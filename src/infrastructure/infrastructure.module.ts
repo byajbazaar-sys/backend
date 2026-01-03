@@ -7,17 +7,16 @@ import { ConfigService } from '@nestjs/config';
 import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 import {
   AI_RESUME_SERVICE,
-  JOB_APPLICATION_REPOSITORY,
-  JOB_REPOSITORY,
-  JOBS_FILE_STORAGE,
+  CUSTOMERS_REPOSITORY,
+  FileStorageOptions,
   LAMBDA_SERVICE,
-  RANKING_REPOSITORY,
   TWILIO_SERVICE,
+  USERS_FILE_STORAGE,
   USERS_REPOSITORY,
 } from '../application';
-import { JobApplicationRepository, JobsRepository, RankingRepository, UsersRepository } from './persistence';
+import { CustomersRepository, UsersRepository } from './persistence';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
-import { JobsFileStorage, FileStorageMock, FileStorageOptions } from './s3';
+import {FileStorageMock, UsersFileStorage } from './s3';
 import { LambdaOptions, LambdaService } from './lambda';
 import { AIOptions, AIResumeService } from './ai';
 import { TwilioOptions, TwilioService } from './sms';
@@ -57,8 +56,8 @@ import { TwilioOptions, TwilioService } from './sms';
       useClass: UsersRepository,
     },
     {
-      provide: JOB_REPOSITORY,
-      useClass: JobsRepository,
+      provide: CUSTOMERS_REPOSITORY,
+      useClass: CustomersRepository,
     },
     {
       provide: AES_ENCRYPT_SERVICE,
@@ -112,16 +111,8 @@ import { TwilioOptions, TwilioService } from './sms';
         ),
     },
     {
-      provide: JOBS_FILE_STORAGE,
-      useClass: process.env.MOCK_STORAGE ? FileStorageMock : JobsFileStorage,
-    },
-    {
-      provide: JOB_APPLICATION_REPOSITORY,
-      useClass: JobApplicationRepository,
-    },
-    {
-      provide: RANKING_REPOSITORY,
-      useClass: RankingRepository,
+      provide: USERS_FILE_STORAGE,
+      useClass: process.env.MOCK_STORAGE ? FileStorageMock : UsersFileStorage,
     },
     {
       provide: LAMBDA_SERVICE,
@@ -139,14 +130,13 @@ import { TwilioOptions, TwilioService } from './sms';
   exports: [
     HttpModule,
     USERS_REPOSITORY,
+    CUSTOMERS_REPOSITORY,
     AES_ENCRYPT_SERVICE,
-    JOB_REPOSITORY,
-    JOB_APPLICATION_REPOSITORY,
-    RANKING_REPOSITORY,
-    JOBS_FILE_STORAGE,
+    USERS_FILE_STORAGE,
     LAMBDA_SERVICE,
     AI_RESUME_SERVICE,
     TWILIO_SERVICE,
+    FileStorageOptions,
     ...Seeds,
   ],
 })

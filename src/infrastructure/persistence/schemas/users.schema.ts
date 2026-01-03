@@ -41,6 +41,9 @@ export class UsersSchema {
 
   @Prop({ type: String, enum: EUserType, default: EUserType.User })
   userType: EUserType;
+
+  @Prop({ type: String, default: null })
+  profilePhotoRef: string;
 }
 
 export const usersSchema = SchemaFactory.createForClass(UsersSchema);

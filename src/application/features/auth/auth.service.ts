@@ -1,4 +1,11 @@
-import { Inject, Injectable, UnauthorizedException, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { IIdentity, UsersAuthOptions, JWT_EXPIRES_IN, BCRYPT_SALT_ROUNDS } from '@shared-libs';
 import { randomBytes } from 'crypto';
@@ -7,13 +14,17 @@ import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
 import { IAuthService } from './interfaces';
 import { compareSync, hashSync } from 'bcrypt';
 import { plainToInstance } from 'class-transformer';
+import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions } from '../../shared';
+import { Types } from 'mongoose';
 
 @Injectable()
 export class AuthService implements IAuthService {
   constructor(
     protected readonly jwtService: JwtService,
     protected readonly options: UsersAuthOptions,
+    protected readonly fileStorageOptions: FileStorageOptions,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
+    @Inject(USERS_FILE_STORAGE) private readonly usersFileStorage: IUsersFileStorage,
   ) {}
 
   async login(email: string, password: string): Promise<LoginResponseModel> {
@@ -35,8 +46,8 @@ export class AuthService implements IAuthService {
         LoginResponseModel,
         {
           ...user,
-          _id: user._id.toString(),
           accessToken: token,
+          profilePhotoUrl: user.profilePhotoRef ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef) : null,
         },
         {
           excludeExtraneousValues: true,
@@ -50,23 +61,29 @@ export class AuthService implements IAuthService {
   }
 
   async signup(body: User): Promise<User> {
-    console.log('signup called with:', body);
     const user = plainToInstance(User, body);
-    console.log('user after plainToInstance:', user);
-
     const existingUser = await this.usersRepo.findByEmail(user.email.toLowerCase().trim());
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
 
     try {
+      user._id = new Types.ObjectId();
+      const fileExtension = user.profilePhotoContentType.split('/')[1];
+      user.profilePhotoRef = `users/profiles/${user._id.toString()}.${fileExtension}`;
       const createdUser = await this.usersRepo.create({
         ...user,
         emailVerificationToken: randomBytes(32).toString('hex'),
-        emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
 
-      return createdUser;
+      if (user.profilePhoto) {
+        await this.usersFileStorage.writeAsync(user.profilePhotoRef, user.profilePhoto, user.profilePhotoContentType);
+      }
+      return {
+        ...createdUser,
+        profilePhotoRef: user.profilePhotoRef ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef) : null,
+      };
     } catch (err) {
       if (err instanceof BadRequestException) {
         throw err;
@@ -82,8 +99,8 @@ export class AuthService implements IAuthService {
         throw new NotFoundException('User not found');
       }
       const resetPasswordToken = randomBytes(32).toString('hex');
-      const resetPasswordExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-      await this.usersRepo.update(user._id.toString(), { resetPasswordToken, resetPasswordExpires });
+      const resetPasswordExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      // await this.usersRepo.update(user._id, { resetPasswordToken, resetPasswordExpires });
     } catch (err) {
       throw err;
     }

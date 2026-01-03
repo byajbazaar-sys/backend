@@ -5,14 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { UserJwtStrategy, UsersAuthOptions } from '@shared-libs';
 
 import { IMsConfig } from '../configurations';
-import {
-  Controllers,
-  Services,
-  JOB_SERVICE,
-  JobService,
-  AUTH_SERVICE,
-  AuthService,
-} from './features';
+import { Controllers, Services, AUTH_SERVICE, AuthService, CUSTOMER_SERVICE, CustomerService } from './features';
 
 @Module({
   imports: [JwtModule, PassportModule, ConfigModule],
@@ -26,18 +19,14 @@ import {
     },
     UserJwtStrategy,
     {
-      provide: JOB_SERVICE,
-      useClass: JobService,
-    },
-    {
       provide: AUTH_SERVICE,
       useClass: AuthService,
     },
+    {
+      provide: CUSTOMER_SERVICE,
+      useClass: CustomerService,
+    },
   ],
-  exports: [
-    PassportModule,
-    UserJwtStrategy,
-  ],
+  exports: [PassportModule, UserJwtStrategy],
 })
 export class ApplicationModule {}
-

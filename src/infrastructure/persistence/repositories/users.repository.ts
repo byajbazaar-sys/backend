@@ -12,10 +12,11 @@ export class UsersRepository implements IUsersRepository {
   async create(createUserDto: Partial<User>): Promise<User> {
     try {
       const createdUser = await this.userModel.create(createUserDto);
-      return plainToInstance(User, createdUser.toJSON(), {
+      return plainToInstance(User, createdUser, {
         excludeExtraneousValues: true,
       });
     } catch (err) {
+      console.error('Error creating user:', err);
       throw err;
     }
   }

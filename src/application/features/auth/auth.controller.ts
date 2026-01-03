@@ -43,7 +43,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Create a new user' })
   @ApiOkResponse({ type: SignupResponseModel })
   @HttpCode(HttpStatus.OK)
-  async signup(@Body() body: SignupRequestModel, @UploadedFile() profilePhoto: Express.Multer.File): Promise<SignupResponseModel> {
+  async signup(
+    @Body() body: SignupRequestModel,
+    @UploadedFile() profilePhoto: Express.Multer.File,
+  ): Promise<SignupResponseModel> {
     const user = plainToInstance(User, body);
     if (profilePhoto) {
       user.profilePhoto = profilePhoto.buffer;
@@ -61,7 +64,7 @@ export class AuthController {
 
     return plainToInstance(
       SignupResponseModel,
-      { accessToken, ...response, id: response.id },
+      { accessToken, ...response, profilePhotoUrl: response.profilePhotoRef },
       {
         excludeExtraneousValues: true,
       },

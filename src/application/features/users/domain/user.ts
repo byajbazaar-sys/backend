@@ -1,10 +1,10 @@
 import { EUserType } from '@shared-libs';
-import { Types } from 'mongoose';
 import { Expose, Transform, Type } from 'class-transformer';
+import { Types } from 'mongoose';
 
 export class User {
   @Expose()
-  public _id: string;
+  public _id: Types.ObjectId;
 
   @Expose()
   @Transform(({ obj }) => obj?._id?.toString())
@@ -56,7 +56,7 @@ export class User {
   public updatedAt?: Date;
   
   @Expose()
-  public profilePhotoUrl?: string;
+  public profilePhotoRef?: string;
 
   @Expose()
   @Type(() => Buffer)

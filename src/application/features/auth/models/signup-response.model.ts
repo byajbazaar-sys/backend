@@ -29,4 +29,8 @@ export class SignupResponseModel {
   @Expose()
   @ApiProperty({ example: 'user' })
   userType: string;
+
+  @Expose()
+  @ApiProperty({ example: 'https://example.com/profile.jpg', nullable: true })
+  profilePhotoUrl: string;
 }

@@ -1,7 +1,8 @@
 import { UsersAuthOptions, type Environment } from '@shared-libs';
 import { Algorithm } from 'jsonwebtoken';
 import { IMsConfig } from './i-ms.config';
-import { AESEncryptOptions, FileStorageOptions, LambdaOptions, AIOptions, TwilioOptions } from '../infrastructure';
+import { AESEncryptOptions, LambdaOptions, AIOptions, TwilioOptions } from '../infrastructure';
+import { FileStorageOptions } from '../application';
 
 export const configFactory = (): IMsConfig => ({
   apiConfig: {

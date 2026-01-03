@@ -6,8 +6,8 @@ export type CustomerDocument = HydratedDocument<CustomersSchema>;
 
 @Schema({ timestamps: true, collection: Schemas.CustomersSchema })
 export class CustomersSchema {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: Schemas.UsersSchema, required: true, unique: true })
-  userId: MongooseSchema.Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: Schemas.UsersSchema, required: true })
+  createdBy: MongooseSchema.Types.ObjectId;
 
   @Prop({ required: true })
   firstName: string;
@@ -18,20 +18,23 @@ export class CustomersSchema {
   @Prop({ required: true })
   lastName: string;
 
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true})
   email: string;
 
   @Prop({ required: false })
   phone?: string;
 
   @Prop({ required: false })
-  profilePhotoUrl?: string;
+  alternativePhone?: string;
 
   @Prop({ required: false })
-  aadhaarCardUrl?: string;
+  profilePhotoRef?: string;
 
   @Prop({ required: false })
-  panCardUrl?: string;
+  aadhaarCardRef?: string;
+
+  @Prop({ required: false })
+  panCardRef?: string;
 
   @Prop({ required: false })
   location?: string;

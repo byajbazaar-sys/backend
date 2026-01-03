@@ -1,6 +1,7 @@
 import { UsersAuthOptions, IDbOptions } from '@shared-libs';
 import { IApiOptions } from './i-api.options';
-import { AESEncryptOptions, FileStorageOptions, LambdaOptions, AIOptions, TwilioOptions } from '../infrastructure';
+import { AESEncryptOptions, LambdaOptions, AIOptions, TwilioOptions } from '../infrastructure';
+import { FileStorageOptions } from '../application';
 
 export interface IMsConfig {
   apiConfig: IApiOptions;

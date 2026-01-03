@@ -3,7 +3,6 @@ import { IsString, IsNotEmpty, IsOptional, IsEmail, IsPhoneNumber } from 'class-
 import { Expose } from 'class-transformer';
 
 export class CreateCustomerRequestModel {
-
   @Expose()
   @ApiProperty({ description: 'First name of the customer', example: 'John' })
   @IsString()
@@ -34,26 +33,40 @@ export class CreateCustomerRequestModel {
   phone?: string;
 
   @Expose()
-  @ApiPropertyOptional({ description: 'URL of the profile photo', example: 'https://example.com/profile.jpg' })
-  @IsString()
+  @ApiProperty({ description: 'Alternative phone number of the customer', example: '+0987654321' })
   @IsOptional()
-  profilePhotoUrl?: string;
-
-  @Expose()
-  @ApiPropertyOptional({ description: 'URL of the Aadhaar card document', example: 'https://example.com/aadhaar.jpg' })
-  @IsString()
-  @IsOptional()
-  aadhaarCardUrl?: string;
-
-  @Expose()
-  @ApiPropertyOptional({ description: 'URL of the PAN card document', example: 'https://example.com/pan.jpg' })
-  @IsString()
-  @IsOptional()
-  panCardUrl?: string;
+  alternativePhone?: string;
 
   @Expose()
   @ApiPropertyOptional({ description: 'Location of the customer', example: 'Mumbai, India' })
   @IsString()
   @IsOptional()
   location?: string;
+
+  @Expose()
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    required: false,
+    description: 'profilePhoto file (JPEG, PNG, WebP) - maximum 5MB',
+  })
+  profilePhoto?: Express.Multer.File;
+
+  @Expose()
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    required: false,
+    description: 'Aadhar card file (JPEG, PNG, WebP) - maximum 5MB',
+  })
+  aadharCard?: Express.Multer.File;
+
+  @Expose()
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    required: false,
+    description: 'PAN card file (JPEG, PNG, WebP) - maximum 5MB',
+  })
+  panCard?: Express.Multer.File;
 }

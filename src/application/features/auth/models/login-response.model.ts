@@ -9,7 +9,7 @@ export class LoginResponseModel {
 
   @Expose()
   @ApiProperty({ example: 'c05a6914-52fd-46be-b5d9-6ec6ae327e2c' })
-  _id: string;
+  id: string;
 
   @Expose()
   @ApiProperty({ example: 'user@example.com' })
@@ -35,6 +35,10 @@ export class LoginResponseModel {
   @ApiProperty({ example: true })
   isEmailVerified: boolean;
 
+  @Expose()
+  @ApiProperty({ example: 'https://example.com/profile.jpg', nullable: true })
+  profilePhotoUrl: string;
+
   constructor(
     accessToken: string,
     id: string,
@@ -46,7 +50,7 @@ export class LoginResponseModel {
     userType: EUserType,
   ) {
     this.accessToken = accessToken;
-    this._id = id;
+    this.id = id;
     this.email = email;
     this.firstName = firstName;
     this.lastName = lastName;

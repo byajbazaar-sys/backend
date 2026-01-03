@@ -7,8 +7,8 @@ export class CustomerResponseModel {
   id: string;
 
   @Expose()
-  @ApiProperty({ description: 'User ID of the customer', example: '507f1f77bcf86cd799439011' })
-  userId: string;
+  @ApiProperty({ description: 'User ID of the creator of this record', example: '507f1f77bcf86cd799439011' })
+  createdBy: string;
 
   @Expose()
   @ApiProperty({ description: 'First name of the customer', example: 'John' })
@@ -27,8 +27,12 @@ export class CustomerResponseModel {
   email: string;
 
   @Expose()
-  @ApiProperty({ description: 'Phone number of the customer', example: '+1234567890' })
-  phone: string;
+  @ApiPropertyOptional({ description: 'Phone number of the customer', example: '+1234567890' })
+  phone?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Alternative phone number of the customer', example: '+1234567890' })
+  alternativePhone?: string;
 
   @Expose()
   @ApiPropertyOptional({ description: 'URL of the profile photo', example: 'https://example.com/profile.jpg' })
