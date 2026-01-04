@@ -2,7 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ESortOrder } from '@shared-libs';
 import { Expose } from 'class-transformer';
 
-export class ListCustomersQueryRequestModel {
+export class ListLoansQueryRequestModel {
   @Expose()
   @ApiPropertyOptional({ example: 10, description: 'Number of items per page', required: false })
   pageSize: number;
@@ -21,9 +21,10 @@ export class ListCustomersQueryRequestModel {
 
   @Expose()
   @ApiPropertyOptional({
-    example: 'customer name',
-    description: 'Search by customer name (partial match)',
+    example: '507f1f77bcf86cd799439011',
+    description: 'Filter by customer ID',
     required: false,
   })
-  name?: string;
+  customerId?: string;
 }
+

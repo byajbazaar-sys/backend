@@ -10,11 +10,13 @@ import {
   CUSTOMERS_REPOSITORY,
   FileStorageOptions,
   LAMBDA_SERVICE,
+  LOAN_ITEMS_REPOSITORY,
+  LOANS_REPOSITORY,
   TWILIO_SERVICE,
   USERS_FILE_STORAGE,
   USERS_REPOSITORY,
 } from '../application';
-import { CustomersRepository, UsersRepository } from './persistence';
+import { CustomersRepository, LoanItemsRepository, LoansRepository, UsersRepository } from './persistence';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
 import {FileStorageMock, UsersFileStorage } from './s3';
 import { LambdaOptions, LambdaService } from './lambda';
@@ -58,6 +60,14 @@ import { TwilioOptions, TwilioService } from './sms';
     {
       provide: CUSTOMERS_REPOSITORY,
       useClass: CustomersRepository,
+    },
+    {
+      provide: LOANS_REPOSITORY,
+      useClass: LoansRepository,
+    },
+    {
+      provide: LOAN_ITEMS_REPOSITORY,
+      useClass: LoanItemsRepository,
     },
     {
       provide: AES_ENCRYPT_SERVICE,
@@ -131,6 +141,8 @@ import { TwilioOptions, TwilioService } from './sms';
     HttpModule,
     USERS_REPOSITORY,
     CUSTOMERS_REPOSITORY,
+    LOANS_REPOSITORY,
+    LOAN_ITEMS_REPOSITORY,
     AES_ENCRYPT_SERVICE,
     USERS_FILE_STORAGE,
     LAMBDA_SERVICE,

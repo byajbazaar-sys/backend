@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import { CustomerDocument, CustomersSchema } from '../schemas';
 import { plainToInstance } from 'class-transformer';
 import { ICustomersRepository, Customer, CustomersFilterOptions } from '../../../application';
-import { ESortOrder, Paged, toPaged } from '@shared-libs';
+import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class CustomersRepository implements ICustomersRepository {
@@ -79,51 +79,51 @@ export class CustomersRepository implements ICustomersRepository {
 
   async listCustomers(params: CustomersFilterOptions): Promise<Paged<Customer>> {
     try {
-      const { pageNumber, pageSize, sortOrder, sortField, name, userId } = params;
-      const skip = (pageNumber - 1) * pageSize;
-      const limit = pageSize;
-      const sort = sortField ? { [sortField]: sortOrder === 'asc' ? 1 : -1 } : { createdAt: -1 };
+      const { name, createdBy } = params;
+      const { pageNumber, pageSize, skip } = getPaginationValues(params);
       const filter: Record<string, any> = {};
 
+      // Add name filter if provided
       if (name && name.trim()) {
-        const q = name.trim();
+        const searchTerm = name.trim();
         filter.$or = [
-          { firstName: { $regex: q, $options: 'i' } },
-          { lastName: { $regex: q, $options: 'i' } },
-          { email: { $regex: q, $options: 'i' } },
+          { firstName: { $regex: searchTerm, $options: 'i' } },
+          { lastName: { $regex: searchTerm, $options: 'i' } },
+          { email: { $regex: searchTerm, $options: 'i' } },
         ];
       }
+      // Add createdBy filter if provided
+      if (createdBy) {
+        filter.createdBy = new Types.ObjectId(createdBy);
+      }
 
-      const docs = await this.customerModel
-        .aggregate([
-          {
-            $match: userId
-              ? {
-                  createdBy: new Types.ObjectId(userId),
-                }
-              : {},
-          },
-          {
-            $facet: {
-              data: [
-                {
-                  $sort: {
-                    [params.sortField]: params.sortOrder === ESortOrder.ASC ? 1 : -1,
-                  },
+      const docs = await this.customerModel.aggregate([
+        { $match: filter },
+        {
+          $facet: {
+            data: [
+              {
+                $sort: {
+                  [params.sortField]: params.sortOrder === ESortOrder.ASC ? 1 : -1,
                 },
-                { $skip: skip },
-                { $limit: +pageSize },
-              ],
-              totalCount: [{ $count: 'total' }],
-            },
+              },
+              { $skip: skip },
+              { $limit: +pageSize },
+            ],
+            totalCount: [{ $count: 'total' }],
           },
-        ])
-        .exec();
-
+        },
+        {
+          $project: {
+            data: 1,
+            total: { $ifNull: [{ $arrayElemAt: ['$totalCount.total', 0] }, 0] },
+          },
+        },
+      ]);
       return toPaged(Customer, {
         items: docs[0].data,
-        page: params.pageNumber,
-        perPage: params.pageSize,
+        page: pageNumber,
+        perPage: pageSize,
         totalCount: docs[0].total,
       });
     } catch (err) {

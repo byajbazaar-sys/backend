@@ -34,6 +34,7 @@ import {
   CustomerResponseModel,
   CustomersPagedResponseModel,
   GetCustomerParamsModel,
+  ListCustomersQueryRequestModel,
   UpdateCustomerRequestModel,
 } from './models';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
@@ -102,15 +103,18 @@ export class CustomersController {
     type: CustomersPagedResponseModel,
   })
   @HttpCode(HttpStatus.OK)
-  async getCustomers(@Query() query: CustomersFilterOptions): Promise<CustomersPagedResponseModel> {
+  async getCustomers(
+    @Query() query: ListCustomersQueryRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<CustomersPagedResponseModel> {
     this.logger.info({ query }, 'getCustomers called');
-    return plainToInstance(
-      CustomersPagedResponseModel,
-      await this.customerService.getCustomers(plainToInstance(CustomersFilterOptions, query)),
-      {
-        excludeExtraneousValues: true,
-      },
-    );
+    const filterOptions = plainToInstance(CustomersFilterOptions, query, {
+      excludeExtraneousValues: true,
+    });
+    filterOptions.createdBy = identity.userId;
+    return plainToInstance(CustomersPagedResponseModel, await this.customerService.getCustomers(filterOptions), {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Get(':id')

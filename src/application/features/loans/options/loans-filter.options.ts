@@ -1,12 +1,12 @@
 import { Expose } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
 
-export class CustomersFilterOptions {
+export class LoansFilterOptions {
   @Expose()
   public createdBy: string;
 
   @Expose()
-  public name: string;
+  public customerId: string;
 
   @Expose()
   public pageNumber: number;
@@ -20,3 +20,4 @@ export class CustomersFilterOptions {
   @Expose()
   public sortField: string;
 }
+

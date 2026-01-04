@@ -1,13 +1,13 @@
 import { IPageable } from '@shared-libs';
 import { Expose, Type } from 'class-transformer';
-import { CustomerResponseModel } from './customers.response.model';
+import { LoanResponseModel } from './loan-response.model';
 import { ApiProperty } from '@nestjs/swagger';
 
-export class CustomersPagedResponseModel implements IPageable<CustomerResponseModel> {
+export class LoansPagedResponseModel implements IPageable<LoanResponseModel> {
   @Expose()
-  @Type(() => CustomerResponseModel)
-  @ApiProperty({ description: 'List of customers', type: [CustomerResponseModel] })
-  items: CustomerResponseModel[];
+  @Type(() => LoanResponseModel)
+  @ApiProperty({ description: 'List of loans', type: [LoanResponseModel] })
+  items: LoanResponseModel[];
 
   @Expose()
   @ApiProperty({ description: 'Page number', example: 1 })
@@ -33,3 +33,4 @@ export class CustomersPagedResponseModel implements IPageable<CustomerResponseMo
   @ApiProperty({ description: 'Has previous page', example: true })
   hasPreviousPage: boolean;
 }
+
