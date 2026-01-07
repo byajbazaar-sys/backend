@@ -60,6 +60,29 @@ export class LoansRepository implements ILoansRepository {
     }
   }
 
+  async findByIds(ids: string[]): Promise<Loan[]> {
+    try {
+      const objectIds = ids.map((id) => new Types.ObjectId(id));
+      const loans = await this.loanModel.find({ _id: { $in: objectIds } }).exec();
+      return plainToInstance(Loan, loans, {
+        excludeExtraneousValues: true,
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async findByCreatedBy(createdBy: string): Promise<Loan[]> {
+    try {
+      const loans = await this.loanModel.find({ createdBy: new Types.ObjectId(createdBy) }).exec();
+      return plainToInstance(Loan, loans, {
+        excludeExtraneousValues: true,
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
   async listLoans(params: LoansFilterOptions): Promise<Paged<Loan>> {
     try {
       const { customerId, createdBy } = params;

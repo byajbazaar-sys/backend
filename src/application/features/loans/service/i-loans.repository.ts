@@ -9,7 +9,8 @@ export interface ILoansRepository {
   findByCustomerId(customerId: string): Promise<Loan[]>;
   update(id: string, updateDto: Partial<Loan>): Promise<Loan>;
   findById(id: string): Promise<Loan>;
+  findByIds(ids: string[]): Promise<Loan[]>;
+  findByCreatedBy(createdBy: string): Promise<Loan[]>;
   listLoans(params: LoansFilterOptions): Promise<Paged<Loan>>;
   delete(id: string): Promise<void>;
 }
-

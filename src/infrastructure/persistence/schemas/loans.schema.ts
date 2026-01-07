@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { Schemas } from './schemas';
-import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../../../application/features/loans/enums';
+import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus } from '../../../application';
 
 export type LoanDocument = HydratedDocument<LoansSchema>;
 
@@ -22,11 +22,29 @@ export class LoansSchema {
   @Prop({ required: true, enum: EInterestCalculationMethod })
   interestCalculationMethod: EInterestCalculationMethod;
 
-  @Prop({ required: true })
+  @Prop({ required: true, default: 0 })
   interestPercentage: number;
 
   @Prop({ required: true, enum: EInterestType })
   interestType: EInterestType;
+
+  @Prop({ required: true, default: 0 })
+  amountPaid: number;
+
+  @Prop({ required: true, default: 0 })
+  amountRemaining: number;
+
+  @Prop({ required: true, default: 0 })
+  interestPaid: number;
+
+  @Prop({ required: true, default: 0 })
+  interestRemaining: number;
+
+  @Prop({ required: true, default: ELoanStatus.OPEN, enum: ELoanStatus })
+  status: ELoanStatus;
+
+  @Prop({ required: false, default: null })
+  currentRate: number;
 }
 
 export const loansSchema = SchemaFactory.createForClass(LoansSchema);

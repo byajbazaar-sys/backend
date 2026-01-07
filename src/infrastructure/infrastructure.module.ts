@@ -12,13 +12,20 @@ import {
   LAMBDA_SERVICE,
   LOAN_ITEMS_REPOSITORY,
   LOANS_REPOSITORY,
+  TRANSACTIONS_REPOSITORY,
   TWILIO_SERVICE,
   USERS_FILE_STORAGE,
   USERS_REPOSITORY,
 } from '../application';
-import { CustomersRepository, LoanItemsRepository, LoansRepository, UsersRepository } from './persistence';
+import {
+  CustomersRepository,
+  LoanItemsRepository,
+  LoansRepository,
+  TransactionsRepository,
+  UsersRepository,
+} from './persistence';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
-import {FileStorageMock, UsersFileStorage } from './s3';
+import { FileStorageMock, UsersFileStorage } from './s3';
 import { LambdaOptions, LambdaService } from './lambda';
 import { AIOptions, AIResumeService } from './ai';
 import { TwilioOptions, TwilioService } from './sms';
@@ -68,6 +75,10 @@ import { TwilioOptions, TwilioService } from './sms';
     {
       provide: LOAN_ITEMS_REPOSITORY,
       useClass: LoanItemsRepository,
+    },
+    {
+      provide: TRANSACTIONS_REPOSITORY,
+      useClass: TransactionsRepository,
     },
     {
       provide: AES_ENCRYPT_SERVICE,
@@ -148,6 +159,7 @@ import { TwilioOptions, TwilioService } from './sms';
     LAMBDA_SERVICE,
     AI_RESUME_SERVICE,
     TWILIO_SERVICE,
+    TRANSACTIONS_REPOSITORY,
     FileStorageOptions,
     ...Seeds,
   ],

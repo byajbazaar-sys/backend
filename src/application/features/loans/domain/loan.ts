@@ -1,6 +1,6 @@
 import { Expose, Transform, Type } from 'class-transformer';
 import { Types } from 'mongoose';
-import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../enums';
+import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus } from '../enums';
 import { LoanItem } from './loan-item';
 
 export class Loan {
@@ -43,5 +43,19 @@ export class Loan {
   @Expose()
   @Type(() => LoanItem)
   public loanItems?: LoanItem[];
-}
 
+  @Expose()
+  public amountPaid: number;
+
+  @Expose()
+  public amountRemaining: number;
+
+  @Expose()
+  public interestPaid: number;
+
+  @Expose()
+  public interestRemaining: number;
+
+  @Expose()
+  public status: ELoanStatus;
+}

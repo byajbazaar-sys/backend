@@ -43,5 +43,7 @@ export class LoanItem {
 
   @Expose()
   public updatedAt?: Date;
-}
 
+  @Expose()
+  public currentRate?: number;
+}

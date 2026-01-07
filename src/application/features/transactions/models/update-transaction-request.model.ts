@@ -1,0 +1,38 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsOptional, IsNumber, IsEnum, IsMongoId, IsDateString, Min } from 'class-validator';
+import { Expose } from 'class-transformer';
+import { ETransactionType, ETransactionPaidIn } from '../enums';
+
+export class UpdateTransactionRequestModel {
+  @Expose()
+  @ApiPropertyOptional({ description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @IsString()
+  @IsOptional()
+  @IsMongoId()
+  loanId?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Transaction amount', example: 5000 })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  amount?: number;
+
+  @Expose()
+  @ApiPropertyOptional({ enum: ETransactionType, example: ETransactionType.INTEREST, description: 'Transaction type' })
+  @IsEnum(ETransactionType)
+  @IsOptional()
+  transactionType?: ETransactionType;
+
+  @Expose()
+  @ApiPropertyOptional({ enum: ETransactionPaidIn, example: ETransactionPaidIn.CASH, description: 'Payment method' })
+  @IsEnum(ETransactionPaidIn)
+  @IsOptional()
+  paidIn?: ETransactionPaidIn;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Payment date', example: '2024-01-15T10:30:00Z' })
+  @IsDateString()
+  @IsOptional()
+  paidAt?: string;
+}

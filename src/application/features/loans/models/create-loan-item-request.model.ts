@@ -14,7 +14,7 @@ export class CreateLoanItemRequestModel {
   @ApiProperty({ description: 'Item amount', example: 50000 })
   @IsNumber()
   @IsNotEmpty()
-  @Min(0)
+  @Min(0.001)
   amount: number;
 
   @Expose()
@@ -33,13 +33,21 @@ export class CreateLoanItemRequestModel {
   @ApiProperty({ description: 'Net weight in grams', example: 50.5 })
   @IsNumber()
   @IsNotEmpty()
-  @Min(0)
+  @Min(0.001)
   netWeightInGrams: number;
 
   @Expose()
   @ApiProperty({ description: 'Gross weight in grams', example: 55.2 })
   @IsNumber()
   @IsNotEmpty()
-  @Min(0)
+  @Min(0.001)
   grossWeightInGrams: number;
+
+  @Expose()
+  @ApiProperty({ description: 'Current rate of item', example: 5000 })
+  @IsNumber()
+  @IsNotEmpty()
+  @IsOptional()
+  @Min(0.001)
+  currentRate?: number;
 }

@@ -69,17 +69,17 @@ export class AuthService implements IAuthService {
 
     try {
       user._id = new Types.ObjectId();
-      const fileExtension = user.profilePhotoContentType.split('/')[1];
-      user.profilePhotoRef = `users/profiles/${user._id.toString()}.${fileExtension}`;
+      if (user.profilePhoto && user.profilePhotoContentType) {
+        const fileExtension = user.profilePhotoContentType.split('/')[1];
+        user.profilePhotoRef = `users/profiles/${user._id.toString()}.${fileExtension}`;
+        await this.usersFileStorage.writeAsync(user.profilePhotoRef, user.profilePhoto, user.profilePhotoContentType);
+      }
+
       const createdUser = await this.usersRepo.create({
         ...user,
         emailVerificationToken: randomBytes(32).toString('hex'),
         emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
       });
-
-      if (user.profilePhoto) {
-        await this.usersFileStorage.writeAsync(user.profilePhotoRef, user.profilePhoto, user.profilePhotoContentType);
-      }
       return {
         ...createdUser,
         profilePhotoRef: user.profilePhotoRef ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef) : null,

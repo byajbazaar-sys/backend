@@ -7,6 +7,7 @@ import { LoansFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
 import { IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
+import { EInterestCalculationMethod } from '../enums';
 
 @Injectable()
 export class LoanService implements ILoanService {
@@ -18,14 +19,23 @@ export class LoanService implements ILoanService {
 
   async create(data: Loan): Promise<Loan> {
     try {
-      console.log('Creating loan', data);
+      if (data.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
+        data.interestRemaining =
+          (data.interestPercentage * data.amountRemaining * (1 + data.interestPercentage / 100) ** data.tenureValue) /
+          100;
+      } else {
+        data.interestRemaining = (data.interestPercentage * data.amountRemaining * data.tenureValue) / 100;
+      }
       const loan = await this.loansRepo.create(data);
       for (const loanItem of data.loanItems) {
-        const fileExtension = loanItem.image.mimetype.split('/')[1];
-        loanItem.imageRef = `loans/items/${loan.id}/${loanItem._id.toString()}.${fileExtension}`;
-        this.loansFileStorage.writeAsync(loanItem.imageRef, loanItem.image.buffer, loanItem.image.mimetype);
-        this.loanItemsRepo.bulkInsert(data.loanItems);
+        if (loanItem.image) {
+          const fileExtension = loanItem.image.mimetype.split('/')[1];
+          loanItem.imageRef = `loans/items/${loan.id}/${loanItem._id.toString()}.${fileExtension}`;
+          this.loansFileStorage.writeAsync(loanItem.imageRef, loanItem.image.buffer, loanItem.image.mimetype);
+        }
       }
+      await this.loanItemsRepo.bulkInsert(data.loanItems);
+
       return { ...loan, loanItems: data.loanItems };
     } catch (err) {
       throw err;

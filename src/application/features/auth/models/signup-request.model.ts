@@ -67,7 +67,7 @@ export class SignupRequestModel {
   @ApiProperty({
     type: 'string',
     format: 'binary',
-    required: true,
+    required: false,
     description: 'profilePhoto file (JPEG, PNG, WebP) - maximum 5MB',
   })
   profilePhoto: Express.Multer.File;

@@ -1,4 +1,4 @@
-import { Expose, Transform } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
 import { Types } from 'mongoose';
 
 export class Customer {
@@ -53,8 +53,10 @@ export class Customer {
   public location?: string;
 
   @Expose()
+  @Type(() => Date)
   public createdAt?: Date;
 
   @Expose()
+  @Type(() => Date)
   public updatedAt?: Date;
 }

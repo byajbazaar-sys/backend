@@ -25,7 +25,7 @@ import {
   ApiConsumes,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { USER_STRATEGY, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { USER_STRATEGY, RolesGuard, Identity, IIdentity, ParseFormDataJsonPipe } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   CreateLoanRequestModel,
@@ -59,30 +59,31 @@ export class LoansController {
   @UseInterceptors(FileFieldsInterceptor([{ name: 'loanItemImages', maxCount: 10 }]))
   @HttpCode(HttpStatus.CREATED)
   async create(
-    @Body() body: CreateLoanRequestModel,
+    @Body(new ParseFormDataJsonPipe()) body: CreateLoanRequestModel,
     @Identity() identity: IIdentity,
     @UploadedFiles()
     files: {
       loanItemImages?: Express.Multer.File[];
     },
   ): Promise<LoanResponseModel> {
-    if (typeof body.loanItems === 'string') {
-      body.loanItems = JSON.parse(body.loanItems);
-    }
-
     const loanData = plainToInstance(Loan, body, {
       excludeExtraneousValues: true,
     });
 
     loanData._id = new Types.ObjectId();
-
+    let loanAmount: number = 0;
+    console.log('loanData:', loanData);
     loanData.loanItems =
-      loanData.loanItems.map((item, index) => ({
-        ...item,
-        _id: new Types.ObjectId(),
-        image: files.loanItemImages[index],
-        loanId: loanData._id.toString(),
-      })) ?? [];
+      loanData.loanItems.map((item, index) => {
+        loanAmount += item.amount;
+        return {
+          ...item,
+          _id: new Types.ObjectId(),
+          image: files.loanItemImages?.[index] ?? null,
+          loanId: loanData._id.toString(),
+        };
+      }) ?? [];
+    loanData.amountRemaining = loanAmount;
     loanData.createdBy = identity.userId;
     const loan = await this.loanService.create(loanData);
     return plainToInstance(LoanResponseModel, loan, {

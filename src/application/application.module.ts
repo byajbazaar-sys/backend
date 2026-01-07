@@ -14,6 +14,8 @@ import {
   CustomerService,
   LOAN_SERVICE,
   LoanService,
+  TRANSACTION_SERVICE,
+  TransactionService,
 } from './features';
 
 @Module({
@@ -39,6 +41,10 @@ import {
       provide: LOAN_SERVICE,
       useClass: LoanService,
     },
+    {
+      provide: TRANSACTION_SERVICE,
+      useClass: TransactionService,
+    }
   ],
   exports: [PassportModule, UserJwtStrategy],
 })
