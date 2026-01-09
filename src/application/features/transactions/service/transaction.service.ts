@@ -142,4 +142,13 @@ export class TransactionService implements ITransactionService {
       throw err;
     }
   }
+
+  async updateDues(): Promise<number> {
+    try {
+      const updatedCount = await this.duesRepo.updatePastDues();
+      return updatedCount;
+    } catch (err) {
+      throw err;
+    }
+  }
 }

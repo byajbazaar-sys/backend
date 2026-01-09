@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { DuesSchema, DueDocument, Schemas } from '../schemas';
-import { Due, DuesFilterOptions, IDuesRepository } from '../../../application';
+import { Due, DuesFilterOptions, IDuesRepository, EDueType } from '../../../application';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 
@@ -152,6 +152,26 @@ export class DuesRepository implements IDuesRepository {
       return plainToInstance(Due, dueDocs, {
         excludeExtraneousValues: true,
       });
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async updatePastDues(): Promise<number> {
+    try {
+      const currentDate = new Date();
+      // Update all dues where dueDate is less than current date and type is not already PAST_DUE
+      const result = await this.dueModel.updateMany(
+        {
+          dueDate: { $lt: currentDate },
+          type: { $ne: EDueType.PAST_DUE },
+        },
+        {
+          $set: { type: EDueType.PAST_DUE },
+        },
+      );
+
+      return result.modifiedCount;
     } catch (err) {
       throw err;
     }

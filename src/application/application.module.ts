@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -16,8 +16,11 @@ import {
   LoanService,
   TRANSACTION_SERVICE,
   TransactionService,
+  USERS_SERVICE,
+  UsersService,
 } from './features';
 
+@Global()
 @Module({
   imports: [JwtModule, PassportModule, ConfigModule],
   controllers: [...Controllers],
@@ -44,8 +47,12 @@ import {
     {
       provide: TRANSACTION_SERVICE,
       useClass: TransactionService,
-    }
+    },
+    {
+      provide: USERS_SERVICE,
+      useClass: UsersService,
+    },
   ],
-  exports: [PassportModule, UserJwtStrategy],
+  exports: [PassportModule, UserJwtStrategy, TRANSACTION_SERVICE],
 })
 export class ApplicationModule {}

@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UserDocument, UsersSchema } from '../schemas';
 import { plainToInstance } from 'class-transformer';
-import { IUsersRepository, User } from '../../../application';
+import { ELoanItemType, IUsersRepository, User } from '../../../application';
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {
@@ -72,16 +72,90 @@ export class UsersRepository implements IUsersRepository {
   }
 
   async findById(id: string): Promise<User> {
-    try {
-      const user = await this.userModel.findById(new Types.ObjectId(id)).exec();
-      if (!user) {
-        return null;
-      }
-      return plainToInstance(User, user.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const user = await this.userModel.aggregate([
+      {
+        $match: {
+          _id: new Types.ObjectId(id),
+        },
+      },
+      {
+        $lookup: {
+          from: 'customers',
+          let: { userId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$createdBy', '$$userId'] },
+              },
+            },
+            {
+              $count: 'count',
+            },
+          ],
+          as: 'customersCount',
+        },
+      },
+      {
+        $addFields: {
+          customersCount: {
+            $ifNull: [{ $arrayElemAt: ['$customersCount.count', 0] }, 0],
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: 'loans',
+          let: { userId: '$_id'},
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$createdBy', '$$userId'] }],
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                closed: {
+                  $sum: {
+                    $cond: [{ $eq: ['$status', 'Closed'] }, 1, 0],
+                  },
+                },
+                open: {
+                  $sum: {
+                    $cond: [{ $eq: ['$status', 'Open'] }, 1, 0],
+                  },
+                },
+                interestRemaining: {
+                  $sum: '$interestRemaining',
+                },
+                interestPaid: {
+                  $sum: '$interestPaid',
+                },
+                amountRemaining: {
+                  $sum: '$amountRemaining',
+                },
+                amountPaid: {
+                  $sum: '$amountPaid',
+                },
+              },
+            },
+          ],
+          as: 'loanStats',
+        },
+      },
+      {
+        $unwind: {
+          path: '$loanStats',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+    ]);
+    console.log(user[0]);
+    return plainToInstance(User, user[0], {
+      excludeExtraneousValues: true,
+    });
   }
 }

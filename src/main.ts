@@ -8,6 +8,7 @@ import { GlobalResponseInterceptor, isDev } from '@shared-libs';
 import mongoose from 'mongoose';
 import { parse } from 'qs';
 import { SeedingService } from './infrastructure/persistence/seeds/seeding.service';
+import { CronService } from './infrastructure/cron';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const seedingService = app.get<SeedingService>(SeedingService);
@@ -71,6 +72,7 @@ async function bootstrap(): Promise<void> {
   const url = await app.getUrl();
   Logger.log(`Application is running on: ${url}`);
   Logger.log(`Swagger documentation: ${url}/api-docs`);
+  await app.get(CronService).runAsync();
 }
 
 // mark promise as intentionally not awaited to satisfy no-floating-promises

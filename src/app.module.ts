@@ -1,13 +1,20 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
-import { createPinoHttpOptions, DEFAULT_THROTTLE_REQ_LIMIT, DEFAULT_THROTTLE_TTL, GlobalResponseInterceptor, type Environment } from '@shared-libs';
+import {
+  createPinoHttpOptions,
+  DEFAULT_THROTTLE_REQ_LIMIT,
+  DEFAULT_THROTTLE_TTL,
+  GlobalResponseInterceptor,
+  type Environment,
+} from '@shared-libs';
 import { LoggerModule } from 'nestjs-pino';
 
-import { ApplicationModule} from './application';
+import { ApplicationModule } from './application';
 import { configFactory, IMsConfig, IApiOptions } from './configurations';
 import { InfrastructureModule } from './infrastructure';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -31,6 +38,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     ]),
     ApplicationModule,
     InfrastructureModule,
+    ScheduleModule.forRoot(),
   ],
   providers: [
     {

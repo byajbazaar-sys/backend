@@ -31,6 +31,7 @@ import { FileStorageMock, UsersFileStorage } from './s3';
 import { LambdaOptions, LambdaService } from './lambda';
 import { AIOptions, AIResumeService } from './ai';
 import { TwilioOptions, TwilioService } from './sms';
+import CronServices from './cron';
 
 @Global()
 @Module({
@@ -62,6 +63,7 @@ import { TwilioOptions, TwilioService } from './sms';
   ],
   providers: [
     ...Seeds,
+    ...CronServices,
     {
       provide: USERS_REPOSITORY,
       useClass: UsersRepository,
@@ -169,6 +171,7 @@ import { TwilioOptions, TwilioService } from './sms';
     DUES_REPOSITORY,
     FileStorageOptions,
     ...Seeds,
+    ...CronServices,
   ],
 })
 export class InfrastructureModule {}

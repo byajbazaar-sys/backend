@@ -7,4 +7,5 @@ export interface IDuesRepository {
   listDues(params: DuesFilterOptions): Promise<Paged<Due>>;
   create(due: Due): Promise<Due>;
   bulkCreate(dues: Due[]): Promise<Due[]>;
+  updatePastDues(): Promise<number>;
 }
