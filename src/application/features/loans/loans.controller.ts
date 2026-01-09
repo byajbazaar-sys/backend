@@ -125,22 +125,6 @@ export class LoansController {
     return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
   }
 
-  @Patch(':id')
-  @ApiOperation({ summary: 'Update loan' })
-  @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
-  @ApiOkResponse({ type: LoanResponseModel })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Not authorized to update this loan' })
-  @HttpCode(HttpStatus.OK)
-  async update(
-    @Param() params: GetLoanParamsModel,
-    @Body() body: UpdateLoanRequestModel,
-    @Identity() identity: IIdentity,
-  ): Promise<LoanResponseModel> {
-    this.logger.info({ params, body, identity }, 'update called');
-    const loan = await this.loanService.update(params.id, body, identity.userId);
-    return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
-  }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete loan by ID' })

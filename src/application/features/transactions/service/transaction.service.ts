@@ -5,58 +5,52 @@ import { ITransactionService } from './i-transaction.service';
 import { UpdateTransactionRequestModel } from '../models';
 import { TransactionsFilterOptions, DuesFilterOptions } from '../options';
 import { Paged, getPaginationValues, toPaged, ESortOrder } from '@shared-libs';
-// import {
-//   LOANS_REPOSITORY,
-//   ILoansRepository,
-//   ELoanStatus,
-//   EInterestCalculationMethod,
-//   EInterestType,
-//   Loan,
-// } from '../../loans';
-// import { EDueType, ETransactionType } from '../enums';
+import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus } from '../../loans';
+import { ETransactionType } from '../enums';
+import { DUES_REPOSITORY, IDuesRepository } from '../../../shared';
 
 @Injectable()
 export class TransactionService implements ITransactionService {
   constructor(
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
-    // @Inject(LOANS_REPOSITORY) private readonly loansRepo: ILoansRepository,
-    // @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
+    @Inject(LOANS_REPOSITORY) private readonly loansRepo: ILoansRepository,
+    @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
   ) {}
 
   async create(data: Transaction): Promise<Transaction> {
     try {
-      // const loan = await this.loansRepo.findById(data.loanId);
-      // data.customerId = loan.customerId;
-      // if (!loan) {
-      //   throw new NotFoundException('Loan not found');
-      // }
-      // if (loan.status === ELoanStatus.CLOSED) {
-      //   throw new BadRequestException('Loan is closed');
-      // }
-      // if (data.amount > loan.amountRemaining) {
-      //   throw new BadRequestException('Amount is greater than loan remaining');
-      // }
-      // const transaction = await this.transactionsRepo.create(data);
-      // if (transaction.transactionType === ETransactionType.INTEREST) {
-      //   if (loan.interestRemaining < transaction.amount) {
-      //     throw new BadRequestException('Interest remaining is less than transaction amount');
-      //   }
-      //   loan.interestRemaining -= transaction.amount;
-      // }
-      // if (transaction.transactionType === ETransactionType.PRINCIPAL) {
-      //   if (loan.amountRemaining < transaction.amount) {
-      //     throw new BadRequestException('Amount remaining is less than transaction amount');
-      //   }
-      //   loan.amountRemaining -= transaction.amount;
-      // }
-      // if (transaction.transactionType === ETransactionType.TOP_UP) {
-      //   loan.amountRemaining += transaction.amount;
-      // }
-      // await this.loansRepo.update(data.loanId, {
-      //   amountRemaining: loan.amountRemaining,
-      //   interestRemaining: loan.interestRemaining,
-      // });
-      // return transaction;
+      const loan = await this.loansRepo.findById(data.loanId);
+      data.customerId = loan.customerId;
+      if (!loan) {
+        throw new NotFoundException('Loan not found');
+      }
+      if (loan.status === ELoanStatus.CLOSED) {
+        throw new BadRequestException('Loan is closed');
+      }
+      if (data.amount > loan.amountRemaining) {
+        throw new BadRequestException('Amount is greater than loan remaining');
+      }
+      const transaction = await this.transactionsRepo.create(data);
+      if (transaction.transactionType === ETransactionType.INTEREST) {
+        if (loan.interestRemaining < transaction.amount) {
+          throw new BadRequestException('Interest remaining is less than transaction amount');
+        }
+        loan.interestRemaining -= transaction.amount;
+      }
+      if (transaction.transactionType === ETransactionType.PRINCIPAL) {
+        if (loan.amountRemaining < transaction.amount) {
+          throw new BadRequestException('Amount remaining is less than transaction amount');
+        }
+        loan.amountRemaining -= transaction.amount;
+      }
+      if (transaction.transactionType === ETransactionType.TOP_UP) {
+        loan.amountRemaining += transaction.amount;
+      }
+      await this.loansRepo.update(data.loanId, {
+        amountRemaining: loan.amountRemaining,
+        interestRemaining: loan.interestRemaining,
+      });
+      return transaction;
       return null;
     } catch (err) {
       throw err;
@@ -142,8 +136,8 @@ export class TransactionService implements ITransactionService {
 
   async getDues(params: DuesFilterOptions): Promise<Paged<Due>> {
     try {
-      // const dues = await this.duesRepo.listDues(params);
-      return null;
+      const dues = await this.duesRepo.listDues(params);
+      return dues;
     } catch (err) {
       throw err;
     }

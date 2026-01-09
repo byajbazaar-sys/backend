@@ -1,6 +1,6 @@
 import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { USER_STRATEGY, RolesGuard, Identity, IIdentity } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -13,8 +13,9 @@ import {
 import { ITransactionService, TRANSACTION_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
 import { Transaction } from './domain';
-import { TransactionsFilterOptions } from './options';
+import { DuesFilterOptions, TransactionsFilterOptions } from './options';
 import { Types } from 'mongoose';
+import { DuesPagedResponseModel, ListDuesQueryRequestModel } from './models';
 
 @ApiTags('transactions')
 @ApiBearerAuth('user')
@@ -72,21 +73,21 @@ export class TransactionsController {
     );
   }
 
-  // @Get('dues')
-  // @ApiOperation({ summary: 'Get upcoming and past dues with pagination' })
-  // @ApiOkResponse({ type: DuesPagedResponseModel })
-  // @HttpCode(HttpStatus.OK)
-  // async getDues(
-  //   @Query() query: ListDuesQueryRequestModel,
-  //   @Identity() identity: IIdentity,
-  // ): Promise<DuesPagedResponseModel> {
-  //   this.logger.info({ query }, 'getDues called');
-  //   const filterOptions = plainToInstance(DuesFilterOptions, query, {
-  //     excludeExtraneousValues: true,
-  //   });
-  //   filterOptions.createdBy = identity.userId;
-  //   return plainToInstance(DuesPagedResponseModel, await this.transactionService.getDues(filterOptions), {
-  //     excludeExtraneousValues: true,
-  //   });
-  // }
+  @Get('dues')
+  @ApiOperation({ summary: 'Get upcoming and past dues with pagination' })
+  @ApiOkResponse({ type: DuesPagedResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async getDues(
+    @Query() query: ListDuesQueryRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<DuesPagedResponseModel> {
+    this.logger.info({ query }, 'getDues called');
+    const filterOptions = plainToInstance(DuesFilterOptions, query, {
+      excludeExtraneousValues: true,
+    });
+    filterOptions.createdBy = identity.userId;
+    return plainToInstance(DuesPagedResponseModel, await this.transactionService.getDues(filterOptions), {
+      excludeExtraneousValues: true,
+    });
+  }
 }

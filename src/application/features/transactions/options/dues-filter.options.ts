@@ -1,5 +1,6 @@
 import { Expose } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
+import { EDueType } from '../../../shared';
 
 export class DuesFilterOptions {
   @Expose()
@@ -19,4 +20,7 @@ export class DuesFilterOptions {
 
   @Expose()
   public createdBy: string;
+
+  @Expose()
+  public type?: EDueType[];
 }

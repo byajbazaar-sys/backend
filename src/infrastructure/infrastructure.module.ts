@@ -8,6 +8,7 @@ import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 import {
   AI_RESUME_SERVICE,
   CUSTOMERS_REPOSITORY,
+  DUES_REPOSITORY,
   FileStorageOptions,
   LAMBDA_SERVICE,
   LOAN_ITEMS_REPOSITORY,
@@ -19,6 +20,7 @@ import {
 } from '../application';
 import {
   CustomersRepository,
+  DuesRepository,
   LoanItemsRepository,
   LoansRepository,
   TransactionsRepository,
@@ -79,6 +81,10 @@ import { TwilioOptions, TwilioService } from './sms';
     {
       provide: TRANSACTIONS_REPOSITORY,
       useClass: TransactionsRepository,
+    },
+    {
+      provide: DUES_REPOSITORY,
+      useClass: DuesRepository,
     },
     {
       provide: AES_ENCRYPT_SERVICE,
@@ -160,6 +166,7 @@ import { TwilioOptions, TwilioService } from './sms';
     AI_RESUME_SERVICE,
     TWILIO_SERVICE,
     TRANSACTIONS_REPOSITORY,
+    DUES_REPOSITORY,
     FileStorageOptions,
     ...Seeds,
   ],

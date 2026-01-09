@@ -31,8 +31,7 @@ export class CreateTransactionRequestModel {
   paidIn: ETransactionPaidIn;
 
   @Expose()
-  @ApiProperty({ description: 'Payment date', example: new Date().toISOString() })
-  @IsDateString()
+  @ApiProperty({ description: 'Payment date', example: new Date() })
   @IsNotEmpty()
   @Type(() => Date)
   paidAt: Date;

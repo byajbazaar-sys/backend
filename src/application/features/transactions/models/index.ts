@@ -4,3 +4,6 @@ export * from './transaction-response.model';
 export * from './get-transaction-params.model';
 export * from './list-transactions-query.model';
 export * from './transactions-paged-response.model';
+export * from './dues-response.model';
+export * from './dues-paged-response.model';
+export * from './list-dues-query.model';
