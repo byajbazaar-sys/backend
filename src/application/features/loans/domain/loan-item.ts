@@ -46,4 +46,8 @@ export class LoanItem {
 
   @Expose()
   public currentRate?: number;
+
+  @Expose()
+  @Transform(({ obj }) => obj?.createdBy?.toString())
+  public createdBy?: string;
 }

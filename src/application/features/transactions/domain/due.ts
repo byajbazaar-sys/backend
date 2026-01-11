@@ -32,5 +32,5 @@ export class Due {
 
   @Expose()
   @Type(() => Transaction)
-  public transaction?: Transaction;
+  public latestTransaction?: Transaction;
 }

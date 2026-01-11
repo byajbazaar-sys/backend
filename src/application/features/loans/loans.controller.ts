@@ -34,10 +34,12 @@ import {
   GetLoanParamsModel,
   ListLoansQueryRequestModel,
   UpdateLoanRequestModel,
+  LoanStatsQueryRequestModel,
+  LoanStatsResponseModel,
 } from './models';
 import { ILoanService, LOAN_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
-import { LoansFilterOptions } from './options';
+import { LoansFilterOptions, LoanStatsFilterOptions } from './options';
 import { Loan, LoanItem } from './domain';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Types } from 'mongoose';
@@ -72,17 +74,21 @@ export class LoansController {
 
     loanData._id = new Types.ObjectId();
     let loanAmount: number = 0;
-    console.log('loanData:', loanData);
-    loanData.loanItems =
-      loanData.loanItems.map((item, index) => {
-        loanAmount += item.amount;
-        return {
-          ...item,
-          _id: new Types.ObjectId(),
-          image: files.loanItemImages?.[index] ?? null,
-          loanId: loanData._id.toString(),
-        };
-      }) ?? [];
+
+    if (!Array.isArray(loanData.loanItems)) {
+      loanData.loanItems = loanData.loanItems ? [loanData.loanItems] : [];
+    }
+
+    loanData.loanItems = loanData.loanItems.map((item, index) => {
+      loanAmount += item.amount;
+      return {
+        ...item,
+        _id: new Types.ObjectId(),
+        image: files.loanItemImages?.[index] ?? null,
+        loanId: loanData._id.toString(),
+        createdBy: identity.userId,
+      };
+    });
     loanData.amountRemaining = loanAmount;
     loanData.createdBy = identity.userId;
     const loan = await this.loanService.create(loanData);
@@ -113,6 +119,22 @@ export class LoansController {
     });
   }
 
+  @Get('stats')
+  @ApiOkResponse({ description: 'Loan stats fetched successfully', type: LoanStatsResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async getStats(
+    @Query() query: LoanStatsQueryRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<LoanStatsResponseModel> {
+    this.logger.info({ identity }, 'getStats called');
+    const filterOptions = plainToInstance(LoanStatsFilterOptions, query, {
+      excludeExtraneousValues: true,
+    });
+    return plainToInstance(LoanStatsResponseModel, await this.loanService.getStats(identity.userId, filterOptions), {
+      excludeExtraneousValues: true,
+    });
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get loan by ID' })
   @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
@@ -123,18 +145,5 @@ export class LoansController {
     this.logger.info({ params }, 'getById called');
     const loan = await this.loanService.getById(params.id);
     return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
-  }
-
-
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete loan by ID' })
-  @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
-  @ApiOkResponse({ description: 'Loan deleted successfully' })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Not authorized to delete this loan' })
-  @HttpCode(HttpStatus.OK)
-  async delete(@Param() params: GetLoanParamsModel, @Identity() identity: IIdentity): Promise<void> {
-    this.logger.info({ params, identity }, 'delete called');
-    await this.loanService.delete(params.id, identity.userId);
   }
 }

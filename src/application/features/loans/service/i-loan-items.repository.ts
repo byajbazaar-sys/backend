@@ -1,4 +1,5 @@
-import { LoanItem } from '../domain';
+import { LoanItem, LoanStats } from '../domain';
+import { LoanStatsFilterOptions } from '../options';
 
 export const LOAN_ITEMS_REPOSITORY = 'LOAN_ITEMS_REPOSITORY';
 

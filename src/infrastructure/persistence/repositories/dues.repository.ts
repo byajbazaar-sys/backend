@@ -12,7 +12,7 @@ export class DuesRepository implements IDuesRepository {
 
   async listDues(params: DuesFilterOptions): Promise<Paged<Due>> {
     try {
-      const { loanIds, createdBy, type } = params;
+      const { loanIds, createdBy, type, customerName } = params;
       const { pageNumber, pageSize, skip } = getPaginationValues(params);
       const filter: Record<string, any> = {};
 
@@ -44,24 +44,18 @@ export class DuesRepository implements IDuesRepository {
                   pipeline: [
                     {
                       $match: {
-                        $expr: {
-                          $eq: ['$customerId', '$$customerId'],
-                        },
+                        $expr: { $eq: ['$customerId', '$$customerId'] },
                       },
                     },
-                    {
-                      $sort: { createdAt: -1 },
-                    },
-                    {
-                      $limit: 1,
-                    },
+                    { $sort: { createdAt: -1 } },
+                    { $limit: 1 },
                   ],
-                  as: 'transactions',
+                  as: 'latestTransaction',
                 },
               },
               {
                 $unwind: {
-                  path: '$transactions',
+                  path: '$latestTransaction',
                   preserveNullAndEmptyArrays: true,
                 },
               },
@@ -70,7 +64,7 @@ export class DuesRepository implements IDuesRepository {
                   _id: 1,
                   firstName: 1,
                   lastName: 1,
-                  transactions: 1,
+                  latestTransaction: 1,
                 },
               },
             ],
@@ -82,9 +76,22 @@ export class DuesRepository implements IDuesRepository {
             preserveNullAndEmptyArrays: true,
           },
         },
+        ...(customerName
+          ? [
+              {
+                $match: {
+                  $or: [
+                    { 'customer.firstName': { $regex: customerName, $options: 'i' } },
+                    { 'customer.lastName': { $regex: customerName, $options: 'i' } },
+                  ],
+                },
+              },
+            ]
+          : []),
+
         {
           $addFields: {
-            transaction: '$customer.transactions',
+            latestTransaction: '$customer.latestTransaction',
           },
         },
         {

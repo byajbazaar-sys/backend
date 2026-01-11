@@ -10,6 +10,9 @@ export class LoanItemsSchema {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: Schemas.LoansSchema, required: true })
   loanId: MongooseSchema.Types.ObjectId;
 
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: Schemas.UsersSchema, required: true })
+  createdBy: MongooseSchema.Types.ObjectId;
+
   @Prop({ required: true, enum: ELoanItemType })
   type: ELoanItemType;
 

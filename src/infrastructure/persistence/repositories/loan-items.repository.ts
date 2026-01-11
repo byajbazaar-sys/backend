@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { LoanItemDocument, LoanItemsSchema } from '../schemas';
+import { LoanItemDocument, LoanItemsSchema, Schemas } from '../schemas';
 import { plainToInstance } from 'class-transformer';
-import { ILoanItemsRepository, LoanItem } from '../../../application';
+import { ILoanItemsRepository, LoanItem, LoanStats, LoanStatsFilterOptions } from '../../../application';
 
 @Injectable()
 export class LoanItemsRepository implements ILoanItemsRepository {

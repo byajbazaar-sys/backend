@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { LoanDocument, LoansSchema } from '../schemas';
+import { LoanDocument, LoansSchema, Schemas } from '../schemas';
 import { plainToInstance } from 'class-transformer';
-import { ILoansRepository, Loan, LoansFilterOptions } from '../../../application';
+import { ELoanStatus, ILoansRepository, Loan, LoansFilterOptions, LoanStats, LoanStatsFilterOptions } from '../../../application';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
@@ -126,6 +126,186 @@ export class LoansRepository implements ILoansRepository {
         page: pageNumber,
         perPage: pageSize,
         totalCount: docs[0].total,
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
+    try {
+      const { startDate, endDate, itemType } = filterOptions;
+      const stats = await this.loanModel.aggregate([
+        {
+          $match: {
+            createdBy: new Types.ObjectId(userId),
+            createdAt: {
+              $gte: startDate,
+              $lte: endDate,
+            },
+          },
+        },
+
+        // ✅ FIXED customers lookup
+        {
+          $lookup: {
+            from: 'customers',
+            let: { userId: '$createdBy' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$createdBy', '$$userId'] },
+                },
+              },
+              { $count: 'count' },
+            ],
+            as: 'customersCount',
+          },
+        },
+        {
+          $addFields: {
+            customersCount: {
+              $ifNull: [{ $arrayElemAt: ['$customersCount.count', 0] }, 0],
+            },
+          },
+        },
+
+        // ✅ Loan items lookup with prorating logic
+        {
+          $lookup: {
+            from: Schemas.LoanItemsSchema,
+            let: { loanId: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$loanId', '$$loanId'] },
+                },
+              },
+
+              // ✅ Calculate total value & matched value (WEIGHTED)
+              {
+                $group: {
+                  _id: null,
+
+                  // ✅ total monetary value of ALL items in this loan
+                  totalItemValue: {
+                    $sum: { $ifNull: ['$amount', 0] },
+                  },
+
+                  // ✅ total monetary value of FILTERED itemType
+                  matchedItemValue: {
+                    $sum: {
+                      $cond: [{ $eq: ['$type', itemType] }, '$amount', 0],
+                    },
+                  },
+
+                  // optional UI metrics
+                  matchedItems: {
+                    $sum: {
+                      $cond: [{ $eq: ['$type', itemType] }, 1, 0],
+                    },
+                  },
+
+                  totalNetWeight: {
+                    $sum: {
+                      $cond: [{ $eq: ['$type', itemType] }, '$netWeightInGrams', 0],
+                    },
+                  },
+
+                  totalGrossWeight: {
+                    $sum: {
+                      $cond: [{ $eq: ['$type', itemType] }, '$grossWeightInGrams', 0],
+                    },
+                  },
+                },
+              },
+
+              // ✅ Allocation ratio based on VALUE (not count)
+              {
+                $addFields: {
+                  allocationRatio: {
+                    $cond: [{ $gt: ['$totalItemValue', 0] }, { $divide: ['$matchedItemValue', '$totalItemValue'] }, 0],
+                  },
+                },
+              },
+            ],
+            as: 'loanItemStats',
+          },
+        },
+
+        // ✅ Only ONE unwind
+        {
+          $unwind: {
+            path: '$loanItemStats',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+
+        // ✅ Final aggregation
+        {
+          $group: {
+            _id: null,
+
+            amountRemaining: {
+              $sum: {
+                $round: [
+                  {
+                    $multiply: ['$amountRemaining', { $ifNull: ['$loanItemStats.allocationRatio', 0] }],
+                  },
+                  2,
+                ],
+              },
+            },
+            amountPaid: {
+              $sum: {
+                $round: [
+                  {
+                    $multiply: ['$amountPaid', { $ifNull: ['$loanItemStats.allocationRatio', 0] }],
+                  },
+                  2,
+                ],
+              },
+            },
+            interestRemaining: {
+              $sum: {
+                $round: [
+                  {
+                    $multiply: ['$interestRemaining', { $ifNull: ['$loanItemStats.allocationRatio', 0] }],
+                  },
+                  2,
+                ],
+              },
+            },
+            interestPaid: {
+              $sum: {
+                $round: [
+                  {
+                    $multiply: ['$interestPaid', { $ifNull: ['$loanItemStats.allocationRatio', 0] }],
+                  },
+                  2,
+                ],
+              },
+            },
+
+            totalItems: {
+              $sum: { $ifNull: ['$loanItemStats.matchedItems', 0] },
+            },
+            totalNetWeight: {
+              $sum: { $ifNull: ['$loanItemStats.totalNetWeight', 0] },
+            },
+            totalGrossWeight: {
+              $sum: { $ifNull: ['$loanItemStats.totalGrossWeight', 0] },
+            },
+            total: { $sum: 1 },
+
+            customersCount: { $first: '$customersCount' },
+            closed: { $sum: { $cond: [{ $eq: ['$status', ELoanStatus.CLOSED] }, 1, 0] } },
+            open: { $sum: { $cond: [{ $eq: ['$status', ELoanStatus.OPEN] }, 1, 0] } },
+          },
+        },
+      ]);
+      return plainToInstance(LoanStats, stats[0], {
+        excludeExtraneousValues: true,
       });
     } catch (err) {
       throw err;

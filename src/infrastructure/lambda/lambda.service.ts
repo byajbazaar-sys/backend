@@ -32,7 +32,6 @@ export class LambdaService implements ILambdaService {
       return null;
     } catch (error) {
       // Handle error appropriately
-      console.log(error);
       throw error;
     }
   }

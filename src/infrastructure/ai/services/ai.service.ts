@@ -22,7 +22,6 @@ export class AIResumeService implements IAIResumeService {
           (p, i, arr) => i === 0 || p !== arr[0],
         )
       : (['openai', 'gemini', 'claude'] as AIProvider[]);
-    console.log(providers);
     for (const provider of providers) {
       try {
         const service = this.getAIService(provider);

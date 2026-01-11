@@ -22,7 +22,6 @@ export class UserJwtStrategy extends PassportStrategy(Strategy, USER_STRATEGY) {
   }
 
   public validate(payload: IIdentity): IIdentity {
-    console.log(payload);
     return payload;
   }
 }

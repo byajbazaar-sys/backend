@@ -110,7 +110,6 @@ export class TransactionsRepository implements ITransactionsRepository {
           },
         },
       ]);
-      console.log(docs[0].data);
       return toPaged(Transaction, {
         items: docs[0].data,
         page: pageNumber,

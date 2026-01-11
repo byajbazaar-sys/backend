@@ -36,22 +36,25 @@ export class TransactionService implements ITransactionService {
           throw new BadRequestException('Interest remaining is less than transaction amount');
         }
         loan.interestRemaining -= transaction.amount;
+        loan.interestPaid += transaction.amount;
       }
       if (transaction.transactionType === ETransactionType.PRINCIPAL) {
         if (loan.amountRemaining < transaction.amount) {
           throw new BadRequestException('Amount remaining is less than transaction amount');
         }
         loan.amountRemaining -= transaction.amount;
+        loan.amountPaid += transaction.amount;
       }
       if (transaction.transactionType === ETransactionType.TOP_UP) {
         loan.amountRemaining += transaction.amount;
       }
-      await this.loansRepo.update(data.loanId, {
+      this.loansRepo.update(data.loanId, {
         amountRemaining: loan.amountRemaining,
         interestRemaining: loan.interestRemaining,
+        amountPaid: loan.amountPaid,
+        interestPaid: loan.interestPaid,
       });
       return transaction;
-      return null;
     } catch (err) {
       throw err;
     }

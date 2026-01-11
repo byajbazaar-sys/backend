@@ -54,7 +54,7 @@ export class User {
 
   @Expose()
   public updatedAt?: Date;
-  
+
   @Expose()
   public profilePhotoRef?: string;
 

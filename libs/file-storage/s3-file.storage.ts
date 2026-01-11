@@ -186,7 +186,6 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
 
   public async getUrlAsync(path: string): Promise<string> {
     try {
-      console.log("S3FileStorage.isPublic:", this.isPublic);
       return this.isPublic ? await this.getSimpleUrlAsync(path) : await this.getSignedUrlAsync(path);
     } catch (ex) {
       this.logger.error(ex);

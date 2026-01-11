@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ESortOrder } from '@shared-libs';
 import { Expose, Transform } from 'class-transformer';
-import { IsArray, IsOptional, IsMongoId, IsEnum } from 'class-validator';
+import { IsArray, IsOptional, IsMongoId, IsEnum, IsString } from 'class-validator';
 import { EDueType } from '../../../shared';
 
 export class ListDuesQueryRequestModel {
@@ -39,4 +39,10 @@ export class ListDuesQueryRequestModel {
   @IsEnum(EDueType, { each: true })
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   type?: EDueType[];
+
+  @Expose()
+  @ApiPropertyOptional({ example: 'John Doe', description: 'Filter by customer name', required: false })
+  @IsOptional()
+  @IsString()
+  customerName?: string;
 }

@@ -30,5 +30,5 @@ export class DueResponseModel {
   @Expose()
   @ApiProperty({ type: TransactionResponseModel, description: 'Transaction' })
   @Type(() => TransactionResponseModel)
-  transaction?: TransactionResponseModel;
+  latestTransaction?: TransactionResponseModel;
 }

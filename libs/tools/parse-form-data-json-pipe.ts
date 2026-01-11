@@ -21,6 +21,19 @@ export class ParseFormDataJsonPipe implements PipeTransform {
         // Recursively parse the parsed value in case it contains more JSON strings
         return this.parseJsonRecursively(parsed);
       } catch {
+        // If parsing fails, try wrapping in array brackets (handles comma-separated objects)
+        // This handles cases like: "{...},{...}" which should become "[{...},{...}]"
+        try {
+          const trimmed = obj.trim();
+          // Only try wrapping if it looks like it might be JSON objects
+          if ((trimmed.startsWith('{') && trimmed.includes('}')) || trimmed.startsWith('[')) {
+            const wrapped = trimmed.startsWith('[') ? trimmed : `[${trimmed}]`;
+            const parsed = JSON.parse(wrapped);
+            return this.parseJsonRecursively(parsed);
+          }
+        } catch {
+          // If wrapping also fails, return the original string
+        }
         // If parsing fails, return the original string
         return obj;
       }

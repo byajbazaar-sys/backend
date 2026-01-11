@@ -1,9 +1,8 @@
 import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { Loan } from '../domain';
+import { Loan, LoanStats } from '../domain';
 import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
-import { UpdateLoanRequestModel } from '../models';
-import { LoansFilterOptions } from '../options';
+import { LoansFilterOptions, LoanStatsFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
@@ -174,6 +173,18 @@ export class LoanService implements ILoanService {
     }
   }
 
+  async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
+    try {
+      filterOptions.startDate = filterOptions.startDate;
+      filterOptions.endDate = filterOptions.endDate;
+      filterOptions.startDate.setHours(0, 0, 0, 0);
+      filterOptions.endDate.setHours(23, 59, 59, 999);
+      const stats = await this.loansRepo.getStats(userId, filterOptions);
+      return stats;
+    } catch (err) {
+      throw err;
+    }
+  }
 
   async delete(id: string, userId: string): Promise<void> {
     try {

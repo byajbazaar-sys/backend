@@ -5,3 +5,5 @@ export * from './loan-response.model';
 export * from './get-loan-params.model';
 export * from './list-loans-query.model';
 export * from './loans-paged-response.model';
+export * from './loan-stats-query.request.model';
+export * from './loan-stats.response.model';

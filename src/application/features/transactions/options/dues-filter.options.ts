@@ -23,4 +23,7 @@ export class DuesFilterOptions {
 
   @Expose()
   public type?: EDueType[];
+
+  @Expose()
+  public customerName?: string;
 }
