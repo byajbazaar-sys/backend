@@ -81,13 +81,15 @@ export class LoansController {
 
     loanData.loanItems = loanData.loanItems.map((item, index) => {
       loanAmount += item.amount;
-      return {
+      const loanItem: any = {
         ...item,
         _id: new Types.ObjectId(),
+        itemId: new Types.ObjectId(item.itemId),
         image: files.loanItemImages?.[index] ?? null,
         loanId: loanData._id.toString(),
         createdBy: identity.userId,
       };
+      return loanItem;
     });
     loanData.amountRemaining = loanAmount;
     loanData.createdBy = identity.userId;

@@ -3,6 +3,7 @@ import { SeedsSchema, seedsSchema } from './seeds.schema';
 import { customersSchema, CustomersSchema } from './customers.schema';
 import { loansSchema, LoansSchema } from './loans.schema';
 import { loanItemsSchema, LoanItemsSchema } from './loan-items.schema';
+import { itemsSchema, ItemsSchema } from './items.schema';
 import { transactionsSchema, TransactionsSchema } from './transactions.schema';
 import { duesSchema, DuesSchema } from './dues.schema';
 
@@ -11,6 +12,7 @@ export * from './seeds.schema';
 export * from './customers.schema';
 export * from './loans.schema';
 export * from './loan-items.schema';
+export * from './items.schema';
 export * from './schemas';
 export * from './transactions.schema';
 export * from './dues.schema';
@@ -37,11 +39,15 @@ export default [
     schema: loanItemsSchema,
   },
   {
+    name: ItemsSchema.name,
+    schema: itemsSchema,
+  },
+  {
     name: TransactionsSchema.name,
     schema: transactionsSchema,
   },
   {
     name: DuesSchema.name,
     schema: duesSchema,
-  }
+  },
 ];

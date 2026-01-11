@@ -1,6 +1,5 @@
 import { Expose, Transform } from 'class-transformer';
 import { Types } from 'mongoose';
-import { ELoanItemType } from '../enums';
 
 export class LoanItem {
   @Expose()
@@ -15,7 +14,8 @@ export class LoanItem {
   public loanId: string;
 
   @Expose()
-  public type: ELoanItemType;
+  @Transform(({ obj }) => obj?.itemId?.toString())
+  public itemId: string;
 
   @Expose()
   public amount: number;

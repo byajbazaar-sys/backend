@@ -8,4 +8,6 @@ export interface IDuesRepository {
   create(due: Due): Promise<Due>;
   bulkCreate(dues: Due[]): Promise<Due[]>;
   updatePastDues(): Promise<number>;
+  findById(id: string): Promise<Due>;
+  update(id: string, due: Due): Promise<Due>;
 }

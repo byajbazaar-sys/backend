@@ -3,7 +3,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { LoanDocument, LoansSchema, Schemas } from '../schemas';
 import { plainToInstance } from 'class-transformer';
-import { ELoanStatus, ILoansRepository, Loan, LoansFilterOptions, LoanStats, LoanStatsFilterOptions } from '../../../application';
+import {
+  ELoanStatus,
+  ILoansRepository,
+  Loan,
+  LoansFilterOptions,
+  LoanStats,
+  LoanStatsFilterOptions,
+} from '../../../application';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
@@ -134,7 +141,8 @@ export class LoansRepository implements ILoansRepository {
 
   async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
     try {
-      const { startDate, endDate, itemType } = filterOptions;
+      let { startDate, endDate, itemId } = filterOptions;
+      const itemIdObjectId = itemId ? new Types.ObjectId(itemId) : null;
       const stats = await this.loanModel.aggregate([
         {
           $match: {
@@ -174,7 +182,7 @@ export class LoansRepository implements ILoansRepository {
         {
           $lookup: {
             from: Schemas.LoanItemsSchema,
-            let: { loanId: '$_id' },
+            let: { loanId: '$_id', filterItemId: itemIdObjectId },
             pipeline: [
               {
                 $match: {
@@ -195,26 +203,26 @@ export class LoansRepository implements ILoansRepository {
                   // ✅ total monetary value of FILTERED itemType
                   matchedItemValue: {
                     $sum: {
-                      $cond: [{ $eq: ['$type', itemType] }, '$amount', 0],
+                      $cond: [{ $eq: ['$itemId', '$$filterItemId'] }, '$amount', 0],
                     },
                   },
 
                   // optional UI metrics
                   matchedItems: {
                     $sum: {
-                      $cond: [{ $eq: ['$type', itemType] }, 1, 0],
+                      $cond: [{ $eq: ['$itemId', '$$filterItemId'] }, 1, 0],
                     },
                   },
 
                   totalNetWeight: {
                     $sum: {
-                      $cond: [{ $eq: ['$type', itemType] }, '$netWeightInGrams', 0],
+                      $cond: [{ $eq: ['$itemId', '$$filterItemId'] }, '$netWeightInGrams', 0],
                     },
                   },
 
                   totalGrossWeight: {
                     $sum: {
-                      $cond: [{ $eq: ['$type', itemType] }, '$grossWeightInGrams', 0],
+                      $cond: [{ $eq: ['$itemId', '$$filterItemId'] }, '$grossWeightInGrams', 0],
                     },
                   },
                 },
@@ -224,7 +232,17 @@ export class LoansRepository implements ILoansRepository {
               {
                 $addFields: {
                   allocationRatio: {
-                    $cond: [{ $gt: ['$totalItemValue', 0] }, { $divide: ['$matchedItemValue', '$totalItemValue'] }, 0],
+                    $cond: [
+                      { $eq: ['$$filterItemId', null] }, // 👈 no filter applied
+                      1,
+                      {
+                        $cond: [
+                          { $gt: ['$totalItemValue', 0] },
+                          { $divide: ['$matchedItemValue', '$totalItemValue'] },
+                          0,
+                        ],
+                      },
+                    ],
                   },
                 },
               },

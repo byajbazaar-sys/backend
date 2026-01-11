@@ -8,6 +8,7 @@ import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repo
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
 import { Due } from '../../transactions';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType } from '../enums';
+import { Types } from 'mongoose';
 
 @Injectable()
 export class LoanService implements ILoanService {
@@ -52,55 +53,84 @@ export class LoanService implements ILoanService {
         interestType,
         tenureType,
         tenureValue,
-        amountRemaining,
-        interestRemaining,
+        amountRemaining, // principal
+        interestRemaining, // interest
         customerId,
         createdBy,
         createdAt,
       } = loan;
+
       const loanId = loan.id || loan._id?.toString();
 
-      if (!loanId) {
-        throw new Error('Loan ID is required to create dues');
-      }
-
+      if (!loanId) throw new Error('Loan ID is required');
       if (!customerId || !createdBy) {
-        throw new Error('Customer ID and Created By are required to create dues');
+        throw new Error('Customer ID and Created By are required');
       }
 
-      // Calculate number of dues based on interest type and tenure
       const numberOfDues = this.calculateNumberOfDues(interestType, tenureType, tenureValue);
 
-      // Calculate total amount (principal + interest)
-      const totalAmount = amountRemaining + interestRemaining;
-      const dueAmountPerPeriod = totalAmount / numberOfDues;
+      if (numberOfDues <= 0) {
+        throw new Error('Invalid number of dues calculated');
+      }
 
-      // Calculate due dates based on interest type
+      // ✅ Split principal and interest separately
+      const principalPerDue = amountRemaining / numberOfDues;
+      const interestPerDue = interestRemaining / numberOfDues;
+
       const dues: Due[] = [];
-      // Use loan creation date as start date, or current date if not available
+
       const startDate = createdAt ? new Date(createdAt) : new Date();
       startDate.setHours(0, 0, 0, 0);
 
       for (let i = 0; i < numberOfDues; i++) {
         const dueDate = this.calculateDueDate(startDate, interestType, i + 1);
+
+        // rounding safely
+        const principalAmount = Number(principalPerDue.toFixed(2));
+        const interestAmount = Number(interestPerDue.toFixed(2));
+        const dueAmount = Number((principalAmount + interestAmount).toFixed(2));
+
         const due: Due = {
           loanId,
           customerId,
-          dueAmount: Math.round(dueAmountPerPeriod * 100) / 100, // Round to 2 decimal places
-          type: EDueType.UPCOMING_DUE, // All dues are initially upcoming
+
+          principalAmount,
+          interestAmount,
+          dueAmount,
+
+          type: EDueType.UPCOMING_DUE,
           dueDate,
           createdBy,
         };
+        console.log(due);
         dues.push(due);
       }
 
-      // Bulk create all dues
+      // ⚠️ Adjust rounding drift on last due
+      this.fixRoundingDrift(dues, amountRemaining, interestRemaining);
+
       if (dues.length > 0) {
         await this.duesRepo.bulkCreate(dues);
       }
     } catch (err) {
       throw err;
     }
+  }
+
+  private fixRoundingDrift(dues: Due[], totalPrincipal: number, totalInterest: number) {
+    const principalSum = dues.reduce((sum, d) => sum + d.principalAmount, 0);
+    const interestSum = dues.reduce((sum, d) => sum + d.interestAmount, 0);
+
+    const principalDiff = Number((totalPrincipal - principalSum).toFixed(2));
+    const interestDiff = Number((totalInterest - interestSum).toFixed(2));
+
+    const lastDue = dues[dues.length - 1];
+
+    lastDue.principalAmount = Number((lastDue.principalAmount + principalDiff).toFixed(2));
+
+    lastDue.interestAmount = Number((lastDue.interestAmount + interestDiff).toFixed(2));
+
+    lastDue.dueAmount = Number((lastDue.principalAmount + lastDue.interestAmount).toFixed(2));
   }
 
   private calculateNumberOfDues(interestType: EInterestType, tenureType: ELoanTenureType, tenureValue: number): number {

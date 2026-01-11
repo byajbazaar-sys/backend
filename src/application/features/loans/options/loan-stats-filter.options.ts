@@ -1,13 +1,12 @@
 import { Expose } from 'class-transformer';
-import { ELoanItemType } from '../enums';
 
 export class LoanStatsFilterOptions {
   @Expose()
-  startDate: Date;
+  public startDate: Date;
 
   @Expose()
-  endDate: Date;
+  public endDate: Date;
 
   @Expose()
-  itemType: ELoanItemType;
+  public itemId: string;
 }

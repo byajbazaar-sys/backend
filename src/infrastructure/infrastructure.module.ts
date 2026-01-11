@@ -10,6 +10,7 @@ import {
   CUSTOMERS_REPOSITORY,
   DUES_REPOSITORY,
   FileStorageOptions,
+  ITEMS_REPOSITORY,
   LAMBDA_SERVICE,
   LOAN_ITEMS_REPOSITORY,
   LOANS_REPOSITORY,
@@ -21,6 +22,7 @@ import {
 import {
   CustomersRepository,
   DuesRepository,
+  ItemsRepository,
   LoanItemsRepository,
   LoansRepository,
   TransactionsRepository,
@@ -79,6 +81,10 @@ import CronServices from './cron';
     {
       provide: LOAN_ITEMS_REPOSITORY,
       useClass: LoanItemsRepository,
+    },
+    {
+      provide: ITEMS_REPOSITORY,
+      useClass: ItemsRepository,
     },
     {
       provide: TRANSACTIONS_REPOSITORY,
@@ -162,6 +168,7 @@ import CronServices from './cron';
     CUSTOMERS_REPOSITORY,
     LOANS_REPOSITORY,
     LOAN_ITEMS_REPOSITORY,
+    ITEMS_REPOSITORY,
     AES_ENCRYPT_SERVICE,
     USERS_FILE_STORAGE,
     LAMBDA_SERVICE,

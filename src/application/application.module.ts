@@ -12,6 +12,8 @@ import {
   AuthService,
   CUSTOMER_SERVICE,
   CustomerService,
+  ITEM_SERVICE,
+  ItemService,
   LOAN_SERVICE,
   LoanService,
   TRANSACTION_SERVICE,
@@ -43,6 +45,10 @@ import {
     {
       provide: LOAN_SERVICE,
       useClass: LoanService,
+    },
+    {
+      provide: ITEM_SERVICE,
+      useClass: ItemService,
     },
     {
       provide: TRANSACTION_SERVICE,

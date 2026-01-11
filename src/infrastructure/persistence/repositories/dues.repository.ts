@@ -154,6 +154,8 @@ export class DuesRepository implements IDuesRepository {
           type: due.type,
           dueDate: due.dueDate,
           createdBy: new Types.ObjectId(due.createdBy),
+          principalAmount: due.principalAmount,
+          interestAmount: due.interestAmount,
         })),
       );
       return plainToInstance(Due, dueDocs, {
@@ -171,7 +173,7 @@ export class DuesRepository implements IDuesRepository {
       const result = await this.dueModel.updateMany(
         {
           dueDate: { $lt: currentDate },
-          type: { $ne: EDueType.PAST_DUE },
+          type: { $eq: EDueType.UPCOMING_DUE },
         },
         {
           $set: { type: EDueType.PAST_DUE },
@@ -179,6 +181,29 @@ export class DuesRepository implements IDuesRepository {
       );
 
       return result.modifiedCount;
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async findById(id: string): Promise<Due> {
+    try {
+      const due = await this.dueModel.findById(new Types.ObjectId(id)).exec();
+      return plainToInstance(Due, due, {
+        excludeExtraneousValues: true,
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async update(id: string, due: Due): Promise<Due> {
+    try {
+      delete due._id;
+      const updatedDue = await this.dueModel.findByIdAndUpdate(new Types.ObjectId(id), due, { new: true }).exec();
+      return plainToInstance(Due, updatedDue, {
+        excludeExtraneousValues: true,
+      });
     } catch (err) {
       throw err;
     }

@@ -4,6 +4,7 @@ export const Schemas = {
   CustomersSchema: 'customers',
   LoansSchema: 'loans',
   LoanItemsSchema: 'loanItems',
+  ItemsSchema: 'items',
   TransactionsSchema: 'transactions',
   DuesSchema: 'dues',
 };

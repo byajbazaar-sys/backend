@@ -5,6 +5,10 @@ import { EDueType } from '../../../shared';
 import { TransactionResponseModel } from './transaction-response.model';
 export class DueResponseModel {
   @Expose()
+  @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Due ID' })
+  id: string;
+
+  @Expose()
   @ApiProperty({ example: '2024-01-15T00:00:00.000Z' })
   @Type(() => Date)
   dueDate: Date;

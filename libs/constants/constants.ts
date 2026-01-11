@@ -24,3 +24,5 @@ export const DEFAULT_PAGE_NUMBER = 1;
 export const DEFAULT_PAGE_SIZE = 10;
 export const BCRYPT_SALT_ROUNDS = 10;
 
+export const SYSTEM_USER_ID = '000000000000000000000000';
+

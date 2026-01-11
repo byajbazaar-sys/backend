@@ -29,6 +29,9 @@ export class TransactionsSchema {
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: Schemas.UsersSchema, required: true })
   createdBy: MongooseSchema.Types.ObjectId;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: Schemas.DuesSchema, required: false })
+  dueId?: MongooseSchema.Types.ObjectId;
 }
 
 export const transactionsSchema = SchemaFactory.createForClass(TransactionsSchema);

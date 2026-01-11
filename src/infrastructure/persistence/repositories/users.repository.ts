@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UserDocument, UsersSchema } from '../schemas';
 import { plainToInstance } from 'class-transformer';
-import { ELoanItemType, IUsersRepository, User } from '../../../application';
+import { IUsersRepository, User } from '../../../application';
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {

@@ -45,4 +45,8 @@ export class Transaction {
   @Expose()
   @Type(() => Customer)
   public customer: Customer;
+
+  @Expose()
+  @Transform(({ obj }) => obj?.dueId?.toString())
+  public dueId?: string;
 }

@@ -26,7 +26,12 @@ export class DuesSchema {
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: Schemas.UsersSchema, required: true })
   createdBy: MongooseSchema.Types.ObjectId;
+
+  @Prop({ required: true })
+  principalAmount: number;
+
+  @Prop({ required: true })
+  interestAmount: number;
 }
 
 export const duesSchema = SchemaFactory.createForClass(DuesSchema);
-  

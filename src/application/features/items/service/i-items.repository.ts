@@ -1,0 +1,11 @@
+import { Item } from '../domain';
+
+export const ITEMS_REPOSITORY = 'ITEMS_REPOSITORY';
+
+export interface IItemsRepository {
+  create(createItem: Item): Promise<Item>;
+  findById(id: string): Promise<Item>;
+  findByName(name: string, createdBy: string): Promise<Item>;
+  findAll(): Promise<Item[]>;
+  delete(id: string): Promise<void>;
+}

@@ -1,14 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumber, IsEnum, IsOptional, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, Min, IsMongoId } from 'class-validator';
 import { Expose } from 'class-transformer';
-import { ELoanItemType } from '../enums';
 
 export class CreateLoanItemRequestModel {
   @Expose()
-  @ApiProperty({ enum: ELoanItemType, example: ELoanItemType.GOLD, description: 'Loan item type' })
-  @IsEnum(ELoanItemType)
+  @ApiProperty({ description: 'Item ID', example: '507f1f77bcf86cd799439011' })
+  @IsString()
   @IsNotEmpty()
-  type: ELoanItemType;
+  @IsMongoId()
+  itemId: string;
 
   @Expose()
   @ApiProperty({ description: 'Item amount', example: 50000 })

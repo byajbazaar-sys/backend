@@ -1,3 +1,4 @@
 export enum ESeedType {
-  Admin = 'admin'
+  Admin = 'admin',
+  Items = 'items',
 }

@@ -4,11 +4,11 @@ import { Types } from 'mongoose';
 
 export class User {
   @Expose()
-  public _id: Types.ObjectId;
+  public _id?: Types.ObjectId;
 
   @Expose()
   @Transform(({ obj }) => obj?._id?.toString())
-  public id: string;
+  public id?: string;
 
   @Expose()
   public firstName?: string;

@@ -2,8 +2,16 @@ import { Expose, Transform, Type } from 'class-transformer';
 import { EDueType } from '../../../shared';
 import { Customer } from '../../customers';
 import { Transaction } from './transaction';
+import { Types } from 'mongoose';
 
 export class Due {
+  @Expose()
+  public _id?: Types.ObjectId;
+
+  @Expose()
+  @Transform(({ obj }) => obj?._id?.toString())
+  public id?: string;
+
   @Expose()
   public type: EDueType;
 
@@ -33,4 +41,10 @@ export class Due {
   @Expose()
   @Type(() => Transaction)
   public latestTransaction?: Transaction;
+
+  @Expose()
+  public principalAmount: number;
+
+  @Expose()
+  public interestAmount: number;
 }

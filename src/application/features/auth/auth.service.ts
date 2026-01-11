@@ -35,7 +35,7 @@ export class AuthService implements IAuthService {
       }
 
       const identity: IIdentity = {
-        userId: user._id.toString(),
+        userId: user.id,
         userType: user.userType,
         email: user.email,
         emailVerified: user.isEmailVerified,
@@ -69,6 +69,7 @@ export class AuthService implements IAuthService {
 
     try {
       user._id = new Types.ObjectId();
+      console.log(user);
       if (user.profilePhoto && user.profilePhotoContentType) {
         const fileExtension = user.profilePhotoContentType.split('/')[1];
         user.profilePhotoRef = `users/profiles/${user._id.toString()}.${fileExtension}`;

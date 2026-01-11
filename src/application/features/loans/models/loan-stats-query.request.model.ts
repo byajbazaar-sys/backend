@@ -1,7 +1,6 @@
 import { Expose } from 'class-transformer';
-import { ELoanItemType } from '../enums';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { IsMongoId } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class LoanStatsQueryRequestModel {
@@ -16,7 +15,7 @@ export class LoanStatsQueryRequestModel {
   endDate: Date;
 
   @Expose()
-  @ApiProperty({ enum: ELoanItemType, example: ELoanItemType.GOLD })
-  @IsEnum(ELoanItemType)
-  itemType: ELoanItemType;
+  @ApiProperty({ example: '507f1f77bcf86cd799439011' })
+  @IsMongoId()
+  itemId: string;
 }

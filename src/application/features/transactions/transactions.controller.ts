@@ -1,4 +1,4 @@
-import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query } from '@nestjs/common';
+import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query, BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -39,6 +39,10 @@ export class TransactionsController {
     const transactionData = plainToInstance(Transaction, body, {
       excludeExtraneousValues: true,
     });
+
+    if(!transactionData.loanId && !transactionData.dueId) {
+      throw new BadRequestException('Loan ID or Due ID is required');
+    }
     transactionData._id = new Types.ObjectId();
     transactionData.createdBy = identity.userId;
     const transaction = await this.transactionService.create(transactionData);
