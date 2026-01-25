@@ -123,9 +123,9 @@ export class CustomersController {
   @ApiOkResponse({ type: CustomerResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Customer not found' })
   @HttpCode(HttpStatus.OK)
-  async getById(@Param() params: GetCustomerParamsModel): Promise<CustomerResponseModel> {
-    this.logger.info({ params }, 'getById called');
-    const customer = await this.customerService.getById(params.id);
+  async getById(@Param() params: GetCustomerParamsModel, @Identity() identity: IIdentity): Promise<CustomerResponseModel> {
+    this.logger.info({ params, identity }, 'getById called');
+    const customer = await this.customerService.getById(params.id, identity.userId);
     return plainToInstance(CustomerResponseModel, customer, { excludeExtraneousValues: true });
   }
 
@@ -143,7 +143,11 @@ export class CustomersController {
     @Identity() identity: IIdentity,
   ): Promise<CustomerResponseModel> {
     this.logger.info({ params, body, identity }, 'update called');
-    const customer = await this.customerService.update(params.id, body, identity.userId);
+    const customerData = plainToInstance(Customer, body, {
+      excludeExtraneousValues: true,
+    });
+    customerData.createdBy = identity.userId;
+    const customer = await this.customerService.update(params.id, customerData);
     return plainToInstance(CustomerResponseModel, customer, { excludeExtraneousValues: true });
   }
 

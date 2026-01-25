@@ -7,8 +7,8 @@ export const CUSTOMER_SERVICE = 'ICustomerService';
 
 export interface ICustomerService {
   create(data: Customer): Promise<Customer>;
-  getById(id: string): Promise<Customer>;
+  getById(id: string, createdBy: string): Promise<Customer>;
   getCustomers(params: CustomersFilterOptions): Promise<Paged<Customer>>;
-  update(id: string, body: UpdateCustomerRequestModel, userId: string): Promise<Customer>;
-  delete(id: string, userId: string): Promise<void>;
+  update(id: string, body: Customer): Promise<Customer>;
+  delete(id: string, createdBy: string): Promise<void>;
 }

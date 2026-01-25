@@ -7,8 +7,9 @@ export const LOAN_SERVICE = 'ILoanService';
 
 export interface ILoanService {
   create(data: Loan): Promise<Loan>;
-  getById(id: string): Promise<Loan>;
+  getById(id: string, createdBy: string): Promise<Loan>;
   getLoans(params: LoansFilterOptions): Promise<Paged<Loan>>;
+  update(id: string, updateData: Loan): Promise<Loan>;
   delete(id: string, userId: string): Promise<void>;
   getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;
 }

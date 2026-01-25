@@ -8,7 +8,7 @@ import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class DuesRepository implements IDuesRepository {
-  constructor(@InjectModel(DuesSchema.name) private dueModel: Model<DueDocument>) {}
+  constructor(@InjectModel(DuesSchema.name) private dueModel: Model<DueDocument>) { }
 
   async listDues(params: DuesFilterOptions): Promise<Paged<Due>> {
     try {
@@ -78,15 +78,15 @@ export class DuesRepository implements IDuesRepository {
         },
         ...(customerName
           ? [
-              {
-                $match: {
-                  $or: [
-                    { 'customer.firstName': { $regex: customerName, $options: 'i' } },
-                    { 'customer.lastName': { $regex: customerName, $options: 'i' } },
-                  ],
-                },
+            {
+              $match: {
+                $or: [
+                  { 'customer.firstName': { $regex: customerName, $options: 'i' } },
+                  { 'customer.lastName': { $regex: customerName, $options: 'i' } },
+                ],
               },
-            ]
+            },
+          ]
           : []),
 
         {
@@ -186,9 +186,9 @@ export class DuesRepository implements IDuesRepository {
     }
   }
 
-  async findById(id: string): Promise<Due> {
+  async findById(id: string, createdBy: string): Promise<Due> {
     try {
-      const due = await this.dueModel.findById(new Types.ObjectId(id)).exec();
+      const due = await this.dueModel.findOne({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
       return plainToInstance(Due, due, {
         excludeExtraneousValues: true,
       });
@@ -202,6 +202,42 @@ export class DuesRepository implements IDuesRepository {
       delete due._id;
       const updatedDue = await this.dueModel.findByIdAndUpdate(new Types.ObjectId(id), due, { new: true }).exec();
       return plainToInstance(Due, updatedDue, {
+        excludeExtraneousValues: true,
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async deleteByLoanId(loanId: string, types?: EDueType[]): Promise<void> {
+    try {
+      const filter: Record<string, any> = {
+        loanId: new Types.ObjectId(loanId),
+      };
+
+      // If types are specified, only delete dues with those types (e.g., only UPCOMING_DUE and PAST_DUE, not PAID)
+      if (types && types.length > 0) {
+        filter.type = { $in: types };
+      }
+
+      await this.dueModel.deleteMany(filter).exec();
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async findByLoanIdAndType(loanId: string, types: EDueType[]): Promise<Due[]> {
+    try {
+      const dues = await this.dueModel
+        .find({
+          loanId: new Types.ObjectId(loanId),
+          type: { $in: types },
+        })
+        .sort({ dueDate: 1 })
+        .lean()
+        .exec();
+
+      return plainToInstance(Due, dues, {
         excludeExtraneousValues: true,
       });
     } catch (err) {

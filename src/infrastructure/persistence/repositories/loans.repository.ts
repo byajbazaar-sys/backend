@@ -15,7 +15,7 @@ import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class LoansRepository implements ILoansRepository {
-  constructor(@InjectModel(LoansSchema.name) private loanModel: Model<LoanDocument>) {}
+  constructor(@InjectModel(LoansSchema.name) private loanModel: Model<LoanDocument>) { }
 
   async create(createLoan: Loan): Promise<Loan> {
     try {
@@ -39,12 +39,11 @@ export class LoansRepository implements ILoansRepository {
     }
   }
 
-  async update(id: string, updateDto: Partial<Loan>): Promise<Loan> {
+  async update(id: string, updateDto: Loan): Promise<Loan> {
     try {
-      const updatedLoan = await this.loanModel.findByIdAndUpdate(id, updateDto, { new: true }).lean().exec();
-      if (!updatedLoan) {
-        return null;
-      }
+      delete updateDto._id;
+      delete updateDto.id;
+      const updatedLoan = await this.loanModel.findOneAndUpdate({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(updateDto.createdBy) }, updateDto, { new: true }).lean().exec();
       return plainToInstance(Loan, updatedLoan, {
         excludeExtraneousValues: true,
       });
@@ -53,12 +52,9 @@ export class LoansRepository implements ILoansRepository {
     }
   }
 
-  async findById(id: string): Promise<Loan> {
+  async findById(id: string, createdBy: string): Promise<Loan> {
     try {
-      const loan = await this.loanModel.findById(new Types.ObjectId(id)).exec();
-      if (!loan) {
-        return null;
-      }
+      const loan = await this.loanModel.findOne({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
       return plainToInstance(Loan, loan.toJSON(), {
         excludeExtraneousValues: true,
       });
@@ -330,9 +326,9 @@ export class LoansRepository implements ILoansRepository {
     }
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, createdBy: string): Promise<void> {
     try {
-      await this.loanModel.findByIdAndDelete(new Types.ObjectId(id)).exec();
+      await this.loanModel.findOneAndDelete({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
     } catch (err) {
       throw err;
     }

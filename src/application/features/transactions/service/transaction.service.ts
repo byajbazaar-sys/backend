@@ -21,7 +21,7 @@ export class TransactionService implements ITransactionService {
     try {
       let { loan, due } = await this.validateTransaction(data);
       if (!loan && due) {
-        loan = await this.loansRepo.findById(due.loanId);
+        loan = await this.loansRepo.findById(due.loanId, data.createdBy);
         data.loanId = loan.id;
       }
       data.customerId = loan.customerId;
@@ -76,9 +76,9 @@ export class TransactionService implements ITransactionService {
     }
   }
 
-  async getById(id: string): Promise<Transaction> {
+  async getById(id: string, createdBy: string): Promise<Transaction> {
     try {
-      const transaction = await this.transactionsRepo.findById(id);
+      const transaction = await this.transactionsRepo.findById(id, createdBy);
       if (!transaction) {
         throw new NotFoundException('Transaction not found');
       }
@@ -100,48 +100,11 @@ export class TransactionService implements ITransactionService {
     }
   }
 
-  async update(id: string, body: UpdateTransactionRequestModel, userId: string): Promise<Transaction> {
+  async delete(id: string, createdBy: string): Promise<void> {
     try {
-      const existingTransaction = await this.transactionsRepo.findById(id);
+      const existingTransaction = await this.transactionsRepo.findById(id, createdBy);
       if (!existingTransaction) {
         throw new NotFoundException('Transaction not found');
-      }
-
-      // Check if user is authorized to update this transaction
-      if (existingTransaction.createdBy !== userId) {
-        throw new ForbiddenException('You are not authorized to update this transaction');
-      }
-
-      const updateData: Partial<Transaction> = {};
-      if (body.loanId !== undefined) updateData.loanId = body.loanId;
-      if (body.amount !== undefined) updateData.amount = body.amount;
-      if (body.transactionType !== undefined) updateData.transactionType = body.transactionType;
-      if (body.paidIn !== undefined) updateData.paidIn = body.paidIn;
-
-      const updatedTransaction = await this.transactionsRepo.update(id, updateData);
-      if (!updatedTransaction) {
-        throw new NotFoundException('Transaction not found');
-      }
-
-      return updatedTransaction;
-    } catch (err) {
-      if (err instanceof NotFoundException || err instanceof ForbiddenException) {
-        throw err;
-      }
-      throw err;
-    }
-  }
-
-  async delete(id: string, userId: string): Promise<void> {
-    try {
-      const existingTransaction = await this.transactionsRepo.findById(id);
-      if (!existingTransaction) {
-        throw new NotFoundException('Transaction not found');
-      }
-
-      // Check if user is authorized to delete this transaction
-      if (existingTransaction.createdBy !== userId) {
-        throw new ForbiddenException('You are not authorized to delete this transaction');
       }
 
       await this.transactionsRepo.delete(id);
@@ -173,8 +136,8 @@ export class TransactionService implements ITransactionService {
 
   private async validateTransaction(data: Transaction): Promise<{ loan?: Loan; due?: Due }> {
     try {
-      const loan = await this.loansRepo.findById(data?.loanId);
-      const due = await this.duesRepo.findById(data?.dueId);
+      const loan = await this.loansRepo.findById(data?.loanId, data.createdBy);
+      const due = await this.duesRepo.findById(data?.dueId, data.createdBy);
       if (data.loanId && data.dueId) {
         if (!loan) {
           throw new NotFoundException('Loan not found');

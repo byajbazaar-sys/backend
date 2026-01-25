@@ -69,9 +69,9 @@ export class CustomerService implements ICustomerService {
     }
   }
 
-  async getById(id: string): Promise<Customer> {
+  async getById(id: string, createdBy: string): Promise<Customer> {
     try {
-      const customer = await this.customersRepo.findById(id);
+      const customer = await this.customersRepo.findById(id, createdBy);
       if (!customer) {
         throw new NotFoundException('Customer not found');
       }
@@ -94,36 +94,14 @@ export class CustomerService implements ICustomerService {
     }
   }
 
-  async update(id: string, body: UpdateCustomerRequestModel, userId: string): Promise<Customer> {
+  async update(id: string, body: Customer): Promise<Customer> {
     try {
-      const existingCustomer = await this.customersRepo.findById(id);
+      const existingCustomer = await this.customersRepo.findById(id, body.createdBy);
       if (!existingCustomer) {
         throw new NotFoundException('Customer not found');
       }
 
-      // Check if user is authorized to update this customer
-      if (existingCustomer.createdBy !== userId) {
-        throw new ForbiddenException('You are not authorized to update this customer');
-      }
-
-      // Check if email is being updated and if it's already taken
-      if (body.email && body.email.toLowerCase().trim() !== existingCustomer.email.toLowerCase()) {
-        const customerWithEmail = await this.customersRepo.findByEmail(body.email.toLowerCase().trim());
-        if (customerWithEmail && customerWithEmail._id.toString() !== id) {
-          throw new ConflictException('Customer with this email already exists');
-        }
-      }
-
-      const updateData: Partial<Customer> = {};
-      if (body.firstName !== undefined) updateData.firstName = body.firstName;
-      if (body.middleName !== undefined) updateData.middleName = body.middleName;
-      if (body.lastName !== undefined) updateData.lastName = body.lastName;
-      if (body.email !== undefined) updateData.email = body.email.toLowerCase().trim();
-      if (body.phone !== undefined) updateData.phone = body.phone;
-      if (body.alternativePhone !== undefined) updateData.alternativePhone = body.alternativePhone;
-      if (body.location !== undefined) updateData.location = body.location;
-
-      const updatedCustomer = await this.customersRepo.update(id, updateData);
+      const updatedCustomer = await this.customersRepo.update(id, body, body.createdBy);
       if (!updatedCustomer) {
         throw new NotFoundException('Customer not found');
       }
@@ -137,12 +115,13 @@ export class CustomerService implements ICustomerService {
     }
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, createdBy: string): Promise<void> {
     try {
-      const existingCustomer = await this.customersRepo.findById(id);
+      const existingCustomer = await this.customersRepo.findById(id, createdBy);
       if (!existingCustomer) {
         throw new NotFoundException('Customer not found');
       }
+      await this.customersRepo.delete(id, createdBy);
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;

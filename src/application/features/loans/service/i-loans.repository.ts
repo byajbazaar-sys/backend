@@ -8,11 +8,11 @@ export const LOANS_REPOSITORY = 'LOANS_REPOSITORY';
 export interface ILoansRepository {
   create(createLoan: Loan): Promise<Loan>;
   findByCustomerId(customerId: string): Promise<Loan[]>;
-  update(id: string, updateDto: Partial<Loan>): Promise<Loan>;
-  findById(id: string): Promise<Loan>;
+  update(id: string, updateDto: Loan): Promise<Loan>;
+  findById(id: string, createdBy: string): Promise<Loan>;
   findByIds(ids: string[]): Promise<Loan[]>;
   findByCreatedBy(createdBy: string): Promise<Loan[]>;
   listLoans(params: LoansFilterOptions): Promise<Paged<Loan>>;
-  delete(id: string): Promise<void>;
+  delete(id: string, createdBy: string): Promise<void>;
   getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;
 }

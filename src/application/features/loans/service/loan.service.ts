@@ -8,7 +8,6 @@ import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repo
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
 import { Due } from '../../transactions';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType } from '../enums';
-import { Types } from 'mongoose';
 
 @Injectable()
 export class LoanService implements ILoanService {
@@ -17,7 +16,7 @@ export class LoanService implements ILoanService {
     @Inject(LOAN_ITEMS_REPOSITORY) private readonly loanItemsRepo: ILoanItemsRepository,
     @Inject(USERS_FILE_STORAGE) private readonly loansFileStorage: IUsersFileStorage,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
-  ) {}
+  ) { }
 
   async create(data: Loan): Promise<Loan> {
     try {
@@ -47,7 +46,15 @@ export class LoanService implements ILoanService {
     }
   }
 
-  private async createDuesForLoan(loan: Loan): Promise<void> {
+  private async createDuesForLoan(
+    loan: Loan,
+    options?: {
+      startDate?: Date;
+      remainingAmount?: number;
+      remainingInterest?: number;
+      remainingTenure?: number;
+    },
+  ): Promise<void> {
     try {
       const {
         interestType,
@@ -67,19 +74,24 @@ export class LoanService implements ILoanService {
         throw new Error('Customer ID and Created By are required');
       }
 
-      const numberOfDues = this.calculateNumberOfDues(interestType, tenureType, tenureValue);
+      // Use provided options or defaults
+      const startDate = options?.startDate || (createdAt ? new Date(createdAt) : new Date());
+      const remainingAmount = options?.remainingAmount ?? amountRemaining;
+      const remainingInterest = options?.remainingInterest ?? interestRemaining;
+      const remainingTenure = options?.remainingTenure ?? tenureValue;
+
+      const numberOfDues = this.calculateNumberOfDues(interestType, tenureType, remainingTenure);
 
       if (numberOfDues <= 0) {
         throw new Error('Invalid number of dues calculated');
       }
 
       // ✅ Split principal and interest separately
-      const principalPerDue = amountRemaining / numberOfDues;
-      const interestPerDue = interestRemaining / numberOfDues;
+      const principalPerDue = remainingAmount / numberOfDues;
+      const interestPerDue = remainingInterest / numberOfDues;
 
       const dues: Due[] = [];
 
-      const startDate = createdAt ? new Date(createdAt) : new Date();
       startDate.setHours(0, 0, 0, 0);
 
       for (let i = 0; i < numberOfDues; i++) {
@@ -107,7 +119,7 @@ export class LoanService implements ILoanService {
       }
 
       // ⚠️ Adjust rounding drift on last due
-      this.fixRoundingDrift(dues, amountRemaining, interestRemaining);
+      this.fixRoundingDrift(dues, remainingAmount, remainingInterest);
 
       if (dues.length > 0) {
         await this.duesRepo.bulkCreate(dues);
@@ -117,20 +129,188 @@ export class LoanService implements ILoanService {
     }
   }
 
-  private fixRoundingDrift(dues: Due[], totalPrincipal: number, totalInterest: number) {
-    const principalSum = dues.reduce((sum, d) => sum + d.principalAmount, 0);
-    const interestSum = dues.reduce((sum, d) => sum + d.interestAmount, 0);
+  async getById(id: string, createdBy: string): Promise<Loan> {
+    try {
+      const loan = await this.loansRepo.findById(id, createdBy);
+      if (!loan) {
+        throw new NotFoundException('Loan not found');
+      }
+      return loan;
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        throw err;
+      }
+      throw err;
+    }
+  }
 
-    const principalDiff = Number((totalPrincipal - principalSum).toFixed(2));
-    const interestDiff = Number((totalInterest - interestSum).toFixed(2));
+  async getLoans(params: LoansFilterOptions): Promise<Paged<Loan>> {
+    try {
+      const result = await this.loansRepo.listLoans(params);
+      return result;
+    } catch (err) {
+      throw err;
+    }
+  }
 
-    const lastDue = dues[dues.length - 1];
+  async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
+    try {
+      filterOptions.startDate = filterOptions.startDate;
+      filterOptions.endDate = filterOptions.endDate;
+      filterOptions.startDate.setHours(0, 0, 0, 0);
+      filterOptions.endDate.setHours(23, 59, 59, 999);
+      const stats = await this.loansRepo.getStats(userId, filterOptions);
+      return stats;
+    } catch (err) {
+      throw err;
+    }
+  }
 
-    lastDue.principalAmount = Number((lastDue.principalAmount + principalDiff).toFixed(2));
+  async update(id: string, updateData: Loan): Promise<Loan> {
+    try {
+      const existingLoan = await this.loansRepo.findById(id, updateData.createdBy);
+      if (!existingLoan) {
+        throw new NotFoundException('Loan not found');
+      }
 
-    lastDue.interestAmount = Number((lastDue.interestAmount + interestDiff).toFixed(2));
+      // Check if fields that affect dues calculation have changed
+      const duesNeedRecalculation =
+        !!updateData.tenureType ||
+        !!updateData.tenureValue ||
+        !!updateData.interestType ||
+        !!updateData.interestPercentage ||
+        !!updateData.interestCalculationMethod ||
+        !!updateData.amountRemaining;
 
-    lastDue.dueAmount = Number((lastDue.principalAmount + lastDue.interestAmount).toFixed(2));
+      // Merge update data with existing loan data to get final values
+      const finalLoanData: Loan = {
+        ...existingLoan,
+        ...updateData,
+        _id: existingLoan._id,
+        id: existingLoan.id,
+        customerId: updateData.customerId ?? existingLoan.customerId,
+        createdBy: existingLoan.createdBy,
+        createdAt: existingLoan.createdAt,
+      };
+
+      // Recalculate interest if interest-related fields are being updated
+      if (
+        updateData.interestCalculationMethod ||
+        updateData.interestPercentage ||
+        updateData.tenureValue ||
+        updateData.amountRemaining ||
+        updateData.interestType
+      ) {
+        const amountRemaining = finalLoanData.amountRemaining;
+        const interestPercentage = finalLoanData.interestPercentage;
+        const tenureValue = finalLoanData.tenureValue;
+        const interestCalculationMethod = finalLoanData.interestCalculationMethod;
+
+        if (interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
+          finalLoanData.interestRemaining =
+            (interestPercentage * amountRemaining * (1 + interestPercentage / 100) ** tenureValue) / 100;
+        } else {
+          finalLoanData.interestRemaining = (interestPercentage * amountRemaining * tenureValue) / 100;
+        }
+      } else {
+        // Keep existing interest remaining if not recalculating
+        finalLoanData.interestRemaining = existingLoan.interestRemaining;
+      }
+
+      // Update the loan first
+      const updatedLoan = await this.loansRepo.update(id, finalLoanData);
+
+      // If dues need recalculation, delete existing upcoming and past dues, then recreate
+      if (duesNeedRecalculation) {
+        // Get all paid dues to calculate remaining amounts and tenure
+        const paidDues = await this.duesRepo.findByLoanIdAndType(id, [EDueType.PAID]);
+
+        // Calculate how many dues have been paid
+        const paidDuesCount = paidDues.length;
+
+        // Calculate remaining amounts from the loan (already updated with transactions)
+        const remainingAmount = updatedLoan.amountRemaining;
+        const remainingInterest = updatedLoan.interestRemaining;
+
+        // Calculate remaining tenure
+        // Use the updated tenure value (which might have changed)
+        const totalTenure = finalLoanData.tenureValue;
+        const remainingTenure = Math.max(0, totalTenure - paidDuesCount);
+
+        // Only recreate dues if there's remaining tenure
+        if (remainingTenure > 0 && (remainingAmount > 0 || remainingInterest > 0)) {
+          // Find the next unpaid due date
+          // If there are paid dues, start from the day after the last paid due
+          // Otherwise, start from the original creation date
+          let startDate: Date;
+          if (paidDues.length > 0) {
+            // Get the last paid due date and add one period
+            const lastPaidDue = paidDues[paidDues.length - 1];
+            startDate = new Date(lastPaidDue.dueDate);
+            // Add one period based on updated interest type
+            if (finalLoanData.interestType === EInterestType.MONTHLY) {
+              startDate.setMonth(startDate.getMonth() + 1);
+            } else if (finalLoanData.interestType === EInterestType.DAILY) {
+              startDate.setDate(startDate.getDate() + 1);
+            }
+          } else {
+            // No paid dues, start from original creation date
+            startDate = existingLoan.createdAt ? new Date(existingLoan.createdAt) : new Date();
+          }
+
+          // Delete only UPCOMING_DUE and PAST_DUE dues (keep PAID dues as they have transactions)
+          await this.duesRepo.deleteByLoanId(id, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
+
+          // Recreate dues with updated loan data, but only for remaining tenure
+          // Use the updated loan data merged with existing values
+          const loanForDues: Loan = {
+            ...updatedLoan,
+            interestType: finalLoanData.interestType,
+            tenureType: finalLoanData.tenureType,
+            tenureValue: remainingTenure, // Use remaining tenure
+            amountRemaining: remainingAmount, // Use remaining amount from loan
+            interestRemaining: remainingInterest, // Use remaining interest from loan
+            customerId: finalLoanData.customerId,
+            createdAt: startDate, // Use calculated start date
+          };
+
+          // Create dues starting from the next unpaid due date with remaining amounts and tenure
+          await this.createDuesForLoan(loanForDues, {
+            startDate,
+            remainingAmount,
+            remainingInterest,
+            remainingTenure,
+          });
+        } else {
+          // No remaining tenure or amounts, just delete upcoming and past dues
+          await this.duesRepo.deleteByLoanId(id, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
+        }
+      }
+
+      return updatedLoan;
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof ForbiddenException) {
+        throw err;
+      }
+      throw err;
+    }
+  }
+
+  async delete(id: string, createdBy: string): Promise<void> {
+    try {
+      const existingLoan = await this.loansRepo.findById(id, createdBy);
+      if (!existingLoan) {
+        throw new NotFoundException('Loan not found');
+      }
+
+
+      await this.loansRepo.delete(id, createdBy);
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
+        throw err;
+      }
+      throw err;
+    }
   }
 
   private calculateNumberOfDues(interestType: EInterestType, tenureType: ELoanTenureType, tenureValue: number): number {
@@ -179,61 +359,19 @@ export class LoanService implements ILoanService {
     return dueDate;
   }
 
-  async getById(id: string): Promise<Loan> {
-    try {
-      const loan = await this.loansRepo.findById(id);
-      if (!loan) {
-        throw new NotFoundException('Loan not found');
-      }
-      return loan;
-    } catch (err) {
-      if (err instanceof NotFoundException) {
-        throw err;
-      }
-      throw err;
-    }
-  }
+  private fixRoundingDrift(dues: Due[], totalPrincipal: number, totalInterest: number) {
+    const principalSum = dues.reduce((sum, d) => sum + d.principalAmount, 0);
+    const interestSum = dues.reduce((sum, d) => sum + d.interestAmount, 0);
 
-  async getLoans(params: LoansFilterOptions): Promise<Paged<Loan>> {
-    try {
-      const result = await this.loansRepo.listLoans(params);
-      return result;
-    } catch (err) {
-      throw err;
-    }
-  }
+    const principalDiff = Number((totalPrincipal - principalSum).toFixed(2));
+    const interestDiff = Number((totalInterest - interestSum).toFixed(2));
 
-  async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
-    try {
-      filterOptions.startDate = filterOptions.startDate;
-      filterOptions.endDate = filterOptions.endDate;
-      filterOptions.startDate.setHours(0, 0, 0, 0);
-      filterOptions.endDate.setHours(23, 59, 59, 999);
-      const stats = await this.loansRepo.getStats(userId, filterOptions);
-      return stats;
-    } catch (err) {
-      throw err;
-    }
-  }
+    const lastDue = dues[dues.length - 1];
 
-  async delete(id: string, userId: string): Promise<void> {
-    try {
-      const existingLoan = await this.loansRepo.findById(id);
-      if (!existingLoan) {
-        throw new NotFoundException('Loan not found');
-      }
+    lastDue.principalAmount = Number((lastDue.principalAmount + principalDiff).toFixed(2));
 
-      // Check if user is authorized to delete this loan
-      if (existingLoan.createdBy !== userId) {
-        throw new ForbiddenException('You are not authorized to delete this loan');
-      }
+    lastDue.interestAmount = Number((lastDue.interestAmount + interestDiff).toFixed(2));
 
-      await this.loansRepo.delete(id);
-    } catch (err) {
-      if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
-        throw err;
-      }
-      throw err;
-    }
+    lastDue.dueAmount = Number((lastDue.principalAmount + lastDue.interestAmount).toFixed(2));
   }
 }

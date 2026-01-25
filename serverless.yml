@@ -1,7 +1,7 @@
 service: byajbazaar-backend
 
 frameworkVersion: '3'
-provider: ${file(serverless/providers/index.yml)}
+provider: ${file(serverless/providers.yml)}
 
 plugins:
   - serverless-dotenv-plugin
@@ -54,7 +54,7 @@ custom:
     # Increase timeout for serverless-offline to match function timeout
     timeout: 30
 
-functions: ${file(serverless/functions/index.yml)}
+functions: ${file(serverless/functions.yml)}
 
 package:
   patterns:

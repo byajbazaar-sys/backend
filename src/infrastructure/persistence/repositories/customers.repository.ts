@@ -35,26 +35,10 @@ export class CustomersRepository implements ICustomersRepository {
     }
   }
 
-  async findByUserId(userId: string): Promise<Customer> {
+  async update(id: string, updateDto: Customer, createdBy: string): Promise<Customer> {
     try {
-      const customer = await this.customerModel.findOne({ userId: new Types.ObjectId(userId) }).exec();
-      if (!customer) {
-        return null;
-      }
-      return plainToInstance(Customer, customer.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  async update(id: string, updateDto: Partial<Customer>): Promise<Customer> {
-    try {
-      const updatedCustomer = await this.customerModel.findByIdAndUpdate(id, updateDto, { new: true }).lean().exec();
-      if (!updatedCustomer) {
-        return null;
-      }
+      delete updateDto._id;
+      const updatedCustomer = await this.customerModel.findOneAndUpdate({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }, updateDto, { new: true }).lean().exec();
       return plainToInstance(Customer, updatedCustomer, {
         excludeExtraneousValues: true,
       });
@@ -63,9 +47,9 @@ export class CustomersRepository implements ICustomersRepository {
     }
   }
 
-  async findById(id: string): Promise<Customer> {
+  async findById(id: string, createdBy: string): Promise<Customer> {
     try {
-      const customer = await this.customerModel.findById(new Types.ObjectId(id)).exec();
+      const customer = await this.customerModel.findOne({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
       if (!customer) {
         return null;
       }
@@ -131,9 +115,9 @@ export class CustomersRepository implements ICustomersRepository {
     }
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, createdBy: string): Promise<void> {
     try {
-      await this.customerModel.findByIdAndDelete(new Types.ObjectId(id)).exec();
+      await this.customerModel.findOneAndDelete({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
     } catch (err) {
       throw err;
     }

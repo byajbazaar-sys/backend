@@ -21,12 +21,9 @@ export class TransactionsRepository implements ITransactionsRepository {
     }
   }
 
-  async findById(id: string): Promise<Transaction> {
+  async findById(id: string, createdBy: string): Promise<Transaction> {
     try {
-      const transaction = await this.transactionModel.findById(new Types.ObjectId(id)).exec();
-      if (!transaction) {
-        return null;
-      }
+      const transaction = await this.transactionModel.findOne({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
       return plainToInstance(Transaction, transaction.toJSON(), {
         excludeExtraneousValues: true,
       });

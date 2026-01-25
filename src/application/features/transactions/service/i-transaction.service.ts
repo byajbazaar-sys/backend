@@ -7,9 +7,8 @@ export const TRANSACTION_SERVICE = 'ITransactionService';
 
 export interface ITransactionService {
   create(data: Transaction): Promise<Transaction>;
-  getById(id: string): Promise<Transaction>;
+  getById(id: string, createdBy: string): Promise<Transaction>;
   getTransactions(params: TransactionsFilterOptions): Promise<Paged<Transaction>>;
-  update(id: string, body: UpdateTransactionRequestModel, userId: string): Promise<Transaction>;
   delete(id: string, userId: string): Promise<void>;
   getDues(params: DuesFilterOptions): Promise<Paged<Due>>;
   updateDues(): Promise<number>;
