@@ -31,16 +31,19 @@ import {
   LoanResponseModel,
   LoansPagedResponseModel,
   GetLoanParamsModel,
+  GetLoanItemParamsModel,
   ListLoansQueryRequestModel,
   UpdateLoanRequestModel,
   UpdateLoanStatusRequestModel,
+  UpdateLoanItemRequestModel,
+  LoanItemResponseModel,
   LoanStatsQueryRequestModel,
   LoanStatsResponseModel,
 } from './models';
 import { ILoanService, LOAN_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
 import { LoansFilterOptions, LoanStatsFilterOptions } from './options';
-import { Loan } from './domain';
+import { Loan, LoanItem } from './domain';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Types } from 'mongoose';
 
@@ -137,6 +140,21 @@ export class LoansController {
     });
   }
 
+  @Patch(':id/status')
+  @ApiOperation({ summary: 'Update loan status (Open/Close)' })
+  @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @ApiOkResponse({ type: LoanResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async updateStatus(
+    @Param() params: GetLoanParamsModel,
+    @Body() body: UpdateLoanStatusRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<LoanResponseModel> {
+    this.logger.info({ params, body, identity }, 'updateStatus called');
+    const loan = await this.loanService.updateStatus(params.id, body.status, identity.userId);
+    return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get loan by ID' })
   @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
@@ -171,18 +189,39 @@ export class LoansController {
     return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
   }
 
-  @Patch(':id/status')
-  @ApiOperation({ summary: 'Update loan status (Open/Close)' })
-  @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
-  @ApiOkResponse({ type: LoanResponseModel })
+  @Patch(':loanId/items/:itemId')
+  @ApiOperation({
+    summary: 'Update loan item',
+    description: 'Update loan item details including amount, name, description, weights, rate, and image. Image can be updated by uploading a new file via multipart/form-data.',
+  })
+  @ApiParam({ name: 'loanId', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'itemId', description: 'Loan Item ID', example: '507f1f77bcf86cd799439011' })
+  @ApiOkResponse({ type: LoanItemResponseModel })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan or loan item not found' })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Cannot update loan item in a closed loan' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }]))
   @HttpCode(HttpStatus.OK)
-  async updateStatus(
-    @Param() params: GetLoanParamsModel,
-    @Body() body: UpdateLoanStatusRequestModel,
+  async updateLoanItem(
+    @Param() params: GetLoanItemParamsModel,
+    @Body(new ParseFormDataJsonPipe()) body: UpdateLoanItemRequestModel,
     @Identity() identity: IIdentity,
-  ): Promise<LoanResponseModel> {
-    this.logger.info({ params, body, identity }, 'updateStatus called');
-    const loan = await this.loanService.updateStatus(params.id, body.status, identity.userId);
-    return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
+    @UploadedFiles()
+    files: {
+      image?: Express.Multer.File[];
+    },
+  ): Promise<LoanItemResponseModel> {
+    this.logger.info({ params, body, identity }, 'updateLoanItem called');
+    const loanItemData = plainToInstance(LoanItem, body, {
+      excludeExtraneousValues: true,
+    });
+
+    // Add image if provided
+    if (files.image && files.image.length > 0) {
+      loanItemData.image = files.image[0];
+    }
+
+    const loanItem = await this.loanService.updateLoanItem(params.loanId, params.itemId, loanItemData, identity.userId);
+    return plainToInstance(LoanItemResponseModel, loanItem, { excludeExtraneousValues: true });
   }
 }

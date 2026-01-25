@@ -1,6 +1,6 @@
 import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { Loan, LoanStats } from '../domain';
+import { Loan, LoanItem, LoanStats } from '../domain';
 import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
 import { LoansFilterOptions, LoanStatsFilterOptions } from '../options';
@@ -23,7 +23,7 @@ export class LoanService implements ILoanService {
   async create(data: Loan): Promise<Loan> {
     try {
       this.logger.info({ customerId: data.customerId, amountRemaining: data.amountRemaining }, 'Creating new loan');
-      
+
       if (data.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
         data.interestRemaining =
           (data.interestPercentage * data.amountRemaining * (1 + data.interestPercentage / 100) ** data.tenureValue) /
@@ -31,10 +31,10 @@ export class LoanService implements ILoanService {
       } else {
         data.interestRemaining = (data.interestPercentage * data.amountRemaining * data.tenureValue) / 100;
       }
-      
+
       const loan = await this.loansRepo.create(data);
       this.logger.debug({ loanId: loan.id }, 'Loan created, processing loan items');
-      
+
       for (const loanItem of data.loanItems) {
         if (loanItem.image) {
           const fileExtension = loanItem.image.mimetype.split('/')[1];
@@ -46,7 +46,7 @@ export class LoanService implements ILoanService {
 
       // Create dues based on loan details
       await this.createDuesForLoan(loan);
-      
+
       this.logger.info({ loanId: loan.id }, 'Loan created successfully with dues');
       return { ...loan, loanItems: data.loanItems };
     } catch (err) {
@@ -195,6 +195,7 @@ export class LoanService implements ILoanService {
       // Update loan status
       const updatedLoan = await this.loansRepo.update(id, {
         status,
+        createdBy,
       } as Loan);
 
       if (!updatedLoan) {
@@ -208,6 +209,149 @@ export class LoanService implements ILoanService {
         throw err;
       }
       this.logger.error({ err, loanId: id, status, createdBy }, 'Error updating loan status');
+      throw err;
+    }
+  }
+
+  async updateLoanItem(loanId: string, itemId: string, updateData: Partial<LoanItem>, createdBy: string): Promise<LoanItem> {
+    try {
+      this.logger.info({ loanId, itemId, createdBy }, 'Updating loan item');
+
+      // Validate loan exists and is not closed
+      const existingLoan = await this.loansRepo.findById(loanId, createdBy);
+      if (!existingLoan) {
+        this.logger.warn({ loanId, createdBy }, 'Loan not found for loan item update');
+        throw new NotFoundException('Loan not found');
+      }
+
+      if (existingLoan.status === ELoanStatus.CLOSED) {
+        this.logger.warn({ loanId }, 'Attempted to update loan item in closed loan');
+        throw new BadRequestException('Cannot update loan item in a closed loan');
+      }
+
+      // Validate loan item exists
+      const existingLoanItem = await this.loanItemsRepo.findById(itemId, loanId);
+      if (!existingLoanItem) {
+        this.logger.warn({ loanId, itemId }, 'Loan item not found');
+        throw new NotFoundException('Loan item not found');
+      }
+
+      // Handle image update if provided
+      if (updateData.image) {
+        const fileExtension = updateData.image.mimetype.split('/')[1];
+        updateData.imageRef = `loans/items/${loanId}/${itemId}.${fileExtension}`;
+        await this.loansFileStorage.writeAsync(updateData.imageRef, updateData.image.buffer, updateData.image.mimetype);
+      }
+
+      // Update the loan item
+      const updatedLoanItem = await this.loanItemsRepo.update(itemId, loanId, updateData);
+      if (!updatedLoanItem) {
+        throw new NotFoundException('Loan item not found');
+      }
+
+      // Calculate the difference in the specific loan item amount
+      const oldItemAmount = existingLoanItem.amount;
+      const newItemAmount = updateData.amount ?? existingLoanItem.amount;
+      const itemAmountDifference = newItemAmount - oldItemAmount;
+
+      // Calculate original total loan amount (sum of all original loan items before update)
+      // This represents the loan amount before any payments or top-ups
+      // Formula: originalTotal = amountRemaining + amountPaid
+      // Note: This assumes no top-ups. If top-ups exist, they're already reflected in amountRemaining
+      const originalTotalLoanAmount = existingLoan.amountRemaining + existingLoan.amountPaid;
+
+      // New total loan amount after item update
+      const newTotalLoanAmount = originalTotalLoanAmount + itemAmountDifference;
+
+      // New amount remaining = new total - amount already paid
+      // This preserves the payment history
+      const newAmountRemaining = newTotalLoanAmount - existingLoan.amountPaid;
+
+      // Ensure amount remaining doesn't go negative
+      if (newAmountRemaining < 0) {
+        this.logger.warn({ loanId, newAmountRemaining, amountPaid: existingLoan.amountPaid }, 'New loan amount would be less than amount paid');
+        throw new BadRequestException('Cannot update loan item: new loan amount would be less than amount already paid');
+      }
+
+      // Update loan with new amount
+      const updatedLoanData: Loan = {
+        ...existingLoan,
+        amountRemaining: newAmountRemaining,
+      };
+
+      // Recalculate interest based on new amount
+      if (existingLoan.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
+        updatedLoanData.interestRemaining =
+          (existingLoan.interestPercentage * updatedLoanData.amountRemaining *
+            (1 + existingLoan.interestPercentage / 100) ** existingLoan.tenureValue) / 100;
+      } else {
+        updatedLoanData.interestRemaining =
+          (existingLoan.interestPercentage * updatedLoanData.amountRemaining * existingLoan.tenureValue) / 100;
+      }
+
+      // Update the loan
+      await this.loansRepo.update(loanId, updatedLoanData);
+
+      // Recalculate dues (preserving paid dues)
+      this.logger.info({ loanId }, 'Recalculating dues after loan item update');
+      const paidDues = await this.duesRepo.findByLoanIdAndType(loanId, [EDueType.PAID]);
+      const paidDuesCount = paidDues.length;
+
+      // Calculate remaining amounts from the updated loan
+      const remainingAmount = updatedLoanData.amountRemaining;
+      const remainingInterest = updatedLoanData.interestRemaining;
+
+      // Calculate remaining tenure
+      const totalTenure = existingLoan.tenureValue;
+      const remainingTenure = totalTenure - paidDuesCount;
+
+      // Find the next unpaid due date
+      let startDate: Date;
+      if (paidDues.length > 0) {
+        const lastPaidDue = paidDues[paidDues.length - 1];
+        startDate = new Date(lastPaidDue.dueDate);
+        if (existingLoan.interestType === EInterestType.MONTHLY) {
+          startDate.setMonth(startDate.getMonth() + 1);
+        } else if (existingLoan.interestType === EInterestType.DAILY) {
+          startDate.setDate(startDate.getDate() + 1);
+        }
+      } else {
+        startDate = existingLoan.createdAt ? new Date(existingLoan.createdAt) : new Date();
+      }
+      startDate.setHours(0, 0, 0, 0);
+
+      // Delete only UPCOMING_DUE and PAST_DUE dues (keep PAID dues)
+      await this.duesRepo.deleteByLoanId(loanId, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
+
+      // Recreate dues with updated loan data
+      if (remainingTenure > 0 && remainingAmount > 0) {
+        const loanForDues: Loan = {
+          ...updatedLoanData,
+          interestType: existingLoan.interestType,
+          tenureType: existingLoan.tenureType,
+          tenureValue: remainingTenure,
+          amountRemaining: remainingAmount,
+          interestRemaining: remainingInterest,
+          customerId: existingLoan.customerId,
+          createdAt: startDate,
+        };
+
+        await this.createDuesForLoan(loanForDues, {
+          startDate,
+          remainingAmount,
+          remainingInterest,
+          remainingTenure,
+        });
+        this.logger.info({ loanId, remainingTenure, paidDuesCount }, 'Dues recalculated successfully after loan item update');
+      }
+
+      this.logger.info({ loanId, itemId }, 'Loan item updated successfully');
+      return updatedLoanItem;
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException) {
+        throw err;
+      }
+      this.logger.error({ err, loanId, itemId, createdBy }, 'Error updating loan item');
       throw err;
     }
   }
