@@ -44,5 +44,21 @@ export class LoanResponseModel {
   @ApiProperty({ description: 'Date when the loan was last updated', type: Date })
   @Type(() => Date)
   updatedAt: Date;
+
+  @Expose()
+  @ApiProperty({ description: 'Amount remaining', example: 1000 })
+  amountRemaining: number;
+
+  @Expose()
+  @ApiProperty({ description: 'Amount paid', example: 1000 })
+  amountPaid: number;
+
+  @Expose()
+  @ApiProperty({ description: 'Interest paid', example: 100 })
+  interestPaid: number;
+
+  @Expose()
+  @ApiProperty({ description: 'Interest remaining', example: 100 })
+  interestRemaining: number;
 }
 
