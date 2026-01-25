@@ -1,6 +1,6 @@
 api:
   handler: dist/src/lambda-handlers/api.handler
-  timeout: 60
+  timeout: 29
   memorySize: 512
   events:
     - httpApi:

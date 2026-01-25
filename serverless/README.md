@@ -6,55 +6,45 @@ This directory contains the Serverless Framework configuration files organized b
 
 ```
 serverless/
-├── functions/          # Lambda function definitions
-│   ├── api.yml        # API Gateway HTTP function
-│   └── cron.yml       # EventBridge scheduled functions
-├── resources/         # AWS CloudFormation resources
-│   └── eventbridge.yml # EventBridge rules and resources
-└── providers/         # Provider-specific configurations
-    └── aws.yml        # AWS provider extensions
+├── functions.yml   # Lambda function definitions (API + cron)
+├── providers.yml   # AWS provider configuration
+└── README.md
 ```
 
 ## Functions
 
-### API Function (`api.yml`)
+### API Function (`functions.yml`)
 
 Defines the main API Gateway Lambda function that handles all HTTP requests.
 
-- **Handler**: `dist/lambda-handlers/api.handler`
+- **Handler**: `dist/src/lambda-handlers/api.handler`
 - **Events**: HTTP API Gateway (all routes)
 - **Memory**: 512 MB
 - **Timeout**: 30 seconds
 
-### Cron Functions (`cron.yml`)
+### Cron Functions (`functions.yml`)
 
 Defines scheduled Lambda functions triggered by AWS EventBridge.
 
 #### Update Dues Cron
 
-- **Handler**: `dist/lambda-handlers/cron.handler`
+- **Handler**: `dist/src/lambda-handlers/cron.handler`
 - **Schedule**: Every 2 hours (`rate(2 hours)`)
 - **Memory**: 512 MB
 - **Timeout**: 300 seconds (5 minutes)
 
-## Resources
-
-### EventBridge (`eventbridge.yml`)
-
-Contains EventBridge rule definitions. Note that when using the `schedule` event type in function definitions, Serverless Framework automatically creates the necessary EventBridge rules and targets.
-
 ## Providers
 
-### AWS (`aws.yml`)
+### AWS (`providers.yml`)
 
 Contains AWS-specific provider configurations and can be extended with additional IAM permissions, VPC configurations, or other AWS-specific settings.
 
 ## Adding New Functions
 
-1. **Create function definition** in `serverless/functions/`:
+1. **Create function definition** in `serverless/functions.yml`:
 ```yaml
 myNewFunction:
-  handler: dist/lambda-handlers/my-new.handler
+  handler: dist/src/lambda-handlers/my-new.handler
   description: 'Description of the function'
   timeout: 30
   memorySize: 256
@@ -64,22 +54,14 @@ myNewFunction:
         path: /my-endpoint
 ```
 
-2. **Reference in main `serverless.yml`**:
-```yaml
-functions:
-  ${file(serverless/functions/api.yml)}
-  ${file(serverless/functions/cron.yml)}
-  ${file(serverless/functions/my-new.yml)}
-```
-
-3. **Create handler** in `src/lambda-handlers/my-new.handler.ts`
+2. **Create handler** in `src/lambda-handlers/my-new.handler.ts`
 
 ## Adding New Cron Jobs
 
-1. **Add to `serverless/functions/cron.yml`**:
+1. **Add to `serverless/functions.yml`**:
 ```yaml
 myNewCron:
-  handler: dist/lambda-handlers/cron.handler
+  handler: dist/src/lambda-handlers/cron.handler
   description: 'My new cron job'
   timeout: 300
   events:

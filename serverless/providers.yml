@@ -4,6 +4,7 @@ stage: ${opt:stage, 'dev'}
 region: ${opt:region, 'ap-south-1'}
 memorySize: 512
 timeout: 30
+logRetentionInDays: 30
 environment:
   NODE_ENV: ${self:provider.stage}
   AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1

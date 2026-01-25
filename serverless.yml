@@ -52,7 +52,7 @@ custom:
     noPrependStageInUrl: true
     noAuth: true
     # Increase timeout for serverless-offline to match function timeout
-    timeout: 30
+    timeout: 29
 
 functions: ${file(serverless/functions.yml)}
 
