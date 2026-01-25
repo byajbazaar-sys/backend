@@ -43,7 +43,19 @@ export class LoansRepository implements ILoansRepository {
     try {
       delete updateDto._id;
       delete updateDto.id;
-      const updatedLoan = await this.loanModel.findOneAndUpdate({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(updateDto.createdBy) }, updateDto, { new: true }).lean().exec();
+      const updatedLoan = await this.loanModel
+        .findOneAndUpdate(
+          { _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(updateDto.createdBy) },
+          updateDto,
+          { new: true },
+        )
+        .lean()
+        .exec();
+      
+      if (!updatedLoan) {
+        return null;
+      }
+      
       return plainToInstance(Loan, updatedLoan, {
         excludeExtraneousValues: true,
       });

@@ -119,7 +119,7 @@ Reply in JSON format:
           };
         }
       } catch (error) {
-        console.warn(`Error analyzing image ${i} with Claude:`, error);
+        // Skip failed image analysis
         photoAnalysis.push({
           isCandidatePhoto: false,
           confidence: 0,

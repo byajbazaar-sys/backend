@@ -6,8 +6,7 @@ export class OpenAIService implements AIBase {
   private client: OpenAI;
 
   constructor(apiKey: string) {
-    console?.log('hereeeeeeeeee');
-    this?.initializeClient(apiKey);
+    this.initializeClient(apiKey);
   }
 
   private initializeClient(apiKey: string): void {

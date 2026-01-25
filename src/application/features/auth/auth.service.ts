@@ -6,6 +6,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { JwtService } from '@nestjs/jwt';
 import { IIdentity, UsersAuthOptions, JWT_EXPIRES_IN, BCRYPT_SALT_ROUNDS } from '@shared-libs';
 import { randomBytes } from 'crypto';
@@ -25,6 +26,7 @@ export class AuthService implements IAuthService {
     protected readonly fileStorageOptions: FileStorageOptions,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(USERS_FILE_STORAGE) private readonly usersFileStorage: IUsersFileStorage,
+    @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {}
 
   async login(email: string, password: string): Promise<LoginResponseModel> {
@@ -69,7 +71,7 @@ export class AuthService implements IAuthService {
 
     try {
       user._id = new Types.ObjectId();
-      console.log(user);
+      this.logger.debug({ userId: user._id.toString(), email: user.email }, 'Creating new user');
       if (user.profilePhoto && user.profilePhotoContentType) {
         const fileExtension = user.profilePhotoContentType.split('/')[1];
         user.profilePhotoRef = `users/profiles/${user._id.toString()}.${fileExtension}`;

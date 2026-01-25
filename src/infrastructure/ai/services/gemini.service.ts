@@ -68,8 +68,7 @@ export class GeminiService implements AIBase {
           .filter((q) => q.length > 0 && !q.match(/^\d+\.?/));
       }
     } catch (error) {
-      console.error('Error generating interview questions:', error);
-      throw new Error('Failed to generate interview questions');
+      throw new Error(`Failed to generate interview questions: ${error.message}`);
     }
   }
 
@@ -135,7 +134,6 @@ export class GeminiService implements AIBase {
         areasForImprovement: Array.isArray(resultData.areasForImprovement) ? resultData.areasForImprovement : [],
       };
     } catch (error) {
-      console.error('Error calculating ranking score:', error);
       throw new Error(`Failed to calculate ranking score: ${error.message}`);
     }
   }
@@ -217,8 +215,6 @@ Return ONLY the JSON object, no additional text.`;
         topSkills: Array.isArray(aiExtractedProfile.topSkills) ? aiExtractedProfile.topSkills.slice(0, 5) : [],
       };
     } catch (error) {
-      console.warn('AI extraction failed, falling back to manual extraction:', error);
-
       // Fallback to manual extraction if AI fails
       const fullName = resumeData?.personal_info?.names?.[0] || 'Unknown';
       const email = resumeData?.personal_info?.emails?.[0] || 'N/A';
@@ -297,7 +293,7 @@ Reply in JSON format:
           };
         }
       } catch (error) {
-        console.warn(`Error analyzing image ${i} with Gemini:`, error);
+        // Skip failed image analysis
         photoAnalysis.push({
           isCandidatePhoto: false,
           confidence: 0,

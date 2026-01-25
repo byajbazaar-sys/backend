@@ -1,4 +1,5 @@
 import { Inject, Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Transaction, Due } from '../domain';
 import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../repository';
 import { ITransactionService } from './i-transaction.service';
@@ -15,10 +16,12 @@ export class TransactionService implements ITransactionService {
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
     @Inject(LOANS_REPOSITORY) private readonly loansRepo: ILoansRepository,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
+    @InjectPinoLogger(TransactionService.name) private readonly logger: PinoLogger,
   ) { }
 
   async create(data: Transaction): Promise<Transaction> {
     try {
+      this.logger.info({ loanId: data.loanId, dueId: data.dueId, transactionType: data.transactionType, amount: data.amount }, 'Creating transaction');
       let { loan, due } = await this.validateTransaction(data);
       if (!loan && due) {
         loan = await this.loansRepo.findById(due.loanId, data.createdBy);
@@ -70,16 +73,23 @@ export class TransactionService implements ITransactionService {
         await this.duesRepo.update(data.dueId, due);
       }
 
+      this.logger.info({ transactionId: transaction.id, loanId: loan.id }, 'Transaction created successfully');
       return transaction;
     } catch (err) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException || err instanceof ForbiddenException) {
+        throw err;
+      }
+      this.logger.error({ err, loanId: data.loanId, dueId: data.dueId }, 'Error creating transaction');
       throw err;
     }
   }
 
   async getById(id: string, createdBy: string): Promise<Transaction> {
     try {
+      this.logger.debug({ transactionId: id, createdBy }, 'Getting transaction by ID');
       const transaction = await this.transactionsRepo.findById(id, createdBy);
       if (!transaction) {
+        this.logger.warn({ transactionId: id, createdBy }, 'Transaction not found');
         throw new NotFoundException('Transaction not found');
       }
       return transaction;
@@ -87,37 +97,45 @@ export class TransactionService implements ITransactionService {
       if (err instanceof NotFoundException) {
         throw err;
       }
+      this.logger.error({ err, transactionId: id, createdBy }, 'Error getting transaction by ID');
       throw err;
     }
   }
 
   async getTransactions(params: TransactionsFilterOptions): Promise<Paged<Transaction>> {
     try {
+      this.logger.debug({ createdBy: params.createdBy }, 'Getting transactions');
       const result = await this.transactionsRepo.listTransactions(params);
       return result;
     } catch (err) {
+      this.logger.error({ err, params }, 'Error getting transactions');
       throw err;
     }
   }
 
   async delete(id: string, createdBy: string): Promise<void> {
     try {
+      this.logger.info({ transactionId: id, createdBy }, 'Deleting transaction');
       const existingTransaction = await this.transactionsRepo.findById(id, createdBy);
       if (!existingTransaction) {
+        this.logger.warn({ transactionId: id, createdBy }, 'Transaction not found for deletion');
         throw new NotFoundException('Transaction not found');
       }
 
       await this.transactionsRepo.delete(id);
+      this.logger.info({ transactionId: id }, 'Transaction deleted successfully');
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ForbiddenException) {
         throw err;
       }
+      this.logger.error({ err, transactionId: id, createdBy }, 'Error deleting transaction');
       throw err;
     }
   }
 
   async getDues(params: DuesFilterOptions): Promise<Paged<Due>> {
     try {
+      this.logger.debug({ createdBy: params.createdBy, loanIds: params.loanIds }, 'Getting dues');
       // Get all open loans for the user to filter dues
       const openLoans = await this.loansRepo.findByCreatedBy(params.createdBy);
       const openLoanIds = openLoans.filter((loan) => loan.status === ELoanStatus.OPEN).map((loan) => loan.id);
@@ -151,17 +169,22 @@ export class TransactionService implements ITransactionService {
       }
 
       const dues = await this.duesRepo.listDues(params);
+      this.logger.debug({ createdBy: params.createdBy, totalDues: dues.totalCount }, 'Dues retrieved successfully');
       return dues;
     } catch (err) {
+      this.logger.error({ err, params }, 'Error getting dues');
       throw err;
     }
   }
 
   async updateDues(): Promise<number> {
     try {
+      this.logger.info('Updating past dues');
       const updatedCount = await this.duesRepo.updatePastDues();
+      this.logger.info({ updatedCount }, 'Past dues updated successfully');
       return updatedCount;
     } catch (err) {
+      this.logger.error({ err }, 'Error updating past dues');
       throw err;
     }
   }

@@ -1,5 +1,5 @@
 import { HttpModule } from '@nestjs/axios';
-import { Global, Module } from '@nestjs/common';
+import { Global, Module, Logger } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import Schemas from './persistence/schemas';
 import Seeds from './persistence/seeds';
@@ -48,7 +48,8 @@ import CronServices from './cron';
         }
 
         const { host, port, database, username, password } = opts;
-        console.log('Database configuration:', { host, port, database, username, password });
+        const logger = new Logger('MongooseModule');
+        logger.log(`Database configuration: ${host}:${port || 27017}/${database}`);
 
         if (!host || !database) {
           throw new Error('Missing required database configuration (host or database name)');
@@ -71,7 +72,7 @@ import CronServices from './cron';
           const encodedUsername = encodeURIComponent(username);
           const encodedPassword = encodeURIComponent(password);
           uri = `mongodb+srv://${encodedUsername}:${encodedPassword}@${host}/${database}?retryWrites=true&w=majority`;
-          console.log(`Connecting to MongoDB Atlas at ${host}/${database}...`);
+          logger.log(`Connecting to MongoDB Atlas at ${host}/${database}...`);
         } else {
           // Standard MongoDB connection
           const dbPort = port || 27017;
@@ -82,7 +83,7 @@ import CronServices from './cron';
           } else {
             uri = `mongodb://${host}:${dbPort}/${database}`;
           }
-          console.log(`Connecting to MongoDB at ${host}:${dbPort}/${database}...`);
+          logger.log(`Connecting to MongoDB at ${host}:${dbPort}/${database}...`);
         }
 
         const connectionOptions: any = {

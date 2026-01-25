@@ -2,17 +2,19 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ResumeOCRData, ResumeAnalysisResult } from '../interfaces';
 import { AIProvider } from '../types';
 import { AIBase } from '../ai-base.interface';
-import { ClaudeService } from './claude.service';
 import { GeminiService } from './gemini.service';
-import { OpenAIService } from './openai.service';
 import { IAIResumeService } from '../../../application';
 import { AIOptions } from '../ai.options';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 @Injectable()
 export class AIResumeService implements IAIResumeService {
   private geminiService: GeminiService;
 
-  constructor(protected options: AIOptions) {
+  constructor(
+    protected options: AIOptions,
+    @InjectPinoLogger(AIResumeService.name) private readonly logger: PinoLogger,
+  ) {
     this.geminiService = new GeminiService(options.geminiApiKey);
   }
 
@@ -29,7 +31,7 @@ export class AIResumeService implements IAIResumeService {
           return await service.analyzeResume(resumeData);
         }
       } catch (error) {
-        console.warn(`Failed to analyze with ${provider}:`, error);
+        // Log warning but continue to next provider
         continue;
       }
     }
@@ -58,7 +60,6 @@ export class AIResumeService implements IAIResumeService {
     try {
       return await this.geminiService.calculateRankingScore(questions, answers, jobDescription);
     } catch (error) {
-      console.error('Error in calculateRankingScore:', error);
       throw new Error(`Failed to calculate ranking score: ${error.message}`);
     }
   }

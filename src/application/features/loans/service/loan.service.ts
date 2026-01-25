@@ -1,4 +1,5 @@
 import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Loan, LoanStats } from '../domain';
 import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
@@ -16,10 +17,13 @@ export class LoanService implements ILoanService {
     @Inject(LOAN_ITEMS_REPOSITORY) private readonly loanItemsRepo: ILoanItemsRepository,
     @Inject(USERS_FILE_STORAGE) private readonly loansFileStorage: IUsersFileStorage,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
+    @InjectPinoLogger(LoanService.name) private readonly logger: PinoLogger,
   ) { }
 
   async create(data: Loan): Promise<Loan> {
     try {
+      this.logger.info({ customerId: data.customerId, amountRemaining: data.amountRemaining }, 'Creating new loan');
+      
       if (data.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
         data.interestRemaining =
           (data.interestPercentage * data.amountRemaining * (1 + data.interestPercentage / 100) ** data.tenureValue) /
@@ -27,7 +31,10 @@ export class LoanService implements ILoanService {
       } else {
         data.interestRemaining = (data.interestPercentage * data.amountRemaining * data.tenureValue) / 100;
       }
+      
       const loan = await this.loansRepo.create(data);
+      this.logger.debug({ loanId: loan.id }, 'Loan created, processing loan items');
+      
       for (const loanItem of data.loanItems) {
         if (loanItem.image) {
           const fileExtension = loanItem.image.mimetype.split('/')[1];
@@ -39,9 +46,11 @@ export class LoanService implements ILoanService {
 
       // Create dues based on loan details
       await this.createDuesForLoan(loan);
-
+      
+      this.logger.info({ loanId: loan.id }, 'Loan created successfully with dues');
       return { ...loan, loanItems: data.loanItems };
     } catch (err) {
+      this.logger.error({ err, customerId: data.customerId }, 'Error creating loan');
       throw err;
     }
   }
@@ -114,7 +123,6 @@ export class LoanService implements ILoanService {
           dueDate,
           createdBy,
         };
-        console.log(due);
         dues.push(due);
       }
 
@@ -123,16 +131,20 @@ export class LoanService implements ILoanService {
 
       if (dues.length > 0) {
         await this.duesRepo.bulkCreate(dues);
+        this.logger.debug({ loanId, numberOfDues: dues.length }, 'Dues created successfully');
       }
     } catch (err) {
+      this.logger.error({ err }, 'Error creating dues for loan');
       throw err;
     }
   }
 
   async getById(id: string, createdBy: string): Promise<Loan> {
     try {
+      this.logger.debug({ loanId: id, createdBy }, 'Getting loan by ID');
       const loan = await this.loansRepo.findById(id, createdBy);
       if (!loan) {
+        this.logger.warn({ loanId: id, createdBy }, 'Loan not found');
         throw new NotFoundException('Loan not found');
       }
       return loan;
@@ -140,6 +152,7 @@ export class LoanService implements ILoanService {
       if (err instanceof NotFoundException) {
         throw err;
       }
+      this.logger.error({ err, loanId: id, createdBy }, 'Error getting loan by ID');
       throw err;
     }
   }
@@ -150,26 +163,32 @@ export class LoanService implements ILoanService {
       if (!params.status) {
         params.status = ELoanStatus.OPEN;
       }
+      this.logger.debug({ createdBy: params.createdBy, status: params.status }, 'Getting loans');
       const result = await this.loansRepo.listLoans(params);
       return result;
     } catch (err) {
+      this.logger.error({ err, params }, 'Error getting loans');
       throw err;
     }
   }
 
   async updateStatus(id: string, status: ELoanStatus, createdBy: string): Promise<Loan> {
     try {
+      this.logger.info({ loanId: id, status, createdBy }, 'Updating loan status');
       const existingLoan = await this.loansRepo.findById(id, createdBy);
       if (!existingLoan) {
+        this.logger.warn({ loanId: id, createdBy }, 'Loan not found for status update');
         throw new NotFoundException('Loan not found');
       }
 
       // Validate status transition
       if (status === ELoanStatus.CLOSED && existingLoan.status === ELoanStatus.CLOSED) {
+        this.logger.warn({ loanId: id }, 'Attempted to close already closed loan');
         throw new BadRequestException('Loan is already closed');
       }
 
       if (status === ELoanStatus.OPEN && existingLoan.status === ELoanStatus.OPEN) {
+        this.logger.warn({ loanId: id }, 'Attempted to open already open loan');
         throw new BadRequestException('Loan is already open');
       }
 
@@ -182,42 +201,48 @@ export class LoanService implements ILoanService {
         throw new NotFoundException('Loan not found');
       }
 
+      this.logger.info({ loanId: id, oldStatus: existingLoan.status, newStatus: status }, 'Loan status updated successfully');
       return updatedLoan;
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof BadRequestException) {
         throw err;
       }
+      this.logger.error({ err, loanId: id, status, createdBy }, 'Error updating loan status');
       throw err;
     }
   }
 
   async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
     try {
-      filterOptions.startDate = filterOptions.startDate;
-      filterOptions.endDate = filterOptions.endDate;
+      this.logger.debug({ userId, filterOptions }, 'Getting loan stats');
       filterOptions.startDate.setHours(0, 0, 0, 0);
       filterOptions.endDate.setHours(23, 59, 59, 999);
       const stats = await this.loansRepo.getStats(userId, filterOptions);
       return stats;
     } catch (err) {
+      this.logger.error({ err, userId, filterOptions }, 'Error getting loan stats');
       throw err;
     }
   }
 
   async update(id: string, updateData: Loan): Promise<Loan> {
     try {
+      this.logger.info({ loanId: id, createdBy: updateData.createdBy }, 'Updating loan');
       const existingLoan = await this.loansRepo.findById(id, updateData.createdBy);
       if (!existingLoan) {
+        this.logger.warn({ loanId: id, createdBy: updateData.createdBy }, 'Loan not found for update');
         throw new NotFoundException('Loan not found');
       }
 
       // Prevent updating closed loans
       if (existingLoan.status === ELoanStatus.CLOSED) {
+        this.logger.warn({ loanId: id }, 'Attempted to update closed loan');
         throw new BadRequestException('Cannot update a closed loan');
       }
 
       // Prevent status updates through regular update endpoint (use updateStatus instead)
       if (updateData.status && updateData.status !== existingLoan.status) {
+        this.logger.warn({ loanId: id }, 'Attempted to update status through regular update endpoint');
         throw new BadRequestException('Cannot update loan status through this endpoint. Use PATCH /loans/:id/status instead');
       }
 
@@ -273,6 +298,7 @@ export class LoanService implements ILoanService {
 
       // If dues need recalculation, delete existing upcoming and past dues, then recreate
       if (duesNeedRecalculation) {
+        this.logger.info({ loanId: id }, 'Recalculating dues for updated loan');
         // Get all paid dues to calculate remaining amounts and tenure
         const paidDues = await this.duesRepo.findByLoanIdAndType(id, [EDueType.PAID]);
 
@@ -332,34 +358,41 @@ export class LoanService implements ILoanService {
             remainingInterest,
             remainingTenure,
           });
+          this.logger.info({ loanId: id, remainingTenure, paidDuesCount }, 'Dues recalculated successfully');
         } else {
           // No remaining tenure or amounts, just delete upcoming and past dues
           await this.duesRepo.deleteByLoanId(id, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
+          this.logger.info({ loanId: id }, 'All dues paid, removed upcoming and past dues');
         }
       }
 
+      this.logger.info({ loanId: id }, 'Loan updated successfully');
       return updatedLoan;
     } catch (err) {
-      if (err instanceof NotFoundException || err instanceof ForbiddenException) {
+      if (err instanceof NotFoundException || err instanceof ForbiddenException || err instanceof BadRequestException) {
         throw err;
       }
+      this.logger.error({ err, loanId: id }, 'Error updating loan');
       throw err;
     }
   }
 
   async delete(id: string, createdBy: string): Promise<void> {
     try {
+      this.logger.info({ loanId: id, createdBy }, 'Deleting loan');
       const existingLoan = await this.loansRepo.findById(id, createdBy);
       if (!existingLoan) {
+        this.logger.warn({ loanId: id, createdBy }, 'Loan not found for deletion');
         throw new NotFoundException('Loan not found');
       }
 
-
       await this.loansRepo.delete(id, createdBy);
+      this.logger.info({ loanId: id }, 'Loan deleted successfully');
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;
       }
+      this.logger.error({ err, loanId: id, createdBy }, 'Error deleting loan');
       throw err;
     }
   }

@@ -1,6 +1,6 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, UploadedFile, UseInterceptors, Inject } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiConsumes } from '@nestjs/swagger';
-
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { IAuthService } from './interfaces';
 import {
   LoginRequestModel,
@@ -12,20 +12,23 @@ import {
 } from './models';
 import { User } from '../users';
 import { plainToInstance } from 'class-transformer';
-import { Inject } from '@nestjs/common';
 import { AUTH_SERVICE } from './interfaces';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject(AUTH_SERVICE) private readonly authService: IAuthService) {}
+  constructor(
+    @Inject(AUTH_SERVICE) private readonly authService: IAuthService,
+    @InjectPinoLogger(AuthController.name) private readonly logger: PinoLogger,
+  ) {}
 
   @Post('login')
   @ApiOperation({ summary: 'Login and receive JWT' })
   @ApiOkResponse({ type: LoginResponseModel })
   @HttpCode(HttpStatus.OK)
   async login(@Body() body: LoginRequestModel): Promise<LoginResponseModel> {
+    this.logger.info({ email: body.email }, 'login called');
     const response = await this.authService.login(body.email, body.password);
 
     return plainToInstance(
@@ -47,6 +50,7 @@ export class AuthController {
     @Body() body: SignupRequestModel,
     @UploadedFile() profilePhoto: Express.Multer.File,
   ): Promise<SignupResponseModel> {
+    this.logger.info({ email: body.email }, 'signup called');
     const user = plainToInstance(User, body);
     if (profilePhoto) {
       user.profilePhoto = profilePhoto.buffer;
@@ -75,14 +79,15 @@ export class AuthController {
   @ApiOperation({ summary: 'Initiate password reset by email' })
   @HttpCode(HttpStatus.OK)
   async forgotPassword(@Body() body: ForgotPasswordRequestModel): Promise<void> {
+    this.logger.info({ email: body.email }, 'forgotPassword called');
     await this.authService.forgotPassword(body.email);
-    return;
   }
 
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password using token' })
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() body: ResetPasswordRequestModel): Promise<string> {
+    this.logger.info({ token: body.token ? 'provided' : 'missing' }, 'resetPassword called');
     await this.authService.verifyForgotPasswordToken(body.token, body.newPassword);
     return 'Password reset successfully';
   }

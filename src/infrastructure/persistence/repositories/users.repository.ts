@@ -16,7 +16,6 @@ export class UsersRepository implements IUsersRepository {
         excludeExtraneousValues: true,
       });
     } catch (err) {
-      console.error('Error creating user:', err);
       throw err;
     }
   }
@@ -51,7 +50,10 @@ export class UsersRepository implements IUsersRepository {
 
   async update(id: string, updateDto: Partial<User>): Promise<User> {
     try {
-      const updatedUser = await this.userModel.findByIdAndUpdate({ id }, updateDto).lean().exec();
+      const updatedUser = await this.userModel.findByIdAndUpdate(new Types.ObjectId(id), updateDto, { new: true }).lean().exec();
+      if (!updatedUser) {
+        return null;
+      }
       return plainToInstance(User, updatedUser, {
         excludeExtraneousValues: true,
       });

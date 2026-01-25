@@ -1,6 +1,5 @@
 import { Paged } from '@shared-libs';
 import { Transaction, Due } from '../domain';
-import { CreateTransactionRequestModel, UpdateTransactionRequestModel } from '../models';
 import { TransactionsFilterOptions, DuesFilterOptions } from '../options';
 
 export const TRANSACTION_SERVICE = 'ITransactionService';

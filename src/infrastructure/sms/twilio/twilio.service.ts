@@ -2,12 +2,16 @@ import { Injectable } from '@nestjs/common';
 import twilio from 'twilio';
 import { TwilioOptions } from './twilio.options';
 import { SendSMSDto, TwilioMessage, ITwilioService } from '../../../application';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 @Injectable()
 export class TwilioService implements ITwilioService {
   private readonly twilioClient: twilio.Twilio;
 
-  constructor(protected readonly options: TwilioOptions) {
+  constructor(
+    protected readonly options: TwilioOptions,
+    @InjectPinoLogger(TwilioService.name) private readonly logger: PinoLogger,
+  ) {
     this.twilioClient = twilio(this.options.accountSid, this.options.authToken);
   }
 
@@ -43,7 +47,7 @@ export class TwilioService implements ITwilioService {
         message: message,
       });
     } catch (error) {
-      console.error('Error sending reply:', error);
+      this.logger.error({ err: error, to: originalFrom, from: originalTo }, 'Error sending SMS reply');
       throw error;
     }
   }

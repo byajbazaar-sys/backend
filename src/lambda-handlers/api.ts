@@ -15,26 +15,21 @@ let cachedServer: Handler;
 
 async function bootstrap(): Promise<Handler> {
   if (cachedServer) {
-    console.log('Using cached server instance');
     return cachedServer;
   }
 
   try {
     // Let NestJS create the Express app internally (avoids deprecated app.router access)
     // This will also establish MongoDB connection
-    console.log('Creating NestJS application...');
     const app = await NestFactory.create(AppModule, {
       logger: ['error', 'warn', 'log']
     });
-
-    console.log('NestJS application created successfully');
 
     // Only run seeding if SKIP_SEEDING is not set to 'true'
     // In Lambda, seeding should typically be skipped as it runs on every cold start
     const skipSeeding = process.env.SKIP_SEEDING === 'true';
 
     if (!skipSeeding) {
-      console.log('Running seeding service...');
       try {
         const seedingService = app.get<SeedingService>(SeedingService);
         // Run with timeout to prevent hanging
@@ -44,14 +39,10 @@ async function bootstrap(): Promise<Handler> {
         );
 
         await Promise.race([seedingPromise, timeoutPromise]);
-        console.log('✅ Seeding completed successfully');
-      } catch (error) {
-        console.error('❌ Seeding service failed or timed out:', error.message);
-        console.error('Stack:', error.stack);
+      } catch (error: any) {
+        console.error('Seeding service failed or timed out:', error?.message);
         // Don't throw - allow Lambda to continue even if seeding fails
       }
-    } else {
-      console.log('⏭️  Seeding skipped (SKIP_SEEDING=true)');
     }
 
     // Enable CORS
@@ -79,7 +70,6 @@ async function bootstrap(): Promise<Handler> {
     app.useGlobalInterceptors(new GlobalResponseInterceptor());
 
     const config = app.get<ConfigService<IMsConfig>>(ConfigService);
-    console.log('config', config);
     const apiConfig = config.get<IApiOptions>('apiConfig');
 
     if (!apiConfig) {
@@ -117,18 +107,12 @@ async function bootstrap(): Promise<Handler> {
       },
     });
 
-    console.log('Initializing NestJS application (app.init)...');
     await app.init();
-    console.log('NestJS application initialized successfully');
 
     // Get the Express app instance from NestJS (created internally, no deprecated access)
-    console.log('Getting Express app instance...');
     const expressApp = app.getHttpAdapter().getInstance();
-    console.log('Express app instance retrieved');
 
-    console.log('Creating serverless-express wrapper...');
     cachedServer = serverlessExpress.default({ app: expressApp });
-    console.log('✅ Server bootstrap completed successfully');
 
     return cachedServer;
   } catch (error: any) {
@@ -146,17 +130,8 @@ export const handler = async (event: any, context: Context, callback: any) => {
   context.callbackWaitsForEmptyEventLoop = false;
 
   try {
-    console.log('Lambda handler invoked', {
-      httpMethod: event?.requestContext?.http?.method || event?.httpMethod,
-      path: event?.requestContext?.http?.path || event?.path,
-      requestId: context.awsRequestId,
-    });
-
     const server = await bootstrap();
-    console.log('Server bootstrap completed, invoking handler...');
-
     const result = await server(event, context, callback);
-    console.log('Handler execution completed successfully');
     return result;
   } catch (error: any) {
     console.error('❌ Lambda handler error:', {

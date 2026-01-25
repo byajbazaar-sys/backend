@@ -153,6 +153,9 @@ export class LoansController {
   @ApiOperation({ summary: 'Update loan' })
   @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
   @ApiOkResponse({ type: LoanResponseModel })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Cannot update a closed loan' })
+  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Not authorized to update this loan' })
   @HttpCode(HttpStatus.OK)
   async update(
     @Param() params: GetLoanParamsModel,
