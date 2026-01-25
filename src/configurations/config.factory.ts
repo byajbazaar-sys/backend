@@ -1,10 +1,11 @@
-import { UsersAuthOptions, type Environment } from '@shared-libs';
+import { generateLoggerConfig, UsersAuthOptions, type Environment } from '@shared-libs';
 import { Algorithm } from 'jsonwebtoken';
 import { IMsConfig } from './i-ms.config';
 import { AESEncryptOptions, LambdaOptions, AIOptions, TwilioOptions } from '../infrastructure';
 import { FileStorageOptions } from '../application';
 
 export const configFactory = (): IMsConfig => ({
+  logger: generateLoggerConfig(),
   apiConfig: {
     env: (process.env.NODE_ENV as Environment) ?? 'development',
     domain: process.env.API_DOMAIN ?? 'localhost',
@@ -20,14 +21,15 @@ export const configFactory = (): IMsConfig => ({
   ),
   database: {
     host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT || 27017),
-    username: process.env.DB_USERNAME || '',
-    password: process.env.DB_PASSWORD || '',
+    port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 27017,
+    // Support both DB_USERNAME/DB_PASSWORD and DB_USER/DB_PASS naming conventions
+    username: process.env.DB_USERNAME || process.env.DB_USER || '',
+    password: process.env.DB_PASSWORD || process.env.DB_PASS || '',
     database: process.env.DB_NAME || 'jobs_db',
   },
   fileStorage: new FileStorageOptions(
-    process.env?.AWS_ACCESS_KEY_ID,
-    process.env?.AWS_SECRET_ACCESS_KEY,
+    process.env?.S3_AWS_ACCESS_KEY_ID || '',
+    process.env?.S3_AWS_SECRET_ACCESS_KEY || '',
     process.env?.S3_BUCKET_NAME ?? 'jobs-file-storage',
     process.env?.S3_BUCKET_REGION ?? 'ap-south-1',
   ),

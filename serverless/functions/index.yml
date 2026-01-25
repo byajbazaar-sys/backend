@@ -1,0 +1,28 @@
+api:
+  handler: dist/src/lambda-handlers/api.handler
+  timeout: 60
+  memorySize: 512
+  events:
+    - httpApi:
+        method: ANY
+        path: /{proxy+}
+    - httpApi:
+        method: ANY
+        path: /
+
+updateDuesCron:
+  handler: dist/src/lambda-handlers/cron.handler
+  description: 'Cron job to update dues - triggered by EventBridge every 2 hours'
+  timeout: 300
+  memorySize: 512
+  events:
+    - schedule:
+        rate: rate(2 hours)
+        enabled: true
+        description: 'Update dues cron job scheduled to run every 2 hours'
+        input:
+          source: '${self:service}'
+          'detail-type': 'Scheduled Event'
+          detail:
+            job: 'updateDues'
+            stage: '${self:provider.stage}'

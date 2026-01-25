@@ -48,17 +48,61 @@ import CronServices from './cron';
         }
 
         const { host, port, database, username, password } = opts;
+        console.log('Database configuration:', { host, port, database, username, password });
 
-        if (!host || !port || !database) {
-          throw new Error('Missing required database configuration (host, port, or database name)');
+        if (!host || !database) {
+          throw new Error('Missing required database configuration (host or database name)');
         }
 
-        return {
-          uri:
-            username && password
-              ? `mongodb://${username}:${password}@${host}:${port}/${database}`
-              : `mongodb://${host}:${port}/${database}`,
+        // Detect MongoDB Atlas (hosts ending with .mongodb.net)
+        const isAtlas = host.includes('.mongodb.net');
+
+        let uri: string;
+        if (isAtlas) {
+          // MongoDB Atlas uses mongodb+srv:// protocol and doesn't require port
+          // Check if username and password are provided and not empty
+          if (!username || !password || username.trim() === '' || password.trim() === '') {
+            throw new Error(
+              'MongoDB Atlas requires username and password. ' +
+                'Please set DB_USERNAME and DB_PASSWORD environment variables.',
+            );
+          }
+          // URL encode username and password to handle special characters
+          const encodedUsername = encodeURIComponent(username);
+          const encodedPassword = encodeURIComponent(password);
+          uri = `mongodb+srv://${encodedUsername}:${encodedPassword}@${host}/${database}?retryWrites=true&w=majority`;
+          console.log(`Connecting to MongoDB Atlas at ${host}/${database}...`);
+        } else {
+          // Standard MongoDB connection
+          const dbPort = port || 27017;
+          if (username && password) {
+            const encodedUsername = encodeURIComponent(username);
+            const encodedPassword = encodeURIComponent(password);
+            uri = `mongodb://${encodedUsername}:${encodedPassword}@${host}:${dbPort}/${database}?retryWrites=true&w=majority`;
+          } else {
+            uri = `mongodb://${host}:${dbPort}/${database}`;
+          }
+          console.log(`Connecting to MongoDB at ${host}:${dbPort}/${database}...`);
+        }
+
+        const connectionOptions: any = {
+          uri,
+          serverSelectionTimeoutMS: isAtlas ? 10000 : 5000, // Atlas may need more time
+          socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+          connectTimeoutMS: isAtlas ? 30000 : 10000, // Atlas connections may take longer
+          maxPoolSize: 10, // Maintain up to 10 socket connections
+          minPoolSize: 1, // Maintain at least 1 socket connection
+          retryWrites: true,
+          w: 'majority',
         };
+
+        // For Atlas, add additional options
+        if (isAtlas) {
+          connectionOptions.tls = true; // Atlas requires TLS
+          connectionOptions.tlsAllowInvalidCertificates = false;
+        }
+
+        return connectionOptions;
       },
     }),
     MongooseModule.forFeature([...Schemas]),

@@ -1,5 +1,5 @@
 import { extname, basename, dirname, join } from 'path';
-import { fileTypeFromBuffer } from 'file-type';
+import * as FileType from 'file-type';
 import { IComparePathOptions, IFileName, IFileType } from './types';
 import { InternalServerErrorException } from '@nestjs/common';
 import * as Papa from 'papaparse';
@@ -43,7 +43,7 @@ export class FileHelper {
   }
 
   public async getExtFromBufferAsync(data: Buffer): Promise<IFileType> {
-    const type = await fileTypeFromBuffer(data);
+    const type = await FileType.fromBuffer(data);
     if (type) {
       return type;
     }

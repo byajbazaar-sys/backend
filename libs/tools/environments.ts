@@ -10,5 +10,5 @@ export const isProd = (): boolean => (process.env.NODE_ENV?.trim() as Environmen
 export const isTest = (): boolean => (process.env.NODE_ENV?.trim() as Environment) === 'test';
 export const isStaging = (): boolean => (process.env.NODE_ENV?.trim() as Environment) === 'staging';
 export const isLocal = (): boolean => (process.env.NODE_ENV?.trim() as Environment) === 'local';
-
+export const isLambda = (): boolean => (process.env.NODE_ENV?.trim() as Environment) === 'lambda';
 export const currentEnv = (): Environment => process.env.NODE_ENV?.trim() as Environment;

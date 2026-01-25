@@ -1,0 +1,75 @@
+service: byajbazaar-backend
+
+frameworkVersion: '3'
+provider: ${file(serverless/providers/index.yml)}
+
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-offline
+
+custom:
+  dotenv:
+    # Load environment variables from .env file
+    # Variables will be available in serverless.yml using ${env:VARIABLE_NAME}
+    path: .env
+    # Include all variables, or specify which ones to include
+    include:
+      - DB_HOST
+      - DB_PORT
+      - DB_USER
+      - DB_USERNAME
+      - DB_PASS
+      - DB_PASSWORD
+      - DB_NAME
+      - TOKEN_SECRET
+      - TOKEN_AUDIENCE
+      - TOKEN_ISSUER
+      - TOKEN_ALG
+      - AES_KEY
+      - AES_ALGORITHM
+      - S3_AWS_ACCESS_KEY_ID
+      - S3_AWS_SECRET_ACCESS_KEY
+      - S3_BUCKET_NAME
+      - S3_BUCKET_REGION
+      - LAMBDA_AWS_REGION
+      - LAMBDA_AWS_ACCESS_KEY_ID
+      - LAMBDA_AWS_SECRET_ACCESS_KEY
+      - AI_OPENAI_API_KEY
+      - AI_GEMINI_API_KEY
+      - AI_CLAUDE_API_KEY
+      - TWILIO_ACCOUNT_SID
+      - TWILIO_AUTH_TOKEN
+      - TWILIO_PHONE_NUMBER
+      - WEB_APP_DOMAIN
+      - MOCK_STORAGE
+    # Exclude sensitive variables from being logged (optional)
+    # exclude:
+    #   - DB_PASSWORD
+    #   - AWS_SECRET_ACCESS_KEY
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+    noPrependStageInUrl: true
+    noAuth: true
+    # Increase timeout for serverless-offline to match function timeout
+    timeout: 30
+
+functions: ${file(serverless/functions/index.yml)}
+
+package:
+  patterns:
+    - '!node_modules/.cache/**'
+    - '!src/**'
+    - '!libs/**'
+    - '!scripts/**'
+    - '!*.md'
+    - '!serverless/**'
+    - '!tsconfig*.json'
+    - '!nest-cli.json'
+    - '!eslint.config.mjs'
+    - '!.git/**'
+    - 'dist/**'
+    - 'node_modules/**'
+    - 'package.json'
+    - 'package-lock.json'
+    - 'yarn.lock'

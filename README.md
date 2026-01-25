@@ -1,98 +1,328 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# CrowdSay Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+A NestJS-based backend application for CrowdSay, built with clean architecture principles and deployed on AWS Lambda using the Serverless Framework.
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+This is a progressive Node.js backend application built with the [NestJS](https://github.com/nestjs/nest) framework. The application follows clean/modular architecture principles with separation of concerns across application, infrastructure, and domain layers.
 
-## Project setup
+## Architecture
+
+The project follows a clean architecture pattern with the following structure:
+
+- **`src/application/`** - Application layer containing features, services, and business logic
+- **`src/infrastructure/`** - Infrastructure layer containing persistence, external services, and cron jobs
+- **`libs/`** - Shared libraries and utilities
+- **`serverless/`** - Serverless Framework configuration files organized by concerns
+
+## Project Setup
+
+### Prerequisites
+
+- Node.js 20.x or higher
+- Yarn or npm
+- AWS CLI configured with appropriate credentials
+- Serverless Framework CLI
+
+### Installation
 
 ```bash
+# Install dependencies
 $ yarn install
+
+# Install Serverless Framework globally (optional)
+$ npm install -g serverless
 ```
 
-## Compile and run the project
+## Development
+
+### Local Development
 
 ```bash
-# development
-$ yarn run start
-
-# watch mode
+# Start development server with hot-reload
 $ yarn run start:dev
 
-# production mode
+# Start in debug mode
+$ yarn run start:debug
+
+# Start production build locally
+$ yarn run build
 $ yarn run start:prod
 ```
 
-## Run tests
+### Local Serverless Development
 
 ```bash
-# unit tests
+# Start serverless offline (simulates AWS Lambda locally)
+$ yarn run sls:offline
+
+# This will start the API at http://localhost:3000
+# Swagger docs available at http://localhost:3000/api-docs
+```
+
+## Serverless Configuration
+
+The project is configured for AWS Lambda deployment using the Serverless Framework with the following structure:
+
+### Folder Structure
+
+```
+serverless/
+├── functions/          # Lambda function definitions
+│   ├── api.yml        # API Gateway function
+│   └── cron.yml       # EventBridge cron function
+├── resources/         # AWS resource definitions
+│   └── eventbridge.yml # EventBridge rules and resources
+└── providers/         # Provider-specific configurations
+    └── aws.yml        # AWS provider configurations
+```
+
+### Functions
+
+1. **API Function** (`api.handler`)
+   - Handles all HTTP requests via API Gateway
+   - Routes: All endpoints under `/api/v1/`
+   - Handler: `dist/lambda-handlers/api.handler`
+
+2. **Cron Function** (`updateDuesCron`)
+   - Scheduled job triggered by AWS EventBridge
+   - Schedule: Every 2 hours
+   - Handler: `dist/lambda-handlers/cron.handler`
+   - Executes: `UpdateDuesCronService` to update loan dues
+
+### AWS EventBridge Configuration
+
+The cron job is configured to run via AWS EventBridge with the following schedule:
+- **Schedule Expression**: `rate(2 hours)`
+- **Description**: Update dues cron job scheduled to run every 2 hours
+- **Timezone**: Asia/Kolkata (configured in the cron service)
+
+### Serverless Commands
+
+```bash
+# Deploy entire stack
+$ yarn run sls:deploy
+
+# Deploy to specific stage
+$ yarn run sls:deploy --stage production
+
+# Deploy to specific region
+$ yarn run sls:deploy --region us-west-2
+
+# Deploy single function (faster for development)
+$ yarn run sls:deploy:function --function api
+
+# Package without deploying
+$ yarn run sls:package
+
+# Remove entire stack
+$ yarn run sls:remove
+
+# View serverless info
+$ yarn run sls info
+
+# View logs
+$ yarn run sls logs --function api --tail
+$ yarn run sls logs --function updateDuesCron --tail
+```
+
+### Environment Variables
+
+Environment variables can be configured in `serverless.yml` under the `provider.environment` section. For sensitive values, use AWS Systems Manager Parameter Store or AWS Secrets Manager:
+
+```yaml
+environment:
+  DATABASE_URL: ${ssm:/crowdsay/${self:provider.stage}/database/url}
+  JWT_SECRET: ${ssm:/crowdsay/${self:provider.stage}/jwt/secret}
+```
+
+### Stages
+
+The application supports multiple deployment stages:
+- `dev` - Development environment (default)
+- `staging` - Staging environment
+- `production` - Production environment
+
+Deploy to a specific stage:
+```bash
+$ yarn run sls:deploy --stage staging
+```
+
+## Build
+
+```bash
+# Build the project
+$ yarn run build
+
+# The build output will be in the `dist/` directory
+```
+
+## Testing
+
+```bash
+# Run unit tests
 $ yarn run test
 
-# e2e tests
+# Run e2e tests
 $ yarn run test:e2e
 
-# test coverage
+# Run test coverage
 $ yarn run test:cov
 ```
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Prerequisites for Deployment
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
+1. Configure AWS credentials:
 ```bash
-$ yarn install -g @nestjs/mau
-$ mau deploy
+$ aws configure
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+2. Ensure you have the necessary IAM permissions:
+   - Lambda functions creation and management
+   - API Gateway creation and management
+   - EventBridge rule creation
+   - CloudFormation stack management
+   - IAM role creation
+
+### Deployment Steps
+
+1. **Build the application**:
+```bash
+$ yarn run build
+```
+
+2. **Deploy to AWS**:
+```bash
+# Deploy to dev (default)
+$ yarn run sls:deploy
+
+# Deploy to production
+$ yarn run sls:deploy --stage production
+```
+
+3. **Verify deployment**:
+```bash
+# Get API endpoint
+$ yarn run sls info
+
+# Test the API
+$ curl https://<api-id>.execute-api.<region>.amazonaws.com/api/v1/health
+```
+
+### Post-Deployment
+
+After deployment, you'll receive:
+- **API Gateway URL**: Base URL for all API endpoints
+- **Lambda Function ARNs**: For each deployed function
+- **EventBridge Rule**: Automatically created for the cron job
+
+## Monitoring and Logs
+
+### View Logs
+
+```bash
+# View API function logs
+$ yarn run sls logs --function api --tail
+
+# View cron function logs
+$ yarn run sls logs --function updateDuesCron --tail
+
+# View logs for specific time range
+$ yarn run sls logs --function api --startTime 1h
+```
+
+### CloudWatch Metrics
+
+Monitor your functions in AWS CloudWatch:
+- Lambda invocations
+- Error rates
+- Duration
+- Throttles
+- EventBridge rule invocations
+
+## Cron Jobs
+
+The application includes a cron job service that runs on AWS EventBridge:
+
+### Update Dues Cron Job
+
+- **Service**: `UpdateDuesCronService`
+- **Schedule**: Every 2 hours
+- **Handler**: `src/lambda-handlers/cron.handler.ts`
+- **Purpose**: Updates loan dues status and calculations
+
+### Adding New Cron Jobs
+
+1. Create a new cron service extending `BaseCronService`:
+```typescript
+@Injectable()
+export class MyNewCronService extends BaseCronService {
+  // Implement required methods
+}
+```
+
+2. Add the function to `serverless/functions/cron.yml`:
+```yaml
+myNewCron:
+  handler: dist/lambda-handlers/cron.handler
+  events:
+    - schedule:
+        rate: rate(1 hour)
+```
+
+3. Update `CronService` to include the new job
+
+## Project Structure
+
+```
+.
+├── src/
+│   ├── application/          # Application layer
+│   │   └── features/         # Feature modules
+│   ├── infrastructure/       # Infrastructure layer
+│   │   ├── cron/            # Cron job services
+│   │   └── persistence/     # Database repositories
+│   ├── configurations/      # Configuration files
+│   ├── lambda-handlers/     # Lambda function handlers
+│   └── main.ts              # Local development entry point
+├── libs/                     # Shared libraries
+├── serverless/               # Serverless configuration
+│   ├── functions/            # Function definitions
+│   ├── resources/            # AWS resources
+│   └── providers/            # Provider configs
+├── serverless.yml            # Main serverless config
+└── package.json
+```
+
+## API Documentation
+
+Once deployed or running locally, Swagger documentation is available at:
+- **Local**: `http://localhost:3000/api-docs`
+- **Deployed**: `https://<api-gateway-url>/api-docs`
+
+## Code Quality
+
+```bash
+# Run linter
+$ yarn run lint
+
+# Format code
+$ yarn run format
+```
 
 ## Resources
 
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- [NestJS Documentation](https://docs.nestjs.com)
+- [Serverless Framework Documentation](https://www.serverless.com/framework/docs)
+- [AWS Lambda Documentation](https://docs.aws.amazon.com/lambda/)
+- [AWS EventBridge Documentation](https://docs.aws.amazon.com/eventbridge/)
 
 ## Support
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+For issues and questions, please contact the development team or create an issue in the repository.
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+This project is proprietary and confidential.
