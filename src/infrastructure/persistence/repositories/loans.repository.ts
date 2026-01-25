@@ -88,7 +88,7 @@ export class LoansRepository implements ILoansRepository {
 
   async listLoans(params: LoansFilterOptions): Promise<Paged<Loan>> {
     try {
-      const { customerId, createdBy } = params;
+      const { customerId, createdBy, status } = params;
       const { pageNumber, pageSize, skip } = getPaginationValues(params);
       const filter: Record<string, any> = {};
 
@@ -99,6 +99,10 @@ export class LoansRepository implements ILoansRepository {
       // Add createdBy filter if provided
       if (createdBy) {
         filter.createdBy = new Types.ObjectId(createdBy);
+      }
+      // Add status filter if provided
+      if (status) {
+        filter.status = status;
       }
 
       const docs = await this.loanModel.aggregate([

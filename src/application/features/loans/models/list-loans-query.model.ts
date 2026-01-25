@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ESortOrder } from '@shared-libs';
 import { Expose } from 'class-transformer';
+import { IsEnum, IsOptional } from 'class-validator';
+import { ELoanStatus } from '../enums';
 
 export class ListLoansQueryRequestModel {
   @Expose()
@@ -26,5 +28,16 @@ export class ListLoansQueryRequestModel {
     required: false,
   })
   customerId?: string;
+
+  @Expose()
+  @ApiPropertyOptional({
+    enum: ELoanStatus,
+    example: ELoanStatus.OPEN,
+    description: 'Filter by loan status (defaults to OPEN if not specified)',
+    required: false,
+  })
+  @IsEnum(ELoanStatus)
+  @IsOptional()
+  status?: ELoanStatus;
 }
 

@@ -4,7 +4,7 @@ import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../repository'
 import { ITransactionService } from './i-transaction.service';
 import { UpdateTransactionRequestModel } from '../models';
 import { TransactionsFilterOptions, DuesFilterOptions } from '../options';
-import { Paged } from '@shared-libs';
+import { Paged, toPaged } from '@shared-libs';
 import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus, Loan } from '../../loans';
 import { ETransactionType } from '../enums';
 import { DUES_REPOSITORY, EDueType, IDuesRepository } from '../../../shared';
@@ -15,7 +15,7 @@ export class TransactionService implements ITransactionService {
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
     @Inject(LOANS_REPOSITORY) private readonly loansRepo: ILoansRepository,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
-  ) {}
+  ) { }
 
   async create(data: Transaction): Promise<Transaction> {
     try {
@@ -118,6 +118,38 @@ export class TransactionService implements ITransactionService {
 
   async getDues(params: DuesFilterOptions): Promise<Paged<Due>> {
     try {
+      // Get all open loans for the user to filter dues
+      const openLoans = await this.loansRepo.findByCreatedBy(params.createdBy);
+      const openLoanIds = openLoans.filter((loan) => loan.status === ELoanStatus.OPEN).map((loan) => loan.id);
+
+      // If no open loans, return empty result
+      if (openLoanIds.length === 0) {
+        return toPaged(Due, {
+          items: [],
+          page: params.pageNumber,
+          perPage: params.pageSize,
+          totalCount: 0,
+        });
+      }
+
+      // Filter loanIds to only include open loans
+      if (params.loanIds && params.loanIds.length > 0) {
+        // Only include loanIds that are in open loans
+        params.loanIds = params.loanIds.filter((loanId) => openLoanIds.includes(loanId));
+        // If after filtering no loanIds remain, return empty result
+        if (params.loanIds.length === 0) {
+          return toPaged(Due, {
+            items: [],
+            page: params.pageNumber,
+            perPage: params.pageSize,
+            totalCount: 0,
+          });
+        }
+      } else {
+        // If no loanIds specified, use all open loan IDs
+        params.loanIds = openLoanIds;
+      }
+
       const dues = await this.duesRepo.listDues(params);
       return dues;
     } catch (err) {

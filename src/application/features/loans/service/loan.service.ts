@@ -1,4 +1,4 @@
-import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { Loan, LoanStats } from '../domain';
 import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
@@ -7,7 +7,7 @@ import { Paged } from '@shared-libs';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
 import { Due } from '../../transactions';
-import { EInterestCalculationMethod, EInterestType, ELoanTenureType } from '../enums';
+import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus } from '../enums';
 
 @Injectable()
 export class LoanService implements ILoanService {
@@ -146,9 +146,47 @@ export class LoanService implements ILoanService {
 
   async getLoans(params: LoansFilterOptions): Promise<Paged<Loan>> {
     try {
+      // Default to open loans if status not specified
+      if (!params.status) {
+        params.status = ELoanStatus.OPEN;
+      }
       const result = await this.loansRepo.listLoans(params);
       return result;
     } catch (err) {
+      throw err;
+    }
+  }
+
+  async updateStatus(id: string, status: ELoanStatus, createdBy: string): Promise<Loan> {
+    try {
+      const existingLoan = await this.loansRepo.findById(id, createdBy);
+      if (!existingLoan) {
+        throw new NotFoundException('Loan not found');
+      }
+
+      // Validate status transition
+      if (status === ELoanStatus.CLOSED && existingLoan.status === ELoanStatus.CLOSED) {
+        throw new BadRequestException('Loan is already closed');
+      }
+
+      if (status === ELoanStatus.OPEN && existingLoan.status === ELoanStatus.OPEN) {
+        throw new BadRequestException('Loan is already open');
+      }
+
+      // Update loan status
+      const updatedLoan = await this.loansRepo.update(id, {
+        status,
+      } as Loan);
+
+      if (!updatedLoan) {
+        throw new NotFoundException('Loan not found');
+      }
+
+      return updatedLoan;
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException) {
+        throw err;
+      }
       throw err;
     }
   }
@@ -173,6 +211,16 @@ export class LoanService implements ILoanService {
         throw new NotFoundException('Loan not found');
       }
 
+      // Prevent updating closed loans
+      if (existingLoan.status === ELoanStatus.CLOSED) {
+        throw new BadRequestException('Cannot update a closed loan');
+      }
+
+      // Prevent status updates through regular update endpoint (use updateStatus instead)
+      if (updateData.status && updateData.status !== existingLoan.status) {
+        throw new BadRequestException('Cannot update loan status through this endpoint. Use PATCH /loans/:id/status instead');
+      }
+
       // Check if fields that affect dues calculation have changed
       const duesNeedRecalculation =
         !!updateData.tenureType ||
@@ -183,14 +231,17 @@ export class LoanService implements ILoanService {
         !!updateData.amountRemaining;
 
       // Merge update data with existing loan data to get final values
+      // Exclude status from updateData to prevent status changes through this endpoint
+      const { status, ...updateDataWithoutStatus } = updateData;
       const finalLoanData: Loan = {
         ...existingLoan,
-        ...updateData,
+        ...updateDataWithoutStatus,
         _id: existingLoan._id,
         id: existingLoan.id,
         customerId: updateData.customerId ?? existingLoan.customerId,
         createdBy: existingLoan.createdBy,
         createdAt: existingLoan.createdAt,
+        status: existingLoan.status, // Always preserve existing status
       };
 
       // Recalculate interest if interest-related fields are being updated

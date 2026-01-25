@@ -4,7 +4,6 @@ import {
   Post,
   Get,
   Patch,
-  Delete,
   HttpStatus,
   HttpCode,
   Body,
@@ -34,13 +33,14 @@ import {
   GetLoanParamsModel,
   ListLoansQueryRequestModel,
   UpdateLoanRequestModel,
+  UpdateLoanStatusRequestModel,
   LoanStatsQueryRequestModel,
   LoanStatsResponseModel,
 } from './models';
 import { ILoanService, LOAN_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
 import { LoansFilterOptions, LoanStatsFilterOptions } from './options';
-import { Loan, LoanItem } from './domain';
+import { Loan } from './domain';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Types } from 'mongoose';
 
@@ -52,7 +52,7 @@ export class LoansController {
   constructor(
     @InjectPinoLogger(LoansController.name) private readonly logger: PinoLogger,
     @Inject(LOAN_SERVICE) private readonly loanService: ILoanService,
-  ) {}
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new loan' })
@@ -103,7 +103,7 @@ export class LoansController {
   @ApiOperation({ summary: 'List all loans with pagination, sorting, and search' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Returns a paginated list of loans with optional sorting and filtering',
+    description: 'Returns a paginated list of loans with optional sorting and filtering (defaults to OPEN loans)',
     type: LoansPagedResponseModel,
   })
   @HttpCode(HttpStatus.OK)
@@ -153,8 +153,6 @@ export class LoansController {
   @ApiOperation({ summary: 'Update loan' })
   @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
   @ApiOkResponse({ type: LoanResponseModel })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Not authorized to update this loan' })
   @HttpCode(HttpStatus.OK)
   async update(
     @Param() params: GetLoanParamsModel,
@@ -167,6 +165,21 @@ export class LoansController {
     });
     loanData.createdBy = identity.userId;
     const loan = await this.loanService.update(params.id, loanData);
+    return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
+  }
+
+  @Patch(':id/status')
+  @ApiOperation({ summary: 'Update loan status (Open/Close)' })
+  @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @ApiOkResponse({ type: LoanResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async updateStatus(
+    @Param() params: GetLoanParamsModel,
+    @Body() body: UpdateLoanStatusRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<LoanResponseModel> {
+    this.logger.info({ params, body, identity }, 'updateStatus called');
+    const loan = await this.loanService.updateStatus(params.id, body.status, identity.userId);
     return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
   }
 }

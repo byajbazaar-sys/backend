@@ -1,6 +1,7 @@
 export * from './create-loan-request.model';
 export * from './create-loan-item-request.model';
 export * from './update-loan-request.model';
+export * from './update-loan-status-request.model';
 export * from './loan-response.model';
 export * from './get-loan-params.model';
 export * from './list-loans-query.model';
