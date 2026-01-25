@@ -14,5 +14,6 @@ export interface ILoansRepository {
   findByCreatedBy(createdBy: string): Promise<Loan[]>;
   listLoans(params: LoansFilterOptions): Promise<Paged<Loan>>;
   delete(id: string, createdBy: string): Promise<void>;
+  deleteByCustomerId(customerId: string, createdBy: string): Promise<void>;
   getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;
 }

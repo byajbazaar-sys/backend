@@ -24,12 +24,41 @@ export class LoanService implements ILoanService {
     try {
       this.logger.info({ customerId: data.customerId, amountRemaining: data.amountRemaining }, 'Creating new loan');
 
+      // Ensure all values are numbers
+      const amountRemaining = Number(data.amountRemaining);
+      const interestPercentage = Number(data.interestPercentage);
+      const tenureValue = Number(data.tenureValue);
+
+      // Validate that all required values are valid numbers
+      if (
+        isNaN(amountRemaining) ||
+        isNaN(interestPercentage) ||
+        isNaN(tenureValue) ||
+        amountRemaining < 0 ||
+        interestPercentage < 0 ||
+        tenureValue < 0
+      ) {
+        this.logger.error(
+          { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod: data.interestCalculationMethod },
+          'Invalid values for interest calculation',
+        );
+        throw new BadRequestException('Invalid loan parameters for interest calculation');
+      }
+
       if (data.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
         data.interestRemaining =
-          (data.interestPercentage * data.amountRemaining * (1 + data.interestPercentage / 100) ** data.tenureValue) /
-          100;
+          (interestPercentage * amountRemaining * (1 + interestPercentage / 100) ** tenureValue) / 100;
       } else {
-        data.interestRemaining = (data.interestPercentage * data.amountRemaining * data.tenureValue) / 100;
+        data.interestRemaining = (interestPercentage * amountRemaining * tenureValue) / 100;
+      }
+
+      // Ensure interestRemaining is a valid number
+      if (isNaN(data.interestRemaining) || !isFinite(data.interestRemaining)) {
+        this.logger.error(
+          { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod: data.interestCalculationMethod, calculatedInterest: data.interestRemaining },
+          'Calculated interest is NaN or infinite',
+        );
+        throw new BadRequestException('Invalid interest calculation result');
       }
 
       const loan = await this.loansRepo.create(data);
@@ -280,13 +309,41 @@ export class LoanService implements ILoanService {
       };
 
       // Recalculate interest based on new amount
+      // Ensure all values are numbers
+      const amountRemaining = Number(updatedLoanData.amountRemaining);
+      const interestPercentage = Number(existingLoan.interestPercentage);
+      const tenureValue = Number(existingLoan.tenureValue);
+
+      // Validate that all required values are valid numbers
+      if (
+        isNaN(amountRemaining) ||
+        isNaN(interestPercentage) ||
+        isNaN(tenureValue) ||
+        amountRemaining < 0 ||
+        interestPercentage < 0 ||
+        tenureValue < 0
+      ) {
+        this.logger.error(
+          { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod: existingLoan.interestCalculationMethod },
+          'Invalid values for interest calculation in updateLoanItem',
+        );
+        throw new BadRequestException('Invalid loan parameters for interest calculation');
+      }
+
       if (existingLoan.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
         updatedLoanData.interestRemaining =
-          (existingLoan.interestPercentage * updatedLoanData.amountRemaining *
-            (1 + existingLoan.interestPercentage / 100) ** existingLoan.tenureValue) / 100;
+          (interestPercentage * amountRemaining * (1 + interestPercentage / 100) ** tenureValue) / 100;
       } else {
-        updatedLoanData.interestRemaining =
-          (existingLoan.interestPercentage * updatedLoanData.amountRemaining * existingLoan.tenureValue) / 100;
+        updatedLoanData.interestRemaining = (interestPercentage * amountRemaining * tenureValue) / 100;
+      }
+
+      // Ensure interestRemaining is a valid number
+      if (isNaN(updatedLoanData.interestRemaining) || !isFinite(updatedLoanData.interestRemaining)) {
+        this.logger.error(
+          { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod: existingLoan.interestCalculationMethod, calculatedInterest: updatedLoanData.interestRemaining },
+          'Calculated interest is NaN or infinite in updateLoanItem',
+        );
+        throw new BadRequestException('Invalid interest calculation result');
       }
 
       // Update the loan
@@ -421,16 +478,42 @@ export class LoanService implements ILoanService {
         updateData.amountRemaining ||
         updateData.interestType
       ) {
-        const amountRemaining = finalLoanData.amountRemaining;
-        const interestPercentage = finalLoanData.interestPercentage;
-        const tenureValue = finalLoanData.tenureValue;
-        const interestCalculationMethod = finalLoanData.interestCalculationMethod;
+        // Use update values if provided, otherwise use existing values
+        const amountRemaining = Number(updateData.amountRemaining ?? existingLoan.amountRemaining);
+        const interestPercentage = Number(updateData.interestPercentage ?? existingLoan.interestPercentage);
+        const tenureValue = Number(updateData.tenureValue ?? existingLoan.tenureValue);
+        const interestCalculationMethod = updateData.interestCalculationMethod ?? existingLoan.interestCalculationMethod;
+
+        // Validate that all required values are valid numbers
+        if (
+          isNaN(amountRemaining) ||
+          isNaN(interestPercentage) ||
+          isNaN(tenureValue) ||
+          amountRemaining < 0 ||
+          interestPercentage < 0 ||
+          tenureValue < 0
+        ) {
+          this.logger.error(
+            { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod },
+            'Invalid values for interest calculation',
+          );
+          throw new BadRequestException('Invalid loan parameters for interest calculation');
+        }
 
         if (interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
           finalLoanData.interestRemaining =
             (interestPercentage * amountRemaining * (1 + interestPercentage / 100) ** tenureValue) / 100;
         } else {
           finalLoanData.interestRemaining = (interestPercentage * amountRemaining * tenureValue) / 100;
+        }
+
+        // Ensure interestRemaining is a valid number
+        if (isNaN(finalLoanData.interestRemaining) || !isFinite(finalLoanData.interestRemaining)) {
+          this.logger.error(
+            { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod, calculatedInterest: finalLoanData.interestRemaining },
+            'Calculated interest is NaN or infinite',
+          );
+          throw new BadRequestException('Invalid interest calculation result');
         }
       } else {
         // Keep existing interest remaining if not recalculating

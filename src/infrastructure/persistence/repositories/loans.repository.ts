@@ -350,4 +350,12 @@ export class LoansRepository implements ILoansRepository {
       throw err;
     }
   }
+
+  async deleteByCustomerId(customerId: string, createdBy: string): Promise<void> {
+    try {
+      await this.loanModel.deleteMany({ customerId: new Types.ObjectId(customerId), createdBy: new Types.ObjectId(createdBy) }).exec();
+    } catch (err) {
+      throw err;
+    }
+  }
 }

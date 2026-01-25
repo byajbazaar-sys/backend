@@ -11,19 +11,24 @@ import { Customer } from '../domain';
 import { ICustomersRepository, CUSTOMERS_REPOSITORY } from './i-customers.repository';
 import { ICustomerService } from './i-customer.service';
 import { UpdateCustomerRequestModel } from '../models';
-import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions } from '../../../shared';
+import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions, DUES_REPOSITORY, IDuesRepository } from '../../../shared';
 import { CustomersFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
 import { Types } from 'mongoose';
+import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
+import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans/service/i-loan-items.repository';
 
 @Injectable()
 export class CustomerService implements ICustomerService {
   constructor(
     @Inject(CUSTOMERS_REPOSITORY) private readonly customersRepo: ICustomersRepository,
     @Inject(USERS_FILE_STORAGE) private readonly customersFileStorage: IUsersFileStorage,
+    @Inject(LOANS_REPOSITORY) private readonly loansRepo: ILoansRepository,
+    @Inject(LOAN_ITEMS_REPOSITORY) private readonly loanItemsRepo: ILoanItemsRepository,
+    @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
     protected readonly fileStorageOptions: FileStorageOptions,
     @InjectPinoLogger(CustomerService.name) private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   async create(body: Customer): Promise<Customer> {
     try {
@@ -137,8 +142,54 @@ export class CustomerService implements ICustomerService {
         this.logger.warn({ customerId: id, createdBy }, 'Customer not found for deletion');
         throw new NotFoundException('Customer not found');
       }
+
+      // Find all loans linked to this customer
+      const customerLoans = await this.loansRepo.findByCustomerId(id);
+      this.logger.info({ customerId: id, loanCount: customerLoans.length }, 'Found loans linked to customer');
+
+      // Delete all related data for each loan
+      for (const loan of customerLoans) {
+        const loanId = loan.id;
+        if (!loanId) {
+          this.logger.warn({ loan }, 'Loan missing ID, skipping');
+          continue;
+        }
+
+        this.logger.debug({ loanId, customerId: id }, 'Deleting loan items and dues for loan');
+
+        // Delete all loan items for this loan
+        try {
+          await this.loanItemsRepo.deleteByLoanId(loanId);
+          this.logger.debug({ loanId }, 'Loan items deleted successfully');
+        } catch (err) {
+          this.logger.error({ err, loanId }, 'Error deleting loan items');
+          // Continue with deletion even if loan items deletion fails
+        }
+
+        // Delete all dues for this loan (including PAID, UPCOMING_DUE, and PAST_DUE)
+        try {
+          await this.duesRepo.deleteByLoanId(loanId);
+          this.logger.debug({ loanId }, 'Dues deleted successfully');
+        } catch (err) {
+          this.logger.error({ err, loanId }, 'Error deleting dues');
+          // Continue with deletion even if dues deletion fails
+        }
+      }
+
+      // Delete all loans linked to this customer
+      if (customerLoans.length > 0) {
+        try {
+          await this.loansRepo.deleteByCustomerId(id, createdBy);
+          this.logger.info({ customerId: id, loanCount: customerLoans.length }, 'Loans deleted successfully');
+        } catch (err) {
+          this.logger.error({ err, customerId: id }, 'Error deleting loans');
+          throw err;
+        }
+      }
+
+      // Finally, delete the customer
       await this.customersRepo.delete(id, createdBy);
-      this.logger.info({ customerId: id }, 'Customer deleted successfully');
+      this.logger.info({ customerId: id, deletedLoans: customerLoans.length }, 'Customer and all related data deleted successfully');
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;
