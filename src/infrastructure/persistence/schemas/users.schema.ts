@@ -44,6 +44,12 @@ export class UsersSchema {
 
   @Prop({ type: String, default: null })
   profilePhotoRef: string;
+
+  @Prop({ required: false, default: null })
+  businessName?: string;
+
+  @Prop({ required: false, default: null })
+  address?: string;
 }
 
 export const usersSchema = SchemaFactory.createForClass(UsersSchema);

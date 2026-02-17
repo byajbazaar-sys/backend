@@ -1,12 +1,13 @@
-import { UseGuards, Controller, Post, Get, Delete, HttpStatus, HttpCode, Body, Param, Inject } from '@nestjs/common';
+import { UseGuards, Controller, Post, Get, Patch, Delete, HttpStatus, HttpCode, Body, Param, Inject } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { USER_STRATEGY, RolesGuard, Identity, IIdentity } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { CreateItemRequestModel, ItemResponseModel, GetItemParamsModel } from './models';
+import { CreateItemRequestModel, UpdateItemRequestModel, ItemResponseModel, GetItemParamsModel } from './models';
 import { IItemService, ITEM_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
+import { Item } from './domain';
 
 @ApiTags('items')
 @ApiBearerAuth('user')
@@ -16,7 +17,7 @@ export class ItemsController {
   constructor(
     @InjectPinoLogger(ItemsController.name) private readonly logger: PinoLogger,
     @Inject(ITEM_SERVICE) private readonly itemService: IItemService,
-  ) {}
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new item' })
@@ -51,6 +52,24 @@ export class ItemsController {
   async getById(@Param() params: GetItemParamsModel): Promise<ItemResponseModel> {
     this.logger.info({ params }, 'getById item called');
     const item = await this.itemService.getById(params.id);
+    return plainToInstance(ItemResponseModel, item, { excludeExtraneousValues: true });
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update item by ID' })
+  @ApiParam({ name: 'id', description: 'Item ID', example: '507f1f77bcf86cd799439011' })
+  @ApiOkResponse({ type: ItemResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @Param() params: GetItemParamsModel,
+    @Body() body: UpdateItemRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<ItemResponseModel> {
+    this.logger.info({ params, body, identity }, 'update item called');
+    const itemData = plainToInstance(Item, body, {
+      excludeExtraneousValues: true,
+    });
+    const item = await this.itemService.update(params.id, itemData, identity.userId);
     return plainToInstance(ItemResponseModel, item, { excludeExtraneousValues: true });
   }
 

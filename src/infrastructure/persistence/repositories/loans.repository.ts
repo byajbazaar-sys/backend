@@ -7,6 +7,7 @@ import {
   ELoanStatus,
   ILoansRepository,
   Loan,
+  LoanExtended,
   LoansFilterOptions,
   LoanStats,
   LoanStatsFilterOptions,
@@ -68,7 +69,7 @@ export class LoansRepository implements ILoansRepository {
   async findById(id: string, createdBy: string): Promise<Loan> {
     try {
       const loan = await this.loanModel.findOne({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
-      return plainToInstance(Loan, loan.toJSON(), {
+      return plainToInstance(Loan, loan, {
         excludeExtraneousValues: true,
       });
     } catch (err) {
@@ -99,7 +100,7 @@ export class LoansRepository implements ILoansRepository {
     }
   }
 
-  async listLoans(params: LoansFilterOptions): Promise<Paged<Loan>> {
+  async listLoans(params: LoansFilterOptions): Promise<LoanExtended> {
     try {
       const { customerId, createdBy, status } = params;
       const { pageNumber, pageSize, skip } = getPaginationValues(params);
@@ -120,6 +121,7 @@ export class LoansRepository implements ILoansRepository {
 
       const docs = await this.loanModel.aggregate([
         { $match: filter },
+
         {
           $facet: {
             data: [
@@ -131,21 +133,57 @@ export class LoansRepository implements ILoansRepository {
               { $skip: skip },
               { $limit: +pageSize },
             ],
+
             totalCount: [{ $count: 'total' }],
+
+            totals: [
+              {
+                $group: {
+                  _id: null,
+                  totalAmountRemaining: { $sum: '$totalAmountRemaining' },
+                  totalAmountPaid: { $sum: '$totalAmountPaid' },
+                  totalInterestRemaining: { $sum: '$totalInterestRemaining' },
+                  totalInterestPaid: { $sum: '$totalInterestPaid' },
+                },
+              },
+            ],
           },
         },
+
         {
           $project: {
             data: 1,
             total: { $ifNull: [{ $arrayElemAt: ['$totalCount.total', 0] }, 0] },
+
+            totalAmountRemaining: {
+              $ifNull: [{ $arrayElemAt: ['$totals.totalAmountRemaining', 0] }, 0],
+            },
+            totalAmountPaid: {
+              $ifNull: [{ $arrayElemAt: ['$totals.totalAmountPaid', 0] }, 0],
+            },
+            totalInterestRemaining: {
+              $ifNull: [{ $arrayElemAt: ['$totals.totalInterestRemaining', 0] }, 0],
+            },
+            totalInterestPaid: {
+              $ifNull: [{ $arrayElemAt: ['$totals.totalInterestPaid', 0] }, 0],
+            },
           },
         },
       ]);
-      return toPaged(Loan, {
+      const data = toPaged(Loan, {
         items: docs[0].data,
         page: pageNumber,
         perPage: pageSize,
         totalCount: docs[0].total,
+      });
+      return plainToInstance(LoanExtended, {
+        ...data,
+        totalAmountRemaining: docs[0].totalAmountRemaining,
+        totalAmountPaid: docs[0].totalAmountPaid,
+        totalInterestPaid: docs[0].totalInterestPaid,
+        totalInterestRemaining: docs[0].totalInterestRemaining,
+      }, {
+        excludeExtraneousValues: true,
       });
     } catch (err) {
       throw err;
@@ -223,13 +261,31 @@ export class LoansRepository implements ILoansRepository {
                   // optional UI metrics
                   matchedItems: {
                     $sum: {
-                      $cond: [{ $eq: ['$itemId', '$$filterItemId'] }, 1, 0],
+                      $cond: [
+                        {
+                          $or: [
+                            { $eq: ['$$filterItemId', null] },
+                            { $eq: ['$itemId', '$$filterItemId'] }
+                          ]
+                        },
+                        1,
+                        0,
+                      ],
                     },
                   },
 
                   totalNetWeight: {
                     $sum: {
-                      $cond: [{ $eq: ['$itemId', '$$filterItemId'] }, '$netWeightInGrams', 0],
+                      $cond: [
+                        {
+                          $or: [
+                            { $eq: ['$$filterItemId', null] },
+                            { $eq: ['$itemId', '$$filterItemId'] }
+                          ]
+                        },
+                        '$netWeightInGrams',
+                        0,
+                      ],
                     },
                   },
 

@@ -66,4 +66,24 @@ export class CreateUserRequestModel {
   @IsOptional()
   @IsEnum(EUserType, { message: 'User type must be either admin or user' })
   userType?: EUserType = EUserType.User;
+
+  @ApiProperty({
+    example: 'ABC Corporation',
+    required: false,
+    nullable: true,
+    description: 'Business name (optional)',
+  })
+  @IsOptional()
+  @IsString({ message: 'Business name must be a string' })
+  businessName?: string;
+
+  @ApiProperty({
+    example: '123 Main Street, City, State, ZIP Code',
+    required: false,
+    nullable: true,
+    description: 'Business address (optional)',
+  })
+  @IsOptional()
+  @IsString({ message: 'Address must be a string' })
+  address?: string;
 }

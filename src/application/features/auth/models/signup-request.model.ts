@@ -71,4 +71,26 @@ export class SignupRequestModel {
     description: 'profilePhoto file (JPEG, PNG, WebP) - maximum 5MB',
   })
   profilePhoto: Express.Multer.File;
+
+  @Expose()
+  @ApiProperty({
+    example: 'ABC Corporation',
+    required: false,
+    nullable: true,
+    description: 'Business name (optional)',
+  })
+  @IsOptional()
+  @IsString({ message: 'Business name must be a string' })
+  businessName?: string;
+
+  @Expose()
+  @ApiProperty({
+    example: '123 Main Street, City, State, ZIP Code',
+    required: false,
+    nullable: true,
+    description: 'Business address (optional)',
+  })
+  @IsOptional()
+  @IsString({ message: 'Address must be a string' })
+  address?: string;
 }

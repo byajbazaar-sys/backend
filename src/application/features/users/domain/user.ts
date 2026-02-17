@@ -67,4 +67,10 @@ export class User {
 
   @Expose()
   public profilePhotoContentType: string;
+
+  @Expose()
+  public businessName?: string;
+
+  @Expose()
+  public address?: string;
 }

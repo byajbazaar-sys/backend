@@ -9,10 +9,13 @@ import {
   Param,
   Patch,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiExtraModels, ApiTags, ApiBearerAuth, ApiOkResponse, ApiResponse } from '@nestjs/swagger';
+import { ApiExtraModels, ApiTags, ApiBearerAuth, ApiOkResponse, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { EUserType, Identity, IIdentity, Roles, RolesGuard, USER_STRATEGY } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
@@ -36,7 +39,7 @@ export class UsersController {
   constructor(
     @Inject(USERS_SERVICE) private readonly usersService: IUsersService,
     @InjectPinoLogger(UsersController.name) private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   @Get()
   @ApiOkResponse({ type: PaginatedUserResponseModel })
@@ -79,13 +82,16 @@ export class UsersController {
 
   @Patch(':id')
   @ApiResponse({ status: HttpStatus.OK, type: UserResponseModel })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('profilePhoto'))
   @HttpCode(HttpStatus.OK)
   async update(
     @Param() params: GetUserParamsModel,
     @Body() body: UpdateUserRequestModel,
+    @UploadedFile() profilePhoto: Express.Multer.File,
     @Identity() identity: IIdentity,
   ): Promise<UserResponseModel> {
-    this.logger.info({ params, body, identity }, 'update called');
+    this.logger.info({ params, body, identity, hasProfilePhoto: !!profilePhoto }, 'update called');
     if (params.id !== identity.userId && identity.userType !== EUserType.Admin) {
       throw new ForbiddenException('You are not authorized to update this user');
     }
@@ -93,7 +99,15 @@ export class UsersController {
     const userData = plainToInstance(User, body, {
       excludeExtraneousValues: true,
     });
+
+    // Attach profile photo file if provided
+    if (profilePhoto) {
+      userData.profilePhoto = profilePhoto.buffer;
+      userData.profilePhotoContentType = profilePhoto.mimetype;
+      userData.profilePhotoFileName = profilePhoto.originalname;
+    }
+
     const user = await this.usersService.update(params.id, userData);
-    return plainToInstance(UserResponseModel, user, { excludeExtraneousValues: true });
+    return plainToInstance(UserResponseModel, { ...user, profilePhotoUrl: user.profilePhotoRef }, { excludeExtraneousValues: true });
   }
 }

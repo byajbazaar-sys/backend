@@ -134,11 +134,14 @@ export const handler = async (event: any, context: Context, callback: any) => {
     const result = await server(event, context, callback);
     return result;
   } catch (error: any) {
+    const requestPath = event?.path || event?.requestContext?.http?.path || 'unknown';
     console.error('❌ Lambda handler error:', {
       message: error?.message,
       stack: error?.stack,
       name: error?.name,
       requestId: context.awsRequestId,
+      path: requestPath,
+      method: event?.requestContext?.http?.method || event?.httpMethod || 'unknown',
     });
 
     // Return a proper error response instead of letting it crash
@@ -154,6 +157,7 @@ export const handler = async (event: any, context: Context, callback: any) => {
         data: {},
         ...(process.env.NODE_ENV === 'development' && {
           details: error?.message,
+          path: requestPath,
         }),
       }),
     };

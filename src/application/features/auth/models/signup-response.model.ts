@@ -33,4 +33,12 @@ export class SignupResponseModel {
   @Expose()
   @ApiProperty({ example: 'https://example.com/profile.jpg', nullable: true })
   profilePhotoUrl: string;
+
+  @Expose()
+  @ApiProperty({ example: 'ABC Corporation', nullable: true, required: false, description: 'Business name' })
+  businessName?: string;
+
+  @Expose()
+  @ApiProperty({ example: '123 Main Street, City, State, ZIP Code', nullable: true, required: false, description: 'Business address' })
+  address?: string;
 }

@@ -65,6 +65,25 @@ export class ItemsRepository implements IItemsRepository {
     }
   }
 
+  async update(id: string, updateItem: Partial<Item>): Promise<Item> {
+    try {
+      const updatedItem = await this.itemModel
+        .findByIdAndUpdate(new Types.ObjectId(id), updateItem, { new: true })
+        .exec();
+      if (!updatedItem) {
+        throw new NotFoundException('Item not found');
+      }
+      return plainToInstance(Item, updatedItem.toJSON(), {
+        excludeExtraneousValues: true,
+      });
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        throw err;
+      }
+      throw err;
+    }
+  }
+
   async delete(id: string): Promise<void> {
     try {
       const result = await this.itemModel.findByIdAndDelete(new Types.ObjectId(id)).exec();

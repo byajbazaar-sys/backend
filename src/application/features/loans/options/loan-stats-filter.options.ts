@@ -8,5 +8,5 @@ export class LoanStatsFilterOptions {
   public endDate: Date;
 
   @Expose()
-  public itemId: string;
+  public itemId?: string;
 }

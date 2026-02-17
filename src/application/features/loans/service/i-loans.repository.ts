@@ -1,5 +1,5 @@
 import { Paged } from '@shared-libs';
-import { Loan } from '../domain';
+import { Loan, LoanExtended } from '../domain';
 import { LoansFilterOptions, LoanStatsFilterOptions } from '../options';
 import { LoanStats } from '../domain';
 
@@ -12,7 +12,7 @@ export interface ILoansRepository {
   findById(id: string, createdBy: string): Promise<Loan>;
   findByIds(ids: string[]): Promise<Loan[]>;
   findByCreatedBy(createdBy: string): Promise<Loan[]>;
-  listLoans(params: LoansFilterOptions): Promise<Paged<Loan>>;
+  listLoans(params: LoansFilterOptions): Promise<LoanExtended>;
   delete(id: string, createdBy: string): Promise<void>;
   deleteByCustomerId(customerId: string, createdBy: string): Promise<void>;
   getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;

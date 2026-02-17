@@ -16,6 +16,7 @@ import { Transaction } from './domain';
 import { DuesFilterOptions, TransactionsFilterOptions } from './options';
 import { Types } from 'mongoose';
 import { DuesPagedResponseModel, ListDuesQueryRequestModel } from './models';
+import { ETransactionType } from './enums';
 
 @ApiTags('transactions')
 @ApiBearerAuth('user')
@@ -43,6 +44,16 @@ export class TransactionsController {
     if(!transactionData.loanId && !transactionData.dueId) {
       throw new BadRequestException('Loan ID or Due ID is required');
     }
+
+    if(transactionData.transactionType === ETransactionType.DUE_PAYMENT || transactionData.dueId) {
+      if(!transactionData.dueId) {
+        throw new BadRequestException('Due ID is required for due payment');
+      }
+      if(transactionData.transactionType !== ETransactionType.DUE_PAYMENT) {
+        throw new BadRequestException('Transaction type must be due payment for due ID');
+      }
+    }
+
     transactionData._id = new Types.ObjectId();
     transactionData.createdBy = identity.userId;
     const transaction = await this.transactionService.create(transactionData);

@@ -39,4 +39,32 @@ export class UpdateUserRequestModel {
   @IsOptional()
   @IsEnum(EUserType, { message: 'User type must be either admin or user' })
   userType?: EUserType;
+
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    required: false,
+    description: 'Profile photo file (JPEG, PNG, WebP) - maximum 5MB',
+  })
+  profilePhoto?: Express.Multer.File;
+
+  @ApiProperty({
+    example: 'ABC Corporation',
+    required: false,
+    nullable: true,
+    description: 'Business name (optional)',
+  })
+  @IsOptional()
+  @IsString({ message: 'Business name must be a string' })
+  businessName?: string | null;
+
+  @ApiProperty({
+    example: '123 Main Street, City, State, ZIP Code',
+    required: false,
+    nullable: true,
+    description: 'Business address (optional)',
+  })
+  @IsOptional()
+  @IsString({ message: 'Address must be a string' })
+  address?: string | null;
 }

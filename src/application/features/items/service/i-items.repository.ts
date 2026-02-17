@@ -7,5 +7,6 @@ export interface IItemsRepository {
   findById(id: string): Promise<Item>;
   findByName(name: string, createdBy: string): Promise<Item>;
   findAll(): Promise<Item[]>;
+  update(id: string, updateItem: Partial<Item>): Promise<Item>;
   delete(id: string): Promise<void>;
 }

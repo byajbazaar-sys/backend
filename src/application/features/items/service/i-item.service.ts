@@ -7,5 +7,6 @@ export interface IItemService {
   create(data: CreateItemRequestModel, userId: string): Promise<Item>;
   getById(id: string): Promise<Item>;
   getAll(): Promise<Item[]>;
+  update(id: string, data: Partial<Item>, userId: string): Promise<Item>;
   delete(id: string): Promise<void>;
 }

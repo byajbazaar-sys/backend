@@ -7,6 +7,7 @@ timeout: 30
 logRetentionInDays: 30
 environment:
   NODE_ENV: ${self:provider.stage}
+  NO_COLOR: "true"
   AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
   SKIP_SEEDING: 'true' # Skip seeding in Lambda to avoid timeout on cold starts
   # Database configuration

@@ -10,6 +10,22 @@ export class LoansPagedResponseModel implements IPageable<LoanResponseModel> {
   items: LoanResponseModel[];
 
   @Expose()
+  @ApiProperty({ description: 'Total amount remaining', example: 1000 })
+  totalAmountRemaining: number;
+
+  @Expose()
+  @ApiProperty({ description: 'Total amount paid', example: 1000 })
+  totalAmountPaid: number;
+
+  @Expose()
+  @ApiProperty({ description: 'Total interest paid', example: 100 })
+  totalInterestPaid: number;
+
+  @Expose()
+  @ApiProperty({ description: 'Total interest remaining', example: 100 })
+  totalInterestRemaining: number;
+
+  @Expose()
   @ApiProperty({ description: 'Page number', example: 1 })
   page: number;
 

@@ -35,24 +35,12 @@ export class TransactionService implements ITransactionService {
         if (loan.interestRemaining < transaction.amount) {
           throw new BadRequestException('Interest remaining is less than transaction amount');
         }
-        if (data.dueId) {
-          if (due.interestAmount < transaction.amount) {
-            throw new BadRequestException('Interest amount should be less than or equal to due interest amount');
-          }
-          due.interestAmount -= transaction.amount;
-        }
         loan.interestRemaining -= transaction.amount;
         loan.interestPaid += transaction.amount;
       }
       if (transaction.transactionType === ETransactionType.PRINCIPAL) {
         if (loan.amountRemaining < transaction.amount) {
           throw new BadRequestException('Amount remaining is less than transaction amount');
-        }
-        if (data.dueId) {
-          if (due.principalAmount < transaction.amount) {
-            throw new BadRequestException('Principal amount should be less than or equal to due principal amount');
-          }
-          due.principalAmount -= transaction.amount;
         }
         loan.amountRemaining -= transaction.amount;
         loan.amountPaid += transaction.amount;
@@ -61,18 +49,15 @@ export class TransactionService implements ITransactionService {
         loan.amountRemaining += transaction.amount;
       }
 
-      if (data.dueId) {
-        due.dueAmount -= transaction.amount;
-        if (data.transactionType === ETransactionType.DUE_PAYMENT) {
-          if (due.dueAmount != transaction.amount) {
-            throw new BadRequestException('For due payment, transaction amount should be equal to due amount');
-          }
-          due.type = EDueType.PAID;
+      if (data.dueId && data.transactionType === ETransactionType.DUE_PAYMENT) {
+        if (due.dueAmount != transaction.amount) {
+          throw new BadRequestException('For due payment, transaction amount should be equal to due amount');
         }
-
+        due.type = EDueType.PAID;
+        due.dueAmount -= transaction.amount;
         await this.duesRepo.update(data.dueId, due);
       }
-
+      await this.loansRepo.update(data.loanId, loan);
       this.logger.info({ transactionId: transaction.id, loanId: loan.id }, 'Transaction created successfully');
       return transaction;
     } catch (err) {

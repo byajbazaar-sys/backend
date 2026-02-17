@@ -1,6 +1,6 @@
 import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { Loan, LoanItem, LoanStats } from '../domain';
+import { Loan, LoanExtended, LoanItem, LoanStats } from '../domain';
 import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
 import { LoansFilterOptions, LoanStatsFilterOptions } from '../options';
@@ -9,6 +9,7 @@ import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repo
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
 import { Due } from '../../transactions';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus } from '../enums';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class LoanService implements ILoanService {
@@ -186,7 +187,7 @@ export class LoanService implements ILoanService {
     }
   }
 
-  async getLoans(params: LoansFilterOptions): Promise<Paged<Loan>> {
+  async getLoans(params: LoansFilterOptions): Promise<LoanExtended> {
     try {
       // Default to open loans if status not specified
       if (!params.status) {
@@ -194,6 +195,7 @@ export class LoanService implements ILoanService {
       }
       this.logger.debug({ createdBy: params.createdBy, status: params.status }, 'Getting loans');
       const result = await this.loansRepo.listLoans(params);
+      console.log("result", result)
       return result;
     } catch (err) {
       this.logger.error({ err, params }, 'Error getting loans');

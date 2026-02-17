@@ -38,4 +38,16 @@ export class UserResponseModel {
   @Expose()
   @ApiProperty({ example: '2025-01-01T12:00:00.000Z' })
   updatedAt: string;
+
+  @Expose()
+  @ApiProperty({ example: 'https://example.com/profile.jpg', nullable: true, required: false, description: 'URL of the profile photo' })
+  profilePhotoUrl?: string;
+
+  @Expose()
+  @ApiProperty({ example: 'ABC Corporation', nullable: true, required: false, description: 'Business name' })
+  businessName?: string;
+
+  @Expose()
+  @ApiProperty({ example: '123 Main Street, City, State, ZIP Code', nullable: true, required: false, description: 'Business address' })
+  address?: string;
 }
