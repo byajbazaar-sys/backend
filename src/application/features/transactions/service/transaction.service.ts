@@ -3,10 +3,9 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Transaction, Due } from '../domain';
 import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../repository';
 import { ITransactionService } from './i-transaction.service';
-import { UpdateTransactionRequestModel } from '../models';
 import { TransactionsFilterOptions, DuesFilterOptions } from '../options';
 import { Paged, toPaged } from '@shared-libs';
-import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus, Loan } from '../../loans';
+import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus, Loan, ILoanService, LOAN_SERVICE, EInterestCalculationMethod } from '../../loans';
 import { ETransactionType } from '../enums';
 import { DUES_REPOSITORY, EDueType, IDuesRepository } from '../../../shared';
 
@@ -16,6 +15,7 @@ export class TransactionService implements ITransactionService {
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
     @Inject(LOANS_REPOSITORY) private readonly loansRepo: ILoansRepository,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
+    @Inject(LOAN_SERVICE) private readonly loanService: ILoanService,
     @InjectPinoLogger(TransactionService.name) private readonly logger: PinoLogger,
   ) { }
 
@@ -38,6 +38,7 @@ export class TransactionService implements ITransactionService {
         loan.interestRemaining -= transaction.amount;
         loan.interestPaid += transaction.amount;
       }
+
       if (transaction.transactionType === ETransactionType.PRINCIPAL) {
         if (loan.amountRemaining < transaction.amount) {
           throw new BadRequestException('Amount remaining is less than transaction amount');
@@ -45,8 +46,20 @@ export class TransactionService implements ITransactionService {
         loan.amountRemaining -= transaction.amount;
         loan.amountPaid += transaction.amount;
       }
+
       if (transaction.transactionType === ETransactionType.TOP_UP) {
         loan.amountRemaining += transaction.amount;
+        // Recalculate interest for the additional principal over remaining periods
+        const unpaidDues = await this.duesRepo.findByLoanIdAndType(data.loanId, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
+        const remainingTenure = unpaidDues.length;
+        if (remainingTenure > 0) {
+          const rate = loan.interestPercentage / 100;
+          if (loan.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
+            loan.interestRemaining += transaction.amount * (Math.pow(1 + rate, remainingTenure) - 1);
+          } else {
+            loan.interestRemaining += (loan.interestPercentage * transaction.amount * remainingTenure) / 100;
+          }
+        }
       }
 
       if (data.dueId && data.transactionType === ETransactionType.DUE_PAYMENT) {
@@ -58,6 +71,15 @@ export class TransactionService implements ITransactionService {
         await this.duesRepo.update(data.dueId, due);
       }
       await this.loansRepo.update(data.loanId, loan);
+
+      if (
+        transaction.transactionType === ETransactionType.INTEREST ||
+        transaction.transactionType === ETransactionType.PRINCIPAL ||
+        transaction.transactionType === ETransactionType.TOP_UP
+      ) {
+        await this.loanService.recalculateDuesForLoan(data.loanId, data.createdBy);
+      }
+
       this.logger.info({ transactionId: transaction.id, loanId: loan.id }, 'Transaction created successfully');
       return transaction;
     } catch (err) {

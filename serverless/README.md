@@ -82,7 +82,7 @@ Environment variables are defined in the main `serverless.yml` under `provider.e
 Example:
 ```yaml
 environment:
-  DATABASE_URL: ${ssm:/crowdsay/${self:provider.stage}/database/url}
+  MONGO_URL: ${ssm:/crowdsay/${self:provider.stage}/database/url}
   JWT_SECRET: ${ssm:/crowdsay/${self:provider.stage}/jwt/secret~true}
 ```
 

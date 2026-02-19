@@ -132,7 +132,7 @@ Environment variables can be configured in `serverless.yml` under the `provider.
 
 ```yaml
 environment:
-  DATABASE_URL: ${ssm:/crowdsay/${self:provider.stage}/database/url}
+  MONGO_URL: ${ssm:/crowdsay/${self:provider.stage}/database/url}
   JWT_SECRET: ${ssm:/crowdsay/${self:provider.stage}/jwt/secret}
 ```
 

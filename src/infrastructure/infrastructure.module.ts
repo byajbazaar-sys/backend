@@ -1,5 +1,5 @@
 import { HttpModule } from '@nestjs/axios';
-import { Global, Module, Logger } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import Schemas from './persistence/schemas';
 import Seeds from './persistence/seeds';
@@ -42,68 +42,22 @@ import CronServices from './cron';
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const opts = configService.get<IDbOptions>('database');
-        if (!opts) {
-          throw new Error('Database configuration is missing');
+        const uri = configService.get<IDbOptions>('database')?.uri?.trim();
+        if (!uri) {
+          throw new Error(
+            'Database configuration is missing. Please set MONGO_URL, MONGODB_URI, or DATABASE_URL environment variable.',
+          );
         }
-
-        const { host, port, database, username, password } = opts;
-        const logger = new Logger('MongooseModule');
-        logger.log(`Database configuration: ${host}:${port || 27017}/${database}`);
-
-        if (!host || !database) {
-          throw new Error('Missing required database configuration (host or database name)');
-        }
-
-        // Detect MongoDB Atlas (hosts ending with .mongodb.net)
-        const isAtlas = host.includes('.mongodb.net');
-
-        let uri: string;
-        if (isAtlas) {
-          // MongoDB Atlas uses mongodb+srv:// protocol and doesn't require port
-          // Check if username and password are provided and not empty
-          if (!username || !password || username.trim() === '' || password.trim() === '') {
-            throw new Error(
-              'MongoDB Atlas requires username and password. ' +
-                'Please set DB_USERNAME and DB_PASSWORD environment variables.',
-            );
-          }
-          // URL encode username and password to handle special characters
-          const encodedUsername = encodeURIComponent(username);
-          const encodedPassword = encodeURIComponent(password);
-          uri = `mongodb+srv://${encodedUsername}:${encodedPassword}@${host}/${database}?retryWrites=true&w=majority`;
-          logger.log(`Connecting to MongoDB Atlas at ${host}/${database}...`);
-        } else {
-          // Standard MongoDB connection
-          const dbPort = port || 27017;
-          if (username && password) {
-            const encodedUsername = encodeURIComponent(username);
-            const encodedPassword = encodeURIComponent(password);
-            uri = `mongodb://${encodedUsername}:${encodedPassword}@${host}:${dbPort}/${database}?retryWrites=true&w=majority`;
-          } else {
-            uri = `mongodb://${host}:${dbPort}/${database}`;
-          }
-          logger.log(`Connecting to MongoDB at ${host}:${dbPort}/${database}...`);
-        }
-
-        const connectionOptions: any = {
+        return {
           uri,
-          serverSelectionTimeoutMS: isAtlas ? 10000 : 5000, // Atlas may need more time
-          socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-          connectTimeoutMS: isAtlas ? 30000 : 10000, // Atlas connections may take longer
-          maxPoolSize: 10, // Maintain up to 10 socket connections
-          minPoolSize: 1, // Maintain at least 1 socket connection
+          serverSelectionTimeoutMS: 10000,
+          socketTimeoutMS: 45000,
+          connectTimeoutMS: 10000,
+          maxPoolSize: 10,
+          minPoolSize: 1,
           retryWrites: true,
           w: 'majority',
         };
-
-        // For Atlas, add additional options
-        if (isAtlas) {
-          connectionOptions.tls = true; // Atlas requires TLS
-          connectionOptions.tlsAllowInvalidCertificates = false;
-        }
-
-        return connectionOptions;
       },
     }),
     MongooseModule.forFeature([...Schemas]),

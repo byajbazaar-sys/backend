@@ -606,6 +606,60 @@ export class LoanService implements ILoanService {
     }
   }
 
+  async recalculateDuesForLoan(loanId: string, createdBy: string): Promise<void> {
+    const existingLoan = await this.loansRepo.findById(loanId, createdBy);
+    if (!existingLoan) {
+      throw new NotFoundException('Loan not found');
+    }
+    if (existingLoan.status === ELoanStatus.CLOSED) {
+      return;
+    }
+
+    const paidDues = await this.duesRepo.findByLoanIdAndType(loanId, [EDueType.PAID]);
+    const paidDuesCount = paidDues.length;
+    const totalTenure = existingLoan.tenureValue;
+    const remainingTenure = Math.max(0, totalTenure - paidDuesCount);
+    const remainingAmount = existingLoan.amountRemaining;
+    const remainingInterest = existingLoan.interestRemaining;
+
+    if (remainingTenure <= 0 || (remainingAmount <= 0 && remainingInterest <= 0)) {
+      await this.duesRepo.deleteByLoanId(loanId, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
+      return;
+    }
+
+    let startDate: Date;
+    if (paidDues.length > 0) {
+      const lastPaidDue = paidDues[paidDues.length - 1];
+      startDate = new Date(lastPaidDue.dueDate);
+      if (existingLoan.interestType === EInterestType.MONTHLY) {
+        startDate.setMonth(startDate.getMonth() + 1);
+      } else if (existingLoan.interestType === EInterestType.DAILY) {
+        startDate.setDate(startDate.getDate() + 1);
+      }
+    } else {
+      startDate = existingLoan.createdAt ? new Date(existingLoan.createdAt) : new Date();
+    }
+    startDate.setHours(0, 0, 0, 0);
+
+    await this.duesRepo.deleteByLoanId(loanId, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
+
+    const loanForDues: Loan = {
+      ...existingLoan,
+      tenureValue: remainingTenure,
+      amountRemaining: remainingAmount,
+      interestRemaining: remainingInterest,
+      createdAt: startDate,
+    };
+
+    await this.createDuesForLoan(loanForDues, {
+      startDate,
+      remainingAmount,
+      remainingInterest,
+      remainingTenure,
+    });
+    this.logger.info({ loanId, remainingTenure, paidDuesCount }, 'Dues recalculated successfully');
+  }
+
   async delete(id: string, createdBy: string): Promise<void> {
     try {
       this.logger.info({ loanId: id, createdBy }, 'Deleting loan');

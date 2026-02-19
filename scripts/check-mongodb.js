@@ -1,16 +1,8 @@
 const mongoose = require('mongoose');
 
-const host = process.env.DB_HOST || 'localhost';
-const port = process.env.DB_PORT || 27017;
-const database = process.env.DB_NAME || 'jobs_db';
-const username = process.env.DB_USERNAME || '';
-const password = process.env.DB_PASSWORD || '';
+const uri = process.env.MONGO_URL || process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/jobs_db';
 
-const uri = username && password
-  ? `mongodb://${username}:${password}@${host}:${port}/${database}?retryWrites=true&w=majority`
-  : `mongodb://${host}:${port}/${database}`;
-
-console.log(`Attempting to connect to MongoDB at ${host}:${port}/${database}...`);
+console.log('Attempting to connect to MongoDB...');
 
 mongoose.connect(uri, {
   serverSelectionTimeoutMS: 5000,
@@ -34,7 +26,6 @@ mongoose.connect(uri, {
     console.error('❌ MongoDB connection failed:', err.message);
     console.error('\nPlease check:');
     console.error('1. MongoDB is running: mongod --version');
-    console.error('2. MongoDB is accessible at:', uri);
-    console.error('3. Environment variables are set correctly');
+    console.error('2. MONGO_URL (or MONGODB_URI/DATABASE_URL) is set correctly');
     process.exit(1);
   });

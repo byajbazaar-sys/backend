@@ -1,0 +1,27 @@
+# Seed CLI Configuration
+# Run database seeds for a specific stage.
+#
+# Usage:
+#   yarn build && yarn seed:dev          # Seed dev (uses .env + .env.dev)
+#   yarn build && yarn seed:staging       # Seed staging (uses .env + .env.staging)
+#   yarn build && yarn seed:production    # Seed production (uses .env + .env.production)
+#
+#   ./scripts/seed.sh dev                 # Same via shell script
+#   ./scripts/seed.sh staging
+#   ./scripts/seed.sh production
+#
+#   STAGE=dev yarn seed                   # Using env var
+#
+# Environment files (loaded in order, later overrides earlier):
+#   .env           - Base config (required)
+#   .env.{stage}   - Stage-specific overrides (optional, e.g. .env.dev, .env.production)
+#
+# Stages:
+#   dev        - Development
+#   staging    - Staging
+#   production - Production
+
+stages:
+  - dev
+  - staging
+  - production

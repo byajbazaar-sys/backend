@@ -12,6 +12,7 @@ export interface ILoanService {
   update(id: string, updateData: Loan): Promise<Loan>;
   updateStatus(id: string, status: ELoanStatus, createdBy: string): Promise<Loan>;
   updateLoanItem(loanId: string, itemId: string, updateData: Partial<LoanItem>, createdBy: string): Promise<LoanItem>;
+  recalculateDuesForLoan(loanId: string, createdBy: string): Promise<void>;
   delete(id: string, userId: string): Promise<void>;
   getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;
 }

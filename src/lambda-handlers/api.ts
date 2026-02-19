@@ -78,8 +78,8 @@ async function bootstrap(): Promise<Handler> {
 
     // Swagger configuration
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('CrowdSay Backend API')
-      .setDescription('The CrowdSay Backend API description')
+      .setTitle('Byajbazaar')
+      .setDescription('The Byajbazaar description')
       .addBearerAuth(
         {
           type: 'http',
