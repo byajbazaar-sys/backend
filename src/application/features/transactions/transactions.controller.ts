@@ -1,6 +1,6 @@
 import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query, BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { USER_STRATEGY, RolesGuard, Identity, IIdentity } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -9,13 +9,16 @@ import {
   ListTransactionsQueryRequestModel,
   TransactionResponseModel,
   TransactionsPagedResponseModel,
+  DuesPagedResponseModel,
+  DueResponseModel,
+  GetDueParamsModel,
+  ListDuesQueryRequestModel,
 } from './models';
 import { ITransactionService, TRANSACTION_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
 import { Transaction } from './domain';
 import { DuesFilterOptions, TransactionsFilterOptions } from './options';
 import { Types } from 'mongoose';
-import { DuesPagedResponseModel, ListDuesQueryRequestModel } from './models';
 import { ETransactionType } from './enums';
 
 @ApiTags('transactions')
@@ -102,6 +105,23 @@ export class TransactionsController {
     });
     filterOptions.createdBy = identity.userId;
     return plainToInstance(DuesPagedResponseModel, await this.transactionService.getDues(filterOptions), {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get('dues/:id')
+  @ApiOperation({ summary: 'Get due details by ID' })
+  @ApiParam({ name: 'id', description: 'Due ID', example: '507f1f77bcf86cd799439011' })
+  @ApiOkResponse({ type: DueResponseModel })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Due not found' })
+  @HttpCode(HttpStatus.OK)
+  async getDueById(
+    @Param() params: GetDueParamsModel,
+    @Identity() identity: IIdentity,
+  ): Promise<DueResponseModel> {
+    this.logger.info({ params, identity }, 'getDueById called');
+    const due = await this.transactionService.getDueById(params.id, identity.userId);
+    return plainToInstance(DueResponseModel, due, {
       excludeExtraneousValues: true,
     });
   }

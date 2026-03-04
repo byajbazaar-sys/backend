@@ -6,6 +6,7 @@ import { loanItemsSchema, LoanItemsSchema } from './loan-items.schema';
 import { itemsSchema, ItemsSchema } from './items.schema';
 import { transactionsSchema, TransactionsSchema } from './transactions.schema';
 import { duesSchema, DuesSchema } from './dues.schema';
+import { notificationsSchema, NotificationsSchema } from './notifications.schema';
 
 export * from './users.schema';
 export * from './seeds.schema';
@@ -16,6 +17,7 @@ export * from './items.schema';
 export * from './schemas';
 export * from './transactions.schema';
 export * from './dues.schema';
+export * from './notifications.schema';
 
 export default [
   {
@@ -49,5 +51,9 @@ export default [
   {
     name: DuesSchema.name,
     schema: duesSchema,
+  },
+  {
+    name: NotificationsSchema.name,
+    schema: notificationsSchema,
   },
 ];

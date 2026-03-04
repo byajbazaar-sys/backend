@@ -1,6 +1,13 @@
 import { UsersAuthOptions, IDbOptions } from '@shared-libs';
 import { IApiOptions } from './i-api.options';
-import { AESEncryptOptions, LambdaOptions, AIOptions, TwilioOptions } from '../infrastructure';
+import { WebAppOptions } from '../application';
+import {
+  AESEncryptOptions,
+  LambdaOptions,
+  AIOptions,
+  TwilioOptions,
+  SendGridOptions,
+} from '../infrastructure';
 import { FileStorageOptions } from '../application';
 import { Params } from 'nestjs-pino';
 
@@ -13,6 +20,7 @@ export interface IMsConfig {
   lambda: LambdaOptions;
   ai: AIOptions;
   twilio: TwilioOptions;
-  webAppDomain: string;
+  sendGrid: SendGridOptions;
+  webApp: WebAppOptions;
   logger: Params;
 }

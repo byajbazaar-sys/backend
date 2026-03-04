@@ -1,8 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 import { Schemas } from './schemas';
 import { hashSync } from 'bcrypt';
-import { StringDecoder } from 'string_decoder';
 import { BCRYPT_SALT_ROUNDS, EUserType } from '@shared-libs';
 
 export type UserDocument = HydratedDocument<UsersSchema>;
@@ -27,14 +26,17 @@ export class UsersSchema {
   @Prop({ select: true, type: Boolean, default: false })
   isEmailVerified: boolean;
 
+  @Prop({ type: Date, default: null })
+  emailVerifiedAt?: Date;
+
   @Prop({ type: String, default: null })
-  resetPasswordToken: StringDecoder;
+  resetPasswordToken?: string;
 
   @Prop({ type: Date, default: null })
   resetPasswordExpires?: Date;
 
   @Prop({ type: String, default: null })
-  emailVerificationToken: StringDecoder;
+  emailVerificationToken?: string;
 
   @Prop({ type: Date, default: null })
   emailVerificationExpires?: Date;

@@ -7,4 +7,5 @@ export const Schemas = {
   ItemsSchema: 'items',
   TransactionsSchema: 'transactions',
   DuesSchema: 'dues',
+  NotificationsSchema: 'notifications',
 };

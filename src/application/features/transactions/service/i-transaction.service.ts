@@ -10,5 +10,6 @@ export interface ITransactionService {
   getTransactions(params: TransactionsFilterOptions): Promise<Paged<Transaction>>;
   delete(id: string, userId: string): Promise<void>;
   getDues(params: DuesFilterOptions): Promise<Paged<Due>>;
+  getDueById(id: string, createdBy: string): Promise<Due>;
   updateDues(): Promise<number>;
 }

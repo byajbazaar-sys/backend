@@ -1,7 +1,14 @@
 import { generateLoggerConfig, UsersAuthOptions, type Environment } from '@shared-libs';
 import { Algorithm } from 'jsonwebtoken';
 import { IMsConfig } from './i-ms.config';
-import { AESEncryptOptions, LambdaOptions, AIOptions, TwilioOptions } from '../infrastructure';
+import { WebAppOptions } from '../application';
+import {
+  AESEncryptOptions,
+  LambdaOptions,
+  AIOptions,
+  TwilioOptions,
+  SendGridOptions,
+} from '../infrastructure';
 import { FileStorageOptions } from '../application';
 
 export const configFactory = (): IMsConfig => ({
@@ -43,5 +50,10 @@ export const configFactory = (): IMsConfig => ({
     process.env.TWILIO_AUTH_TOKEN,
     process.env.TWILIO_PHONE_NUMBER,
   ),
-  webAppDomain: process.env.WEB_APP_DOMAIN,
+  sendGrid: new SendGridOptions(
+    process.env.SENDGRID_API_KEY ?? '',
+    process.env.SENDGRID_SENDER ?? '',
+    process.env.SENDGRID_SENDER_NAME ?? '',
+  ),
+  webApp: new WebAppOptions(process.env.WEB_APP_DOMAIN),
 });

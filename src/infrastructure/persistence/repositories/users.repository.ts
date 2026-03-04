@@ -36,6 +36,20 @@ export class UsersRepository implements IUsersRepository {
 
   async findByEmailVerificationToken(token: string): Promise<User> {
     try {
+      const user = await this.userModel.findOne({ emailVerificationToken: token }).exec();
+      if (!user) {
+        return null;
+      }
+      return plainToInstance(User, user.toJSON(), {
+        excludeExtraneousValues: true,
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async findByResetPasswordToken(token: string): Promise<User> {
+    try {
       const user = await this.userModel.findOne({ resetPasswordToken: token }).exec();
       if (!user) {
         return null;
@@ -50,6 +64,7 @@ export class UsersRepository implements IUsersRepository {
 
   async update(id: string, updateDto: Partial<User>): Promise<User> {
     try {
+      console.log('updateDto', id, updateDto);
       const updatedUser = await this.userModel.findByIdAndUpdate(new Types.ObjectId(id), updateDto, { new: true }).lean().exec();
       if (!updatedUser) {
         return null;

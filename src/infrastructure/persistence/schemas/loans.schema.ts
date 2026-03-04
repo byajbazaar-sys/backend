@@ -1,7 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { Schemas } from './schemas';
-import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus } from '../../../application';
+import {
+  ELoanTenureType,
+  EInterestCalculationMethod,
+  EInterestType,
+  ELoanStatus,
+} from '../../../application/features/loans/enums';
 
 export type LoanDocument = HydratedDocument<LoansSchema>;
 

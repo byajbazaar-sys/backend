@@ -5,3 +5,4 @@ export * from './loan-items.repository';
 export * from './items.repository';
 export * from './transactions.repository';
 export * from './dues.repository';
+export * from './notifications.repository';

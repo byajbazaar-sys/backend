@@ -22,9 +22,21 @@ export class DueResponseModel {
   dueAmount: number;
 
   @Expose()
-  @ApiProperty({ type: CustomerResponseModel, description: 'Customer' })
+  @ApiProperty({ example: 1000, description: 'Principal amount for this due' })
+  principalAmount: number;
+
+  @Expose()
+  @ApiProperty({ example: 250.5, description: 'Interest amount for this due' })
+  interestAmount: number;
+
+  @Expose()
+  @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Customer ID' })
+  customerId?: string;
+
+  @Expose()
+  @ApiProperty({ type: CustomerResponseModel, description: 'Customer', required: false })
   @Type(() => CustomerResponseModel)
-  customer: CustomerResponseModel;
+  customer?: CustomerResponseModel;
 
   @Expose()
   @ApiProperty({ enum: EDueType, example: EDueType.PAST_DUE })

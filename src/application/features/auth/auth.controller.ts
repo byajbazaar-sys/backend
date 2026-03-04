@@ -9,6 +9,7 @@ import {
   SignupResponseModel,
   ForgotPasswordRequestModel,
   ResetPasswordRequestModel,
+  VerifyEmailRequestModel,
 } from './models';
 import { User } from '../users';
 import { plainToInstance } from 'class-transformer';
@@ -59,16 +60,9 @@ export class AuthController {
     }
     const response = await this.authService.signup(user);
 
-    const accessToken = await this.authService.generateJwtToken({
-      userId: response.id,
-      userType: response.userType,
-      email: response.email,
-      emailVerified: response.isEmailVerified,
-    });
-
     return plainToInstance(
       SignupResponseModel,
-      { accessToken, ...response, profilePhotoUrl: response.profilePhotoRef },
+      { ...response, profilePhotoUrl: response.profilePhotoRef },
       {
         excludeExtraneousValues: true,
       },
@@ -81,6 +75,27 @@ export class AuthController {
   async forgotPassword(@Body() body: ForgotPasswordRequestModel): Promise<void> {
     this.logger.info({ email: body.email }, 'forgotPassword called');
     await this.authService.forgotPassword(body.email);
+  }
+
+  @Post('resend-verification-email')
+  @ApiOperation({ summary: 'Resend verification email for unverified accounts' })
+  @HttpCode(HttpStatus.OK)
+  async resendVerificationEmail(@Body() body: ForgotPasswordRequestModel): Promise<{ message: string }> {
+    this.logger.info({ email: body.email }, 'resendVerificationEmail called');
+    await this.authService.resendVerificationEmail(body.email);
+    return { message: 'Verification email sent successfully' };
+  }
+
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Verify email using token from verification email' })
+  @ApiOkResponse({ type: LoginResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(@Body() body: VerifyEmailRequestModel): Promise<LoginResponseModel> {
+    this.logger.info({ hasToken: !!body.token }, 'verifyEmail called');
+    const response = await this.authService.verifyEmail(body.token);
+    return plainToInstance(LoginResponseModel, response, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Post('reset-password')

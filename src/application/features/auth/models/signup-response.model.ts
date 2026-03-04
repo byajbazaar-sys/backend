@@ -11,10 +11,6 @@ export class SignupResponseModel {
   email: string;
 
   @Expose()
-  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6Ikp...' })
-  accessToken: string;
-
-  @Expose()
   @ApiProperty({ example: 'John' })
   firstName: string;
 

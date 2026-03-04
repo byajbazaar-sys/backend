@@ -197,6 +197,71 @@ export class DuesRepository implements IDuesRepository {
     }
   }
 
+  async findByIdWithDetails(id: string, createdBy: string): Promise<Due> {
+    try {
+      const filter = {
+        _id: new Types.ObjectId(id),
+        createdBy: new Types.ObjectId(createdBy),
+      };
+
+      const docs = await this.dueModel.aggregate([
+        { $match: filter },
+        {
+          $lookup: {
+            from: Schemas.CustomersSchema,
+            localField: 'customerId',
+            foreignField: '_id',
+            as: 'customer',
+            pipeline: [
+              {
+                $lookup: {
+                  from: Schemas.TransactionsSchema,
+                  let: { customerId: '$_id' },
+                  pipeline: [
+                    { $match: { $expr: { $eq: ['$customerId', '$$customerId'] } } },
+                    { $sort: { createdAt: -1 } },
+                    { $limit: 1 },
+                  ],
+                  as: 'latestTransaction',
+                },
+              },
+              {
+                $unwind: { path: '$latestTransaction', preserveNullAndEmptyArrays: true },
+              },
+              {
+                $project: {
+                  _id: 1,
+                  firstName: 1,
+                  lastName: 1,
+                  latestTransaction: 1,
+                },
+              },
+            ],
+          },
+        },
+        {
+          $unwind: { path: '$customer', preserveNullAndEmptyArrays: true },
+        },
+        {
+          $addFields: {
+            latestTransaction: '$customer.latestTransaction',
+          },
+        },
+        { $limit: 1 },
+      ]);
+
+      if (!docs || docs.length === 0) {
+        return null;
+      }
+
+      return plainToInstance(Due, docs[0], {
+        excludeExtraneousValues: true,
+      });
+    } catch (err) {
+      throw err;
+    }
+  }
+
   async update(id: string, due: Due): Promise<Due> {
     try {
       delete due._id;

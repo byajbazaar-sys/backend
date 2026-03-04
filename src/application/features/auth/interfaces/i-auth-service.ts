@@ -10,4 +10,6 @@ export interface IAuthService {
   generateJwtToken(payload: IIdentity): Promise<string>;
   forgotPassword(email: string): Promise<void>;
   verifyForgotPasswordToken(token: string, newPassword: string): Promise<User>;
+  verifyEmail(token: string): Promise<LoginResponseModel>;
+  resendVerificationEmail(email: string): Promise<void>;
 }

@@ -9,11 +9,13 @@ import {
   AI_RESUME_SERVICE,
   CUSTOMERS_REPOSITORY,
   DUES_REPOSITORY,
+  EMAIL_SERVICE,
   FileStorageOptions,
   ITEMS_REPOSITORY,
   LAMBDA_SERVICE,
   LOAN_ITEMS_REPOSITORY,
   LOANS_REPOSITORY,
+  NOTIFICATIONS_REPOSITORY,
   TRANSACTIONS_REPOSITORY,
   TWILIO_SERVICE,
   USERS_FILE_STORAGE,
@@ -25,6 +27,7 @@ import {
   ItemsRepository,
   LoanItemsRepository,
   LoansRepository,
+  NotificationsRepository,
   TransactionsRepository,
   UsersRepository,
 } from './persistence';
@@ -33,6 +36,8 @@ import { FileStorageMock, UsersFileStorage } from './s3';
 import { LambdaOptions, LambdaService } from './lambda';
 import { AIOptions, AIResumeService } from './ai';
 import { TwilioOptions, TwilioService } from './sms';
+import { SendGridOptions, SendGridService } from './send-grid';
+import { WebAppOptions } from '../application';
 import CronServices from './cron';
 
 @Global()
@@ -92,6 +97,10 @@ import CronServices from './cron';
     {
       provide: DUES_REPOSITORY,
       useClass: DuesRepository,
+    },
+    {
+      provide: NOTIFICATIONS_REPOSITORY,
+      useClass: NotificationsRepository,
     },
     {
       provide: AES_ENCRYPT_SERVICE,
@@ -160,6 +169,20 @@ import CronServices from './cron';
       provide: TWILIO_SERVICE,
       useClass: TwilioService,
     },
+    {
+      provide: SendGridOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('sendGrid'),
+    },
+    {
+      provide: WebAppOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('webApp'),
+    },
+    {
+      provide: EMAIL_SERVICE,
+      useClass: SendGridService,
+    },
   ],
   exports: [
     HttpModule,
@@ -175,9 +198,12 @@ import CronServices from './cron';
     TWILIO_SERVICE,
     TRANSACTIONS_REPOSITORY,
     DUES_REPOSITORY,
+    NOTIFICATIONS_REPOSITORY,
+    EMAIL_SERVICE,
     FileStorageOptions,
+    WebAppOptions,
     ...Seeds,
     ...CronServices,
   ],
 })
-export class InfrastructureModule {}
+export class InfrastructureModule { }

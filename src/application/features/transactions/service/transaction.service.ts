@@ -140,6 +140,24 @@ export class TransactionService implements ITransactionService {
     }
   }
 
+  async getDueById(id: string, createdBy: string): Promise<Due> {
+    try {
+      this.logger.debug({ dueId: id, createdBy }, 'Getting due by ID');
+      const due = await this.duesRepo.findByIdWithDetails(id, createdBy);
+      if (!due) {
+        this.logger.warn({ dueId: id, createdBy }, 'Due not found');
+        throw new NotFoundException('Due not found');
+      }
+      return due;
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        throw err;
+      }
+      this.logger.error({ err, dueId: id, createdBy }, 'Error getting due by ID');
+      throw err;
+    }
+  }
+
   async getDues(params: DuesFilterOptions): Promise<Paged<Due>> {
     try {
       this.logger.debug({ createdBy: params.createdBy, loanIds: params.loanIds }, 'Getting dues');

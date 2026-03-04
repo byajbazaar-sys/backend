@@ -1,7 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import { Schemas } from './schemas';
-import { ETransactionType, ETransactionPaidIn } from '../../../application';
+import {
+  ETransactionType,
+  ETransactionPaidIn,
+} from '../../../application/features/transactions/enums';
 import { Type } from 'class-transformer';
 
 export type TransactionDocument = HydratedDocument<TransactionsSchema>;

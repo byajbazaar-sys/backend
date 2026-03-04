@@ -7,3 +7,4 @@ export * from './transactions-paged-response.model';
 export * from './dues-response.model';
 export * from './dues-paged-response.model';
 export * from './list-dues-query.model';
+export * from './get-due-params.model';

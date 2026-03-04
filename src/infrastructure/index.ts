@@ -5,4 +5,5 @@ export * from './s3';
 export * from './lambda';
 export * from './ai';
 export * from './sms';
+export * from './send-grid';
 export * from './cron';

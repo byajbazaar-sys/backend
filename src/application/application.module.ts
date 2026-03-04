@@ -16,11 +16,17 @@ import {
   ItemService,
   LOAN_SERVICE,
   LoanService,
+  NOTIFICATION_SERVICE,
+  NotificationService,
   TRANSACTION_SERVICE,
   TransactionService,
   USERS_SERVICE,
   UsersService,
 } from './features';
+import {
+  EMAIL_TEMPLATE_SERVICE,
+  EmailTemplateService,
+} from './features/notifications';
 
 @Global()
 @Module({
@@ -28,6 +34,10 @@ import {
   controllers: [...Controllers],
   providers: [
     ...Services,
+    {
+      provide: EMAIL_TEMPLATE_SERVICE,
+      useClass: EmailTemplateService,
+    },
     {
       provide: UsersAuthOptions,
       inject: [ConfigService],
@@ -53,6 +63,10 @@ import {
     {
       provide: TRANSACTION_SERVICE,
       useClass: TransactionService,
+    },
+    {
+      provide: NOTIFICATION_SERVICE,
+      useClass: NotificationService,
     },
     {
       provide: USERS_SERVICE,
