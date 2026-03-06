@@ -1,116 +1,81 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { NotificationEntity } from '../entities/notification.entity';
 import { plainToInstance } from 'class-transformer';
 import {
   INotificationsRepository,
   Notification,
   NotificationsFilterOptions,
 } from '../../../application/features/notifications';
-import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
-import { NotificationsSchema, NotificationDocument } from '../schemas';
+import { ENotificationChannel, ENotificationStatus, ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class NotificationsRepository implements INotificationsRepository {
   constructor(
-    @InjectModel(NotificationsSchema.name) private readonly notificationModel: Model<NotificationDocument>,
+    @InjectRepository(NotificationEntity) private readonly notificationRepo: Repository<NotificationEntity>,
   ) {}
 
   async create(notification: Notification): Promise<Notification> {
-    try {
-      const normalized = plainToInstance(Notification, notification, { excludeExtraneousValues: true });
-
-      const doc = await this.notificationModel.create({
-        channel: normalized.channel,
-        recipient: normalized.recipient,
-        subject: normalized.subject,
-        body: normalized.body,
-        status: normalized.status,
-        externalId: normalized.externalId,
-        metadata: normalized.metadata,
-        errorMessage: normalized.errorMessage,
-        createdBy: normalized.createdBy ? new Types.ObjectId(normalized.createdBy) : undefined,
-      });
-
-      return plainToInstance(Notification, doc.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const entity = this.notificationRepo.create({
+      channel: notification.channel as ENotificationChannel,
+      recipient: notification.recipient,
+      subject: notification.subject,
+      body: notification.body,
+      status: notification.status as ENotificationStatus,
+      externalId: notification.externalId,
+      metadata: notification.metadata,
+      errorMessage: notification.errorMessage,
+      createdById: notification.createdBy ?? null,
+    });
+    const created = await this.notificationRepo.save(entity);
+    return plainToInstance(Notification, created, { excludeExtraneousValues: true });
   }
 
   async update(id: string, notification: Partial<Notification>): Promise<Notification | null> {
-    try {
-      const updateData: Record<string, unknown> = {};
-      if (notification.status !== undefined) updateData.status = notification.status;
-      if (notification.externalId !== undefined) updateData.externalId = notification.externalId;
-      if (notification.errorMessage !== undefined) updateData.errorMessage = notification.errorMessage;
+    const updateData: Partial<NotificationEntity> = {};
+    if (notification.status !== undefined) updateData.status = notification.status as ENotificationStatus;
+    if (notification.externalId !== undefined) updateData.externalId = notification.externalId;
+    if (notification.errorMessage !== undefined) updateData.errorMessage = notification.errorMessage;
 
-      const doc = await this.notificationModel
-        .findByIdAndUpdate(new Types.ObjectId(id), updateData, { new: true })
-        .lean()
-        .exec();
-
-      if (!doc) return null;
-
-      return plainToInstance(Notification, doc, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    await this.notificationRepo.update(id, updateData);
+    const updated = await this.notificationRepo.findOne({ where: { id } });
+    if (!updated) return null;
+    return plainToInstance(Notification, updated, { excludeExtraneousValues: true });
   }
 
   async findById(id: string, createdBy?: string): Promise<Notification | null> {
-    try {
-      const filter: Record<string, unknown> = { _id: new Types.ObjectId(id) };
-      if (createdBy) {
-        filter.createdBy = new Types.ObjectId(createdBy);
-      }
+    const where: { id: string; createdById?: string } = { id };
+    if (createdBy) where.createdById = createdBy;
 
-      const doc = await this.notificationModel.findOne(filter).lean().exec();
-      if (!doc) return null;
-
-      return plainToInstance(Notification, doc, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const doc = await this.notificationRepo.findOne({ where });
+    if (!doc) return null;
+    return plainToInstance(Notification, doc, { excludeExtraneousValues: true });
   }
 
   async listNotifications(params: NotificationsFilterOptions): Promise<Paged<Notification>> {
-    try {
-      const filter: Record<string, unknown> = {};
-      if (params.channel) filter.channel = params.channel;
-      if (params.status) filter.status = params.status;
-      if (params.recipient) filter.recipient = { $regex: params.recipient, $options: 'i' };
-      if (params.createdBy) filter.createdBy = new Types.ObjectId(params.createdBy);
+    const { pageNumber, pageSize, skip } = getPaginationValues(params);
+    const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
+    const sortField = params.sortField || 'createdAt';
 
-      const { pageNumber, pageSize, skip } = getPaginationValues(params);
-      const sortOrder = params.sortOrder === ESortOrder.ASC ? 1 : -1;
-      const sortField = params.sortField || 'createdAt';
+    const qb = this.notificationRepo.createQueryBuilder('n');
 
-      const [docs, totalCount] = await Promise.all([
-        this.notificationModel
-          .find(filter)
-          .sort({ [sortField]: sortOrder })
-          .skip(skip)
-          .limit(pageSize)
-          .lean()
-          .exec(),
-        this.notificationModel.countDocuments(filter),
-      ]);
+    if (params.channel) qb.andWhere('n.channel = :channel', { channel: params.channel });
+    if (params.status) qb.andWhere('n.status = :status', { status: params.status });
+    if (params.recipient) qb.andWhere('n.recipient ILIKE :recipient', { recipient: `%${params.recipient}%` });
+    if (params.createdBy) qb.andWhere('n.created_by_id = :createdBy', { createdBy: params.createdBy });
 
-      return toPaged(Notification, {
-        items: docs,
-        page: pageNumber,
-        perPage: pageSize,
-        totalCount,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const [docs, totalCount] = await qb
+      .orderBy(`n.${sortField}`, sortOrder)
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return toPaged(Notification, {
+      items: docs,
+      page: pageNumber,
+      perPage: pageSize,
+      totalCount,
+    });
   }
 }

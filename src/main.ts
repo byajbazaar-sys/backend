@@ -5,7 +5,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { IApiOptions, IMsConfig } from './configurations';
 import { GlobalResponseInterceptor, isDev } from '@shared-libs';
-import mongoose from 'mongoose';
 import { parse } from 'qs';
 import { SeedingService } from './infrastructure/persistence/seeds/seeding.service';
 import { CronService } from './infrastructure/cron';
@@ -60,12 +59,6 @@ async function bootstrap(): Promise<void> {
       tryItOutEnabled: true,
     },
   });
-
-  isDev() &&
-    mongoose.set('debug', (collectionName, methodName, ...methodArgs) => {
-      const logger = new Logger('Mongoose'); // Create a specific logger for Mongoose
-      logger.debug(JSON.stringify({ collectionName, methodName, methodArgs }), 'Mongoose Debug');
-    });
 
   await app.listen(apiConfig.port, apiConfig.host);
 

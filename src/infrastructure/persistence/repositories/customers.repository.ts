@@ -1,125 +1,72 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { CustomerDocument, CustomersSchema } from '../schemas';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, ILike } from 'typeorm';
+import { CustomerEntity } from '../entities/customer.entity';
 import { plainToInstance } from 'class-transformer';
 import { ICustomersRepository, Customer, CustomersFilterOptions } from '../../../application';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class CustomersRepository implements ICustomersRepository {
-  constructor(@InjectModel(CustomersSchema.name) private customerModel: Model<CustomerDocument>) {}
+  constructor(@InjectRepository(CustomerEntity) private customerRepo: Repository<CustomerEntity>) {}
 
   async create(createCustomer: Customer): Promise<Customer> {
-    try {
-      const createdCustomer = await this.customerModel.create(createCustomer);
-      return plainToInstance(Customer, createdCustomer.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const entity = this.customerRepo.create(createCustomer);
+    const created = await this.customerRepo.save(entity);
+    return plainToInstance(Customer, created, { excludeExtraneousValues: true });
   }
 
   async findByEmail(email: string): Promise<Customer> {
-    try {
-      const customer = await this.customerModel.findOne({ email }).exec();
-      if (!customer) {
-        return null;
-      }
-      return plainToInstance(Customer, customer.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const customer = await this.customerRepo.findOne({ where: { email } });
+    if (!customer) return null;
+    return plainToInstance(Customer, customer, { excludeExtraneousValues: true });
   }
 
   async update(id: string, updateDto: Customer, createdBy: string): Promise<Customer> {
-    try {
-      delete updateDto._id;
-      const updatedCustomer = await this.customerModel.findOneAndUpdate({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }, updateDto, { new: true }).lean().exec();
-      return plainToInstance(Customer, updatedCustomer, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const { id: _omitId, ...rest } = updateDto as Customer & { id?: string };
+    await this.customerRepo.update({ id, createdById: createdBy }, rest as Partial<CustomerEntity>);
+    const updated = await this.customerRepo.findOne({ where: { id, createdById: createdBy } });
+    if (!updated) return null;
+    return plainToInstance(Customer, updated, { excludeExtraneousValues: true });
   }
 
   async findById(id: string, createdBy: string): Promise<Customer> {
-    try {
-      const customer = await this.customerModel.findOne({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
-      if (!customer) {
-        return null;
-      }
-      return plainToInstance(Customer, customer.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const customer = await this.customerRepo.findOne({ where: { id, createdById: createdBy } });
+    if (!customer) return null;
+    return plainToInstance(Customer, customer, { excludeExtraneousValues: true });
   }
 
   async listCustomers(params: CustomersFilterOptions): Promise<Paged<Customer>> {
-    try {
-      const { name, createdBy } = params;
-      const { pageNumber, pageSize, skip } = getPaginationValues(params);
-      const filter: Record<string, any> = {};
+    const { name, createdBy } = params;
+    const { pageNumber, pageSize, skip } = getPaginationValues(params);
+    const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
+    const sortField = params.sortField || 'createdAt';
 
-      // Add name filter if provided
-      if (name && name.trim()) {
-        const searchTerm = name.trim();
-        filter.$or = [
-          { firstName: { $regex: searchTerm, $options: 'i' } },
-          { lastName: { $regex: searchTerm, $options: 'i' } },
-          { email: { $regex: searchTerm, $options: 'i' } },
-        ];
-      }
-      // Add createdBy filter if provided
-      if (createdBy) {
-        filter.createdBy = new Types.ObjectId(createdBy);
-      }
+    const qb = this.customerRepo
+      .createQueryBuilder('c')
+      .where(createdBy ? 'c.created_by_id = :createdBy' : '1=1', { createdBy })
+      .orderBy(`c.${sortField}`, sortOrder)
+      .skip(skip)
+      .take(pageSize);
 
-      const docs = await this.customerModel.aggregate([
-        { $match: filter },
-        {
-          $facet: {
-            data: [
-              {
-                $sort: {
-                  [params.sortField]: params.sortOrder === ESortOrder.ASC ? 1 : -1,
-                },
-              },
-              { $skip: skip },
-              { $limit: +pageSize },
-            ],
-            totalCount: [{ $count: 'total' }],
-          },
-        },
-        {
-          $project: {
-            data: 1,
-            total: { $ifNull: [{ $arrayElemAt: ['$totalCount.total', 0] }, 0] },
-          },
-        },
-      ]);
-      return toPaged(Customer, {
-        items: docs[0].data,
-        page: pageNumber,
-        perPage: pageSize,
-        totalCount: docs[0].total,
-      });
-    } catch (err) {
-      throw err;
+    if (name?.trim()) {
+      const searchTerm = name.trim();
+      qb.andWhere(
+        '(c.first_name ILIKE :search OR c.last_name ILIKE :search OR c.email ILIKE :search)',
+        { search: `%${searchTerm}%` },
+      );
     }
+
+    const [items, totalCount] = await qb.getManyAndCount();
+    return toPaged(Customer, {
+      items,
+      page: pageNumber,
+      perPage: pageSize,
+      totalCount,
+    });
   }
 
   async delete(id: string, createdBy: string): Promise<void> {
-    try {
-      await this.customerModel.findOneAndDelete({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
-    } catch (err) {
-      throw err;
-    }
+    await this.customerRepo.delete({ id, createdById: createdBy });
   }
 }

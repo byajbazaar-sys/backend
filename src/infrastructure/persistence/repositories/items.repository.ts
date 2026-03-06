@@ -1,100 +1,54 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { ItemDocument, ItemsSchema } from '../schemas';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ItemEntity } from '../entities/item.entity';
 import { plainToInstance } from 'class-transformer';
 import { IItemsRepository, Item } from '../../../application/features/items';
 
 @Injectable()
 export class ItemsRepository implements IItemsRepository {
-  constructor(@InjectModel(ItemsSchema.name) private itemModel: Model<ItemDocument>) {}
+  constructor(@InjectRepository(ItemEntity) private itemRepo: Repository<ItemEntity>) {}
 
   async create(createItem: Item): Promise<Item> {
-    try {
-      const createdItem = await this.itemModel.create(createItem);
-      return plainToInstance(Item, createdItem.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const entity = this.itemRepo.create(createItem);
+    const created = await this.itemRepo.save(entity);
+    return plainToInstance(Item, created, { excludeExtraneousValues: true });
   }
 
   async findById(id: string): Promise<Item> {
-    try {
-      const item = await this.itemModel.findById(new Types.ObjectId(id)).exec();
-      if (!item) {
-        throw new NotFoundException('Item not found');
-      }
-      return plainToInstance(Item, item.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      if (err instanceof NotFoundException) {
-        throw err;
-      }
-      throw err;
+    const item = await this.itemRepo.findOne({ where: { id } });
+    if (!item) {
+      throw new NotFoundException('Item not found');
     }
+    return plainToInstance(Item, item, { excludeExtraneousValues: true });
   }
 
   async findByName(name: string, createdBy: string): Promise<Item> {
-    try {
-      const item = await this.itemModel.findOne({ name, createdBy }).exec();
-      if (!item) {
-        throw new NotFoundException('Item not found');
-      }
-      return plainToInstance(Item, item.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      if (err instanceof NotFoundException) {
-        throw err;
-      }
-      throw err;
+    const item = await this.itemRepo.findOne({ where: { name, createdById: createdBy } });
+    if (!item) {
+      throw new NotFoundException('Item not found');
     }
+    return plainToInstance(Item, item, { excludeExtraneousValues: true });
   }
 
   async findAll(): Promise<Item[]> {
-    try {
-      const items = await this.itemModel.find().exec();
-      return plainToInstance(Item, items, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const items = await this.itemRepo.find();
+    return plainToInstance(Item, items, { excludeExtraneousValues: true });
   }
 
   async update(id: string, updateItem: Partial<Item>): Promise<Item> {
-    try {
-      const updatedItem = await this.itemModel
-        .findByIdAndUpdate(new Types.ObjectId(id), updateItem, { new: true })
-        .exec();
-      if (!updatedItem) {
-        throw new NotFoundException('Item not found');
-      }
-      return plainToInstance(Item, updatedItem.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      if (err instanceof NotFoundException) {
-        throw err;
-      }
-      throw err;
+    await this.itemRepo.update(id, updateItem as Partial<ItemEntity>);
+    const updated = await this.itemRepo.findOne({ where: { id } });
+    if (!updated) {
+      throw new NotFoundException('Item not found');
     }
+    return plainToInstance(Item, updated, { excludeExtraneousValues: true });
   }
 
   async delete(id: string): Promise<void> {
-    try {
-      const result = await this.itemModel.findByIdAndDelete(new Types.ObjectId(id)).exec();
-      if (!result) {
-        throw new NotFoundException('Item not found');
-      }
-    } catch (err) {
-      if (err instanceof NotFoundException) {
-        throw err;
-      }
-      throw err;
+    const result = await this.itemRepo.delete(id);
+    if (!result.affected) {
+      throw new NotFoundException('Item not found');
     }
   }
 }

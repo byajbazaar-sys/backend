@@ -28,7 +28,11 @@ export const configFactory = (): IMsConfig => ({
     (process.env.TOKEN_ALG as Algorithm) ?? 'HS256',
   ),
   database: {
-    uri: process.env.MONGO_URL || process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/jobs_db',
+    host: process.env.DB_HOST ?? 'localhost',
+    port: Number(process.env.DB_PORT ?? 5432),
+    username: process.env.DB_USER ?? 'postgres',
+    password: process.env.DB_PASS ?? 'postgres',
+    database: process.env.DB_NAME ?? 'user_db',
   },
   fileStorage: new FileStorageOptions(
     process.env?.S3_AWS_ACCESS_KEY_ID || '',

@@ -8,6 +8,7 @@ This directory contains the Serverless Framework configuration files organized b
 serverless/
 ├── functions.yml   # Lambda function definitions (API + cron)
 ├── providers.yml   # AWS provider configuration
+├── resources.yml  # RDS and other AWS resources
 └── README.md
 ```
 
@@ -42,6 +43,7 @@ Contains AWS-specific provider configurations and can be extended with additiona
 ## Adding New Functions
 
 1. **Create function definition** in `serverless/functions.yml`:
+
 ```yaml
 myNewFunction:
   handler: dist/src/lambda-handlers/my-new.handler
@@ -59,6 +61,7 @@ myNewFunction:
 ## Adding New Cron Jobs
 
 1. **Add to `serverless/functions.yml`**:
+
 ```yaml
 myNewCron:
   handler: dist/src/lambda-handlers/cron.handler
@@ -72,6 +75,22 @@ myNewCron:
 
 2. **Update `CronService`** to include the new job execution logic
 
+## RDS (PostgreSQL) Deployment
+
+The `resources.yml` defines an RDS PostgreSQL instance. Set env vars and deploy:
+
+```bash
+export DB_MASTER_PASSWORD=YourSecurePassword
+serverless deploy --stage dev \
+  --param="VpcId=vpc-xxxxxxxx" \
+  --param="SubnetIds=subnet-xxx,subnet-yyy"
+```
+
+**Parameters:** `VpcId`, `SubnetIds` (min 2, different AZs)  
+**Env vars:** `DB_MASTER_USERNAME` (default: postgres), `DB_MASTER_PASSWORD`, `DB_NAME` (default: crowdsay_db)
+
+To use an external database, remove `resources` from `serverless.yml` and set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` in `.env`.
+
 ## Environment Variables
 
 Environment variables are defined in the main `serverless.yml` under `provider.environment`. For sensitive values, use:
@@ -80,9 +99,10 @@ Environment variables are defined in the main `serverless.yml` under `provider.e
 - **AWS Secrets Manager**: `${ssm:/path/to/secret~true}`
 
 Example:
+
 ```yaml
 environment:
-  MONGO_URL: ${ssm:/crowdsay/${self:provider.stage}/database/url}
+  DB_HOST: !Ref RdsInstance
   JWT_SECRET: ${ssm:/crowdsay/${self:provider.stage}/jwt/secret~true}
 ```
 

@@ -1,6 +1,6 @@
 export enum ETransactionType {
-  TOP_UP = 'Top-Up',
-  INTEREST = 'Interest',
   PRINCIPAL = 'Principal',
-  DUE_PAYMENT = 'Due Payment',
+  INTEREST = 'Interest',
+  TOP_UP = 'TopUp',
+  DUE_PAYMENT = 'DuePayment',
 }

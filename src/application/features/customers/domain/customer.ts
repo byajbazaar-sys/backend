@@ -1,16 +1,10 @@
-import { Expose, Transform, Type } from 'class-transformer';
-import { Types } from 'mongoose';
+import { Expose, Type } from 'class-transformer';
 
 export class Customer {
   @Expose()
-  public _id?: Types.ObjectId;
-
-  @Expose()
-  @Transform(({ obj }) => obj?._id?.toString())
   public id: string;
 
   @Expose()
-  @Transform(({ obj }) => obj?.createdBy?.toString())
   public createdBy: string;
 
   @Expose()

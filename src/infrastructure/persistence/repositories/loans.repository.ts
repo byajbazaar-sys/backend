@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { LoanDocument, LoansSchema, Schemas } from '../schemas';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { LoanEntity } from '../entities/loan.entity';
 import { plainToInstance } from 'class-transformer';
 import {
   ELoanStatus,
@@ -12,406 +12,206 @@ import {
   LoanStats,
   LoanStatsFilterOptions,
 } from '../../../application';
-import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
+import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 
 @Injectable()
 export class LoansRepository implements ILoansRepository {
-  constructor(@InjectModel(LoansSchema.name) private loanModel: Model<LoanDocument>) { }
+  constructor(@InjectRepository(LoanEntity) private loanRepo: Repository<LoanEntity>) {}
 
   async create(createLoan: Loan): Promise<Loan> {
-    try {
-      const createdLoan = await this.loanModel.create(createLoan);
-      return plainToInstance(Loan, createdLoan.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const { loanItems, ...loanData } = createLoan as Loan & { loanItems?: unknown[] };
+    const entity = this.loanRepo.create({
+      ...loanData,
+      createdById: createLoan.createdBy,
+    });
+    const created = await this.loanRepo.save(entity);
+    return plainToInstance(Loan, created, { excludeExtraneousValues: true });
   }
 
   async findByCustomerId(customerId: string): Promise<Loan[]> {
-    try {
-      const loans = await this.loanModel.find({ customerId: new Types.ObjectId(customerId) }).exec();
-      return plainToInstance(Loan, loans, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const loans = await this.loanRepo.find({ where: { customerId } });
+    return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
   async update(id: string, updateDto: Loan): Promise<Loan> {
-    try {
-      delete updateDto._id;
-      delete updateDto.id;
-
-      const updatedLoan = await this.loanModel
-        .findOneAndUpdate(
-          { _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(updateDto.createdBy) },
-          updateDto,
-          { new: true },
-        )
-        .lean()
-        .exec();
-
-      if (!updatedLoan) {
-        return null;
-      }
-
-      return plainToInstance(Loan, updatedLoan, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const { loanItems, id: _omitId, ...data } = updateDto as Loan & { loanItems?: unknown[] };
+    await this.loanRepo.update(
+      { id, createdById: updateDto.createdBy },
+      { ...data, createdById: updateDto.createdBy } as Partial<LoanEntity>,
+    );
+    const updated = await this.loanRepo.findOne({ where: { id, createdById: updateDto.createdBy } });
+    if (!updated) return null;
+    return plainToInstance(Loan, updated, { excludeExtraneousValues: true });
   }
 
   async findById(id: string, createdBy: string): Promise<Loan> {
-    try {
-      const loan = await this.loanModel.findOne({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
-      return plainToInstance(Loan, loan, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const loan = await this.loanRepo.findOne({ where: { id, createdById: createdBy } });
+    if (!loan) return null;
+    return plainToInstance(Loan, loan, { excludeExtraneousValues: true });
   }
 
   async findByIds(ids: string[]): Promise<Loan[]> {
-    try {
-      const objectIds = ids.map((id) => new Types.ObjectId(id));
-      const loans = await this.loanModel.find({ _id: { $in: objectIds } }).exec();
-      return plainToInstance(Loan, loans, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    if (!ids?.length) return [];
+    const loans = await this.loanRepo.find({ where: { id: In(ids) } });
+    return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
   async findByCreatedBy(createdBy: string): Promise<Loan[]> {
-    try {
-      const loans = await this.loanModel.find({ createdBy: new Types.ObjectId(createdBy) }).exec();
-      return plainToInstance(Loan, loans, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const loans = await this.loanRepo.find({ where: { createdById: createdBy } });
+    return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
   async listLoans(params: LoansFilterOptions): Promise<LoanExtended> {
-    try {
-      const { customerId, createdBy, status } = params;
-      const { pageNumber, pageSize, skip } = getPaginationValues(params);
-      const filter: Record<string, any> = {};
+    const { customerId, createdBy, status } = params;
+    const { pageNumber, pageSize, skip } = getPaginationValues(params);
+    const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
+    const sortField = params.sortField || 'createdAt';
 
-      // Add customerId filter if provided
-      if (customerId) {
-        filter.customerId = new Types.ObjectId(customerId);
-      }
-      // Add createdBy filter if provided
-      if (createdBy) {
-        filter.createdBy = new Types.ObjectId(createdBy);
-      }
-      // Add status filter if provided
-      if (status) {
-        filter.status = status;
-      }
+    const qb = this.loanRepo
+      .createQueryBuilder('loan')
+      .where('1=1')
+      .andWhere(customerId ? 'loan.customer_id = :customerId' : '1=1', { customerId })
+      .andWhere(createdBy ? 'loan.created_by_id = :createdBy' : '1=1', { createdBy })
+      .andWhere(status ? 'loan.status = :status' : '1=1', { status });
 
-      const docs = await this.loanModel.aggregate([
-        { $match: filter },
+    const [loans, totalCount] = await qb
+      .orderBy(`loan.${sortField}`, sortOrder)
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
 
-        {
-          $facet: {
-            data: [
-              {
-                $sort: {
-                  [params.sortField]: params.sortOrder === ESortOrder.ASC ? 1 : -1,
-                },
-              },
-              { $skip: skip },
-              { $limit: +pageSize },
-            ],
+    const totals = await this.loanRepo
+      .createQueryBuilder('loan')
+      .select([
+        'SUM(loan.amount_remaining) as "totalAmountRemaining"',
+        'SUM(loan.amount_paid) as "totalAmountPaid"',
+        'SUM(loan.interest_remaining) as "totalInterestRemaining"',
+        'SUM(loan.interest_paid) as "totalInterestPaid"',
+      ])
+      .where('1=1')
+      .andWhere(customerId ? 'loan.customer_id = :customerId' : '1=1', { customerId })
+      .andWhere(createdBy ? 'loan.created_by_id = :createdBy' : '1=1', { createdBy })
+      .andWhere(status ? 'loan.status = :status' : '1=1', { status })
+      .getRawOne();
 
-            totalCount: [{ $count: 'total' }],
+    const data = toPaged(Loan, {
+      items: loans,
+      page: pageNumber,
+      perPage: pageSize,
+      totalCount,
+    });
 
-            totals: [
-              {
-                $group: {
-                  _id: null,
-                  totalAmountRemaining: { $sum: '$totalAmountRemaining' },
-                  totalAmountPaid: { $sum: '$totalAmountPaid' },
-                  totalInterestRemaining: { $sum: '$totalInterestRemaining' },
-                  totalInterestPaid: { $sum: '$totalInterestPaid' },
-                },
-              },
-            ],
-          },
-        },
-
-        {
-          $project: {
-            data: 1,
-            total: { $ifNull: [{ $arrayElemAt: ['$totalCount.total', 0] }, 0] },
-
-            totalAmountRemaining: {
-              $ifNull: [{ $arrayElemAt: ['$totals.totalAmountRemaining', 0] }, 0],
-            },
-            totalAmountPaid: {
-              $ifNull: [{ $arrayElemAt: ['$totals.totalAmountPaid', 0] }, 0],
-            },
-            totalInterestRemaining: {
-              $ifNull: [{ $arrayElemAt: ['$totals.totalInterestRemaining', 0] }, 0],
-            },
-            totalInterestPaid: {
-              $ifNull: [{ $arrayElemAt: ['$totals.totalInterestPaid', 0] }, 0],
-            },
-          },
-        },
-      ]);
-      const data = toPaged(Loan, {
-        items: docs[0].data,
-        page: pageNumber,
-        perPage: pageSize,
-        totalCount: docs[0].total,
-      });
-      return plainToInstance(LoanExtended, {
-        ...data,
-        totalAmountRemaining: docs[0].totalAmountRemaining,
-        totalAmountPaid: docs[0].totalAmountPaid,
-        totalInterestPaid: docs[0].totalInterestPaid,
-        totalInterestRemaining: docs[0].totalInterestRemaining,
-      }, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    return plainToInstance(LoanExtended, {
+      ...data,
+      totalAmountRemaining: Number(totals?.totalAmountRemaining ?? totals?.totalamountremaining ?? 0),
+      totalAmountPaid: Number(totals?.totalAmountPaid ?? totals?.totalamountpaid ?? 0),
+      totalInterestRemaining: Number(totals?.totalInterestRemaining ?? totals?.totalinterestremaining ?? 0),
+      totalInterestPaid: Number(totals?.totalInterestPaid ?? totals?.totalinterestpaid ?? 0),
+    });
   }
 
   async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
-    try {
-      let { startDate, endDate, itemId } = filterOptions;
-      const itemIdObjectId = itemId ? new Types.ObjectId(itemId) : null;
-      const stats = await this.loanModel.aggregate([
-        {
-          $match: {
-            createdBy: new Types.ObjectId(userId),
-            createdAt: {
-              $gte: startDate,
-              $lte: endDate,
-            },
-          },
-        },
+    const { startDate, endDate, itemId } = filterOptions;
 
-        // ✅ FIXED customers lookup
-        {
-          $lookup: {
-            from: 'customers',
-            let: { userId: '$createdBy' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: ['$createdBy', '$$userId'] },
-                },
-              },
-              { $count: 'count' },
-            ],
-            as: 'customersCount',
-          },
-        },
-        {
-          $addFields: {
-            customersCount: {
-              $ifNull: [{ $arrayElemAt: ['$customersCount.count', 0] }, 0],
-            },
-          },
-        },
+    const qb = this.loanRepo
+      .createQueryBuilder('loan')
+      .leftJoinAndSelect('loan.loanItems', 'li')
+      .where('loan.created_by_id = :userId', { userId })
+      .andWhere('loan.created_at >= :startDate', { startDate })
+      .andWhere('loan.created_at <= :endDate', { endDate });
 
-        // ✅ Loan items lookup with prorating logic
-        {
-          $lookup: {
-            from: Schemas.LoanItemsSchema,
-            let: { loanId: '$_id', filterItemId: itemIdObjectId },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: ['$loanId', '$$loanId'] },
-                },
-              },
+    const loans = await qb.getMany();
 
-              // ✅ Calculate total value & matched value (WEIGHTED)
-              {
-                $group: {
-                  _id: null,
+    let allocationRatio = 1;
+    if (itemId && loans.length > 0) {
+      const loanIds = loans.map((l) => l.id);
+      const itemTotals = await this.loanRepo.manager
+        .createQueryBuilder()
+        .select('li.loan_id', 'loanId')
+        .addSelect('SUM(li.amount)', 'totalValue')
+        .addSelect(
+          `SUM(CASE WHEN li.item_id = :itemId THEN li.amount ELSE 0 END)`,
+          'matchedValue',
+        )
+        .from('loan_items', 'li')
+        .where('li.loan_id IN (:...loanIds)', { loanIds, itemId })
+        .groupBy('li.loan_id')
+        .getRawMany();
 
-                  // ✅ total monetary value of ALL items in this loan
-                  totalItemValue: {
-                    $sum: { $ifNull: ['$amount', 0] },
-                  },
-
-                  // ✅ total monetary value of FILTERED itemType
-                  matchedItemValue: {
-                    $sum: {
-                      $cond: [{ $eq: ['$itemId', '$$filterItemId'] }, '$amount', 0],
-                    },
-                  },
-
-                  // optional UI metrics
-                  matchedItems: {
-                    $sum: {
-                      $cond: [
-                        {
-                          $or: [
-                            { $eq: ['$$filterItemId', null] },
-                            { $eq: ['$itemId', '$$filterItemId'] }
-                          ]
-                        },
-                        1,
-                        0,
-                      ],
-                    },
-                  },
-
-                  totalNetWeight: {
-                    $sum: {
-                      $cond: [
-                        {
-                          $or: [
-                            { $eq: ['$$filterItemId', null] },
-                            { $eq: ['$itemId', '$$filterItemId'] }
-                          ]
-                        },
-                        '$netWeightInGrams',
-                        0,
-                      ],
-                    },
-                  },
-
-                  totalGrossWeight: {
-                    $sum: {
-                      $cond: [{ $eq: ['$itemId', '$$filterItemId'] }, '$grossWeightInGrams', 0],
-                    },
-                  },
-                },
-              },
-
-              // ✅ Allocation ratio based on VALUE (not count)
-              {
-                $addFields: {
-                  allocationRatio: {
-                    $cond: [
-                      { $eq: ['$$filterItemId', null] }, // 👈 no filter applied
-                      1,
-                      {
-                        $cond: [
-                          { $gt: ['$totalItemValue', 0] },
-                          { $divide: ['$matchedItemValue', '$totalItemValue'] },
-                          0,
-                        ],
-                      },
-                    ],
-                  },
-                },
-              },
-            ],
-            as: 'loanItemStats',
-          },
-        },
-
-        // ✅ Only ONE unwind
-        {
-          $unwind: {
-            path: '$loanItemStats',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-
-        // ✅ Final aggregation
-        {
-          $group: {
-            _id: null,
-
-            amountRemaining: {
-              $sum: {
-                $round: [
-                  {
-                    $multiply: ['$amountRemaining', { $ifNull: ['$loanItemStats.allocationRatio', 0] }],
-                  },
-                  2,
-                ],
-              },
-            },
-            amountPaid: {
-              $sum: {
-                $round: [
-                  {
-                    $multiply: ['$amountPaid', { $ifNull: ['$loanItemStats.allocationRatio', 0] }],
-                  },
-                  2,
-                ],
-              },
-            },
-            interestRemaining: {
-              $sum: {
-                $round: [
-                  {
-                    $multiply: ['$interestRemaining', { $ifNull: ['$loanItemStats.allocationRatio', 0] }],
-                  },
-                  2,
-                ],
-              },
-            },
-            interestPaid: {
-              $sum: {
-                $round: [
-                  {
-                    $multiply: ['$interestPaid', { $ifNull: ['$loanItemStats.allocationRatio', 0] }],
-                  },
-                  2,
-                ],
-              },
-            },
-
-            totalItems: {
-              $sum: { $ifNull: ['$loanItemStats.matchedItems', 0] },
-            },
-            totalNetWeight: {
-              $sum: { $ifNull: ['$loanItemStats.totalNetWeight', 0] },
-            },
-            totalGrossWeight: {
-              $sum: { $ifNull: ['$loanItemStats.totalGrossWeight', 0] },
-            },
-            total: { $sum: 1 },
-
-            customersCount: { $first: '$customersCount' },
-            closed: { $sum: { $cond: [{ $eq: ['$status', ELoanStatus.CLOSED] }, 1, 0] } },
-            open: { $sum: { $cond: [{ $eq: ['$status', ELoanStatus.OPEN] }, 1, 0] } },
-          },
-        },
-      ]);
-      return plainToInstance(LoanStats, stats[0], {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
+      const totalValue = itemTotals.reduce((s, r) => s + Number(r.totalvalue || 0), 0);
+      const matchedValue = itemTotals.reduce((s, r) => s + Number(r.matchedvalue || 0), 0);
+      allocationRatio = totalValue > 0 ? matchedValue / totalValue : 0;
     }
+
+    const stats = loans.reduce(
+      (acc, loan) => {
+        const ratio = itemId ? allocationRatio : 1;
+        acc.amountRemaining += Number(loan.amountRemaining || 0) * ratio;
+        acc.amountPaid += Number(loan.amountPaid || 0) * ratio;
+        acc.interestRemaining += Number(loan.interestRemaining || 0) * ratio;
+        acc.interestPaid += Number(loan.interestPaid || 0) * ratio;
+        acc.total += 1;
+        acc.open += loan.status === ELoanStatus.OPEN ? 1 : 0;
+        acc.closed += loan.status === ELoanStatus.CLOSED ? 1 : 0;
+        return acc;
+      },
+      {
+        amountRemaining: 0,
+        amountPaid: 0,
+        interestRemaining: 0,
+        interestPaid: 0,
+        total: 0,
+        open: 0,
+        closed: 0,
+      },
+    );
+
+    const customersCount = await this.loanRepo.manager
+      .createQueryBuilder()
+      .select('COUNT(DISTINCT c.id)', 'count')
+      .from('customers', 'c')
+      .where('c.created_by_id = :userId', { userId })
+      .getRawOne();
+
+    const itemStats = itemId
+      ? await this.loanRepo.manager
+          .createQueryBuilder()
+          .select('COUNT(li.id)', 'totalItems')
+          .addSelect('SUM(li.net_weight_in_grams)', 'totalNetWeight')
+          .addSelect('SUM(li.gross_weight_in_grams)', 'totalGrossWeight')
+          .from('loan_items', 'li')
+          .innerJoin('loans', 'l', 'l.id = li.loan_id')
+          .where('l.created_by_id = :userId', { userId })
+          .andWhere('l.created_at >= :startDate', { startDate })
+          .andWhere('l.created_at <= :endDate', { endDate })
+          .andWhere('li.item_id = :itemId', { itemId })
+          .getRawOne()
+      : await this.loanRepo.manager
+          .createQueryBuilder()
+          .select('COUNT(li.id)', 'totalItems')
+          .addSelect('SUM(li.net_weight_in_grams)', 'totalNetWeight')
+          .addSelect('SUM(li.gross_weight_in_grams)', 'totalGrossWeight')
+          .from('loan_items', 'li')
+          .innerJoin('loans', 'l', 'l.id = li.loan_id')
+          .where('l.created_by_id = :userId', { userId })
+          .andWhere('l.created_at >= :startDate', { startDate })
+          .andWhere('l.created_at <= :endDate', { endDate })
+          .getRawOne();
+
+    return plainToInstance(LoanStats, {
+      ...stats,
+      customersCount: Number(customersCount?.count ?? 0),
+      totalItems: Number(itemStats?.totalitems ?? 0),
+      totalNetWeight: Number(itemStats?.totalnetweight ?? 0),
+      totalGrossWeight: Number(itemStats?.totalgrossweight ?? 0),
+    });
   }
 
   async delete(id: string, createdBy: string): Promise<void> {
-    try {
-      await this.loanModel.findOneAndDelete({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
-    } catch (err) {
-      throw err;
-    }
+    await this.loanRepo.delete({ id, createdById: createdBy });
   }
 
   async deleteByCustomerId(customerId: string, createdBy: string): Promise<void> {
-    try {
-      await this.loanModel.deleteMany({ customerId: new Types.ObjectId(customerId), createdBy: new Types.ObjectId(createdBy) }).exec();
-    } catch (err) {
-      throw err;
-    }
+    await this.loanRepo.delete({ customerId, createdById: createdBy });
   }
 }

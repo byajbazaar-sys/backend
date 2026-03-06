@@ -7,9 +7,14 @@ timeout: 30
 logRetentionInDays: 30
 environment:
   NODE_ENV: ${self:provider.stage}
-  NO_COLOR: "true"
+  NO_COLOR: 'true'
   AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
-  SKIP_SEEDING: "true"
+  SKIP_SEEDING: 'true'
+  DB_HOST: !Ref RdsInstance
+  DB_PORT: 5432
+  DB_NAME: ${env:DB_NAME, 'byajbazaar_db'}
+  DB_USER: ${env:DB_MASTER_USERNAME, 'postgres'}
+  DB_PASS: ${env:DB_MASTER_PASSWORD}
 httpApi:
   cors: true
 iam:

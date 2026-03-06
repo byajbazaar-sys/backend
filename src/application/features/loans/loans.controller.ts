@@ -45,7 +45,7 @@ import { plainToInstance } from 'class-transformer';
 import { LoansFilterOptions, LoanStatsFilterOptions } from './options';
 import { Loan, LoanItem } from './domain';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { Types } from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
 
 @ApiTags('loans')
 @ApiBearerAuth('user')
@@ -75,7 +75,8 @@ export class LoansController {
       excludeExtraneousValues: true,
     });
 
-    loanData._id = new Types.ObjectId();
+    const loanId = uuidv4();
+    loanData.id = loanId;
     let loanAmount: number = 0;
 
     if (!Array.isArray(loanData.loanItems)) {
@@ -84,12 +85,12 @@ export class LoansController {
 
     loanData.loanItems = loanData.loanItems.map((item, index) => {
       loanAmount += item.amount;
-      const loanItem: any = {
+      const loanItem: LoanItem & { id?: string } = {
         ...item,
-        _id: new Types.ObjectId(),
-        itemId: new Types.ObjectId(item.itemId),
+        id: uuidv4(),
+        itemId: item.itemId,
         image: files.loanItemImages?.[index] ?? null,
-        loanId: loanData._id.toString(),
+        loanId,
         createdBy: identity.userId,
       };
       return loanItem;

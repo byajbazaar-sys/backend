@@ -1,12 +1,7 @@
-import { Expose, Transform } from 'class-transformer';
-import { Types } from 'mongoose';
+import { Expose } from 'class-transformer';
 
 export class Item {
   @Expose()
-  public _id?: Types.ObjectId;
-
-  @Expose()
-  @Transform(({ obj }) => obj?._id?.toString())
   public id?: string;
 
   @Expose()
@@ -16,7 +11,6 @@ export class Item {
   public description?: string;
 
   @Expose()
-  @Transform(({ obj }) => obj?.createdBy?.toString())
   public createdBy?: string;
 
   @Expose()

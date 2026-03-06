@@ -1,4 +1,3 @@
-import { Types } from 'mongoose';
 import { User } from '../domain';
 
 export const USERS_REPOSITORY = 'USERS_REPOSITORY';

@@ -1,0 +1,44 @@
+Parameters:
+  VpcId:
+    Type: String
+  SubnetIds:
+    Type: CommaDelimitedList
+
+Resources:
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS PostgreSQL
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+
+  RdsSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS
+      SubnetIds: !Ref SubnetIds
+
+  RdsInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub ${AWS::StackName}-postgres
+      DBInstanceClass: db.t3.micro
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 7
+      Engine: postgres
+      EngineVersion: '16.8'
+      AllocatedStorage: 20
+      StorageEncrypted: true
+      MasterUsername: postgres
+      MasterUserPassword: ${env:DB_MASTER_PASSWORD}
+      DBName: byajbazaar_db
+      DBSubnetGroupName: !Ref RdsSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RdsSecurityGroup
+      PubliclyAccessible: false

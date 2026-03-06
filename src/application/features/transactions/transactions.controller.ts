@@ -18,7 +18,6 @@ import { ITransactionService, TRANSACTION_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
 import { Transaction } from './domain';
 import { DuesFilterOptions, TransactionsFilterOptions } from './options';
-import { Types } from 'mongoose';
 import { ETransactionType } from './enums';
 
 @ApiTags('transactions')
@@ -57,7 +56,6 @@ export class TransactionsController {
       }
     }
 
-    transactionData._id = new Types.ObjectId();
     transactionData.createdBy = identity.userId;
     const transaction = await this.transactionService.create(transactionData);
     return plainToInstance(TransactionResponseModel, transaction, {

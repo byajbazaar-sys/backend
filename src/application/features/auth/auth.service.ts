@@ -16,7 +16,7 @@ import { IAuthService } from './interfaces';
 import { compareSync, hashSync } from 'bcrypt';
 import { plainToInstance } from 'class-transformer';
 import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions } from '../../shared';
-import { Types } from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
 import { EMAIL_SERVICE, IEmailService } from '../../shared/services/i-email.service';
 import { WebAppOptions } from '../../shared';
 import {
@@ -79,11 +79,12 @@ export class AuthService implements IAuthService {
     }
 
     try {
-      user._id = new Types.ObjectId();
-      this.logger.debug({ userId: user._id.toString(), email: user.email }, 'Creating new user');
+      const userId = uuidv4();
+      user.id = userId;
+      this.logger.debug({ userId, email: user.email }, 'Creating new user');
       if (user.profilePhoto && user.profilePhotoContentType) {
         const fileExtension = user.profilePhotoContentType.split('/')[1];
-        user.profilePhotoRef = `users/profiles/${user._id.toString()}.${fileExtension}`;
+        user.profilePhotoRef = `users/profiles/${userId}.${fileExtension}`;
         await this.usersFileStorage.writeAsync(user.profilePhotoRef, user.profilePhoto, user.profilePhotoContentType);
       }
 

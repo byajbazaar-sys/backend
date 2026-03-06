@@ -1,22 +1,15 @@
-import { Expose, Transform, Type } from 'class-transformer';
-import { Types } from 'mongoose';
+import { Expose, Type } from 'class-transformer';
 import { ETransactionType, ETransactionPaidIn } from '../enums';
 import { Customer } from '../../customers';
 
 export class Transaction {
   @Expose()
-  public _id?: Types.ObjectId;
-
-  @Expose()
-  @Transform(({ obj }) => obj?._id?.toString())
   public id: string;
 
   @Expose()
-  @Transform(({ obj }) => obj?.loanId?.toString())
   public loanId: string;
 
   @Expose()
-  @Transform(({ obj }) => obj?.customerId?.toString())
   public customerId: string;
 
   @Expose()
@@ -33,7 +26,6 @@ export class Transaction {
   public paidAt: Date;
 
   @Expose()
-  @Transform(({ obj }) => obj?.createdBy?.toString())
   public createdBy: string;
 
   @Expose()
@@ -47,6 +39,5 @@ export class Transaction {
   public customer: Customer;
 
   @Expose()
-  @Transform(({ obj }) => obj?.dueId?.toString())
   public dueId?: string;
 }

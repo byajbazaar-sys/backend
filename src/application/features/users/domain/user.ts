@@ -1,13 +1,8 @@
 import { EUserType } from '@shared-libs';
-import { Expose, Transform, Type } from 'class-transformer';
-import { Types } from 'mongoose';
+import { Expose, Type } from 'class-transformer';
 
 export class User {
   @Expose()
-  public _id?: Types.ObjectId;
-
-  @Expose()
-  @Transform(({ obj }) => obj?._id?.toString())
   public id?: string;
 
   @Expose()

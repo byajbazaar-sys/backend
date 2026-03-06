@@ -1,8 +1,6 @@
 import { HttpModule } from '@nestjs/axios';
 import { Global, Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
-import Schemas from './persistence/schemas';
-import Seeds from './persistence/seeds';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 import {
@@ -40,33 +38,27 @@ import { SendGridOptions, SendGridService } from './send-grid';
 import { SesOptions, SesService } from './ses';
 import { WebAppOptions } from '../application';
 import CronServices from './cron';
+import { generateDataSourceOptions } from './persistence/type-orm.config';
+import Entities from './persistence/entities';
+import Seeds from './persistence/seeds';
 
 @Global()
 @Module({
   imports: [
     HttpModule,
-    MongooseModule.forRootAsync({
+    TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const uri = configService.get<IDbOptions>('database')?.uri?.trim();
-        if (!uri) {
+        const dbConfig = configService.get<IDbOptions>('database');
+        if (!dbConfig?.host) {
           throw new Error(
-            'Database configuration is missing. Please set MONGO_URL, MONGODB_URI, or DATABASE_URL environment variable.',
+            'Database configuration is missing. Please set DB_HOST, DB_PORT, DB_USER, DB_PASS, DB_NAME environment variables.',
           );
         }
-        return {
-          uri,
-          serverSelectionTimeoutMS: 10000,
-          socketTimeoutMS: 45000,
-          connectTimeoutMS: 10000,
-          maxPoolSize: 10,
-          minPoolSize: 1,
-          retryWrites: true,
-          w: 'majority',
-        };
+        return generateDataSourceOptions(dbConfig);
       },
     }),
-    MongooseModule.forFeature([...Schemas]),
+    TypeOrmModule.forFeature([...Entities]),
   ],
   providers: [
     ...Seeds,

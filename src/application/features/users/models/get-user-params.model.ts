@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsMongoId, IsString } from 'class-validator';
+import { IsUUID, IsString } from 'class-validator';
 
 export class GetUserParamsModel {
-  @ApiProperty({ example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   @IsString()
-  @IsMongoId({ message: 'id must be a valid MongoDB ObjectId' })
+  @IsUUID('4', { message: 'id must be a valid UUID' })
   id: string;
 }

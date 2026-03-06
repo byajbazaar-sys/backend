@@ -1,103 +1,60 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { UserDocument, UsersSchema } from '../schemas';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In } from 'typeorm';
+import { hashSync } from 'bcrypt';
+import { BCRYPT_SALT_ROUNDS } from '@shared-libs';
+import { UserEntity } from '../entities/user.entity';
 import { plainToInstance } from 'class-transformer';
 import { IUsersRepository, User } from '../../../application';
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {
-  constructor(@InjectModel(UsersSchema.name) private userModel: Model<UserDocument>) {}
+  constructor(@InjectRepository(UserEntity) private userRepo: Repository<UserEntity>) {}
 
   async create(createUserDto: Partial<User>): Promise<User> {
-    try {
-      const createdUser = await this.userModel.create(createUserDto);
-      return plainToInstance(User, createdUser, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
+    const dto = { ...createUserDto };
+    if (dto.password) {
+      dto.password = hashSync(dto.password, BCRYPT_SALT_ROUNDS);
     }
+    const entity = this.userRepo.create(dto);
+    const created = await this.userRepo.save(entity);
+    return plainToInstance(User, created, { excludeExtraneousValues: true });
   }
 
   async findByEmail(email: string): Promise<User> {
-    try {
-      const user = await this.userModel.findOne({ email }).exec();
-      if (!user) {
-        return null;
-      }
-      return plainToInstance(User, user.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const user = await this.userRepo.findOne({ where: { email } });
+    if (!user) return null;
+    return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
 
   async findByEmailVerificationToken(token: string): Promise<User> {
-    try {
-      const user = await this.userModel.findOne({ emailVerificationToken: token }).exec();
-      if (!user) {
-        return null;
-      }
-      return plainToInstance(User, user.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const user = await this.userRepo.findOne({ where: { emailVerificationToken: token } });
+    if (!user) return null;
+    return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
 
   async findByResetPasswordToken(token: string): Promise<User> {
-    try {
-      const user = await this.userModel.findOne({ resetPasswordToken: token }).exec();
-      if (!user) {
-        return null;
-      }
-      return plainToInstance(User, user.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const user = await this.userRepo.findOne({ where: { resetPasswordToken: token } });
+    if (!user) return null;
+    return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
 
   async update(id: string, updateDto: Partial<User>): Promise<User> {
-    try {
-      console.log('updateDto', id, updateDto);
-      const updatedUser = await this.userModel.findByIdAndUpdate(new Types.ObjectId(id), updateDto, { new: true }).lean().exec();
-      if (!updatedUser) {
-        return null;
-      }
-      return plainToInstance(User, updatedUser, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    await this.userRepo.update(id, updateDto as Partial<UserEntity>);
+    const updated = await this.userRepo.findOne({ where: { id } });
+    if (!updated) return null;
+    return plainToInstance(User, updated, { excludeExtraneousValues: true });
   }
 
   async getUsers(ids?: string[]): Promise<User[]> {
-    try {
-      const users = await this.userModel.find(ids?.length ? { _id: { $in: ids } } : {}).exec();
-      return plainToInstance(User, users, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const where = ids?.length ? { id: In(ids as string[]) } : {};
+    const users = await this.userRepo.find({ where });
+    return plainToInstance(User, users, { excludeExtraneousValues: true });
   }
 
   async findById(id: string): Promise<User> {
-    const user = await this.userModel.aggregate([
-      {
-        $match: {
-          _id: new Types.ObjectId(id),
-        },
-      },
-    ]);
-    return plainToInstance(User, user[0], {
-      excludeExtraneousValues: true,
-    });
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) return null;
+    return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
 }

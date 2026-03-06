@@ -1,25 +1,15 @@
-import { Expose, Transform, Type } from 'class-transformer';
-import { Types } from 'mongoose';
+import { Expose, Type } from 'class-transformer';
 import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus } from '../enums';
 import { LoanItem } from './loan-item';
 
 export class Loan {
-  // Use @Transform to copy _id directly from source - class-transformer has a bug where plain
-  // assignment to Types.ObjectId creates new instances (especially with excludeExtraneousValues).
   @Expose()
-  @Transform(({ obj }) => obj?._id)
-  public _id?: Types.ObjectId;
-
-  @Expose()
-  @Transform(({ obj }) => obj?._id?.toString())
   public id: string;
 
   @Expose()
-  @Transform(({ obj }) => obj?.createdBy?.toString())
   public createdBy: string;
 
   @Expose()
-  @Transform(({ obj }) => obj?.customerId?.toString())
   public customerId: string;
 
   @Expose()

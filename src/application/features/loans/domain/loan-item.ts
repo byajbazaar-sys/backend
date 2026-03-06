@@ -1,20 +1,13 @@
-import { Expose, Transform } from 'class-transformer';
-import { Types } from 'mongoose';
+import { Expose } from 'class-transformer';
 
 export class LoanItem {
   @Expose()
-  public _id?: Types.ObjectId;
-
-  @Expose()
-  @Transform(({ obj }) => obj?._id?.toString())
   public id: string;
 
   @Expose()
-  @Transform(({ obj }) => obj?.loanId?.toString())
   public loanId: string;
 
   @Expose()
-  @Transform(({ obj }) => obj?.itemId?.toString())
   public itemId: string;
 
   @Expose()
@@ -48,6 +41,5 @@ export class LoanItem {
   public currentRate?: number;
 
   @Expose()
-  @Transform(({ obj }) => obj?.createdBy?.toString())
   public createdBy?: string;
 }

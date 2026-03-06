@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsMongoId } from 'class-validator';
+import { IsString, IsUUID } from 'class-validator';
 
 export class GetLoanParamsModel {
-  @ApiProperty({ description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Loan ID', example: '550e8400-e29b-41d4-a716-446655440000' })
   @IsString()
-  @IsMongoId({ message: 'id must be a valid MongoDB ObjectId' })
+  @IsUUID('4', { message: 'id must be a valid UUID' })
   id: string;
 }
 

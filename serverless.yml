@@ -20,6 +20,8 @@ custom:
 
 functions: ${file(serverless/functions.yml)}
 
+resources: ${file(serverless/resources.yml)}
+
 package:
   patterns:
     - '!node_modules/.cache/**'

@@ -1,166 +1,101 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Schemas, TransactionDocument, TransactionsSchema } from '../schemas';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { TransactionEntity } from '../entities/transaction.entity';
 import { plainToInstance } from 'class-transformer';
-import { ETransactionType, ITransactionsRepository, Transaction, TransactionsFilterOptions } from '../../../application';
+import {
+  ETransactionType,
+  ITransactionsRepository,
+  Transaction,
+  TransactionsFilterOptions,
+} from '../../../application';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class TransactionsRepository implements ITransactionsRepository {
-  constructor(@InjectModel(TransactionsSchema.name) private transactionModel: Model<TransactionDocument>) {}
+  constructor(
+    @InjectRepository(TransactionEntity) private transactionRepo: Repository<TransactionEntity>,
+  ) {}
 
   async create(createTransaction: Partial<Transaction>): Promise<Transaction> {
-    try {
-      const createdTransaction = await this.transactionModel.create(createTransaction);
-      return plainToInstance(Transaction, createdTransaction.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const entity = this.transactionRepo.create({
+      loanId: createTransaction.loanId,
+      customerId: createTransaction.customerId,
+      amount: createTransaction.amount,
+      transactionType: createTransaction.transactionType,
+      paidIn: createTransaction.paidIn,
+      paidAt: createTransaction.paidAt,
+      createdById: createTransaction.createdBy,
+      dueId: createTransaction.dueId ?? null,
+    } as unknown as Partial<TransactionEntity>);
+    const created = await this.transactionRepo.save(entity);
+    return plainToInstance(Transaction, created, { excludeExtraneousValues: true });
   }
 
   async findById(id: string, createdBy: string): Promise<Transaction> {
-    try {
-      const transaction = await this.transactionModel.findOne({ _id: new Types.ObjectId(id), createdBy: new Types.ObjectId(createdBy) }).exec();
-      return plainToInstance(Transaction, transaction.toJSON(), {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  async update(id: string, updateDto: Partial<Transaction>): Promise<Transaction> {
-    try {
-      const updatedTransaction = await this.transactionModel
-        .findByIdAndUpdate(id, updateDto, { new: true })
-        .lean()
-        .exec();
-      if (!updatedTransaction) {
-        return null;
-      }
-      return plainToInstance(Transaction, updatedTransaction, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+    const transaction = await this.transactionRepo.findOne({
+      where: { id, createdById: createdBy },
+      relations: ['customer'],
+    });
+    if (!transaction) return null;
+    return plainToInstance(Transaction, transaction, { excludeExtraneousValues: true });
   }
 
   async listTransactions(params: TransactionsFilterOptions): Promise<Paged<Transaction>> {
-    try {
-      const { loanId, createdBy } = params;
-      const { pageNumber, pageSize, skip } = getPaginationValues(params);
-      const filter: Record<string, any> = {};
+    const { loanId, createdBy } = params;
+    const { pageNumber, pageSize, skip } = getPaginationValues(params);
+    const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
+    const sortField = params.sortField || 'createdAt';
 
-      // Add loanId filter if provided
-      if (loanId) {
-        filter.loanId = new Types.ObjectId(loanId);
-      }
-      // Add createdBy filter if provided
-      if (createdBy) {
-        filter.createdBy = new Types.ObjectId(createdBy);
-      }
-
-      const docs = await this.transactionModel.aggregate([
-        { $match: filter },
-        {
-          $lookup: {
-            from: Schemas.CustomersSchema,
-            localField: 'customerId',
-            foreignField: '_id',
-            as: 'customer',
-            pipeline: [
-              {
-                $project: {
-                  _id: 1,
-                  firstName: 1,
-                  lastName: 1,
-                },
-              },
-            ],
-          },
-        },
-        {
-          $unwind: '$customer',
-        },
-        {
-          $facet: {
-            data: [
-              {
-                $sort: {
-                  [params.sortField]: params.sortOrder === ESortOrder.ASC ? 1 : -1,
-                },
-              },
-              { $skip: skip },
-              { $limit: +pageSize },
-            ],
-            totalCount: [{ $count: 'total' }],
-          },
-        },
-        {
-          $project: {
-            data: 1,
-            total: { $ifNull: [{ $arrayElemAt: ['$totalCount.total', 0] }, 0] },
-          },
-        },
+    const qb = this.transactionRepo
+      .createQueryBuilder('t')
+      .leftJoinAndSelect('t.customer', 'customer')
+      .select([
+        't.id',
+        't.loanId',
+        't.customerId',
+        't.amount',
+        't.transactionType',
+        't.paidIn',
+        't.paidAt',
+        't.createdById',
+        't.dueId',
+        't.createdAt',
+        'customer.id',
+        'customer.firstName',
+        'customer.lastName',
       ]);
-      return toPaged(Transaction, {
-        items: docs[0].data,
-        page: pageNumber,
-        perPage: pageSize,
-        totalCount: docs[0].total,
-      });
-    } catch (err) {
-      throw err;
-    }
+
+    if (loanId) qb.andWhere('t.loan_id = :loanId', { loanId });
+    if (createdBy) qb.andWhere('t.created_by_id = :createdBy', { createdBy });
+
+    const [items, totalCount] = await qb
+      .orderBy(`t.${sortField}`, sortOrder)
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return toPaged(Transaction, {
+      items,
+      page: pageNumber,
+      perPage: pageSize,
+      totalCount,
+    });
   }
 
-  async findByLoanIdAndTransactionType(loanId: string, transactionType: ETransactionType): Promise<Transaction[]> {
-    try {
-      const transactions = await this.transactionModel.aggregate([
-        {
-          $match: {
-            loanId: new Types.ObjectId(loanId),
-            transactionType: transactionType,
-          },
-        },
-        {
-          $lookup: {
-            from: Schemas.CustomersSchema,
-            localField: 'customerId',
-            foreignField: '_id',
-            as: 'customer',
-            pipeline: [
-              {
-                $project: {
-                  _id: 1,
-                  firstName: 1,
-                  lastName: 1,
-                },
-              },
-            ],
-          },
-        },
-        {
-          $unwind: '$customer',
-        },
-      ]);
-      return plainToInstance(Transaction, transactions, {
-        excludeExtraneousValues: true,
-      });
-    } catch (err) {
-      throw err;
-    }
+  async findByLoanIdAndTransactionType(
+    loanId: string,
+    transactionType: ETransactionType,
+  ): Promise<Transaction[]> {
+    const transactions = await this.transactionRepo.find({
+      where: { loanId, transactionType },
+      relations: ['customer'],
+      order: { createdAt: 'DESC' },
+    });
+    return plainToInstance(Transaction, transactions, { excludeExtraneousValues: true });
   }
 
   async delete(id: string): Promise<void> {
-    try {
-      await this.transactionModel.findByIdAndDelete(new Types.ObjectId(id)).exec();
-    } catch (err) {
-      throw err;
-    }
+    await this.transactionRepo.delete(id);
   }
 }

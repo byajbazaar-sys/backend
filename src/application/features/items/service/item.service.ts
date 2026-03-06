@@ -3,7 +3,6 @@ import { Item } from '../domain';
 import { IItemsRepository, ITEMS_REPOSITORY } from './i-items.repository';
 import { IItemService } from './i-item.service';
 import { CreateItemRequestModel } from '../models';
-import { Types } from 'mongoose';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { SYSTEM_USER_ID } from '@shared-libs';
 
@@ -30,7 +29,6 @@ export class ItemService implements IItemService {
 
       const itemData: Item = {
         ...data,
-        _id: new Types.ObjectId(),
         createdBy: userId,
       };
 

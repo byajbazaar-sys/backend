@@ -14,7 +14,7 @@ import { UpdateCustomerRequestModel } from '../models';
 import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions, DUES_REPOSITORY, IDuesRepository } from '../../../shared';
 import { CustomersFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
-import { Types } from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
 import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans/service/i-loan-items.repository';
 
@@ -33,10 +33,10 @@ export class CustomerService implements ICustomerService {
   async create(body: Customer): Promise<Customer> {
     try {
       this.logger.info({ createdBy: body.createdBy }, 'Creating new customer');
-      body._id = new Types.ObjectId();
+      const newId = uuidv4();
       if (body.profilePhoto) {
         const fileExtension = body.profilePhoto.mimetype.split('/')[1];
-        body.profilePhotoRef = `customers/profiles/${body._id.toString()}.${fileExtension}`;
+        body.profilePhotoRef = `customers/profiles/${newId}.${fileExtension}`;
         await this.customersFileStorage.writeAsync(
           body.profilePhotoRef,
           body.profilePhoto.buffer,
@@ -46,7 +46,7 @@ export class CustomerService implements ICustomerService {
 
       if (body.aadharCard) {
         const fileExtension = body.aadharCard.mimetype.split('/')[1];
-        body.aadhaarCardRef = `customers/documents/aadhar/${body._id.toString()}.${fileExtension}`;
+        body.aadhaarCardRef = `customers/documents/aadhar/${newId}.${fileExtension}`;
 
         await this.customersFileStorage.writeAsync(
           body.aadhaarCardRef,
@@ -57,7 +57,7 @@ export class CustomerService implements ICustomerService {
 
       if (body.panCard) {
         const fileExtension = body.panCard.mimetype.split('/')[1];
-        body.panCardRef = `customers/documents/pan/${body._id.toString()}.${fileExtension}`;
+        body.panCardRef = `customers/documents/pan/${newId}.${fileExtension}`;
         await this.customersFileStorage.writeAsync(body.panCardRef, body.panCard.buffer, body.panCard.mimetype);
       }
 

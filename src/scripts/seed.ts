@@ -22,7 +22,7 @@ async function runSeed(): Promise<void> {
   process.env.STAGE = stage;
 
   console.log(`[Seed] Running seeds for stage: ${stage}`);
-  console.log(`[Seed] MONGO_URL: ${process.env.MONGO_URL ? '***configured***' : 'NOT SET'}`);
+  console.log(`[Seed] DB_HOST: ${process.env.DB_HOST ?? 'localhost'}, DB_NAME: ${process.env.DB_NAME ?? 'user_db'}`);
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['log', 'error', 'warn'],

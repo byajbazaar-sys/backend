@@ -68,7 +68,7 @@ export class LoanService implements ILoanService {
       for (const loanItem of data.loanItems) {
         if (loanItem.image) {
           const fileExtension = loanItem.image.mimetype.split('/')[1];
-          loanItem.imageRef = `loans/items/${loan.id}/${loanItem._id.toString()}.${fileExtension}`;
+          loanItem.imageRef = `loans/items/${loan.id}/${loanItem.id}.${fileExtension}`;
           this.loansFileStorage.writeAsync(loanItem.imageRef, loanItem.image.buffer, loanItem.image.mimetype);
         }
       }
@@ -106,7 +106,7 @@ export class LoanService implements ILoanService {
         createdAt,
       } = loan;
 
-      const loanId = loan.id || loan._id?.toString();
+      const loanId = loan.id;
 
       if (!loanId) throw new Error('Loan ID is required');
       if (!customerId || !createdBy) {
@@ -464,7 +464,6 @@ export class LoanService implements ILoanService {
       const finalLoanData: Loan = {
         ...existingLoan,
         ...updateDataWithoutStatus,
-        _id: existingLoan._id,
         id: existingLoan.id,
         customerId: updateData.customerId ?? existingLoan.customerId,
         createdBy: existingLoan.createdBy,
