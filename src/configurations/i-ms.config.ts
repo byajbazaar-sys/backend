@@ -7,6 +7,7 @@ import {
   AIOptions,
   TwilioOptions,
   SendGridOptions,
+  SesOptions,
 } from '../infrastructure';
 import { FileStorageOptions } from '../application';
 import { Params } from 'nestjs-pino';
@@ -21,6 +22,7 @@ export interface IMsConfig {
   ai: AIOptions;
   twilio: TwilioOptions;
   sendGrid: SendGridOptions;
+  ses: SesOptions;
   webApp: WebAppOptions;
   logger: Params;
 }

@@ -37,6 +37,7 @@ import { LambdaOptions, LambdaService } from './lambda';
 import { AIOptions, AIResumeService } from './ai';
 import { TwilioOptions, TwilioService } from './sms';
 import { SendGridOptions, SendGridService } from './send-grid';
+import { SesOptions, SesService } from './ses';
 import { WebAppOptions } from '../application';
 import CronServices from './cron';
 
@@ -175,13 +176,19 @@ import CronServices from './cron';
       useFactory: (configService: ConfigService) => configService.get('sendGrid'),
     },
     {
+      provide: SesOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('ses'),
+    },
+    SesService,
+    {
       provide: WebAppOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('webApp'),
     },
     {
       provide: EMAIL_SERVICE,
-      useClass: SendGridService,
+      useClass: process.env.EMAIL_SERVICE_PROVIDER === 'ses' ? SesService : SendGridService,
     },
   ],
   exports: [

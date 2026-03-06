@@ -8,6 +8,7 @@ import {
   AIOptions,
   TwilioOptions,
   SendGridOptions,
+  SesOptions,
 } from '../infrastructure';
 import { FileStorageOptions } from '../application';
 
@@ -54,6 +55,13 @@ export const configFactory = (): IMsConfig => ({
     process.env.SENDGRID_API_KEY ?? '',
     process.env.SENDGRID_SENDER ?? '',
     process.env.SENDGRID_SENDER_NAME ?? '',
+  ),
+  ses: new SesOptions(
+    process.env.SES_AWS_REGION ?? process.env.S3_BUCKET_REGION ?? 'ap-south-1',
+    process.env.SES_AWS_ACCESS_KEY_ID ?? process.env.S3_AWS_ACCESS_KEY_ID ?? '',
+    process.env.SES_AWS_SECRET_ACCESS_KEY ?? process.env.S3_AWS_SECRET_ACCESS_KEY ?? '',
+    process.env.SES_SENDER ?? '',
+    process.env.SES_SENDER_NAME ?? '',
   ),
   webApp: new WebAppOptions(process.env.WEB_APP_DOMAIN),
 });
