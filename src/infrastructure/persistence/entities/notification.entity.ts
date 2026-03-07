@@ -22,7 +22,7 @@ export class NotificationEntity {
   recipient: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  subject: string | null;
+  subject: string;
 
   @Column({ type: 'text' })
   body: string;
@@ -31,20 +31,20 @@ export class NotificationEntity {
   status: ENotificationStatus;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  externalId: string | null;
+  externalId: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata: Record<string, unknown> | null;
+  metadata: Record<string, unknown>;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  errorMessage: string | null;
+  errorMessage: string;
 
-  @Column({ type: 'uuid', nullable: true })
-  createdById: string | null;
+  @Column({ type: 'uuid' })
+  createdBy: string;
 
   @ManyToOne(() => UserEntity, (u) => u.notifications, { onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'created_by_id' })
-  createdByUser: UserEntity | null;
+  @JoinColumn({ name: 'created_by' })
+  user: UserEntity;
 
   @CreateDateColumn()
   createdAt: Date;

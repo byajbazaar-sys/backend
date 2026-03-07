@@ -15,7 +15,7 @@ import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 export class TransactionsRepository implements ITransactionsRepository {
   constructor(
     @InjectRepository(TransactionEntity) private transactionRepo: Repository<TransactionEntity>,
-  ) {}
+  ) { }
 
   async create(createTransaction: Partial<Transaction>): Promise<Transaction> {
     const entity = this.transactionRepo.create({
@@ -25,7 +25,7 @@ export class TransactionsRepository implements ITransactionsRepository {
       transactionType: createTransaction.transactionType,
       paidIn: createTransaction.paidIn,
       paidAt: createTransaction.paidAt,
-      createdById: createTransaction.createdBy,
+      createdBy: createTransaction.createdBy,
       dueId: createTransaction.dueId ?? null,
     } as unknown as Partial<TransactionEntity>);
     const created = await this.transactionRepo.save(entity);
@@ -34,7 +34,7 @@ export class TransactionsRepository implements ITransactionsRepository {
 
   async findById(id: string, createdBy: string): Promise<Transaction> {
     const transaction = await this.transactionRepo.findOne({
-      where: { id, createdById: createdBy },
+      where: { id, createdBy: createdBy },
       relations: ['customer'],
     });
     if (!transaction) return null;
@@ -58,7 +58,7 @@ export class TransactionsRepository implements ITransactionsRepository {
         't.transactionType',
         't.paidIn',
         't.paidAt',
-        't.createdById',
+        't.createdBy',
         't.dueId',
         't.createdAt',
         'customer.id',
@@ -67,7 +67,7 @@ export class TransactionsRepository implements ITransactionsRepository {
       ]);
 
     if (loanId) qb.andWhere('t.loan_id = :loanId', { loanId });
-    if (createdBy) qb.andWhere('t.created_by_id = :createdBy', { createdBy });
+    if (createdBy) qb.andWhere('t.created_by = :createdBy', { createdBy });
 
     const [items, totalCount] = await qb
       .orderBy(`t.${sortField}`, sortOrder)

@@ -21,8 +21,8 @@ export class AIResumeService implements IAIResumeService {
   async analyzeResumeWithAI(resumeData: any, preferredProvider?: AIProvider): Promise<ResumeAnalysisResult> {
     const providers: AIProvider[] = preferredProvider
       ? ([preferredProvider, 'gemini', 'claude', 'openai'] as AIProvider[]).filter(
-          (p, i, arr) => i === 0 || p !== arr[0],
-        )
+        (p, i, arr) => i === 0 || p !== arr[0],
+      )
       : (['openai', 'gemini', 'claude'] as AIProvider[]);
     for (const provider of providers) {
       try {
@@ -39,7 +39,7 @@ export class AIResumeService implements IAIResumeService {
     throw new BadRequestException('No AI providers configured. Please set API keys for OpenAI, Gemini, or Claude.');
   }
 
-  private getAIService(provider: AIProvider): AIBase | null {
+  private getAIService(provider: AIProvider): AIBase {
     switch (provider) {
       // case 'openai':
       //   return new OpenAIService(this.options.openaiApiKey);

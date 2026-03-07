@@ -10,14 +10,22 @@ export class LoanItemsRepository implements ILoanItemsRepository {
   constructor(@InjectRepository(LoanItemEntity) private loanItemRepo: Repository<LoanItemEntity>) {}
 
   async create(createLoanItem: LoanItem): Promise<LoanItem> {
-    const entity = this.loanItemRepo.create(createLoanItem);
+    const entity = this.loanItemRepo.create({
+      ...createLoanItem,
+      createdBy: createLoanItem.createdBy,
+    });
     const created = await this.loanItemRepo.save(entity);
     return plainToInstance(LoanItem, created, { excludeExtraneousValues: true });
   }
 
   async bulkInsert(createLoanItems: LoanItem[]): Promise<LoanItem[]> {
     if (!createLoanItems?.length) return [];
-    const entities = this.loanItemRepo.create(createLoanItems);
+    const entities = this.loanItemRepo.create(
+      createLoanItems.map((li) => ({
+        ...li,
+        createdBy: li.createdBy,
+      })),
+    );
     const created = await this.loanItemRepo.save(entities);
     return plainToInstance(LoanItem, created, { excludeExtraneousValues: true });
   }
@@ -34,8 +42,9 @@ export class LoanItemsRepository implements ILoanItemsRepository {
   }
 
   async update(id: string, loanId: string, updateData: Partial<LoanItem>): Promise<LoanItem> {
-    const { id: _omitId, loanId: _omitLoanId, ...rest } = updateData as LoanItem & { id?: string; loanId?: string };
-    await this.loanItemRepo.update({ id, loanId }, rest as Partial<LoanItemEntity>);
+    const { id: _omitId, loanId: _omitLoanId, createdBy, ...rest } = updateData as LoanItem & { id?: string; loanId?: string };
+    const entityUpdate = createdBy ? { ...rest, createdBy: createdBy } : rest;
+    await this.loanItemRepo.update({ id, loanId }, entityUpdate as Partial<LoanItemEntity>);
     const updated = await this.loanItemRepo.findOne({ where: { id, loanId } });
     if (!updated) return null;
     return plainToInstance(LoanItem, updated, { excludeExtraneousValues: true });

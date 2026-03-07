@@ -15,7 +15,7 @@ import { CustomerEntity } from './customer.entity';
 
 @Entity('dues')
 @Index(['loanId', 'dueDate'])
-@Index(['createdById', 'type'])
+@Index(['createdBy', 'type'])
 export class DueEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -44,11 +44,11 @@ export class DueEntity {
   dueDate: Date;
 
   @Column({ type: 'uuid' })
-  createdById: string;
+  createdBy: string;
 
   @ManyToOne(() => UserEntity, (u) => u.dues, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'created_by_id' })
-  createdByUser: UserEntity;
+  @JoinColumn({ name: 'created_by' })
+  user: UserEntity;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   principalAmount: number;

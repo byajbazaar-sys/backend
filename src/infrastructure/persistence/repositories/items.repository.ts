@@ -7,10 +7,13 @@ import { IItemsRepository, Item } from '../../../application/features/items';
 
 @Injectable()
 export class ItemsRepository implements IItemsRepository {
-  constructor(@InjectRepository(ItemEntity) private itemRepo: Repository<ItemEntity>) {}
+  constructor(@InjectRepository(ItemEntity) private itemRepo: Repository<ItemEntity>) { }
 
   async create(createItem: Item): Promise<Item> {
-    const entity = this.itemRepo.create(createItem);
+    const entity = this.itemRepo.create({
+      ...createItem,
+      createdBy: createItem.createdBy,
+    });
     const created = await this.itemRepo.save(entity);
     return plainToInstance(Item, created, { excludeExtraneousValues: true });
   }
@@ -24,7 +27,7 @@ export class ItemsRepository implements IItemsRepository {
   }
 
   async findByName(name: string, createdBy: string): Promise<Item> {
-    const item = await this.itemRepo.findOne({ where: { name, createdById: createdBy } });
+    const item = await this.itemRepo.findOne({ where: { name, createdBy: createdBy } });
     if (!item) {
       throw new NotFoundException('Item not found');
     }
@@ -37,7 +40,9 @@ export class ItemsRepository implements IItemsRepository {
   }
 
   async update(id: string, updateItem: Partial<Item>): Promise<Item> {
-    await this.itemRepo.update(id, updateItem as Partial<ItemEntity>);
+    const { createdBy, ...rest } = updateItem;
+    const entityUpdate = createdBy ? { ...rest, createdBy: createdBy } : rest;
+    await this.itemRepo.update(id, entityUpdate as Partial<ItemEntity>);
     const updated = await this.itemRepo.findOne({ where: { id } });
     if (!updated) {
       throw new NotFoundException('Item not found');

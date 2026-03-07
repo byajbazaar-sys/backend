@@ -13,11 +13,11 @@ export class CreateNotificationsTable1730880000008 implements MigrationInterface
         "external_id" varchar(255),
         "metadata" jsonb,
         "error_message" varchar(500),
-        "created_by_id" uuid,
+        "created_by" uuid,
         "created_at" TIMESTAMP NOT NULL DEFAULT now(),
         "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
         CONSTRAINT "PK_notifications" PRIMARY KEY ("id"),
-        CONSTRAINT "FK_notifications_created_by" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE SET NULL
+        CONSTRAINT "FK_notifications_created_by" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL
       )
     `);
   }

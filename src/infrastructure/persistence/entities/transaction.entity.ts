@@ -45,18 +45,18 @@ export class TransactionEntity {
   paidAt: Date;
 
   @Column({ type: 'uuid' })
-  createdById: string;
+  createdBy: string;
 
   @ManyToOne(() => UserEntity, (u) => u.transactions, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'created_by_id' })
-  createdByUser: UserEntity;
+  @JoinColumn({ name: 'created_by' })
+  user: UserEntity;
 
   @Column({ type: 'uuid', nullable: true })
-  dueId: string | null;
+  dueId: string;
 
   @ManyToOne(() => DueEntity, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'due_id' })
-  due: DueEntity | null;
+  due: DueEntity;
 
   @CreateDateColumn()
   createdAt: Date;

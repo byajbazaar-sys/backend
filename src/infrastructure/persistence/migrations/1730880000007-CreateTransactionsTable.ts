@@ -11,14 +11,14 @@ export class CreateTransactionsTable1730880000007 implements MigrationInterface 
         "transaction_type" "e_transaction_type_enum" NOT NULL,
         "paid_in" "e_transaction_paid_in_enum" NOT NULL,
         "paid_at" TIMESTAMP WITH TIME ZONE NOT NULL,
-        "created_by_id" uuid NOT NULL,
+        "created_by" uuid NOT NULL,
         "due_id" uuid,
         "created_at" TIMESTAMP NOT NULL DEFAULT now(),
         "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
         CONSTRAINT "PK_transactions" PRIMARY KEY ("id"),
         CONSTRAINT "FK_transactions_loan" FOREIGN KEY ("loan_id") REFERENCES "loans"("id") ON DELETE CASCADE,
         CONSTRAINT "FK_transactions_customer" FOREIGN KEY ("customer_id") REFERENCES "customers"("id") ON DELETE CASCADE,
-        CONSTRAINT "FK_transactions_created_by" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE CASCADE,
+        CONSTRAINT "FK_transactions_created_by" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE CASCADE,
         CONSTRAINT "FK_transactions_due" FOREIGN KEY ("due_id") REFERENCES "dues"("id") ON DELETE SET NULL
       )
     `);

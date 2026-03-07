@@ -61,7 +61,7 @@ export class LoanService implements ILoanService {
         );
         throw new BadRequestException('Invalid interest calculation result');
       }
-
+      console.log("data====", data)
       const loan = await this.loansRepo.create(data);
       this.logger.debug({ loanId: loan.id }, 'Loan created, processing loan items');
 
@@ -105,6 +105,8 @@ export class LoanService implements ILoanService {
         createdBy,
         createdAt,
       } = loan;
+
+      console.log("loan====", loan)
 
       const loanId = loan.id;
 

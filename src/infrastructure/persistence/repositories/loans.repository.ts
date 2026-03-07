@@ -16,13 +16,13 @@ import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 
 @Injectable()
 export class LoansRepository implements ILoansRepository {
-  constructor(@InjectRepository(LoanEntity) private loanRepo: Repository<LoanEntity>) {}
+  constructor(@InjectRepository(LoanEntity) private loanRepo: Repository<LoanEntity>) { }
 
   async create(createLoan: Loan): Promise<Loan> {
     const { loanItems, ...loanData } = createLoan as Loan & { loanItems?: unknown[] };
     const entity = this.loanRepo.create({
       ...loanData,
-      createdById: createLoan.createdBy,
+      createdBy: createLoan.createdBy,
     });
     const created = await this.loanRepo.save(entity);
     return plainToInstance(Loan, created, { excludeExtraneousValues: true });
@@ -35,17 +35,18 @@ export class LoansRepository implements ILoansRepository {
 
   async update(id: string, updateDto: Loan): Promise<Loan> {
     const { loanItems, id: _omitId, ...data } = updateDto as Loan & { loanItems?: unknown[] };
+    const createdBy = updateDto.createdBy;
     await this.loanRepo.update(
-      { id, createdById: updateDto.createdBy },
-      { ...data, createdById: updateDto.createdBy } as Partial<LoanEntity>,
+      { id, createdBy: createdBy },
+      { ...data, createdBy: createdBy } as Partial<LoanEntity>,
     );
-    const updated = await this.loanRepo.findOne({ where: { id, createdById: updateDto.createdBy } });
+    const updated = await this.loanRepo.findOne({ where: { id, createdBy: createdBy } });
     if (!updated) return null;
     return plainToInstance(Loan, updated, { excludeExtraneousValues: true });
   }
 
   async findById(id: string, createdBy: string): Promise<Loan> {
-    const loan = await this.loanRepo.findOne({ where: { id, createdById: createdBy } });
+    const loan = await this.loanRepo.findOne({ where: { id, createdBy: createdBy } });
     if (!loan) return null;
     return plainToInstance(Loan, loan, { excludeExtraneousValues: true });
   }
@@ -57,7 +58,7 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async findByCreatedBy(createdBy: string): Promise<Loan[]> {
-    const loans = await this.loanRepo.find({ where: { createdById: createdBy } });
+    const loans = await this.loanRepo.find({ where: { createdBy: createdBy } });
     return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
@@ -71,7 +72,7 @@ export class LoansRepository implements ILoansRepository {
       .createQueryBuilder('loan')
       .where('1=1')
       .andWhere(customerId ? 'loan.customer_id = :customerId' : '1=1', { customerId })
-      .andWhere(createdBy ? 'loan.created_by_id = :createdBy' : '1=1', { createdBy })
+      .andWhere(createdBy ? 'loan.created_by = :createdBy' : '1=1', { createdBy })
       .andWhere(status ? 'loan.status = :status' : '1=1', { status });
 
     const [loans, totalCount] = await qb
@@ -90,7 +91,7 @@ export class LoansRepository implements ILoansRepository {
       ])
       .where('1=1')
       .andWhere(customerId ? 'loan.customer_id = :customerId' : '1=1', { customerId })
-      .andWhere(createdBy ? 'loan.created_by_id = :createdBy' : '1=1', { createdBy })
+      .andWhere(createdBy ? 'loan.created_by = :createdBy' : '1=1', { createdBy })
       .andWhere(status ? 'loan.status = :status' : '1=1', { status })
       .getRawOne();
 
@@ -116,7 +117,7 @@ export class LoansRepository implements ILoansRepository {
     const qb = this.loanRepo
       .createQueryBuilder('loan')
       .leftJoinAndSelect('loan.loanItems', 'li')
-      .where('loan.created_by_id = :userId', { userId })
+      .where('loan.created_by = :userId', { userId })
       .andWhere('loan.created_at >= :startDate', { startDate })
       .andWhere('loan.created_at <= :endDate', { endDate });
 
@@ -170,33 +171,33 @@ export class LoansRepository implements ILoansRepository {
       .createQueryBuilder()
       .select('COUNT(DISTINCT c.id)', 'count')
       .from('customers', 'c')
-      .where('c.created_by_id = :userId', { userId })
+      .where('c.created_by = :userId', { userId })
       .getRawOne();
 
     const itemStats = itemId
       ? await this.loanRepo.manager
-          .createQueryBuilder()
-          .select('COUNT(li.id)', 'totalItems')
-          .addSelect('SUM(li.net_weight_in_grams)', 'totalNetWeight')
-          .addSelect('SUM(li.gross_weight_in_grams)', 'totalGrossWeight')
-          .from('loan_items', 'li')
-          .innerJoin('loans', 'l', 'l.id = li.loan_id')
-          .where('l.created_by_id = :userId', { userId })
-          .andWhere('l.created_at >= :startDate', { startDate })
-          .andWhere('l.created_at <= :endDate', { endDate })
-          .andWhere('li.item_id = :itemId', { itemId })
-          .getRawOne()
+        .createQueryBuilder()
+        .select('COUNT(li.id)', 'totalItems')
+        .addSelect('SUM(li.net_weight_in_grams)', 'totalNetWeight')
+        .addSelect('SUM(li.gross_weight_in_grams)', 'totalGrossWeight')
+        .from('loan_items', 'li')
+        .innerJoin('loans', 'l', 'l.id = li.loan_id')
+        .where('l.created_by = :userId', { userId })
+        .andWhere('l.created_at >= :startDate', { startDate })
+        .andWhere('l.created_at <= :endDate', { endDate })
+        .andWhere('li.item_id = :itemId', { itemId })
+        .getRawOne()
       : await this.loanRepo.manager
-          .createQueryBuilder()
-          .select('COUNT(li.id)', 'totalItems')
-          .addSelect('SUM(li.net_weight_in_grams)', 'totalNetWeight')
-          .addSelect('SUM(li.gross_weight_in_grams)', 'totalGrossWeight')
-          .from('loan_items', 'li')
-          .innerJoin('loans', 'l', 'l.id = li.loan_id')
-          .where('l.created_by_id = :userId', { userId })
-          .andWhere('l.created_at >= :startDate', { startDate })
-          .andWhere('l.created_at <= :endDate', { endDate })
-          .getRawOne();
+        .createQueryBuilder()
+        .select('COUNT(li.id)', 'totalItems')
+        .addSelect('SUM(li.net_weight_in_grams)', 'totalNetWeight')
+        .addSelect('SUM(li.gross_weight_in_grams)', 'totalGrossWeight')
+        .from('loan_items', 'li')
+        .innerJoin('loans', 'l', 'l.id = li.loan_id')
+        .where('l.created_by = :userId', { userId })
+        .andWhere('l.created_at >= :startDate', { startDate })
+        .andWhere('l.created_at <= :endDate', { endDate })
+        .getRawOne();
 
     return plainToInstance(LoanStats, {
       ...stats,
@@ -208,10 +209,10 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async delete(id: string, createdBy: string): Promise<void> {
-    await this.loanRepo.delete({ id, createdById: createdBy });
+    await this.loanRepo.delete({ id, createdBy: createdBy });
   }
 
   async deleteByCustomerId(customerId: string, createdBy: string): Promise<void> {
-    await this.loanRepo.delete({ customerId, createdById: createdBy });
+    await this.loanRepo.delete({ customerId, createdBy: createdBy });
   }
 }

@@ -49,13 +49,13 @@ export interface ResumeAnalysisResult {
     summary: string;
   };
   photoAnalysis: {
-    identifiedPhotoIndex: number | null;
+    identifiedPhotoIndex: number;
     photoDetails: CandidatePhotoAnalysis[];
     bestPhoto: {
       index: number;
       base64: string;
       reasoning: string;
-    } | null;
+    };
   };
   aiProvider: 'openai' | 'gemini' | 'claude';
   generatedInsights: string;

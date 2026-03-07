@@ -32,8 +32,8 @@ async function bootstrap(): Promise<void> {
   }
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Jobs Microservice')
-    .setDescription('The Jobs Microservice API description')
+    .setTitle('byajbazaar Microservice')
+    .setDescription('The byajbazaar Microservice API description')
     .addBearerAuth(
       {
         type: 'http',

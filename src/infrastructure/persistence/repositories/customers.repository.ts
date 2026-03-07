@@ -8,10 +8,13 @@ import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class CustomersRepository implements ICustomersRepository {
-  constructor(@InjectRepository(CustomerEntity) private customerRepo: Repository<CustomerEntity>) {}
+  constructor(@InjectRepository(CustomerEntity) private customerRepo: Repository<CustomerEntity>) { }
 
   async create(createCustomer: Customer): Promise<Customer> {
-    const entity = this.customerRepo.create(createCustomer);
+    const entity = this.customerRepo.create({
+      ...createCustomer,
+      createdBy: createCustomer.createdBy,
+    });
     const created = await this.customerRepo.save(entity);
     return plainToInstance(Customer, created, { excludeExtraneousValues: true });
   }
@@ -23,15 +26,22 @@ export class CustomersRepository implements ICustomersRepository {
   }
 
   async update(id: string, updateDto: Customer, createdBy: string): Promise<Customer> {
-    const { id: _omitId, ...rest } = updateDto as Customer & { id?: string };
-    await this.customerRepo.update({ id, createdById: createdBy }, rest as Partial<CustomerEntity>);
-    const updated = await this.customerRepo.findOne({ where: { id, createdById: createdBy } });
+    const {
+      id: _omitId,
+      createdBy: _omitCreatedBy,
+      profilePhoto: _omitProfilePhoto,
+      aadharCard: _omitAadharCard,
+      panCard: _omitPanCard,
+      ...rest
+    } = updateDto as Customer & { id?: string; createdBy?: string };
+    await this.customerRepo.update({ id, createdBy: createdBy }, rest as Partial<CustomerEntity>);
+    const updated = await this.customerRepo.findOne({ where: { id, createdBy: createdBy } });
     if (!updated) return null;
     return plainToInstance(Customer, updated, { excludeExtraneousValues: true });
   }
 
   async findById(id: string, createdBy: string): Promise<Customer> {
-    const customer = await this.customerRepo.findOne({ where: { id, createdById: createdBy } });
+    const customer = await this.customerRepo.findOne({ where: { id, createdBy: createdBy } });
     if (!customer) return null;
     return plainToInstance(Customer, customer, { excludeExtraneousValues: true });
   }
@@ -44,7 +54,7 @@ export class CustomersRepository implements ICustomersRepository {
 
     const qb = this.customerRepo
       .createQueryBuilder('c')
-      .where(createdBy ? 'c.created_by_id = :createdBy' : '1=1', { createdBy })
+      .where(createdBy ? 'c.created_by = :createdBy' : '1=1', { createdBy })
       .orderBy(`c.${sortField}`, sortOrder)
       .skip(skip)
       .take(pageSize);
@@ -67,6 +77,6 @@ export class CustomersRepository implements ICustomersRepository {
   }
 
   async delete(id: string, createdBy: string): Promise<void> {
-    await this.customerRepo.delete({ id, createdById: createdBy });
+    await this.customerRepo.delete({ id, createdBy: createdBy });
   }
 }

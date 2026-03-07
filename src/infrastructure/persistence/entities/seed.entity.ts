@@ -16,7 +16,7 @@ export class SeedEntity {
   timestamp: Date;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  description: string | null;
+  description: string;
 
   @CreateDateColumn()
   createdAt: Date;

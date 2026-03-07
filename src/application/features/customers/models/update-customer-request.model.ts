@@ -44,4 +44,28 @@ export class UpdateCustomerRequestModel {
   @IsString()
   @IsOptional()
   location?: string;
+
+  @Expose()
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Profile photo file (JPEG, PNG, WebP) - maximum 5MB',
+  })
+  profilePhoto?: Express.Multer.File;
+
+  @Expose()
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Aadhar card file (JPEG, PNG, WebP) - maximum 5MB',
+  })
+  aadharCard?: Express.Multer.File;
+
+  @Expose()
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'PAN card file (JPEG, PNG, WebP) - maximum 5MB',
+  })
+  panCard?: Express.Multer.File;
 }

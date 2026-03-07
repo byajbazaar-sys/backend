@@ -29,7 +29,7 @@ export class ItemsSeed extends BaseSeed {
       await this.itemRepo.save({
         name: 'Gold',
         description: 'Pure gold item',
-        createdById: SYSTEM_USER_ID,
+        createdBy: SYSTEM_USER_ID,
       });
       this.logger.log('Gold item created successfully');
     } else {
@@ -41,7 +41,7 @@ export class ItemsSeed extends BaseSeed {
       await this.itemRepo.save({
         name: 'Silver',
         description: 'Pure silver item',
-        createdById: SYSTEM_USER_ID,
+        createdBy: SYSTEM_USER_ID,
       });
       this.logger.log('Silver item created successfully');
     } else {

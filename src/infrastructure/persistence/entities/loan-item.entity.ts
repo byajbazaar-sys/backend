@@ -31,11 +31,11 @@ export class LoanItemEntity {
   item: ItemEntity;
 
   @Column({ type: 'uuid' })
-  createdById: string;
+  createdBy: string;
 
   @ManyToOne(() => UserEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'created_by_id' })
-  createdByUser: UserEntity;
+  @JoinColumn({ name: 'created_by' })
+  user: UserEntity;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
   amount: number;
@@ -44,7 +44,7 @@ export class LoanItemEntity {
   itemName: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  itemDescription: string | null;
+  itemDescription: string;
 
   @Column({ type: 'decimal', precision: 12, scale: 4 })
   netWeightInGrams: number;
@@ -53,7 +53,7 @@ export class LoanItemEntity {
   grossWeightInGrams: number;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  imageRef: string | null;
+  imageRef: string;
 
   @CreateDateColumn()
   createdAt: Date;

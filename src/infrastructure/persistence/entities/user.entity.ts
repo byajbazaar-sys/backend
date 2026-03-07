@@ -20,13 +20,16 @@ export class UserEntity {
   id: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  firstName: string | null;
+  firstName: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  lastName: string | null;
+  lastName: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  phoneNumber: string;
 
   @Column({ type: 'varchar', length: 255, select: true })
   password: string;
@@ -35,31 +38,31 @@ export class UserEntity {
   isEmailVerified: boolean;
 
   @Column({ type: 'timestamptz', nullable: true })
-  emailVerifiedAt: Date | null;
+  emailVerifiedAt: Date;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  resetPasswordToken: string | null;
+  resetPasswordToken: string;
 
   @Column({ type: 'timestamptz', nullable: true })
-  resetPasswordExpires: Date | null;
+  resetPasswordExpires: Date;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  emailVerificationToken: string | null;
+  emailVerificationToken: string;
 
   @Column({ type: 'timestamptz', nullable: true })
-  emailVerificationExpires: Date | null;
+  emailVerificationExpires: Date;
 
   @Column({ type: 'enum', enum: EUserType, enumName: 'e_user_type_enum', default: EUserType.User })
   userType: EUserType;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  profilePhotoRef: string | null;
+  profilePhotoRef: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  businessName: string | null;
+  businessName: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  address: string | null;
+  address: string;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -67,21 +70,21 @@ export class UserEntity {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @OneToMany(() => CustomerEntity, (c) => c.createdByUser)
+  @OneToMany(() => CustomerEntity, (c) => c.createdBy)
   customers: CustomerEntity[];
 
-  @OneToMany(() => LoanEntity, (l) => l.createdByUser)
+  @OneToMany(() => LoanEntity, (l) => l.createdBy)
   loans: LoanEntity[];
 
-  @OneToMany(() => ItemEntity, (i) => i.createdByUser)
+  @OneToMany(() => ItemEntity, (i) => i.createdBy)
   items: ItemEntity[];
 
-  @OneToMany(() => TransactionEntity, (t) => t.createdByUser)
+  @OneToMany(() => TransactionEntity, (t) => t.createdBy)
   transactions: TransactionEntity[];
 
-  @OneToMany(() => DueEntity, (d) => d.createdByUser)
+  @OneToMany(() => DueEntity, (d) => d.createdBy)
   dues: DueEntity[];
 
-  @OneToMany(() => NotificationEntity, (n) => n.createdByUser)
+  @OneToMany(() => NotificationEntity, (n) => n.createdBy)
   notifications: NotificationEntity[];
 }

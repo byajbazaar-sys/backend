@@ -10,7 +10,7 @@ export interface IDuesRepository {
   bulkCreate(dues: Due[]): Promise<Due[]>;
   updatePastDues(): Promise<number>;
   findById(id: string, createdBy: string): Promise<Due>;
-  findByIdWithDetails(id: string, createdBy: string): Promise<Due | null>;
+  findByIdWithDetails(id: string, createdBy: string): Promise<Due>;
   update(id: string, due: Due): Promise<Due>;
   deleteByLoanId(loanId: string, types?: EDueType[]): Promise<void>;
   findByLoanIdAndType(loanId: string, types: EDueType[]): Promise<Due[]>;

@@ -16,6 +16,7 @@ export class UsersRepository implements IUsersRepository {
     if (dto.password) {
       dto.password = hashSync(dto.password, BCRYPT_SALT_ROUNDS);
     }
+    console.log(dto);
     const entity = this.userRepo.create(dto);
     const created = await this.userRepo.save(entity);
     return plainToInstance(User, created, { excludeExtraneousValues: true });

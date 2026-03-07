@@ -28,7 +28,7 @@ export class UpdateUserRequestModel {
   @IsOptional()
   @IsString({ message: 'Phone number must be a string' })
   @Matches(PHONE_E164_REGEX, { message: 'Please provide a valid phone number in international format' })
-  phoneNumber?: string | null;
+  phoneNumber?: string;
 
   @ApiProperty({ example: true, required: false, description: 'User active status' })
   @IsOptional()
@@ -56,7 +56,7 @@ export class UpdateUserRequestModel {
   })
   @IsOptional()
   @IsString({ message: 'Business name must be a string' })
-  businessName?: string | null;
+  businessName?: string;
 
   @ApiProperty({
     example: '123 Main Street, City, State, ZIP Code',
@@ -66,5 +66,5 @@ export class UpdateUserRequestModel {
   })
   @IsOptional()
   @IsString({ message: 'Address must be a string' })
-  address?: string | null;
+  address?: string;
 }

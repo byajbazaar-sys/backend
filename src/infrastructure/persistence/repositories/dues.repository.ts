@@ -9,7 +9,7 @@ import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class DuesRepository implements IDuesRepository {
-  constructor(@InjectRepository(DueEntity) private dueRepo: Repository<DueEntity>) {}
+  constructor(@InjectRepository(DueEntity) private dueRepo: Repository<DueEntity>) { }
 
   async listDues(params: DuesFilterOptions): Promise<Paged<Due>> {
     const { loanIds, createdBy, type, customerName } = params;
@@ -22,7 +22,7 @@ export class DuesRepository implements IDuesRepository {
       .leftJoinAndSelect('d.customer', 'customer');
 
     if (loanIds?.length) qb.andWhere('d.loanId IN (:...loanIds)', { loanIds });
-    if (createdBy) qb.andWhere('d.createdById = :createdBy', { createdBy });
+    if (createdBy) qb.andWhere('d.created_by = :createdBy', { createdBy });
     if (type?.length) qb.andWhere('d.type IN (:...type)', { type });
     if (customerName) {
       qb.andWhere(
@@ -39,10 +39,10 @@ export class DuesRepository implements IDuesRepository {
     const customerIds = [...new Set(items.map((d) => d.customerId))];
     const latestTxs = customerIds.length
       ? await txRepo
-          .createQueryBuilder('t')
-          .where('t.customerId IN (:...customerIds)', { customerIds })
-          .orderBy('t.paidAt', 'DESC')
-          .getMany()
+        .createQueryBuilder('t')
+        .where('t.customerId IN (:...customerIds)', { customerIds })
+        .orderBy('t.paidAt', 'DESC')
+        .getMany()
       : [];
     const latestByCustomer = new Map<string, typeof latestTxs[0]>();
     for (const tx of latestTxs) {
@@ -65,13 +65,25 @@ export class DuesRepository implements IDuesRepository {
   }
 
   async create(due: Due): Promise<Due> {
-    const entity = this.dueRepo.create(due);
+    const entity = this.dueRepo.create({
+      ...due,
+      createdBy: due.createdBy,
+      customer: due.customerId ? { id: due.customerId } : undefined,
+      loan: due.loanId ? { id: due.loanId } : undefined,
+    });
     const created = await this.dueRepo.save(entity);
     return plainToInstance(Due, created, { excludeExtraneousValues: true });
   }
 
   async bulkCreate(dues: Due[]): Promise<Due[]> {
-    const entities = this.dueRepo.create(dues);
+    const entities = this.dueRepo.create(
+      dues.map((d) => ({
+        ...d,
+        createdBy: d.createdBy,
+        customer: d.customerId ? { id: d.customerId } : undefined,
+        loan: d.loanId ? { id: d.loanId } : undefined,
+      })),
+    );
     const created = await this.dueRepo.save(entities);
     return plainToInstance(Due, created, { excludeExtraneousValues: true });
   }
@@ -89,15 +101,15 @@ export class DuesRepository implements IDuesRepository {
 
   async findById(id: string, createdBy: string): Promise<Due> {
     const due = await this.dueRepo.findOne({
-      where: { id, createdById: createdBy },
+      where: { id, createdBy: createdBy },
     });
     if (!due) return null;
     return plainToInstance(Due, due, { excludeExtraneousValues: true });
   }
 
-  async findByIdWithDetails(id: string, createdBy: string): Promise<Due | null> {
+  async findByIdWithDetails(id: string, createdBy: string): Promise<Due> {
     const due = await this.dueRepo.findOne({
-      where: { id, createdById: createdBy },
+      where: { id, createdBy: createdBy },
       relations: ['customer'],
     });
     if (!due) return null;
@@ -115,10 +127,8 @@ export class DuesRepository implements IDuesRepository {
   }
 
   async update(id: string, due: Due): Promise<Due> {
-    const { id: _omitId, customer, latestTransaction, ...rest } = due as Due & { id?: string };
-    const updateData = { ...rest, createdById: rest.createdBy };
-    delete (updateData as Record<string, unknown>).createdBy;
-    await this.dueRepo.update(id, updateData as Partial<DueEntity>);
+    const { id: _omitId, customer, latestTransaction, createdBy: _omitCreatedBy, ...rest } = due as Due & { id?: string };
+    await this.dueRepo.update(id, rest as Partial<DueEntity>);
     const updated = await this.dueRepo.findOne({ where: { id } });
     if (!updated) return null;
     return plainToInstance(Due, updated, { excludeExtraneousValues: true });

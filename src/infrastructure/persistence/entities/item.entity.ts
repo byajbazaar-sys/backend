@@ -17,17 +17,17 @@ export class ItemEntity {
   id: string;
 
   @Column({ type: 'uuid' })
-  createdById: string;
+  createdBy: string;
 
   @ManyToOne(() => UserEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'created_by_id' })
-  createdByUser: UserEntity;
+  @JoinColumn({ name: 'created_by' })
+  user: UserEntity;
 
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  description: string | null;
+  description: string;
 
   @CreateDateColumn()
   createdAt: Date;

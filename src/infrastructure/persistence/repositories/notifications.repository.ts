@@ -14,7 +14,7 @@ import { ENotificationChannel, ENotificationStatus, ESortOrder, getPaginationVal
 export class NotificationsRepository implements INotificationsRepository {
   constructor(
     @InjectRepository(NotificationEntity) private readonly notificationRepo: Repository<NotificationEntity>,
-  ) {}
+  ) { }
 
   async create(notification: Notification): Promise<Notification> {
     const entity = this.notificationRepo.create({
@@ -26,13 +26,13 @@ export class NotificationsRepository implements INotificationsRepository {
       externalId: notification.externalId,
       metadata: notification.metadata,
       errorMessage: notification.errorMessage,
-      createdById: notification.createdBy ?? null,
+      createdBy: notification.createdBy,
     });
     const created = await this.notificationRepo.save(entity);
     return plainToInstance(Notification, created, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, notification: Partial<Notification>): Promise<Notification | null> {
+  async update(id: string, notification: Partial<Notification>): Promise<Notification> {
     const updateData: Partial<NotificationEntity> = {};
     if (notification.status !== undefined) updateData.status = notification.status as ENotificationStatus;
     if (notification.externalId !== undefined) updateData.externalId = notification.externalId;
@@ -44,9 +44,9 @@ export class NotificationsRepository implements INotificationsRepository {
     return plainToInstance(Notification, updated, { excludeExtraneousValues: true });
   }
 
-  async findById(id: string, createdBy?: string): Promise<Notification | null> {
-    const where: { id: string; createdById?: string } = { id };
-    if (createdBy) where.createdById = createdBy;
+  async findById(id: string, createdBy?: string): Promise<Notification> {
+    const where: { id: string; createdBy?: string } = { id };
+    if (createdBy) where.createdBy = createdBy;
 
     const doc = await this.notificationRepo.findOne({ where });
     if (!doc) return null;
@@ -63,7 +63,7 @@ export class NotificationsRepository implements INotificationsRepository {
     if (params.channel) qb.andWhere('n.channel = :channel', { channel: params.channel });
     if (params.status) qb.andWhere('n.status = :status', { status: params.status });
     if (params.recipient) qb.andWhere('n.recipient ILIKE :recipient', { recipient: `%${params.recipient}%` });
-    if (params.createdBy) qb.andWhere('n.created_by_id = :createdBy', { createdBy: params.createdBy });
+    if (params.createdBy) qb.andWhere('n.created_by = :createdBy', { createdBy: params.createdBy });
 
     const [docs, totalCount] = await qb
       .orderBy(`n.${sortField}`, sortOrder)

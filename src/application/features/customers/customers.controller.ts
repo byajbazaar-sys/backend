@@ -136,19 +136,45 @@ export class CustomersController {
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Customer not found' })
   @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Not authorized to update this customer' })
   @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Email already exists' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'profilePhoto', maxCount: 1 },
+      { name: 'aadharCard', maxCount: 1 },
+      { name: 'panCard', maxCount: 1 },
+    ]),
+  )
   @HttpCode(HttpStatus.OK)
   async update(
     @Param() params: GetCustomerParamsModel,
     @Body() body: UpdateCustomerRequestModel,
     @Identity() identity: IIdentity,
+    @UploadedFiles()
+    files: {
+      profilePhoto?: Express.Multer.File[];
+      aadharCard?: Express.Multer.File[];
+      panCard?: Express.Multer.File[];
+    },
   ): Promise<CustomerResponseModel> {
     this.logger.info({ params, body, identity }, 'update called');
     const customerData = plainToInstance(Customer, body, {
       excludeExtraneousValues: true,
     });
+    customerData.profilePhoto = files.profilePhoto?.[0];
+    customerData.aadharCard = files.aadharCard?.[0];
+    customerData.panCard = files.panCard?.[0];
     customerData.createdBy = identity.userId;
     const customer = await this.customerService.update(params.id, customerData);
-    return plainToInstance(CustomerResponseModel, customer, { excludeExtraneousValues: true });
+    return plainToInstance(
+      CustomerResponseModel,
+      {
+        ...customer,
+        profilePhotoUrl: customer.profilePhotoRef,
+        aadhaarCardUrl: customer.aadhaarCardRef,
+        panCardUrl: customer.panCardRef,
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Delete(':id')

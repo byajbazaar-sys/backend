@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumber, IsEnum, IsMongoId, Min, IsArray } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsEnum, IsMongoId, Min, IsArray, IsUUID } from 'class-validator';
 import { Expose, plainToInstance, Transform, Type } from 'class-transformer';
 import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../enums';
 import { CreateLoanItemRequestModel } from './create-loan-item-request.model';
@@ -9,7 +9,7 @@ export class CreateLoanRequestModel {
   @ApiProperty({ description: 'Customer ID', example: '507f1f77bcf86cd799439011' })
   @IsString()
   @IsNotEmpty()
-  @IsMongoId()
+  @IsUUID()
   customerId: string;
 
   @Expose()

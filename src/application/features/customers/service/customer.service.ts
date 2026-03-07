@@ -88,7 +88,14 @@ export class CustomerService implements ICustomerService {
         throw new NotFoundException('Customer not found');
       }
 
-      return customer;
+      const response = {
+        ...customer,
+        profilePhotoUrl: customer.profilePhotoRef ? await this.customersFileStorage.getUrlAsync(customer.profilePhotoRef) : null,
+        aadhaarCardUrl: customer.aadhaarCardRef ? await this.customersFileStorage.getUrlAsync(customer.aadhaarCardRef) : null,
+        panCardUrl: customer.panCardRef ? await this.customersFileStorage.getUrlAsync(customer.panCardRef) : null,
+      };
+
+      return response;
     } catch (err) {
       if (err instanceof NotFoundException) {
         throw err;
@@ -118,13 +125,74 @@ export class CustomerService implements ICustomerService {
         throw new NotFoundException('Customer not found');
       }
 
-      const updatedCustomer = await this.customersRepo.update(id, body, body.createdBy);
+      if (body.profilePhoto) {
+        if (existingCustomer.profilePhotoRef) {
+          try {
+            await this.customersFileStorage.removeAsync(existingCustomer.profilePhotoRef);
+          } catch (err) {
+            this.logger.warn({ err, customerId: id }, 'Failed to delete old profile photo');
+          }
+        }
+        const fileExtension = body.profilePhoto.mimetype.split('/')[1];
+        body.profilePhotoRef = `customers/profiles/${id}.${fileExtension}`;
+        await this.customersFileStorage.writeAsync(
+          body.profilePhotoRef,
+          body.profilePhoto.buffer,
+          body.profilePhoto.mimetype,
+        );
+      }
+
+      if (body.aadharCard) {
+        if (existingCustomer.aadhaarCardRef) {
+          try {
+            await this.customersFileStorage.removeAsync(existingCustomer.aadhaarCardRef);
+          } catch (err) {
+            this.logger.warn({ err, customerId: id }, 'Failed to delete old aadhaar card');
+          }
+        }
+        const fileExtension = body.aadharCard.mimetype.split('/')[1];
+        body.aadhaarCardRef = `customers/documents/aadhar/${id}.${fileExtension}`;
+        await this.customersFileStorage.writeAsync(
+          body.aadhaarCardRef,
+          body.aadharCard.buffer,
+          body.aadharCard.mimetype,
+        );
+      }
+
+      if (body.panCard) {
+        if (existingCustomer.panCardRef) {
+          try {
+            await this.customersFileStorage.removeAsync(existingCustomer.panCardRef);
+          } catch (err) {
+            this.logger.warn({ err, customerId: id }, 'Failed to delete old pan card');
+          }
+        }
+        const fileExtension = body.panCard.mimetype.split('/')[1];
+        body.panCardRef = `customers/documents/pan/${id}.${fileExtension}`;
+        await this.customersFileStorage.writeAsync(body.panCardRef, body.panCard.buffer, body.panCard.mimetype);
+      }
+
+      const { profilePhoto, aadharCard, panCard, ...dataToUpdate } = body;
+      const updatedCustomer = await this.customersRepo.update(id, { ...dataToUpdate } as Customer, body.createdBy);
       if (!updatedCustomer) {
         throw new NotFoundException('Customer not found');
       }
 
+      const response = {
+        ...updatedCustomer,
+        profilePhotoUrl: updatedCustomer.profilePhotoRef
+          ? await this.customersFileStorage.getUrlAsync(updatedCustomer.profilePhotoRef)
+          : null,
+        aadhaarCardUrl: updatedCustomer.aadhaarCardRef
+          ? await this.customersFileStorage.getUrlAsync(updatedCustomer.aadhaarCardRef)
+          : null,
+        panCardUrl: updatedCustomer.panCardRef
+          ? await this.customersFileStorage.getUrlAsync(updatedCustomer.panCardRef)
+          : null,
+      };
+
       this.logger.info({ customerId: id }, 'Customer updated successfully');
-      return updatedCustomer;
+      return response;
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;

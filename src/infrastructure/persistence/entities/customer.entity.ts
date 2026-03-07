@@ -15,23 +15,23 @@ import { TransactionEntity } from './transaction.entity';
 import { DueEntity } from './due.entity';
 
 @Entity('customers')
-@Index(['createdById', 'email'], { unique: true })
+@Index(['createdBy', 'email'], { unique: true })
 export class CustomerEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'uuid' })
-  createdById: string;
+  createdBy: string;
 
   @ManyToOne(() => UserEntity, (u) => u.customers, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'created_by_id' })
-  createdByUser: UserEntity;
+  @JoinColumn({ name: 'created_by' })
+  user: UserEntity;
 
   @Column({ type: 'varchar', length: 100 })
   firstName: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  middleName: string | null;
+  middleName: string;
 
   @Column({ type: 'varchar', length: 100 })
   lastName: string;
@@ -40,22 +40,22 @@ export class CustomerEntity {
   email: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  phone: string | null;
+  phone: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  alternativePhone: string | null;
+  alternativePhone: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  profilePhotoRef: string | null;
+  profilePhotoRef: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  aadhaarCardRef: string | null;
+  aadhaarCardRef: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  panCardRef: string | null;
+  panCardRef: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  location: string | null;
+  location: string;
 
   @CreateDateColumn()
   createdAt: Date;

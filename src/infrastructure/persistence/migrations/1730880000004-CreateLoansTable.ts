@@ -5,7 +5,7 @@ export class CreateLoansTable1730880000004 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE "loans" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
-        "created_by_id" uuid NOT NULL,
+        "created_by" uuid NOT NULL,
         "customer_id" uuid NOT NULL,
         "tenure_type" "e_loan_tenure_type_enum" NOT NULL,
         "tenure_value" integer NOT NULL,
@@ -21,7 +21,7 @@ export class CreateLoansTable1730880000004 implements MigrationInterface {
         "created_at" TIMESTAMP NOT NULL DEFAULT now(),
         "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
         CONSTRAINT "PK_loans" PRIMARY KEY ("id"),
-        CONSTRAINT "FK_loans_created_by" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE CASCADE,
+        CONSTRAINT "FK_loans_created_by" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE CASCADE,
         CONSTRAINT "FK_loans_customer" FOREIGN KEY ("customer_id") REFERENCES "customers"("id") ON DELETE CASCADE
       )
     `);

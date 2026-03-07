@@ -8,6 +8,7 @@ export class CreateUsersTable1730880000001 implements MigrationInterface {
         "first_name" varchar(100),
         "last_name" varchar(100),
         "email" varchar(255) NOT NULL,
+        "phone_number" varchar(20),
         "password" varchar(255) NOT NULL,
         "is_email_verified" boolean NOT NULL DEFAULT false,
         "email_verified_at" TIMESTAMP WITH TIME ZONE,
