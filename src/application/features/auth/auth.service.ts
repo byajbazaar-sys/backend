@@ -36,7 +36,7 @@ export class AuthService implements IAuthService {
     @Inject(EMAIL_TEMPLATE_SERVICE) private readonly emailTemplateService: IEmailTemplateService,
     private readonly webAppOptions: WebAppOptions,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   async login(email: string, password: string): Promise<LoginResponseModel> {
     try {

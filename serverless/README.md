@@ -77,17 +77,28 @@ myNewCron:
 
 ## RDS (PostgreSQL) Deployment
 
-The `resources.yml` defines an RDS PostgreSQL instance. Set env vars and deploy:
+The `resources.yml` defines an RDS PostgreSQL instance. VPC and Subnets are read from **AWS SSM Parameter Store**.
+
+> **Note:** RDS Query Editor requires Aurora. This uses standard RDS PostgreSQL (free tier compatible). For Query Editor, use pgAdmin, DBeaver, or an SSH tunnel to connect.
+
+**One-time setup** (run once per stage):
 
 ```bash
-export DB_MASTER_PASSWORD=YourSecurePassword
-serverless deploy --stage dev \
-  --param="VpcId=vpc-xxxxxxxx" \
-  --param="SubnetIds=subnet-xxx,subnet-yyy"
+VPC_ID=vpc-xxx SUBNET_IDS=subnet-a,subnet-b yarn sls:setup-ssm dev
 ```
 
-**Parameters:** `VpcId`, `SubnetIds` (min 2, different AZs)  
-**Env vars:** `DB_MASTER_USERNAME` (default: postgres), `DB_MASTER_PASSWORD`, `DB_NAME` (default: crowdsay_db)
+Or add `VPC_ID` and `SUBNET_IDS` to `.env`, then run `yarn sls:setup-ssm dev`.
+
+**Deploy** (builds, deploys, then runs migrations):
+
+```bash
+yarn sls:deploy:dev
+```
+
+**Migration Lambda:** The `runMigrations` function runs TypeORM migrations and is invoked automatically after each deploy. To run migrations manually: `serverless invoke -f runMigrations --stage dev`
+
+**SSM parameters:** `/byajbazaar/{stage}/vpc-id`, `/byajbazaar/{stage}/subnet-ids`  
+**Env vars:** `DB_MASTER_USERNAME` (default: postgres), `DB_MASTER_PASSWORD`, `DB_NAME` (default: byajbazaar_db)
 
 To use an external database, remove `resources` from `serverless.yml` and set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` in `.env`.
 
@@ -113,3 +124,11 @@ environment:
 3. **Memory allocation**: Start with 512MB and adjust based on CloudWatch metrics
 4. **Environment-specific configs**: Use stages to manage different environments
 5. **Resource organization**: Keep related resources together in the same file
+
+# Get default VPC ID
+
+aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query 'Vpcs[0].VpcId' --output text
+
+# Get subnet IDs (replace vpc-xxx with your VPC ID)
+
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=vpc-0896b04d21805e1b5" --query 'Subnets[*].SubnetId' --output text | tr '\t' ','

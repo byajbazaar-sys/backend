@@ -1,11 +1,14 @@
 service: byajbazaar-backend
 
 frameworkVersion: '3'
+useDotenv: true
 provider: ${file(serverless/providers.yml)}
 
 plugins:
   - serverless-dotenv-plugin
   - serverless-offline
+  - serverless-plugin-common-excludes
+  - serverless-plugin-include-dependencies
 
 custom:
   dotenv:
@@ -17,6 +20,9 @@ custom:
     noAuth: true
     # Increase timeout for serverless-offline to match function timeout
     timeout: 29
+  includeDependencies:
+    enableCaching: true
+    logLevel: error
 
 functions: ${file(serverless/functions.yml)}
 
@@ -35,7 +41,4 @@ package:
     - '!eslint.config.mjs'
     - '!.git/**'
     - 'dist/**'
-    - 'node_modules/**'
     - 'package.json'
-    - 'package-lock.json'
-    - 'yarn.lock'

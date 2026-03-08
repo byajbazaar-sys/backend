@@ -1,7 +1,13 @@
+runMigrations:
+  handler: dist/src/lambda-handlers/migration.handler
+  description: 'Runs TypeORM migrations - invoked after deployment'
+  timeout: 120
+  memorySize: 512
+
 api:
   handler: dist/src/lambda-handlers/api.handler
   timeout: 29
-  memorySize: 512
+  memorySize: 1512
   events:
     - httpApi:
         method: ANY
@@ -14,7 +20,7 @@ updateDuesCron:
   handler: dist/src/lambda-handlers/cron.handler
   description: 'Cron job to update dues - triggered by EventBridge every 2 hours'
   timeout: 300
-  memorySize: 512
+  memorySize: 1512
   events:
     - schedule:
         rate: rate(2 hours)

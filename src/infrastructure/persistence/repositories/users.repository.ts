@@ -9,7 +9,7 @@ import { IUsersRepository, User } from '../../../application';
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {
-  constructor(@InjectRepository(UserEntity) private userRepo: Repository<UserEntity>) {}
+  constructor(@InjectRepository(UserEntity) private userRepo: Repository<UserEntity>) { }
 
   async create(createUserDto: Partial<User>): Promise<User> {
     const dto = { ...createUserDto };

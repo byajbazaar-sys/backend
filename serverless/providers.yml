@@ -5,6 +5,16 @@ region: ${opt:region, 'ap-south-1'}
 memorySize: 512
 timeout: 30
 logRetentionInDays: 30
+# Lambda must be in the same VPC as RDS to reach private RDS (PubliclyAccessible: false)
+
+# vpc is not needed because the lambda is in the same VPC as the RDS instance
+# vpc:
+#   securityGroupIds:
+#     - !Ref LambdaSecurityGroup
+#   subnetIds:
+#     Fn::Split:
+#       - ','
+#       - '${ssm:/byajbazaar/${sls:stage}/subnet-ids}'
 environment:
   NODE_ENV: ${self:provider.stage}
   NO_COLOR: 'true'
