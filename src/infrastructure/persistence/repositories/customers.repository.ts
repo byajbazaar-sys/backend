@@ -3,7 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
 import { CustomerEntity } from '../entities/customer.entity';
 import { plainToInstance } from 'class-transformer';
-import { ICustomersRepository, Customer, CustomersFilterOptions } from '../../../application';
+import {
+  ICustomersRepository,
+  Customer,
+  CustomersFilterOptions,
+  CustomersDownloadFilterOptions,
+} from '../../../application';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
@@ -74,6 +79,34 @@ export class CustomersRepository implements ICustomersRepository {
       perPage: pageSize,
       totalCount,
     });
+  }
+
+  async listAllCustomers(params: CustomersDownloadFilterOptions): Promise<Customer[]> {
+    const { name, createdBy, startDate, endDate } = params;
+    const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
+    const sortField = params.sortField || 'createdAt';
+
+    const qb = this.customerRepo
+      .createQueryBuilder('c')
+      .where(createdBy ? 'c.created_by = :createdBy' : '1=1', { createdBy })
+      .orderBy(`c.${sortField}`, sortOrder);
+
+    if (name?.trim()) {
+      const searchTerm = name.trim();
+      qb.andWhere(
+        '(c.first_name ILIKE :search OR c.last_name ILIKE :search OR c.email ILIKE :search)',
+        { search: `%${searchTerm}%` },
+      );
+    }
+    if (startDate) qb.andWhere('c.created_at >= :startDate', { startDate });
+    if (endDate) {
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      qb.andWhere('c.created_at <= :endDate', { endDate: endOfDay });
+    }
+
+    const items = await qb.getMany();
+    return plainToInstance(Customer, items, { excludeExtraneousValues: true });
   }
 
   async delete(id: string, createdBy: string): Promise<void> {

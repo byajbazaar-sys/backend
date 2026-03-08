@@ -9,6 +9,7 @@ import {
   Loan,
   LoanExtended,
   LoansFilterOptions,
+  LoansDownloadFilterOptions,
   LoanStats,
   LoanStatsFilterOptions,
 } from '../../../application';
@@ -65,15 +66,23 @@ export class LoansRepository implements ILoansRepository {
   async listLoans(params: LoansFilterOptions): Promise<LoanExtended> {
     const { customerId, createdBy, status } = params;
     const { pageNumber, pageSize, skip } = getPaginationValues(params);
+
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
     const sortField = params.sortField || 'createdAt';
 
-    const qb = this.loanRepo
-      .createQueryBuilder('loan')
-      .where('1=1')
-      .andWhere(customerId ? 'loan.customer_id = :customerId' : '1=1', { customerId })
-      .andWhere(createdBy ? 'loan.created_by = :createdBy' : '1=1', { createdBy })
-      .andWhere(status ? 'loan.status = :status' : '1=1', { status });
+    const qb = this.loanRepo.createQueryBuilder('loan');
+
+    if (customerId) {
+      qb.andWhere('loan.customer_id = :customerId', { customerId });
+    }
+
+    if (createdBy) {
+      qb.andWhere('loan.created_by = :createdBy', { createdBy });
+    }
+
+    if (status) {
+      qb.andWhere('loan.status = :status', { status });
+    }
 
     const [loans, totalCount] = await qb
       .orderBy(`loan.${sortField}`, sortOrder)
@@ -81,18 +90,15 @@ export class LoansRepository implements ILoansRepository {
       .take(pageSize)
       .getManyAndCount();
 
-    const totals = await this.loanRepo
-      .createQueryBuilder('loan')
+    const totals = await qb
+      .clone()
+      .orderBy()   // removes order by
       .select([
-        'SUM(loan.amount_remaining) as "totalAmountRemaining"',
-        'SUM(loan.amount_paid) as "totalAmountPaid"',
-        'SUM(loan.interest_remaining) as "totalInterestRemaining"',
-        'SUM(loan.interest_paid) as "totalInterestPaid"',
+        'ROUND(SUM(loan.amount_remaining),2) as "totalAmountRemaining"',
+        'ROUND(SUM(loan.amount_paid),2) as "totalAmountPaid"',
+        'ROUND(SUM(loan.interest_remaining),2) as "totalInterestRemaining"',
+        'ROUND(SUM(loan.interest_paid),2) as "totalInterestPaid"',
       ])
-      .where('1=1')
-      .andWhere(customerId ? 'loan.customer_id = :customerId' : '1=1', { customerId })
-      .andWhere(createdBy ? 'loan.created_by = :createdBy' : '1=1', { createdBy })
-      .andWhere(status ? 'loan.status = :status' : '1=1', { status })
       .getRawOne();
 
     const data = toPaged(Loan, {
@@ -104,107 +110,121 @@ export class LoansRepository implements ILoansRepository {
 
     return plainToInstance(LoanExtended, {
       ...data,
-      totalAmountRemaining: Number(totals?.totalAmountRemaining ?? totals?.totalamountremaining ?? 0),
-      totalAmountPaid: Number(totals?.totalAmountPaid ?? totals?.totalamountpaid ?? 0),
-      totalInterestRemaining: Number(totals?.totalInterestRemaining ?? totals?.totalinterestremaining ?? 0),
-      totalInterestPaid: Number(totals?.totalInterestPaid ?? totals?.totalinterestpaid ?? 0),
+      totalAmountRemaining: Number(totals?.totalAmountRemaining ?? 0),
+      totalAmountPaid: Number(totals?.totalAmountPaid ?? 0),
+      totalInterestRemaining: Number(totals?.totalInterestRemaining ?? 0),
+      totalInterestPaid: Number(totals?.totalInterestPaid ?? 0),
     });
+  }
+
+  async listAllLoans(params: LoansDownloadFilterOptions): Promise<Loan[]> {
+    const { customerId, createdBy, status, startDate, endDate } = params;
+    const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
+    const sortField = params.sortField || 'createdAt';
+
+    const qb = this.loanRepo.createQueryBuilder('loan');
+
+    if (customerId) qb.andWhere('loan.customer_id = :customerId', { customerId });
+    if (createdBy) qb.andWhere('loan.created_by = :createdBy', { createdBy });
+    if (status) qb.andWhere('loan.status = :status', { status });
+    if (startDate) qb.andWhere('loan.created_at >= :startDate', { startDate });
+    if (endDate) {
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      qb.andWhere('loan.created_at <= :endDate', { endDate: endOfDay });
+    }
+
+    const loans = await qb.orderBy(`loan.${sortField}`, sortOrder).getMany();
+    return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
   async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
     const { startDate, endDate, itemId } = filterOptions;
+    const queryParams = [userId, startDate, endDate, itemId ?? null];
 
-    const qb = this.loanRepo
-      .createQueryBuilder('loan')
-      .leftJoinAndSelect('loan.loanItems', 'li')
-      .where('loan.created_by = :userId', { userId })
-      .andWhere('loan.created_at >= :startDate', { startDate })
-      .andWhere('loan.created_at <= :endDate', { endDate });
+    const statsQuery = this.loanRepo.manager.query(
+      `
+      WITH loan_item_ratio AS (
+          SELECT
+              li.loan_id,
+              SUM(li.amount) AS total_value,
+              SUM(
+                  CASE 
+                      WHEN $4::uuid IS NOT NULL AND li.item_id = $4 THEN li.amount
+                      WHEN $4::uuid IS NULL THEN li.amount
+                      ELSE 0
+                  END
+              ) AS matched_value
+          FROM loan_items li
+          GROUP BY li.loan_id
+      ),
+      loan_ratio AS (
+          SELECT
+              loan_id,
+              CASE 
+                  WHEN total_value > 0 THEN matched_value / total_value
+                  ELSE 0
+              END AS ratio
+          FROM loan_item_ratio
+      )
+      SELECT
+          COUNT(l.id) AS "total",
+          COUNT(*) FILTER (WHERE l.status = 'Open') AS "open",
+          COUNT(*) FILTER (WHERE l.status = 'Closed') AS "closed",
 
-    const loans = await qb.getMany();
+          ROUND(SUM(l.amount_remaining * COALESCE(r.ratio,1)), 2) AS "amountRemaining",
+          ROUND(SUM(l.amount_paid * COALESCE(r.ratio,1)), 2) AS "amountPaid",
+          ROUND(SUM(l.interest_remaining * COALESCE(r.ratio,1)), 2) AS "interestRemaining",
+          ROUND(SUM(l.interest_paid * COALESCE(r.ratio,1)), 2) AS "interestPaid"
 
-    let allocationRatio = 1;
-    if (itemId && loans.length > 0) {
-      const loanIds = loans.map((l) => l.id);
-      const itemTotals = await this.loanRepo.manager
-        .createQueryBuilder()
-        .select('li.loan_id', 'loanId')
-        .addSelect('SUM(li.amount)', 'totalValue')
-        .addSelect(
-          `SUM(CASE WHEN li.item_id = :itemId THEN li.amount ELSE 0 END)`,
-          'matchedValue',
-        )
-        .from('loan_items', 'li')
-        .where('li.loan_id IN (:...loanIds)', { loanIds, itemId })
-        .groupBy('li.loan_id')
-        .getRawMany();
-
-      const totalValue = itemTotals.reduce((s, r) => s + Number(r.totalvalue || 0), 0);
-      const matchedValue = itemTotals.reduce((s, r) => s + Number(r.matchedvalue || 0), 0);
-      allocationRatio = totalValue > 0 ? matchedValue / totalValue : 0;
-    }
-
-    const stats = loans.reduce(
-      (acc, loan) => {
-        const ratio = itemId ? allocationRatio : 1;
-        acc.amountRemaining += Number(loan.amountRemaining || 0) * ratio;
-        acc.amountPaid += Number(loan.amountPaid || 0) * ratio;
-        acc.interestRemaining += Number(loan.interestRemaining || 0) * ratio;
-        acc.interestPaid += Number(loan.interestPaid || 0) * ratio;
-        acc.total += 1;
-        acc.open += loan.status === ELoanStatus.OPEN ? 1 : 0;
-        acc.closed += loan.status === ELoanStatus.CLOSED ? 1 : 0;
-        return acc;
-      },
-      {
-        amountRemaining: 0,
-        amountPaid: 0,
-        interestRemaining: 0,
-        interestPaid: 0,
-        total: 0,
-        open: 0,
-        closed: 0,
-      },
+      FROM loans l
+      LEFT JOIN loan_ratio r ON r.loan_id = l.id
+      
+      WHERE l.created_by = $1
+      AND l.created_at >= $2
+      AND l.created_at <= $3
+  `,
+      queryParams,
     );
 
-    const customersCount = await this.loanRepo.manager
-      .createQueryBuilder()
-      .select('COUNT(DISTINCT c.id)', 'count')
-      .from('customers', 'c')
-      .where('c.created_by = :userId', { userId })
-      .getRawOne();
+    const customersQuery = this.loanRepo.manager.query(
+      `
+      SELECT COUNT(DISTINCT id) as count
+      FROM customers
+      WHERE created_by = $1
+      `,
+      [userId],
+    );
 
-    const itemStats = itemId
-      ? await this.loanRepo.manager
-        .createQueryBuilder()
-        .select('COUNT(li.id)', 'totalItems')
-        .addSelect('SUM(li.net_weight_in_grams)', 'totalNetWeight')
-        .addSelect('SUM(li.gross_weight_in_grams)', 'totalGrossWeight')
-        .from('loan_items', 'li')
-        .innerJoin('loans', 'l', 'l.id = li.loan_id')
-        .where('l.created_by = :userId', { userId })
-        .andWhere('l.created_at >= :startDate', { startDate })
-        .andWhere('l.created_at <= :endDate', { endDate })
-        .andWhere('li.item_id = :itemId', { itemId })
-        .getRawOne()
-      : await this.loanRepo.manager
-        .createQueryBuilder()
-        .select('COUNT(li.id)', 'totalItems')
-        .addSelect('SUM(li.net_weight_in_grams)', 'totalNetWeight')
-        .addSelect('SUM(li.gross_weight_in_grams)', 'totalGrossWeight')
-        .from('loan_items', 'li')
-        .innerJoin('loans', 'l', 'l.id = li.loan_id')
-        .where('l.created_by = :userId', { userId })
-        .andWhere('l.created_at >= :startDate', { startDate })
-        .andWhere('l.created_at <= :endDate', { endDate })
-        .getRawOne();
+    const itemStatsQuery = this.loanRepo.manager.query(
+      `
+      SELECT
+          COUNT(li.id) AS totalItems,
+          SUM(li.net_weight_in_grams) AS totalNetWeight,
+          SUM(li.gross_weight_in_grams) AS totalGrossWeight
+      FROM loan_items li
+      JOIN loans l ON l.id = li.loan_id
+      WHERE l.created_by = $1
+      AND l.created_at >= $2
+      AND l.created_at <= $3
+      AND ($4::uuid IS NULL OR li.item_id = $4)
+    `,
+      queryParams,
+    );
 
+    const [stats, customers, itemStats] = await Promise.all([statsQuery, customersQuery, itemStatsQuery]);
     return plainToInstance(LoanStats, {
-      ...stats,
-      customersCount: Number(customersCount?.count ?? 0),
-      totalItems: Number(itemStats?.totalitems ?? 0),
-      totalNetWeight: Number(itemStats?.totalnetweight ?? 0),
-      totalGrossWeight: Number(itemStats?.totalgrossweight ?? 0),
+      total: Number(stats?.[0]?.total ?? 0),
+      open: Number(stats?.[0]?.open ?? 0),
+      closed: Number(stats?.[0]?.closed ?? 0),
+      amountRemaining: Number(stats?.[0]?.amountRemaining ?? 0),
+      amountPaid: Number(stats?.[0]?.amountPaid ?? 0),
+      interestRemaining: Number(stats?.[0]?.interestRemaining ?? 0),
+      interestPaid: Number(stats?.[0]?.interestPaid ?? 0),
+      customersCount: Number(customers?.[0]?.count ?? 0),
+      totalItems: Number(itemStats?.[0]?.totalitems ?? 0),
+      totalNetWeight: Number(itemStats?.[0]?.totalnetweight ?? 0),
+      totalGrossWeight: Number(itemStats?.[0]?.totalgrossweight ?? 0),
     });
   }
 

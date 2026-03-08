@@ -12,7 +12,7 @@ import { ICustomersRepository, CUSTOMERS_REPOSITORY } from './i-customers.reposi
 import { ICustomerService } from './i-customer.service';
 import { UpdateCustomerRequestModel } from '../models';
 import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions, DUES_REPOSITORY, IDuesRepository } from '../../../shared';
-import { CustomersFilterOptions } from '../options';
+import { CustomersFilterOptions, CustomersDownloadFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
 import { v4 as uuidv4 } from 'uuid';
 import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
@@ -112,6 +112,16 @@ export class CustomerService implements ICustomerService {
       return result;
     } catch (err) {
       this.logger.error({ err, params }, 'Error getting customers');
+      throw err;
+    }
+  }
+
+  async getCustomersForDownload(params: CustomersDownloadFilterOptions): Promise<Customer[]> {
+    try {
+      this.logger.debug({ createdBy: params.createdBy }, 'Getting customers for download');
+      return this.customersRepo.listAllCustomers(params);
+    } catch (err) {
+      this.logger.error({ err, params }, 'Error getting customers for download');
       throw err;
     }
   }

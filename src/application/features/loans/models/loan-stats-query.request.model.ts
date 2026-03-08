@@ -1,6 +1,6 @@
 import { Expose } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsMongoId, IsOptional } from 'class-validator';
+import { IsOptional, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class LoanStatsQueryRequestModel {
@@ -16,7 +16,7 @@ export class LoanStatsQueryRequestModel {
 
   @Expose()
   @ApiProperty({ example: '507f1f77bcf86cd799439011', required: false })
-  @IsMongoId()
+  @IsUUID()
   @IsOptional()
   itemId: string;
 }

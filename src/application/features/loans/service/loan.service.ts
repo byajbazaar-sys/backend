@@ -3,7 +3,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Loan, LoanExtended, LoanItem, LoanStats } from '../domain';
 import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
-import { LoansFilterOptions, LoanStatsFilterOptions } from '../options';
+import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
@@ -61,7 +61,6 @@ export class LoanService implements ILoanService {
         );
         throw new BadRequestException('Invalid interest calculation result');
       }
-      console.log("data====", data)
       const loan = await this.loansRepo.create(data);
       this.logger.debug({ loanId: loan.id }, 'Loan created, processing loan items');
 
@@ -196,11 +195,19 @@ export class LoanService implements ILoanService {
         params.status = ELoanStatus.OPEN;
       }
       this.logger.debug({ createdBy: params.createdBy, status: params.status }, 'Getting loans');
-      const result = await this.loansRepo.listLoans(params);
-      console.log("result", result)
-      return result;
+      return this.loansRepo.listLoans(params);
     } catch (err) {
       this.logger.error({ err, params }, 'Error getting loans');
+      throw err;
+    }
+  }
+
+  async getLoansForDownload(params: LoansDownloadFilterOptions): Promise<Loan[]> {
+    try {
+      this.logger.debug({ createdBy: params.createdBy }, 'Getting loans for download');
+      return this.loansRepo.listAllLoans(params);
+    } catch (err) {
+      this.logger.error({ err, params }, 'Error getting loans for download');
       throw err;
     }
   }

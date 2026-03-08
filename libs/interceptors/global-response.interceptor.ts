@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NestInterceptor,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -21,18 +22,21 @@ export interface ApiResponse<T> {
 }
 
 @Injectable()
-export class GlobalResponseInterceptor<T> implements NestInterceptor<T, ApiResponse<T>> {
+export class GlobalResponseInterceptor<T> implements NestInterceptor<T, ApiResponse<T> | StreamableFile> {
   private readonly logger = new Logger(GlobalResponseInterceptor.name);
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T>> {
-    const response = context.switchToHttp().getResponse();
+  intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T> | StreamableFile> {
     const request = context.switchToHttp().getRequest();
 
     return next.handle().pipe(
       map((data) => {
         const res = this.handleSuccess(data, context);
 
-        this.logger.log(`[${request.method}] ${request.url} → ${res.statusCode} ${res.message}`);
+        if (res instanceof StreamableFile) {
+          this.logger.log(`[${request.method}] ${request.url} → file download`);
+        } else {
+          this.logger.log(`[${request.method}] ${request.url} → ${res.statusCode} ${res.message}`);
+        }
 
         return res;
       }),
@@ -43,9 +47,14 @@ export class GlobalResponseInterceptor<T> implements NestInterceptor<T, ApiRespo
     );
   }
 
-  private handleSuccess(data: any, context: ExecutionContext): ApiResponse<any> {
+  private handleSuccess(data: any, context: ExecutionContext): ApiResponse<any> | StreamableFile {
     const res = context.switchToHttp().getResponse();
     const statusCode = res.statusCode || HttpStatus.OK;
+
+    // Pass through file downloads without wrapping in JSON
+    if (data instanceof StreamableFile) {
+      return data;
+    }
 
     if (data && typeof data === 'object' && 'statusCode' in data) {
       return data;

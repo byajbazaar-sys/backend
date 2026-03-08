@@ -12,6 +12,8 @@ import {
   Inject,
   UseInterceptors,
   UploadedFiles,
+  StreamableFile,
+  Header,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -28,6 +30,7 @@ import { USER_STRATEGY, RolesGuard, Identity, IIdentity, ParseFormDataJsonPipe }
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   CreateLoanRequestModel,
+  DownloadLoansQueryRequestModel,
   LoanResponseModel,
   LoansPagedResponseModel,
   GetLoanParamsModel,
@@ -42,7 +45,9 @@ import {
 } from './models';
 import { ILoanService, LOAN_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
-import { LoansFilterOptions, LoanStatsFilterOptions } from './options';
+import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from './options';
+import { toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { ExportFormat } from '../../shared';
 import { Loan, LoanItem } from './domain';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { v4 as uuidv4 } from 'uuid';
@@ -138,6 +143,62 @@ export class LoansController {
     });
     return plainToInstance(LoanStatsResponseModel, await this.loanService.getStats(identity.userId, filterOptions), {
       excludeExtraneousValues: true,
+    });
+  }
+
+  @Get('download')
+  @ApiOperation({ summary: 'Download loans list as CSV or PDF' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Returns file attachment (csv or pdf)',
+  })
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  @Header('X-Content-Type-Options', 'nosniff')
+  @Header('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length')
+  async downloadLoans(
+    @Query() query: DownloadLoansQueryRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<StreamableFile> {
+    this.logger.info({ query }, 'downloadLoans called');
+    const filterOptions = plainToInstance(LoansDownloadFilterOptions, query, {
+      excludeExtraneousValues: true,
+    });
+    filterOptions.createdBy = identity.userId;
+    const loans = await this.loanService.getLoansForDownload(filterOptions);
+    const items = plainToInstance(LoanResponseModel, loans, {
+      excludeExtraneousValues: true,
+    });
+    const filename = `loans-${Date.now()}`;
+    if (query.format === ExportFormat.CSV) {
+      const buffer = Buffer.from(toCSV(items as unknown as Record<string, unknown>[]), 'utf-8');
+      return new StreamableFile(buffer, {
+        type: 'text/csv; charset=utf-8',
+        disposition: `attachment; filename="${filename}.csv"`,
+        length: buffer.length,
+      });
+    }
+    const fmt = {
+      truncateId: (v: unknown) => (v ? String(v).slice(0, 8) + '...' : ''),
+      formatDate: (v: unknown) =>
+        v instanceof Date ? v.toISOString().slice(0, 10) : v ? new Date(String(v)).toISOString().slice(0, 10) : '',
+      formatNum: (v: unknown) => (v != null ? Number(v).toFixed(2) : ''),
+    };
+    const columns: IPdfColumnConfig[] = [
+      { header: 'ID', key: 'id', width: 55, formatter: fmt.truncateId },
+      { header: 'Customer ID', key: 'customerId', width: 55, formatter: fmt.truncateId },
+      { header: 'Status', key: 'status', width: 45 },
+      { header: 'Amt Remain', key: 'amountRemaining', width: 65, formatter: fmt.formatNum },
+      { header: 'Amt Paid', key: 'amountPaid', width: 65, formatter: fmt.formatNum },
+      { header: 'Int Remain', key: 'interestRemaining', width: 65, formatter: fmt.formatNum },
+      { header: 'Int Paid', key: 'interestPaid', width: 65, formatter: fmt.formatNum },
+      { header: 'Created', key: 'createdAt', width: 75, formatter: fmt.formatDate },
+    ];
+    const pdf = await toPDF(items as unknown as Record<string, unknown>[], columns, 'Loans');
+    return new StreamableFile(pdf, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="${filename}.pdf"`,
+      length: pdf.length,
     });
   }
 

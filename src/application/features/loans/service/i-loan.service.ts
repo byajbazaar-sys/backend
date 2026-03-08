@@ -1,5 +1,5 @@
 import { Loan, LoanExtended, LoanItem } from '../domain';
-import { LoansFilterOptions, LoanStatsFilterOptions } from '../options';
+import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 import { LoanStats } from '../domain';
 import { ELoanStatus } from '../enums';
 
@@ -9,6 +9,7 @@ export interface ILoanService {
   create(data: Loan): Promise<Loan>;
   getById(id: string, createdBy: string): Promise<Loan>;
   getLoans(params: LoansFilterOptions): Promise<LoanExtended>;
+  getLoansForDownload(params: LoansDownloadFilterOptions): Promise<Loan[]>;
   update(id: string, updateData: Loan): Promise<Loan>;
   updateStatus(id: string, status: ELoanStatus, createdBy: string): Promise<Loan>;
   updateLoanItem(loanId: string, itemId: string, updateData: Partial<LoanItem>, createdBy: string): Promise<LoanItem>;

@@ -3,6 +3,7 @@ export * from './update-transaction-request.model';
 export * from './transaction-response.model';
 export * from './get-transaction-params.model';
 export * from './list-transactions-query.model';
+export * from './download-transactions-query.model';
 export * from './transactions-paged-response.model';
 export * from './dues-response.model';
 export * from './dues-paged-response.model';

@@ -3,7 +3,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Transaction, Due } from '../domain';
 import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../repository';
 import { ITransactionService } from './i-transaction.service';
-import { TransactionsFilterOptions, DuesFilterOptions } from '../options';
+import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, DuesFilterOptions } from '../options';
 import { Paged, toPaged } from '@shared-libs';
 import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus, Loan, ILoanService, LOAN_SERVICE, EInterestCalculationMethod } from '../../loans';
 import { ETransactionType } from '../enums';
@@ -116,6 +116,16 @@ export class TransactionService implements ITransactionService {
       return result;
     } catch (err) {
       this.logger.error({ err, params }, 'Error getting transactions');
+      throw err;
+    }
+  }
+
+  async getTransactionsForDownload(params: TransactionsDownloadFilterOptions): Promise<Transaction[]> {
+    try {
+      this.logger.debug({ createdBy: params.createdBy }, 'Getting transactions for download');
+      return this.transactionsRepo.listAllTransactions(params);
+    } catch (err) {
+      this.logger.error({ err, params }, 'Error getting transactions for download');
       throw err;
     }
   }

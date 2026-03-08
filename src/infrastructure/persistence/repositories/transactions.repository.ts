@@ -8,6 +8,7 @@ import {
   ITransactionsRepository,
   Transaction,
   TransactionsFilterOptions,
+  TransactionsDownloadFilterOptions,
 } from '../../../application';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
@@ -81,6 +82,43 @@ export class TransactionsRepository implements ITransactionsRepository {
       perPage: pageSize,
       totalCount,
     });
+  }
+
+  async listAllTransactions(params: TransactionsDownloadFilterOptions): Promise<Transaction[]> {
+    const { loanId, createdBy, startDate, endDate } = params;
+    const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
+    const sortField = params.sortField || 'createdAt';
+
+    const qb = this.transactionRepo
+      .createQueryBuilder('t')
+      .leftJoinAndSelect('t.customer', 'customer')
+      .select([
+        't.id',
+        't.loanId',
+        't.customerId',
+        't.amount',
+        't.transactionType',
+        't.paidIn',
+        't.paidAt',
+        't.createdBy',
+        't.dueId',
+        't.createdAt',
+        'customer.id',
+        'customer.firstName',
+        'customer.lastName',
+      ]);
+
+    if (loanId) qb.andWhere('t.loan_id = :loanId', { loanId });
+    if (createdBy) qb.andWhere('t.created_by = :createdBy', { createdBy });
+    if (startDate) qb.andWhere('t.paid_at >= :startDate', { startDate });
+    if (endDate) {
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      qb.andWhere('t.paid_at <= :endDate', { endDate: endOfDay });
+    }
+
+    const items = await qb.orderBy(`t.${sortField}`, sortOrder).getMany();
+    return plainToInstance(Transaction, items, { excludeExtraneousValues: true });
   }
 
   async findByLoanIdAndTransactionType(
