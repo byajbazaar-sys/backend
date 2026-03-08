@@ -4,14 +4,16 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { IApiOptions, IMsConfig } from './configurations';
-import { GlobalResponseInterceptor, isDev } from '@shared-libs';
+import { GlobalResponseInterceptor, isLocal } from '@shared-libs';
 import { parse } from 'qs';
 import { SeedingService } from './infrastructure/persistence/seeds/seeding.service';
 import { CronService } from './infrastructure/cron';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  const seedingService = app.get<SeedingService>(SeedingService);
-  await seedingService.runAsync();
+  if (isLocal()) {
+    const seedingService = app.get<SeedingService>(SeedingService);
+    await seedingService.runAsync();
+  }
   // Enable CORS for all origins
   app.enableCors({
     origin: '*',

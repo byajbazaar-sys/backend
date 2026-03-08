@@ -1,6 +1,6 @@
-runMigrations:
-  handler: dist/src/lambda-handlers/migration.handler
-  description: 'Runs TypeORM migrations - invoked after deployment'
+runPostDeploy:
+  handler: dist/src/lambda-handlers/post-deploy.handler
+  description: 'Runs migrations + seeds - invoked after deployment'
   timeout: 120
   memorySize: 512
 

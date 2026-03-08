@@ -14,6 +14,13 @@ serverless/
 
 ## Functions
 
+### Post-Deploy (`functions.yml`)
+
+Runs migrations + seeds after each deployment. Invoked automatically by deploy scripts.
+
+- **Handler**: `dist/src/lambda-handlers/post-deploy.handler`
+- **Manual**: `serverless invoke -f runPostDeploy --stage dev`
+
 ### API Function (`functions.yml`)
 
 Defines the main API Gateway Lambda function that handles all HTTP requests.
@@ -89,13 +96,13 @@ VPC_ID=vpc-xxx SUBNET_IDS=subnet-a,subnet-b yarn sls:setup-ssm dev
 
 Or add `VPC_ID` and `SUBNET_IDS` to `.env`, then run `yarn sls:setup-ssm dev`.
 
-**Deploy** (builds, deploys, then runs migrations):
+**Deploy** (builds, deploys, then runs migrations + seeds):
 
 ```bash
 yarn sls:deploy:dev
 ```
 
-**Migration Lambda:** The `runMigrations` function runs TypeORM migrations and is invoked automatically after each deploy. To run migrations manually: `serverless invoke -f runMigrations --stage dev`
+**Post-deploy Lambda:** The `runPostDeploy` function runs migrations and seeds, invoked automatically after each deploy. Manual: `serverless invoke -f runPostDeploy --stage dev`
 
 **SSM parameters:** `/byajbazaar/{stage}/vpc-id`, `/byajbazaar/{stage}/subnet-ids`  
 **Env vars:** `DB_MASTER_USERNAME` (default: postgres), `DB_MASTER_PASSWORD`, `DB_NAME` (default: byajbazaar_db)

@@ -9,7 +9,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { RequestMethod } from '@nestjs/common';
 import { parse } from 'qs';
 import * as serverlessExpress from '@vendia/serverless-express';
-import { SeedingService } from '../infrastructure/persistence/seeds/seeding.service';
 
 let cachedServer: Handler;
 
@@ -19,31 +18,9 @@ async function bootstrap(): Promise<Handler> {
   }
 
   try {
-    // Let NestJS create the Express app internally (avoids deprecated app.router access)
-    // This will also establish MongoDB connection
     const app = await NestFactory.create(AppModule, {
-      logger: ['error', 'warn', 'log']
+      logger: ['error', 'warn', 'log'],
     });
-
-    // Only run seeding if SKIP_SEEDING is not set to 'true'
-    // In Lambda, seeding should typically be skipped as it runs on every cold start
-    const skipSeeding = process.env.SKIP_SEEDING === 'true';
-
-    if (!skipSeeding) {
-      try {
-        const seedingService = app.get<SeedingService>(SeedingService);
-        // Run with timeout to prevent hanging
-        const seedingPromise = seedingService.runAsync();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Seeding timeout after 15 seconds')), 15000),
-        );
-
-        await Promise.race([seedingPromise, timeoutPromise]);
-      } catch (error: any) {
-        console.error('Seeding service failed or timed out:', error?.message);
-        // Don't throw - allow Lambda to continue even if seeding fails
-      }
-    }
 
     // Enable CORS
     app.enableCors({

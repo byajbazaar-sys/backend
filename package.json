@@ -15,9 +15,9 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "sls": "serverless",
     "sls:deploy": "serverless deploy",
-    "sls:deploy:dev": "yarn build && serverless deploy --stage dev && serverless invoke -f runMigrations --stage dev",
-    "sls:deploy:staging": "yarn build && serverless deploy --stage staging && serverless invoke -f runMigrations --stage staging",
-    "sls:deploy:production": "yarn build && serverless deploy --stage production && serverless invoke -f runMigrations --stage production",
+    "sls:deploy:dev": "yarn build && serverless deploy --stage dev && serverless invoke -f runPostDeploy --stage dev",
+    "sls:deploy:staging": "yarn build && serverless deploy --stage staging && serverless invoke -f runPostDeploy --stage staging",
+    "sls:deploy:production": "yarn build && serverless deploy --stage production && serverless invoke -f runPostDeploy --stage production",
     "sls:setup-ssm": "bash scripts/setup-ssm-rds.sh",
     "sls:deploy:function": "serverless deploy function",
     "sls:remove": "serverless remove",
@@ -29,11 +29,7 @@
     "migration:generate": "npm run typeorm -- -d ./src/infrastructure/persistence/type-orm.config.ts migration:generate ./src/infrastructure/persistence/migrations/migration",
     "migration:create": "npm run typeorm -- migration:create ./src/infrastructure/persistence/migrations/migration",
     "migration:down": "npm run typeorm -- -d ./src/infrastructure/persistence/type-orm.config.ts migration:revert",
-    "schema:drop": "npm run typeorm -- -d ./src/infrastructure/persistence/type-orm.config.ts schema:drop",
-    "seed": "node dist/src/scripts/seed.js",
-    "seed:dev": "STAGE=dev node dist/src/scripts/seed.js",
-    "seed:staging": "STAGE=staging node dist/src/scripts/seed.js",
-    "seed:production": "STAGE=production node dist/src/scripts/seed.js"
+    "schema:drop": "npm run typeorm -- -d ./src/infrastructure/persistence/type-orm.config.ts schema:drop"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.69.0",

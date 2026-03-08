@@ -19,7 +19,6 @@ environment:
   NODE_ENV: ${self:provider.stage}
   NO_COLOR: 'true'
   AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
-  SKIP_SEEDING: 'true'
   DB_HOST: !Ref RdsInstance
   DB_PORT: 5432
   DB_NAME: ${env:DB_NAME, 'byajbazaar_db'}
