@@ -10,18 +10,22 @@ export class TransactionsPagedResponseModel implements IPageable<TransactionResp
   items: TransactionResponseModel[];
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Page number', example: 1 })
   page: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Page size', example: 10 })
   perPage: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Total pages', example: 10 })
   totalPages: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Total count', example: 100 })
   totalCount: number;
 

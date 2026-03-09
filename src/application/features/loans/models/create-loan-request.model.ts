@@ -19,6 +19,7 @@ export class CreateLoanRequestModel {
   tenureType: ELoanTenureType;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Tenure value', example: 12 })
   @IsNumber()
   @IsNotEmpty()
@@ -36,6 +37,7 @@ export class CreateLoanRequestModel {
   interestCalculationMethod: EInterestCalculationMethod;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Interest percentage', example: 12.5 })
   @IsNumber()
   @IsNotEmpty()

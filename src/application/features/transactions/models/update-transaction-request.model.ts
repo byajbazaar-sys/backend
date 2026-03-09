@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNumber, IsEnum, IsMongoId, IsDateString, Min, IsUUID } from 'class-validator';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import { ETransactionType, ETransactionPaidIn } from '../enums';
 
 export class UpdateTransactionRequestModel {
@@ -12,6 +12,7 @@ export class UpdateTransactionRequestModel {
   loanId?: string;
 
   @Expose()
+  @Type(() => Number)
   @ApiPropertyOptional({ description: 'Transaction amount', example: 5000 })
   @IsNumber()
   @IsOptional()

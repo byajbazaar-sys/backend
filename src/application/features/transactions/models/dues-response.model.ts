@@ -18,14 +18,17 @@ export class DueResponseModel {
   loanId: string;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ example: 1250.5, description: 'Due amount' })
   dueAmount: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ example: 1000, description: 'Principal amount for this due' })
   principalAmount: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ example: 250.5, description: 'Interest amount for this due' })
   interestAmount: number;
 

@@ -12,4 +12,5 @@ export interface ITransactionsRepository {
   listAllTransactions(params: TransactionsDownloadFilterOptions): Promise<Transaction[]>;
   findByLoanIdAndTransactionType(loanId: string, transactionType: ETransactionType): Promise<Transaction[]>;
   delete(id: string): Promise<void>;
+  deleteByLoanId(loanId: string): Promise<void>;
 }

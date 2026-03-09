@@ -1,4 +1,4 @@
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
 
 export class NotificationsFilterOptions {
@@ -12,9 +12,11 @@ export class NotificationsFilterOptions {
   public recipient?: string;
 
   @Expose()
+  @Type(() => Number)
   public pageNumber: number;
 
   @Expose()
+  @Type(() => Number)
   public pageSize: number;
 
   @Expose()

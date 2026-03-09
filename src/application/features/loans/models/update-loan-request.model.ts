@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNumber, IsEnum, IsMongoId, Min, IsUUID } from 'class-validator';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../enums';
 
 export class UpdateLoanRequestModel {
@@ -18,6 +18,7 @@ export class UpdateLoanRequestModel {
   tenureType?: ELoanTenureType;
 
   @Expose()
+  @Type(() => Number)
   @ApiPropertyOptional({ description: 'Tenure value', example: 12 })
   @IsNumber()
   @IsOptional()
@@ -35,6 +36,7 @@ export class UpdateLoanRequestModel {
   interestCalculationMethod?: EInterestCalculationMethod;
 
   @Expose()
+  @Type(() => Number)
   @ApiPropertyOptional({ description: 'Interest percentage', example: 12.5 })
   @IsNumber()
   @IsOptional()

@@ -35,13 +35,13 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async update(id: string, updateDto: Loan): Promise<Loan> {
-    const { loanItems, id: _omitId, ...data } = updateDto as Loan & { loanItems?: unknown[] };
+    const { loanItems, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
     await this.loanRepo.update(
-      { id, createdBy: createdBy },
-      { ...data, createdBy: createdBy } as Partial<LoanEntity>,
+      { id, createdBy },
+      { ...data },
     );
-    const updated = await this.loanRepo.findOne({ where: { id, createdBy: createdBy } });
+    const updated = await this.loanRepo.findOne({ where: { id, createdBy } });
     if (!updated) return null;
     return plainToInstance(Loan, updated, { excludeExtraneousValues: true });
   }

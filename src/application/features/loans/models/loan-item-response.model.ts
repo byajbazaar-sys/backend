@@ -15,6 +15,7 @@ export class LoanItemResponseModel {
     itemId: string;
 
     @Expose()
+    @Type(() => Number)
     @ApiProperty({ description: 'Item amount', example: 50000 })
     amount: number;
 
@@ -27,10 +28,12 @@ export class LoanItemResponseModel {
     itemDescription?: string;
 
     @Expose()
+    @Type(() => Number)
     @ApiProperty({ description: 'Net weight in grams', example: 50.5 })
     netWeightInGrams: number;
 
     @Expose()
+    @Type(() => Number)
     @ApiProperty({ description: 'Gross weight in grams', example: 55.2 })
     grossWeightInGrams: number;
 
@@ -39,6 +42,7 @@ export class LoanItemResponseModel {
     imageRef?: string;
 
     @Expose()
+    @Type(() => Number)
     @ApiPropertyOptional({ description: 'Current rate of item', example: 5000 })
     currentRate?: number;
 

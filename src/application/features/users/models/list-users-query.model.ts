@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, IsIn, Min, IsEnum } from 'class-validator';
 
 // Define allowed filter fields as enum for Swagger dropdown
@@ -17,6 +17,7 @@ export enum EFilterField {
 export class ListUsersQueryModel {
   @ApiPropertyOptional({ example: 1, minimum: 1, description: 'Page number (1-based)' })
   @IsOptional()
+  @Type(() => Number)
   @Transform(({ value }) => (value !== undefined ? Number(value) : 1))
   @IsInt()
   @Min(1)
@@ -24,6 +25,7 @@ export class ListUsersQueryModel {
 
   @ApiPropertyOptional({ example: 10, minimum: 1, maximum: 100, description: 'Items per page' })
   @IsOptional()
+  @Type(() => Number)
   @Transform(({ value }) => (value !== undefined ? Number(value) : 10))
   @IsInt()
   @Min(1)

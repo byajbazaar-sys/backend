@@ -16,12 +16,14 @@ export class Loan {
   public tenureType: ELoanTenureType;
 
   @Expose()
+  @Type(() => Number)
   public tenureValue: number;
 
   @Expose()
   public interestCalculationMethod: EInterestCalculationMethod;
 
   @Expose()
+  @Type(() => Number)
   public interestPercentage: number;
 
   @Expose()
@@ -38,15 +40,19 @@ export class Loan {
   public loanItems?: LoanItem[];
 
   @Expose()
+  @Type(() => Number)
   public amountPaid: number;
 
   @Expose()
+  @Type(() => Number)
   public amountRemaining: number;
 
   @Expose()
+  @Type(() => Number)
   public interestPaid: number;
 
   @Expose()
+  @Type(() => Number)
   public interestRemaining: number;
 
   @Expose()

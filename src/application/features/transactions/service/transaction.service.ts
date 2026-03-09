@@ -29,56 +29,61 @@ export class TransactionService implements ITransactionService {
       }
       data.customerId = loan.customerId;
 
-      const transaction = await this.transactionsRepo.create(data);
 
-      if (transaction.transactionType === ETransactionType.INTEREST) {
-        if (loan.interestRemaining < transaction.amount) {
+      if (data.transactionType === ETransactionType.INTEREST) {
+        console.log('Interest transaction');
+        console.log(loan.interestRemaining, data.amount);
+        if (loan.interestRemaining < data.amount) {
           throw new BadRequestException('Interest remaining is less than transaction amount');
         }
-        loan.interestRemaining -= transaction.amount;
-        loan.interestPaid += transaction.amount;
+        loan.interestRemaining -= data.amount;
+        loan.interestPaid += data.amount;
       }
+      console.log("loan====", loan)
+      console.log("data====", data)
 
-      if (transaction.transactionType === ETransactionType.PRINCIPAL) {
-        if (loan.amountRemaining < transaction.amount) {
+      if (data.transactionType === ETransactionType.PRINCIPAL) {
+        if (loan.amountRemaining < data.amount) {
           throw new BadRequestException('Amount remaining is less than transaction amount');
         }
-        loan.amountRemaining -= transaction.amount;
-        loan.amountPaid += transaction.amount;
+        loan.amountRemaining -= data.amount;
+        loan.amountPaid += data.amount;
       }
 
-      if (transaction.transactionType === ETransactionType.TOP_UP) {
-        loan.amountRemaining += transaction.amount;
+      if (data.transactionType === ETransactionType.TOP_UP) {
+        loan.amountRemaining += data.amount;
         // Recalculate interest for the additional principal over remaining periods
         const unpaidDues = await this.duesRepo.findByLoanIdAndType(data.loanId, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
         const remainingTenure = unpaidDues.length;
         if (remainingTenure > 0) {
           const rate = loan.interestPercentage / 100;
           if (loan.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
-            loan.interestRemaining += transaction.amount * (Math.pow(1 + rate, remainingTenure) - 1);
+            loan.interestRemaining += data.amount * (Math.pow(1 + rate, remainingTenure) - 1);
           } else {
-            loan.interestRemaining += (loan.interestPercentage * transaction.amount * remainingTenure) / 100;
+            loan.interestRemaining += (loan.interestPercentage * data.amount * remainingTenure) / 100;
           }
         }
       }
 
       if (data.dueId && data.transactionType === ETransactionType.DUE_PAYMENT) {
-        if (due.dueAmount != transaction.amount) {
+        if (due.dueAmount != data.amount) {
           throw new BadRequestException('For due payment, transaction amount should be equal to due amount');
         }
         due.type = EDueType.PAID;
-        due.dueAmount -= transaction.amount;
+        due.dueAmount -= data.amount;
         await this.duesRepo.update(data.dueId, due);
       }
       await this.loansRepo.update(data.loanId, loan);
 
       if (
-        transaction.transactionType === ETransactionType.INTEREST ||
-        transaction.transactionType === ETransactionType.PRINCIPAL ||
-        transaction.transactionType === ETransactionType.TOP_UP
+        data.transactionType === ETransactionType.INTEREST ||
+        data.transactionType === ETransactionType.PRINCIPAL ||
+        data.transactionType === ETransactionType.TOP_UP
       ) {
         await this.loanService.recalculateDuesForLoan(data.loanId, data.createdBy);
       }
+
+      const transaction = await this.transactionsRepo.create(data);
 
       this.logger.info({ transactionId: transaction.id, loanId: loan.id }, 'Transaction created successfully');
       return transaction;

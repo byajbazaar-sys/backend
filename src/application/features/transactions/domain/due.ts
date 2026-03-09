@@ -18,6 +18,7 @@ export class Due {
   public loanId: string;
 
   @Expose()
+  @Type(() => Number)
   public dueAmount: number;
 
   @Expose()
@@ -35,8 +36,10 @@ export class Due {
   public latestTransaction?: Transaction;
 
   @Expose()
+  @Type(() => Number)
   public principalAmount: number;
 
   @Expose()
+  @Type(() => Number)
   public interestAmount: number;
 }

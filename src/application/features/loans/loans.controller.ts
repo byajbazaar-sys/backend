@@ -5,6 +5,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   HttpStatus,
   HttpCode,
   Body,
@@ -207,6 +208,40 @@ export class LoansController {
     });
   }
 
+  @Patch('items/:itemId')
+  @ApiOperation({
+    summary: 'Update loan item',
+    description: 'Update loan item details including amount, name, description, weights, rate, and image. Image can be updated by uploading a new file via multipart/form-data.',
+  })
+  @ApiParam({ name: 'itemId', description: 'Loan Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
+  @ApiOkResponse({ type: LoanItemResponseModel })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan or loan item not found' })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Cannot update loan item in a closed loan' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }]))
+  @HttpCode(HttpStatus.OK)
+  async updateLoanItem(
+    @Param() params: GetLoanItemParamsModel,
+    @Body(new ParseFormDataJsonPipe()) body: UpdateLoanItemRequestModel,
+    @Identity() identity: IIdentity,
+    @UploadedFiles()
+    files: {
+      image?: Express.Multer.File[];
+    },
+  ): Promise<LoanItemResponseModel> {
+    this.logger.info({ params, body, identity }, 'updateLoanItem called');
+    const loanItemData = plainToInstance(LoanItem, body, {
+      excludeExtraneousValues: true,
+    });
+
+    if (files.image && files.image.length > 0) {
+      loanItemData.image = files.image[0];
+    }
+
+    const loanItem = await this.loanService.updateLoanItem(params.itemId, loanItemData, identity.userId);
+    return plainToInstance(LoanItemResponseModel, loanItem, { excludeExtraneousValues: true });
+  }
+
   @Patch(':id/status')
   @ApiOperation({ summary: 'Update loan status (Open/Close)' })
   @ApiParam({ name: 'id', description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
@@ -220,6 +255,17 @@ export class LoansController {
     this.logger.info({ params, body, identity }, 'updateStatus called');
     const loan = await this.loanService.updateStatus(params.id, body.status, identity.userId);
     return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete loan by ID' })
+  @ApiParam({ name: 'id', description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Loan deleted successfully' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(@Param() params: GetLoanParamsModel, @Identity() identity: IIdentity): Promise<void> {
+    this.logger.info({ params, identity }, 'delete called');
+    await this.loanService.delete(params.id, identity.userId);
   }
 
   @Get(':id')
@@ -254,41 +300,5 @@ export class LoansController {
     loanData.createdBy = identity.userId;
     const loan = await this.loanService.update(params.id, loanData);
     return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
-  }
-
-  @Patch(':loanId/items/:itemId')
-  @ApiOperation({
-    summary: 'Update loan item',
-    description: 'Update loan item details including amount, name, description, weights, rate, and image. Image can be updated by uploading a new file via multipart/form-data.',
-  })
-  @ApiParam({ name: 'loanId', description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
-  @ApiParam({ name: 'itemId', description: 'Loan Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
-  @ApiOkResponse({ type: LoanItemResponseModel })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan or loan item not found' })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Cannot update loan item in a closed loan' })
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }]))
-  @HttpCode(HttpStatus.OK)
-  async updateLoanItem(
-    @Param() params: GetLoanItemParamsModel,
-    @Body(new ParseFormDataJsonPipe()) body: UpdateLoanItemRequestModel,
-    @Identity() identity: IIdentity,
-    @UploadedFiles()
-    files: {
-      image?: Express.Multer.File[];
-    },
-  ): Promise<LoanItemResponseModel> {
-    this.logger.info({ params, body, identity }, 'updateLoanItem called');
-    const loanItemData = plainToInstance(LoanItem, body, {
-      excludeExtraneousValues: true,
-    });
-
-    // Add image if provided
-    if (files.image && files.image.length > 0) {
-      loanItemData.image = files.image[0];
-    }
-
-    const loanItem = await this.loanService.updateLoanItem(params.loanId, params.itemId, loanItemData, identity.userId);
-    return plainToInstance(LoanItemResponseModel, loanItem, { excludeExtraneousValues: true });
   }
 }

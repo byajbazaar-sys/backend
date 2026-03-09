@@ -13,6 +13,7 @@ export class Transaction {
   public customerId: string;
 
   @Expose()
+  @Type(() => Number)
   public amount: number;
 
   @Expose()

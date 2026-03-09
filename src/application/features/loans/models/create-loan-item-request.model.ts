@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsNumber, IsOptional, Min, IsUUID } from 'class-validator';
-import { Expose, Transform } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
 
 export class CreateLoanItemRequestModel {
   @Expose()
@@ -12,6 +12,7 @@ export class CreateLoanItemRequestModel {
   itemId: string;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Item amount', example: 50000 })
   @IsNumber()
   @IsNotEmpty()
@@ -31,6 +32,7 @@ export class CreateLoanItemRequestModel {
   itemDescription?: string;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Net weight in grams', example: 50.5 })
   @IsNumber()
   @IsNotEmpty()
@@ -38,6 +40,7 @@ export class CreateLoanItemRequestModel {
   netWeightInGrams: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Gross weight in grams', example: 55.2 })
   @IsNumber()
   @IsNotEmpty()
@@ -45,6 +48,7 @@ export class CreateLoanItemRequestModel {
   grossWeightInGrams: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Current rate of item', example: 5000 })
   @IsNumber()
   @IsNotEmpty()

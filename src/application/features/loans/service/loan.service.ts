@@ -7,6 +7,7 @@ import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions 
 import { Paged } from '@shared-libs';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
+import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../transactions/repository';
 import { Due } from '../../transactions';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus } from '../enums';
 import { plainToInstance } from 'class-transformer';
@@ -18,6 +19,7 @@ export class LoanService implements ILoanService {
     @Inject(LOAN_ITEMS_REPOSITORY) private readonly loanItemsRepo: ILoanItemsRepository,
     @Inject(USERS_FILE_STORAGE) private readonly loansFileStorage: IUsersFileStorage,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
+    @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
     @InjectPinoLogger(LoanService.name) private readonly logger: PinoLogger,
   ) { }
 
@@ -267,11 +269,18 @@ export class LoanService implements ILoanService {
     }
   }
 
-  async updateLoanItem(loanId: string, itemId: string, updateData: Partial<LoanItem>, createdBy: string): Promise<LoanItem> {
+  async updateLoanItem(itemId: string, updateData: Partial<LoanItem>, createdBy: string): Promise<LoanItem> {
     try {
-      this.logger.info({ loanId, itemId, createdBy }, 'Updating loan item');
+      this.logger.info({ itemId, createdBy }, 'Updating loan item');
 
-      // Validate loan exists and is not closed
+      const existingLoanItem = await this.loanItemsRepo.findByIdOnly(itemId);
+      if (!existingLoanItem) {
+        this.logger.warn({ itemId }, 'Loan item not found');
+        throw new NotFoundException('Loan item not found');
+      }
+
+      const loanId = existingLoanItem.loanId;
+
       const existingLoan = await this.loansRepo.findById(loanId, createdBy);
       if (!existingLoan) {
         this.logger.warn({ loanId, createdBy }, 'Loan not found for loan item update');
@@ -282,9 +291,6 @@ export class LoanService implements ILoanService {
         this.logger.warn({ loanId }, 'Attempted to update loan item in closed loan');
         throw new BadRequestException('Cannot update loan item in a closed loan');
       }
-
-      // Validate loan item exists
-      const existingLoanItem = await this.loanItemsRepo.findById(itemId, loanId);
       if (!existingLoanItem) {
         this.logger.warn({ loanId, itemId }, 'Loan item not found');
         throw new NotFoundException('Loan item not found');
@@ -303,27 +309,26 @@ export class LoanService implements ILoanService {
         throw new NotFoundException('Loan item not found');
       }
 
-      // Calculate the difference in the specific loan item amount
-      const oldItemAmount = existingLoanItem.amount;
-      const newItemAmount = updateData.amount ?? existingLoanItem.amount;
+      // Calculate the difference in the specific loan item amount (coerce - DB decimals/form data can be strings)
+      const oldItemAmount = Number(existingLoanItem.amount);
+      const newItemAmount = Number(updateData.amount ?? existingLoanItem.amount);
       const itemAmountDifference = newItemAmount - oldItemAmount;
 
       // Calculate original total loan amount (sum of all original loan items before update)
-      // This represents the loan amount before any payments or top-ups
-      // Formula: originalTotal = amountRemaining + amountPaid
-      // Note: This assumes no top-ups. If top-ups exist, they're already reflected in amountRemaining
-      const originalTotalLoanAmount = existingLoan.amountRemaining + existingLoan.amountPaid;
+      // Formula: originalTotal = amountRemaining + amountPaid (use Number - PG decimals are strings)
+      const amountRemainingNum = Number(existingLoan.amountRemaining);
+      const amountPaidNum = Number(existingLoan.amountPaid);
+      const originalTotalLoanAmount = amountRemainingNum + amountPaidNum;
 
       // New total loan amount after item update
       const newTotalLoanAmount = originalTotalLoanAmount + itemAmountDifference;
 
       // New amount remaining = new total - amount already paid
-      // This preserves the payment history
-      const newAmountRemaining = newTotalLoanAmount - existingLoan.amountPaid;
+      const newAmountRemaining = newTotalLoanAmount - amountPaidNum;
 
       // Ensure amount remaining doesn't go negative
       if (newAmountRemaining < 0) {
-        this.logger.warn({ loanId, newAmountRemaining, amountPaid: existingLoan.amountPaid }, 'New loan amount would be less than amount paid');
+        this.logger.warn({ loanId, newAmountRemaining, amountPaid: amountPaidNum }, 'New loan amount would be less than amount paid');
         throw new BadRequestException('Cannot update loan item: new loan amount would be less than amount already paid');
       }
 
@@ -434,7 +439,7 @@ export class LoanService implements ILoanService {
       if (err instanceof NotFoundException || err instanceof BadRequestException) {
         throw err;
       }
-      this.logger.error({ err, loanId, itemId, createdBy }, 'Error updating loan item');
+      this.logger.error({ err, itemId, createdBy }, 'Error updating loan item');
       throw err;
     }
   }
@@ -692,6 +697,9 @@ export class LoanService implements ILoanService {
         throw new NotFoundException('Loan not found');
       }
 
+      await this.transactionsRepo.deleteByLoanId(id);
+      await this.duesRepo.deleteByLoanId(id);
+      await this.loanItemsRepo.deleteByLoanId(id);
       await this.loansRepo.delete(id, createdBy);
       this.logger.info({ loanId: id }, 'Loan deleted successfully');
     } catch (err) {

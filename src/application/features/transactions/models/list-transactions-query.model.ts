@@ -1,13 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ESortOrder } from '@shared-libs';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class ListTransactionsQueryRequestModel {
   @Expose()
+  @Type(() => Number)
   @ApiPropertyOptional({ example: 10, description: 'Number of items per page', required: false })
   pageSize: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiPropertyOptional({ example: 0, description: 'Page number (0-based)', required: false })
   pageNumber: number;
 

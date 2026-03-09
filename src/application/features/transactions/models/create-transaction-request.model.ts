@@ -12,6 +12,7 @@ export class CreateTransactionRequestModel {
   loanId?: string;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Transaction amount', example: 5000 })
   @IsNumber()
   @IsNotEmpty()

@@ -1,4 +1,4 @@
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
 import { EDueType } from '../../../shared';
 
@@ -7,9 +7,11 @@ export class DuesFilterOptions {
   public loanIds?: string[];
 
   @Expose()
+  @Type(() => Number)
   public pageNumber: number;
 
   @Expose()
+  @Type(() => Number)
   public pageSize: number;
 
   @Expose()

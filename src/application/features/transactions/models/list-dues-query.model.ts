@@ -1,15 +1,17 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ESortOrder } from '@shared-libs';
-import { Expose, Transform } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
 import { IsArray, IsOptional, IsMongoId, IsEnum, IsString } from 'class-validator';
 import { EDueType } from '../../../shared';
 
 export class ListDuesQueryRequestModel {
   @Expose()
+  @Type(() => Number)
   @ApiPropertyOptional({ example: 10, description: 'Number of items per page', required: false })
   pageSize: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiPropertyOptional({ example: 0, description: 'Page number (0-based)', required: false })
   pageNumber: number;
 

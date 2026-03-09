@@ -13,6 +13,7 @@ export class TransactionResponseModel {
   loanId: string;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Transaction amount', example: 5000 })
   amount: number;
 

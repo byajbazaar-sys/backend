@@ -21,6 +21,7 @@ export class LoanResponseModel {
   tenureType: ELoanTenureType;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Tenure value', example: 12 })
   tenureValue: number;
 
@@ -29,6 +30,7 @@ export class LoanResponseModel {
   interestCalculationMethod: EInterestCalculationMethod;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Interest percentage', example: 12.5 })
   interestPercentage: number;
 
@@ -47,18 +49,22 @@ export class LoanResponseModel {
   updatedAt: Date;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Amount remaining', example: 1000 })
   amountRemaining: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Amount paid', example: 1000 })
   amountPaid: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Interest paid', example: 100 })
   interestPaid: number;
 
   @Expose()
+  @Type(() => Number)
   @ApiProperty({ description: 'Interest remaining', example: 100 })
   interestRemaining: number;
 

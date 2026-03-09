@@ -136,4 +136,8 @@ export class TransactionsRepository implements ITransactionsRepository {
   async delete(id: string): Promise<void> {
     await this.transactionRepo.delete(id);
   }
+
+  async deleteByLoanId(loanId: string): Promise<void> {
+    await this.transactionRepo.delete({ loanId });
+  }
 }

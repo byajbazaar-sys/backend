@@ -1,4 +1,4 @@
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class LoanItem {
   @Expose()
@@ -11,6 +11,7 @@ export class LoanItem {
   public itemId: string;
 
   @Expose()
+  @Type(() => Number)
   public amount: number;
 
   @Expose()
@@ -20,9 +21,11 @@ export class LoanItem {
   public itemDescription?: string;
 
   @Expose()
+  @Type(() => Number)
   public netWeightInGrams: number;
 
   @Expose()
+  @Type(() => Number)
   public grossWeightInGrams: number;
 
   @Expose()
@@ -38,6 +41,7 @@ export class LoanItem {
   public updatedAt?: Date;
 
   @Expose()
+  @Type(() => Number)
   public currentRate?: number;
 
   @Expose()
