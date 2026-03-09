@@ -645,13 +645,19 @@ export class LoanService implements ILoanService {
     const paidDues = await this.duesRepo.findByLoanIdAndType(loanId, [EDueType.PAID]);
     const paidDuesCount = paidDues.length;
     const totalTenure = existingLoan.tenureValue;
-    const remainingTenure = Math.max(0, totalTenure - paidDuesCount);
+    let remainingTenure = Math.max(0, totalTenure - paidDuesCount);
     const remainingAmount = existingLoan.amountRemaining;
     const remainingInterest = existingLoan.interestRemaining;
 
-    if (remainingTenure <= 0 || (remainingAmount <= 0 && remainingInterest <= 0)) {
+    // Nothing to distribute - exit (delete any stale unpaid dues)
+    if (remainingAmount <= 0 && remainingInterest <= 0) {
       await this.duesRepo.deleteByLoanId(loanId, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
       return;
+    }
+
+    // When all dues are paid but we have remaining amount (e.g. from top-up), use full tenure for new dues
+    if (remainingTenure <= 0) {
+      remainingTenure = totalTenure;
     }
 
     let startDate: Date;

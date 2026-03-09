@@ -50,8 +50,11 @@ export class TransactionService implements ITransactionService {
       }
 
       if (data.transactionType === ETransactionType.TOP_UP) {
+        if (data.amount <= 0) {
+          throw new BadRequestException('Top up amount must be greater than zero');
+        }
         loan.amountRemaining += data.amount;
-        // Recalculate interest for the additional principal over remaining periods
+        // Add interest for the additional principal over remaining periods
         const unpaidDues = await this.duesRepo.findByLoanIdAndType(data.loanId, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
         const remainingTenure = unpaidDues.length;
         if (remainingTenure > 0) {
@@ -62,6 +65,10 @@ export class TransactionService implements ITransactionService {
             loan.interestRemaining += (loan.interestPercentage * data.amount * remainingTenure) / 100;
           }
         }
+        this.logger.info(
+          { loanId: loan.id, topUpAmount: data.amount, remainingTenure },
+          'Loan principal and interest increased due to top-up',
+        );
       }
 
       if (data.dueId && data.transactionType === ETransactionType.DUE_PAYMENT) {
@@ -257,8 +264,9 @@ export class TransactionService implements ITransactionService {
         if (loan.status === ELoanStatus.CLOSED) {
           throw new BadRequestException('Loan is closed');
         }
-        if (data.amount > loan.amountRemaining) {
-          throw new BadRequestException('Amount is greater than loan remaining');
+        const totalRemaining = loan.amountRemaining + loan.interestRemaining;
+        if (data.amount > totalRemaining && data.transactionType !== ETransactionType.TOP_UP) {
+          throw new BadRequestException('Amount should not be greater than loan remaining');
         }
       }
       if (data.dueId) {
