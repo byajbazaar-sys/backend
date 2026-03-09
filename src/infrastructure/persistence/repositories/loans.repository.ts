@@ -47,7 +47,10 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async findById(id: string, createdBy: string): Promise<Loan> {
-    const loan = await this.loanRepo.findOne({ where: { id, createdBy: createdBy } });
+    const loan = await this.loanRepo.findOne({
+      where: { id, createdBy: createdBy },
+      relations: ['loanItems'],
+    });
     if (!loan) return null;
     return plainToInstance(Loan, loan, { excludeExtraneousValues: true });
   }

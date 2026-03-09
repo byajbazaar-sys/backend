@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   UseGuards,
   Controller,
   Post,
@@ -90,10 +91,14 @@ export class LoansController {
 
     loanData.loanItems = loanData.loanItems.map((item, index) => {
       loanAmount += item.amount;
+      const itemId = item.itemId ?? (item as { item_id?: string }).item_id;
+      if (!itemId) {
+        throw new BadRequestException('Each loan item must have an itemId referencing an existing item');
+      }
       const loanItem: LoanItem & { id?: string } = {
         ...item,
         id: uuidv4(),
-        itemId: item.itemId,
+        itemId,
         image: files.loanItemImages?.[index] ?? null,
         loanId,
         createdBy: identity.userId,
