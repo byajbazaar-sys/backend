@@ -1,13 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, Min, IsMongoId } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, IsMongoId, IsUUID } from 'class-validator';
 import { Expose } from 'class-transformer';
 
 export class UpdateLoanItemRequestModel {
     @Expose()
-    @ApiPropertyOptional({ description: 'Item ID', example: '507f1f77bcf86cd799439011' })
+    @ApiPropertyOptional({ description: 'Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
     @IsString()
     @IsOptional()
-    @IsMongoId()
+    @IsUUID()
     itemId?: string;
 
     @Expose()

@@ -3,15 +3,15 @@ import { Expose, Type } from 'class-transformer';
 
 export class LoanItemResponseModel {
     @Expose()
-    @ApiProperty({ description: 'Loan item ID', example: '507f1f77bcf86cd799439011' })
+    @ApiProperty({ description: 'Loan item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
     id: string;
 
     @Expose()
-    @ApiProperty({ description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+    @ApiProperty({ description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
     loanId: string;
 
     @Expose()
-    @ApiProperty({ description: 'Item ID', example: '507f1f77bcf86cd799439011' })
+    @ApiProperty({ description: 'Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
     itemId: string;
 
     @Expose()
@@ -35,7 +35,7 @@ export class LoanItemResponseModel {
     grossWeightInGrams: number;
 
     @Expose()
-    @ApiPropertyOptional({ description: 'Image reference URL', example: 'https://s3.amazonaws.com/bucket/loans/items/...' })
+    @ApiPropertyOptional({ description: 'Signed URL for item image (presigned, time-limited)', example: 'https://bucket.s3.region.amazonaws.com/loans/items/...?X-Amz-...' })
     imageRef?: string;
 
     @Expose()
@@ -43,7 +43,7 @@ export class LoanItemResponseModel {
     currentRate?: number;
 
     @Expose()
-    @ApiProperty({ description: 'Created by user ID', example: '507f1f77bcf86cd799439011' })
+    @ApiProperty({ description: 'Created by user ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
     createdBy?: string;
 
     @Expose()

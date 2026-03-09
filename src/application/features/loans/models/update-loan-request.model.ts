@@ -1,14 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsEnum, IsMongoId, Min } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsEnum, IsMongoId, Min, IsUUID } from 'class-validator';
 import { Expose } from 'class-transformer';
 import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../enums';
 
 export class UpdateLoanRequestModel {
   @Expose()
-  @ApiPropertyOptional({ description: 'Customer ID', example: '507f1f77bcf86cd799439011' })
+  @ApiPropertyOptional({ description: 'Customer ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @IsString()
   @IsOptional()
-  @IsMongoId()
+  @IsUUID()
   customerId?: string;
 
   @Expose()

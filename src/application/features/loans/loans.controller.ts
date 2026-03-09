@@ -209,7 +209,7 @@ export class LoansController {
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Update loan status (Open/Close)' })
-  @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: LoanResponseModel })
   @HttpCode(HttpStatus.OK)
   async updateStatus(
@@ -224,7 +224,7 @@ export class LoansController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get loan by ID' })
-  @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: LoanResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
   @HttpCode(HttpStatus.OK)
@@ -236,7 +236,7 @@ export class LoansController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update loan' })
-  @ApiParam({ name: 'id', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: LoanResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Cannot update a closed loan' })
@@ -261,8 +261,8 @@ export class LoansController {
     summary: 'Update loan item',
     description: 'Update loan item details including amount, name, description, weights, rate, and image. Image can be updated by uploading a new file via multipart/form-data.',
   })
-  @ApiParam({ name: 'loanId', description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
-  @ApiParam({ name: 'itemId', description: 'Loan Item ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'loanId', description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
+  @ApiParam({ name: 'itemId', description: 'Loan Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: LoanItemResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan or loan item not found' })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Cannot update loan item in a closed loan' })

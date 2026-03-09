@@ -115,6 +115,13 @@ export class ItemService implements IItemService {
   async delete(id: string): Promise<void> {
     try {
       this.logger.info({ itemId: id }, 'Deleting item');
+      const item = await this.itemsRepo.findById(id);
+      if (!item) {
+        throw new NotFoundException('Item not found');
+      }
+      if (item.createdBy === SYSTEM_USER_ID) {
+        throw new ForbiddenException('Cannot delete system-generated items');
+      }
       await this.itemsRepo.delete(id);
       this.logger.info({ itemId: id }, 'Item deleted successfully');
     } catch (err) {

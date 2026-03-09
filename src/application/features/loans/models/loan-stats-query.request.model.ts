@@ -15,7 +15,7 @@ export class LoanStatsQueryRequestModel {
   endDate: Date;
 
   @Expose()
-  @ApiProperty({ example: '507f1f77bcf86cd799439011', required: false })
+  @ApiProperty({ example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', required: false })
   @IsUUID()
   @IsOptional()
   itemId: string;

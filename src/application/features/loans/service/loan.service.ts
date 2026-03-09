@@ -21,6 +21,18 @@ export class LoanService implements ILoanService {
     @InjectPinoLogger(LoanService.name) private readonly logger: PinoLogger,
   ) { }
 
+  private async enrichLoanItemsWithImageUrls(items: LoanItem[]): Promise<void> {
+    if (!items?.length) return;
+    await Promise.all(
+      items.map(async (item) => {
+        if (item.imageRef) {
+          const url = await this.loansFileStorage.getUrlAsync(item.imageRef);
+          if (url) item.imageRef = url;
+        }
+      }),
+    );
+  }
+
   async create(data: Loan): Promise<Loan> {
     try {
       this.logger.info({ customerId: data.customerId, amountRemaining: data.amountRemaining }, 'Creating new loan');
@@ -68,7 +80,7 @@ export class LoanService implements ILoanService {
         if (loanItem.image) {
           const fileExtension = loanItem.image.mimetype.split('/')[1];
           loanItem.imageRef = `loans/items/${loan.id}/${loanItem.id}.${fileExtension}`;
-          this.loansFileStorage.writeAsync(loanItem.imageRef, loanItem.image.buffer, loanItem.image.mimetype);
+          await this.loansFileStorage.writeAsync(loanItem.imageRef, loanItem.image.buffer, loanItem.image.mimetype);
         }
       }
       await this.loanItemsRepo.bulkInsert(data.loanItems);
@@ -77,6 +89,7 @@ export class LoanService implements ILoanService {
       await this.createDuesForLoan(loan);
 
       this.logger.info({ loanId: loan.id }, 'Loan created successfully with dues');
+      await this.enrichLoanItemsWithImageUrls(data.loanItems);
       return { ...loan, loanItems: data.loanItems };
     } catch (err) {
       this.logger.error({ err, customerId: data.customerId }, 'Error creating loan');
@@ -178,6 +191,7 @@ export class LoanService implements ILoanService {
         this.logger.warn({ loanId: id, createdBy }, 'Loan not found');
         throw new NotFoundException('Loan not found');
       }
+      await this.enrichLoanItemsWithImageUrls(loan.loanItems ?? []);
       return loan;
     } catch (err) {
       if (err instanceof NotFoundException) {
@@ -414,6 +428,7 @@ export class LoanService implements ILoanService {
       }
 
       this.logger.info({ loanId, itemId }, 'Loan item updated successfully');
+      await this.enrichLoanItemsWithImageUrls([updatedLoanItem]);
       return updatedLoanItem;
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof BadRequestException) {

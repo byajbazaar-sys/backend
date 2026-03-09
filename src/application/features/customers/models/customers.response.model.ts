@@ -3,11 +3,11 @@ import { Expose, Type } from 'class-transformer';
 
 export class CustomerResponseModel {
   @Expose()
-  @ApiProperty({ description: 'Unique identifier of the customer', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Unique identifier of the customer', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   id: string;
 
   @Expose()
-  @ApiProperty({ description: 'User ID of the creator of this record', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'User ID of the creator of this record', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   createdBy: string;
 
   @Expose()

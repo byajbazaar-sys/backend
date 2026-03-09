@@ -5,15 +5,15 @@ import { LoanItemResponseModel } from './loan-item-response.model';
 
 export class LoanResponseModel {
   @Expose()
-  @ApiProperty({ description: 'Unique identifier of the loan', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Unique identifier of the loan', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   id: string;
 
   @Expose()
-  @ApiProperty({ description: 'User ID of the creator', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'User ID of the creator', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   createdBy: string;
 
   @Expose()
-  @ApiProperty({ description: 'Customer ID', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Customer ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   customerId: string;
 
   @Expose()

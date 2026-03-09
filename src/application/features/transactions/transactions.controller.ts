@@ -31,7 +31,7 @@ export class TransactionsController {
   constructor(
     @InjectPinoLogger(TransactionsController.name) private readonly logger: PinoLogger,
     @Inject(TRANSACTION_SERVICE) private readonly transactionService: ITransactionService,
-  ) {}
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new transaction' })
@@ -46,15 +46,15 @@ export class TransactionsController {
       excludeExtraneousValues: true,
     });
 
-    if(!transactionData.loanId && !transactionData.dueId) {
+    if (!transactionData.loanId && !transactionData.dueId) {
       throw new BadRequestException('Loan ID or Due ID is required');
     }
 
-    if(transactionData.transactionType === ETransactionType.DUE_PAYMENT || transactionData.dueId) {
-      if(!transactionData.dueId) {
+    if (transactionData.transactionType === ETransactionType.DUE_PAYMENT || transactionData.dueId) {
+      if (!transactionData.dueId) {
         throw new BadRequestException('Due ID is required for due payment');
       }
-      if(transactionData.transactionType !== ETransactionType.DUE_PAYMENT) {
+      if (transactionData.transactionType !== ETransactionType.DUE_PAYMENT) {
         throw new BadRequestException('Transaction type must be due payment for due ID');
       }
     }
@@ -170,7 +170,7 @@ export class TransactionsController {
 
   @Get('dues/:id')
   @ApiOperation({ summary: 'Get due details by ID' })
-  @ApiParam({ name: 'id', description: 'Due ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Due ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: DueResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Due not found' })
   @HttpCode(HttpStatus.OK)

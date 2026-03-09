@@ -5,7 +5,7 @@ import { EDueType } from '../../../shared';
 import { TransactionResponseModel } from './transaction-response.model';
 export class DueResponseModel {
   @Expose()
-  @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Due ID' })
+  @ApiProperty({ example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', description: 'Due ID' })
   id: string;
 
   @Expose()
@@ -14,7 +14,7 @@ export class DueResponseModel {
   dueDate: Date;
 
   @Expose()
-  @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Loan ID' })
+  @ApiProperty({ example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', description: 'Loan ID' })
   loanId: string;
 
   @Expose()
@@ -30,7 +30,7 @@ export class DueResponseModel {
   interestAmount: number;
 
   @Expose()
-  @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Customer ID' })
+  @ApiProperty({ example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', description: 'Customer ID' })
   customerId?: string;
 
   @Expose()

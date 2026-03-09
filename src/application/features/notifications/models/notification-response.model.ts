@@ -3,7 +3,7 @@ import { Expose, Type } from 'class-transformer';
 
 export class NotificationResponseModel {
   @Expose()
-  @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'Notification ID' })
+  @ApiProperty({ example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', description: 'Notification ID' })
   id: string;
 
   @Expose()

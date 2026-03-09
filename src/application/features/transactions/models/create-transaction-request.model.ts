@@ -1,14 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumber, IsEnum, IsMongoId, IsDateString, Min, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsEnum, IsMongoId, IsDateString, Min, IsOptional, IsUUID } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { ETransactionType, ETransactionPaidIn } from '../enums';
 
 export class CreateTransactionRequestModel {
   @Expose()
-  @ApiPropertyOptional({ description: 'Loan ID', example: '507f1f77bcf86cd799439011', required: false })
+  @ApiPropertyOptional({ description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', required: false })
   @IsString()
   @IsOptional()
-  @IsMongoId()
+  @IsUUID()
   loanId?: string;
 
   @Expose()
@@ -37,9 +37,9 @@ export class CreateTransactionRequestModel {
   paidAt: Date;
 
   @Expose()
-  @ApiProperty({ description: 'Due ID', example: '507f1f77bcf86cd799439011', required: false })
+  @ApiProperty({ description: 'Due ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', required: false })
   @IsString()
   @IsOptional()
-  @IsMongoId()
+  @IsUUID()
   dueId?: string;
 }

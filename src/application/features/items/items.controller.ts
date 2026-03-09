@@ -45,7 +45,7 @@ export class ItemsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get item by ID' })
-  @ApiParam({ name: 'id', description: 'Item ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: ItemResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Item not found' })
   @HttpCode(HttpStatus.OK)
@@ -57,7 +57,7 @@ export class ItemsController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update item by ID' })
-  @ApiParam({ name: 'id', description: 'Item ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: ItemResponseModel })
   @HttpCode(HttpStatus.OK)
   async update(
@@ -75,7 +75,7 @@ export class ItemsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete item by ID' })
-  @ApiParam({ name: 'id', description: 'Item ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ description: 'Item deleted successfully' })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Item not found' })
   @HttpCode(HttpStatus.OK)

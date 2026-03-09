@@ -5,11 +5,11 @@ import { CustomerResponseModel } from '../../customers';
 
 export class TransactionResponseModel {
   @Expose()
-  @ApiProperty({ description: 'Unique identifier of the transaction', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Unique identifier of the transaction', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   id: string;
 
   @Expose()
-  @ApiProperty({ description: 'Loan ID', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   loanId: string;
 
   @Expose()
@@ -30,7 +30,7 @@ export class TransactionResponseModel {
   paidAt: Date;
 
   @Expose()
-  @ApiProperty({ description: 'User ID of the creator of this record', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'User ID of the creator of this record', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   createdBy: string;
 
   @Expose()

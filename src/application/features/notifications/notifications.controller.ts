@@ -23,7 +23,7 @@ export class NotificationsController {
   constructor(
     @InjectPinoLogger(NotificationsController.name) private readonly logger: PinoLogger,
     @Inject(NOTIFICATION_SERVICE) private readonly notificationService: INotificationService,
-  ) {}
+  ) { }
 
   @Post('email')
   @ApiOperation({ summary: 'Send an email and store notification record' })
@@ -62,7 +62,7 @@ export class NotificationsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get notification by ID' })
-  @ApiParam({ name: 'id', description: 'Notification ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Notification ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: NotificationResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Notification not found' })
   @HttpCode(HttpStatus.OK)

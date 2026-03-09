@@ -56,7 +56,7 @@ export class CustomersController {
   constructor(
     @InjectPinoLogger(CustomersController.name) private readonly logger: PinoLogger,
     @Inject(CUSTOMER_SERVICE) private readonly customerService: ICustomerService,
-  ) {}
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new customer' })
@@ -178,7 +178,7 @@ export class CustomersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get customer by ID' })
-  @ApiParam({ name: 'id', description: 'Customer ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Customer ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: CustomerResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Customer not found' })
   @HttpCode(HttpStatus.OK)
@@ -190,7 +190,7 @@ export class CustomersController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update customer' })
-  @ApiParam({ name: 'id', description: 'Customer ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Customer ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: CustomerResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Customer not found' })
   @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Not authorized to update this customer' })
@@ -238,7 +238,7 @@ export class CustomersController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete customer by ID' })
-  @ApiParam({ name: 'id', description: 'Customer ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({ name: 'id', description: 'Customer ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ description: 'Customer deleted successfully' })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Customer not found' })
   @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Not authorized to delete this customer' })

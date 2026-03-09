@@ -3,7 +3,7 @@ import { Expose } from 'class-transformer';
 
 export class ItemResponseModel {
   @Expose()
-  @ApiProperty({ description: 'Item ID', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   id: string;
 
   @Expose()
@@ -15,7 +15,7 @@ export class ItemResponseModel {
   description?: string;
 
   @Expose()
-  @ApiProperty({ description: 'Created by user ID', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Created by user ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   createdBy?: string;
 
   @Expose()

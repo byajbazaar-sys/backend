@@ -6,7 +6,7 @@ import { CreateLoanItemRequestModel } from './create-loan-item-request.model';
 
 export class CreateLoanRequestModel {
   @Expose()
-  @ApiProperty({ description: 'Customer ID', example: '507f1f77bcf86cd799439011' })
+  @ApiProperty({ description: 'Customer ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @IsString()
   @IsNotEmpty()
   @IsUUID()

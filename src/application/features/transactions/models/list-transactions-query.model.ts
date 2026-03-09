@@ -21,7 +21,7 @@ export class ListTransactionsQueryRequestModel {
 
   @Expose()
   @ApiPropertyOptional({
-    example: '507f1f77bcf86cd799439011',
+    example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327',
     description: 'Filter by loan ID',
     required: false,
   })
