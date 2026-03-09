@@ -41,7 +41,7 @@ export class DuesRepository implements IDuesRepository {
       ? await txRepo
         .createQueryBuilder('t')
         .where('t.customerId IN (:...customerIds)', { customerIds })
-        .orderBy('t.paidAt', 'DESC')
+        .orderBy('t.createdAt', 'DESC')
         .getMany()
       : [];
     const latestByCustomer = new Map<string, typeof latestTxs[0]>();
@@ -118,7 +118,7 @@ export class DuesRepository implements IDuesRepository {
       .getRepository(TransactionEntity)
       .createQueryBuilder('t')
       .where('t.customerId = :customerId', { customerId: due.customerId })
-      .orderBy('t.paidAt', 'DESC')
+      .orderBy('t.createdAt', 'DESC')
       .limit(1)
       .getOne();
 

@@ -25,7 +25,6 @@ export class TransactionsRepository implements ITransactionsRepository {
       amount: createTransaction.amount,
       transactionType: createTransaction.transactionType,
       paidIn: createTransaction.paidIn,
-      paidAt: createTransaction.paidAt,
       createdBy: createTransaction.createdBy,
       dueId: createTransaction.dueId ?? null,
     } as unknown as Partial<TransactionEntity>);
@@ -46,7 +45,7 @@ export class TransactionsRepository implements ITransactionsRepository {
     const { loanId, createdBy } = params;
     const { pageNumber, pageSize, skip } = getPaginationValues(params);
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
-    const sortField = params.sortField || 'createdAt';
+    const sortField = params.sortField === 'paidAt' ? 'createdAt' : (params.sortField || 'createdAt');
 
     const qb = this.transactionRepo
       .createQueryBuilder('t')
@@ -58,7 +57,6 @@ export class TransactionsRepository implements ITransactionsRepository {
         't.amount',
         't.transactionType',
         't.paidIn',
-        't.paidAt',
         't.createdBy',
         't.dueId',
         't.createdAt',
@@ -87,7 +85,7 @@ export class TransactionsRepository implements ITransactionsRepository {
   async listAllTransactions(params: TransactionsDownloadFilterOptions): Promise<Transaction[]> {
     const { loanId, createdBy, startDate, endDate } = params;
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
-    const sortField = params.sortField || 'createdAt';
+    const sortField = params.sortField === 'paidAt' ? 'createdAt' : (params.sortField || 'createdAt');
 
     const qb = this.transactionRepo
       .createQueryBuilder('t')
@@ -99,7 +97,6 @@ export class TransactionsRepository implements ITransactionsRepository {
         't.amount',
         't.transactionType',
         't.paidIn',
-        't.paidAt',
         't.createdBy',
         't.dueId',
         't.createdAt',
@@ -110,11 +107,11 @@ export class TransactionsRepository implements ITransactionsRepository {
 
     if (loanId) qb.andWhere('t.loan_id = :loanId', { loanId });
     if (createdBy) qb.andWhere('t.created_by = :createdBy', { createdBy });
-    if (startDate) qb.andWhere('t.paid_at >= :startDate', { startDate });
+    if (startDate) qb.andWhere('t.created_at >= :startDate', { startDate });
     if (endDate) {
       const endOfDay = new Date(endDate);
       endOfDay.setHours(23, 59, 59, 999);
-      qb.andWhere('t.paid_at <= :endDate', { endDate: endOfDay });
+      qb.andWhere('t.created_at <= :endDate', { endDate: endOfDay });
     }
 
     const items = await qb.orderBy(`t.${sortField}`, sortOrder).getMany();

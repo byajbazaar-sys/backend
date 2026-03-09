@@ -41,9 +41,6 @@ export class TransactionEntity {
   @Column({ type: 'enum', enum: ETransactionPaidIn, enumName: 'e_transaction_paid_in_enum' })
   paidIn: ETransactionPaidIn;
 
-  @Column({ type: 'timestamptz' })
-  paidAt: Date;
-
   @Column({ type: 'uuid' })
   createdBy: string;
 

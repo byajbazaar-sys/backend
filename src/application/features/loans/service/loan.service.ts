@@ -10,7 +10,6 @@ import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FI
 import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../transactions/repository';
 import { Due } from '../../transactions';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus } from '../enums';
-import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class LoanService implements ILoanService {

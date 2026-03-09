@@ -26,11 +26,6 @@ export class TransactionResponseModel {
   paidIn: ETransactionPaidIn;
 
   @Expose()
-  @ApiProperty({ description: 'Payment date in milliseconds', example: 1715040000 })
-  @Type(() => Date)
-  paidAt: Date;
-
-  @Expose()
   @ApiProperty({ description: 'User ID of the creator of this record', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   createdBy: string;
 

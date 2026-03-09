@@ -138,9 +138,8 @@ export class TransactionsController {
       { header: 'Amount', key: 'amount', width: 60, formatter: fmt.formatNum },
       { header: 'Type', key: 'transactionType', width: 55 },
       { header: 'Paid In', key: 'paidIn', width: 50 },
-      { header: 'Paid At', key: 'paidAt', width: 75, formatter: fmt.formatDate },
+      { header: 'Date', key: 'createdAt', width: 75, formatter: fmt.formatDate },
       { header: 'Customer', key: 'customer', width: 100, formatter: fmt.customer },
-      { header: 'Created', key: 'createdAt', width: 75, formatter: fmt.formatDate },
     ];
     const pdf = await toPDF(items as unknown as Record<string, unknown>[], columns, 'Transactions');
     return new StreamableFile(pdf, {

@@ -39,8 +39,7 @@ export class TransactionService implements ITransactionService {
         loan.interestRemaining -= data.amount;
         loan.interestPaid += data.amount;
       }
-      console.log("loan====", loan)
-      console.log("data====", data)
+
 
       if (data.transactionType === ETransactionType.PRINCIPAL) {
         if (loan.amountRemaining < data.amount) {
@@ -72,6 +71,12 @@ export class TransactionService implements ITransactionService {
         due.type = EDueType.PAID;
         due.dueAmount -= data.amount;
         await this.duesRepo.update(data.dueId, due);
+
+        // Update loan amounts: principal portion reduces remaining, increases paid; interest same
+        loan.amountRemaining -= due.principalAmount;
+        loan.amountPaid += due.principalAmount;
+        loan.interestRemaining -= due.interestAmount;
+        loan.interestPaid += due.interestAmount;
       }
       await this.loansRepo.update(data.loanId, loan);
 

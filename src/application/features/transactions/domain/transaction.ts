@@ -23,10 +23,6 @@ export class Transaction {
   public paidIn: ETransactionPaidIn;
 
   @Expose()
-  @Type(() => Date)
-  public paidAt: Date;
-
-  @Expose()
   public createdBy: string;
 
   @Expose()
