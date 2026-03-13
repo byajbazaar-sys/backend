@@ -1,7 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsEnum, Min, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsEnum, Min, Max, IsUUID } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { ETransactionType, ETransactionPaidIn } from '../enums';
+import { AMOUNT_MAX } from '@shared-libs';
 
 export class UpdateTransactionRequestModel {
   @Expose()
@@ -17,6 +18,7 @@ export class UpdateTransactionRequestModel {
   @IsNumber()
   @IsOptional()
   @Min(0)
+  @Max(AMOUNT_MAX)
   amount?: number;
 
   @Expose()

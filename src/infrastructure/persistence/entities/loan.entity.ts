@@ -48,22 +48,22 @@ export class LoanEntity {
   @Column({ type: 'enum', enum: EInterestCalculationMethod, enumName: 'e_interest_calculation_method_enum' })
   interestCalculationMethod: EInterestCalculationMethod;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   interestPercentage: number;
 
   @Column({ type: 'enum', enum: EInterestType, enumName: 'e_interest_type_enum' })
   interestType: EInterestType;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   amountPaid: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   amountRemaining: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   interestPaid: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   interestRemaining: number;
 
   @Column({ type: 'enum', enum: ELoanStatus, enumName: 'e_loan_status_enum', default: ELoanStatus.OPEN })

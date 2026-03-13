@@ -32,7 +32,7 @@ export class TransactionEntity {
   @JoinColumn({ name: 'customer_id' })
   customer: CustomerEntity;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount: number;
 
   @Column({ type: 'enum', enum: ETransactionType, enumName: 'e_transaction_type_enum' })

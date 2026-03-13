@@ -34,7 +34,7 @@ export class DueEntity {
   @JoinColumn({ name: 'customer_id' })
   customer: CustomerEntity;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
   dueAmount: number;
 
   @Column({ type: 'enum', enum: EDueType, enumName: 'e_due_type_enum' })
@@ -50,10 +50,10 @@ export class DueEntity {
   @JoinColumn({ name: 'created_by' })
   user: UserEntity;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
   principalAmount: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
   interestAmount: number;
 
   @CreateDateColumn()

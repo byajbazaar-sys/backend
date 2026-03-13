@@ -28,12 +28,12 @@ export class CreateCustomerRequestModel {
   email: string;
 
   @Expose()
-  @ApiProperty({ description: 'Phone number of the customer', example: '+1234567890' })
+  @ApiPropertyOptional({ description: 'Phone number of the customer', example: '+1234567890' })
   @IsOptional()
   phone?: string;
 
   @Expose()
-  @ApiProperty({ description: 'Alternative phone number of the customer', example: '+0987654321' })
+  @ApiPropertyOptional({ description: 'Alternative phone number of the customer', example: '+0987654321' })
   @IsOptional()
   alternativePhone?: string;
 

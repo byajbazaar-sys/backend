@@ -37,7 +37,7 @@ export class LoanItemEntity {
   @JoinColumn({ name: 'created_by' })
   user: UserEntity;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount: number;
 
   @Column({ type: 'varchar', length: 255 })
@@ -46,10 +46,10 @@ export class LoanItemEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   itemDescription: string;
 
-  @Column({ type: 'decimal', precision: 12, scale: 4 })
+  @Column({ type: 'decimal', precision: 10, scale: 3 })
   netWeightInGrams: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 4 })
+  @Column({ type: 'decimal', precision: 10, scale: 3 })
   grossWeightInGrams: number;
 
   @Column({ type: 'varchar', length: 500, nullable: true })

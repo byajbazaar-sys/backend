@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumber, IsEnum, IsMongoId, Min, IsArray, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsEnum, Min, Max, IsArray, IsUUID } from 'class-validator';
 import { Expose, plainToInstance, Transform, Type } from 'class-transformer';
 import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../enums';
+import { INTEREST_PERCENTAGE_MAX, TENURE_MAX } from '@shared-libs';
 import { CreateLoanItemRequestModel } from './create-loan-item-request.model';
 
 export class CreateLoanRequestModel {
@@ -24,6 +25,7 @@ export class CreateLoanRequestModel {
   @IsNumber()
   @IsNotEmpty()
   @Min(1)
+  @Max(TENURE_MAX)
   tenureValue: number;
 
   @Expose()
@@ -42,6 +44,7 @@ export class CreateLoanRequestModel {
   @IsNumber()
   @IsNotEmpty()
   @Min(0)
+  @Max(INTEREST_PERCENTAGE_MAX)
   interestPercentage: number;
 
   @Expose()

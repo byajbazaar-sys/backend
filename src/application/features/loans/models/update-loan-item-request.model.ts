@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, Max } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
+import { AMOUNT_MAX, WEIGHT_MAX, RATE_MAX } from '@shared-libs';
 
 export class UpdateLoanItemRequestModel {
   @Expose()
@@ -9,6 +10,7 @@ export class UpdateLoanItemRequestModel {
   @IsNumber()
   @IsOptional()
   @Min(0.001)
+  @Max(AMOUNT_MAX)
   amount?: number;
 
   @Expose()
@@ -45,6 +47,7 @@ export class UpdateLoanItemRequestModel {
   @IsNumber()
   @IsOptional()
   @Min(0.001)
+  @Max(RATE_MAX)
   currentRate?: number;
 
   @Expose()
