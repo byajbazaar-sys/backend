@@ -1,6 +1,7 @@
+import { Params } from 'nestjs-pino';
 import { UsersAuthOptions, IDbOptions } from '@shared-libs';
 import { IApiOptions } from './i-api.options';
-import { WebAppOptions } from '../application';
+import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions } from '../application';
 import {
   AESEncryptOptions,
   LambdaOptions,
@@ -9,8 +10,7 @@ import {
   SendGridOptions,
   SesOptions,
 } from '../infrastructure';
-import { FileStorageOptions } from '../application';
-import { Params } from 'nestjs-pino';
+
 
 export interface IMsConfig {
   apiConfig: IApiOptions;
@@ -24,5 +24,6 @@ export interface IMsConfig {
   sendGrid: SendGridOptions;
   ses: SesOptions;
   webApp: WebAppOptions;
+  googleOAuth: GoogleOAuthOptions;
   logger: Params;
 }

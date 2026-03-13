@@ -8,17 +8,25 @@ import {
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { JwtService } from '@nestjs/jwt';
-import { IIdentity, UsersAuthOptions, JWT_EXPIRES_IN, BCRYPT_SALT_ROUNDS } from '@shared-libs';
+import { IIdentity, UsersAuthOptions, JWT_EXPIRES_IN, BCRYPT_SALT_ROUNDS, EUserType } from '@shared-libs';
 import { randomBytes } from 'crypto';
-import { LoginResponseModel } from './models';
+import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
 import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
 import { IAuthService } from './interfaces';
 import { compareSync, hashSync } from 'bcrypt';
 import { plainToInstance } from 'class-transformer';
-import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions } from '../../shared';
+import {
+  USERS_FILE_STORAGE,
+  IUsersFileStorage,
+  FileStorageOptions,
+  WebAppOptions,
+  EMAIL_SERVICE,
+  IEmailService,
+  IGoogleOAuthService,
+  GOOGLE_OAUTH_SERVICE,
+  GoogleUserInfo,
+} from '../../shared';
 import { v4 as uuidv4 } from 'uuid';
-import { EMAIL_SERVICE, IEmailService } from '../../shared/services/i-email.service';
-import { WebAppOptions } from '../../shared';
 import {
   EMAIL_TEMPLATE_SERVICE,
   IEmailTemplateService,
@@ -30,20 +38,40 @@ export class AuthService implements IAuthService {
     protected readonly jwtService: JwtService,
     protected readonly options: UsersAuthOptions,
     protected readonly fileStorageOptions: FileStorageOptions,
+    private readonly webAppOptions: WebAppOptions,
+    @Inject(GOOGLE_OAUTH_SERVICE) private readonly googleOAuthService: IGoogleOAuthService,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(USERS_FILE_STORAGE) private readonly usersFileStorage: IUsersFileStorage,
     @Inject(EMAIL_SERVICE) private readonly emailService: IEmailService,
     @Inject(EMAIL_TEMPLATE_SERVICE) private readonly emailTemplateService: IEmailTemplateService,
-    private readonly webAppOptions: WebAppOptions,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) { }
 
   async login(email: string, password: string): Promise<LoginResponseModel> {
     try {
       const user = await this.usersRepo.findByEmail(email.toLowerCase().trim());
-      if (!user || !compareSync(password, user.password)) {
+      
+      // User doesn't exist
+      if (!user) {
         throw new UnauthorizedException('Invalid credentials');
       }
+
+      // User exists but is a Google-only user (no password set)
+      if (!user.password || (typeof user.password === 'string' && user.password.trim() === '')) {
+        throw new UnauthorizedException(
+          'This account was created with Google Sign-In. Please use "Forgot Password" to set a password and login, or sign in with Google.'
+        );
+      }
+
+      // Password doesn't match
+      if (!compareSync(password, user.password)) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      // Update last login timestamp
+      await this.usersRepo.update(user.id, {
+        lastLoginAt: new Date(),
+      });
 
       const identity: IIdentity = {
         userId: user.id,
@@ -75,6 +103,13 @@ export class AuthService implements IAuthService {
     const user = plainToInstance(User, body);
     const existingUser = await this.usersRepo.findByEmail(user.email.toLowerCase().trim());
     if (existingUser) {
+      // User exists - check if it's a Google user
+      if (existingUser.isGoogleUser) {
+        throw new ConflictException(
+          'This email is already registered with Google Sign-In. Please sign in with Google or use "Forgot Password" to set a password.'
+        );
+      }
+      // Regular user already exists
       throw new ConflictException('User with this email already exists');
     }
 
@@ -249,6 +284,122 @@ export class AuthService implements IAuthService {
     }
   }
 
+  async googleSso(request: GoogleSsoRequestModel): Promise<GoogleSsoResponseModel> {
+    try {
+      let googleUser: GoogleUserInfo;
+
+      if (request.authCode) {
+        // OAuth2 Authorization Code Flow
+        const tokens = await this.googleOAuthService.exchangeCodeForTokens(request.authCode);
+
+        // Get user info from ID token
+        if (tokens.id_token) {
+          googleUser = await this.googleOAuthService.getUserInfoFromIdToken(tokens.id_token);
+        } else {
+          throw new UnauthorizedException('No ID token received');
+        }
+      } else if (request.accessToken) {
+        // Direct Access Token Flow (for mobile apps or other scenarios)
+        googleUser = await this.googleOAuthService.getUserInfoFromIdToken(request.accessToken);
+      } else {
+        throw new BadRequestException('Either authCode or accessToken must be provided');
+      }
+
+      if (!googleUser.email) {
+        throw new UnauthorizedException('Invalid Google token');
+      }
+
+      // Check if user exists with Google ID
+      let user = await this.usersRepo.findByGoogleId(googleUser.sub);
+
+      let isNewUser = false;
+
+      // If not found by Google ID, check by email
+      if (!user) {
+        const existingUser = await this.usersRepo.findByEmail(googleUser.email.toLowerCase().trim());
+
+        if (existingUser) {
+          // User exists with same email - link Google account to existing user
+          // This allows users who registered with email/password to later use Google Sign-In
+          await this.usersRepo.update(existingUser.id, {
+            googleId: googleUser.sub,
+            isGoogleUser: true,
+            isEmailVerified: true, // Google emails are verified
+            emailVerifiedAt: existingUser.emailVerifiedAt || new Date(),
+            lastLoginAt: new Date(),
+          });
+          
+          // Refresh user data
+          user = await this.usersRepo.findById(existingUser.id);
+          isNewUser = false;
+        }
+      }
+
+      // Create new user if not found
+      if (!user) {
+        const userId = uuidv4();
+        user = await this.usersRepo.create({
+          id: userId,
+          email: googleUser.email.toLowerCase().trim(),
+          firstName: googleUser.given_name || '',
+          lastName: googleUser.family_name || '',
+          isEmailVerified: true,
+          emailVerifiedAt: new Date(),
+          userType: EUserType.User,
+          googleId: googleUser.sub,
+          isGoogleUser: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          profilePhoto: Buffer.alloc(0),
+          profilePhotoFileName: '',
+          profilePhotoContentType: '',
+        });
+        isNewUser = true;
+      } else if (!isNewUser) {
+        // Update last login for existing user (only if we didn't just create it)
+        await this.usersRepo.update(user.id, {
+          lastLoginAt: new Date(),
+        });
+        // Refresh user to get updated timestamp
+        user = await this.usersRepo.findById(user.id);
+      }
+
+      const identity: IIdentity = {
+        userId: user.id,
+        userType: user.userType,
+        email: user.email,
+        emailVerified: user.isEmailVerified,
+      };
+
+      const token = await this.generateJwtToken(identity);
+      const profilePhotoUrl = user.profilePhotoRef
+        ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef)
+        : googleUser.picture;
+
+      return plainToInstance(
+        GoogleSsoResponseModel,
+        {
+          ...user,
+          accessToken: token,
+          profilePhotoUrl,
+          isNewUser,
+        },
+        {
+          excludeExtraneousValues: true,
+        },
+      );
+    } catch (error) {
+      this.logger.error({ error }, 'Google SSO error');
+      if (error.response?.status === 401) {
+        throw new UnauthorizedException('Invalid Google authorization code');
+      }
+      if (error.response?.status === 400) {
+        throw new BadRequestException('Invalid authorization code or client credentials');
+      }
+      throw error;
+    }
+  }
+
   generateJwtToken(payload: IIdentity): Promise<string> {
     return this.jwtService.signAsync(payload, {
       secret: this.options.secret,
@@ -259,3 +410,5 @@ export class AuthService implements IAuthService {
     });
   }
 }
+
+

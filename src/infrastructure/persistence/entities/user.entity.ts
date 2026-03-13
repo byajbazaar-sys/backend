@@ -31,7 +31,7 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 20, nullable: true })
   phoneNumber: string;
 
-  @Column({ type: 'varchar', length: 255, select: true })
+  @Column({ type: 'varchar', length: 255, select: true, nullable: true })
   password: string;
 
   @Column({ type: 'boolean', default: false })
@@ -63,6 +63,15 @@ export class UserEntity {
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   address: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  googleId: string;
+
+  @Column({ type: 'boolean', default: false })
+  isGoogleUser: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastLoginAt: Date;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -1,7 +1,7 @@
 import { generateLoggerConfig, UsersAuthOptions, type Environment } from '@shared-libs';
 import { Algorithm } from 'jsonwebtoken';
 import { IMsConfig } from './i-ms.config';
-import { WebAppOptions } from '../application';
+import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions } from '../application';
 import {
   AESEncryptOptions,
   LambdaOptions,
@@ -10,7 +10,6 @@ import {
   SendGridOptions,
   SesOptions,
 } from '../infrastructure';
-import { FileStorageOptions } from '../application';
 
 export const configFactory = (): IMsConfig => ({
   logger: generateLoggerConfig(),
@@ -68,4 +67,9 @@ export const configFactory = (): IMsConfig => ({
     process.env.SES_SENDER_NAME ?? '',
   ),
   webApp: new WebAppOptions(process.env.WEB_APP_DOMAIN),
+  googleOAuth: new GoogleOAuthOptions(
+    process.env.GOOGLE_CLIENT_ID ?? '',
+    process.env.GOOGLE_CLIENT_SECRET ?? '',
+    process.env.GOOGLE_REDIRECT_URI,
+  ),
 });

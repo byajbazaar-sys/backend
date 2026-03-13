@@ -9,4 +9,5 @@ export interface IUsersRepository {
   findByEmailVerificationToken(token: string): Promise<User>;
   findByResetPasswordToken(token: string): Promise<User>;
   findById(id: string): Promise<User>;
+  findByGoogleId(googleId: string): Promise<User>;
 }

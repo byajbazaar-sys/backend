@@ -10,6 +10,8 @@ import {
   ForgotPasswordRequestModel,
   ResetPasswordRequestModel,
   VerifyEmailRequestModel,
+  GoogleSsoRequestModel,
+  GoogleSsoResponseModel,
 } from './models';
 import { User } from '../users';
 import { plainToInstance } from 'class-transformer';
@@ -105,5 +107,20 @@ export class AuthController {
     this.logger.info({ token: body.token ? 'provided' : 'missing' }, 'resetPassword called');
     await this.authService.verifyForgotPasswordToken(body.token, body.newPassword);
     return 'Password reset successfully';
+  }
+
+  @Post('google-sso')
+  @ApiOperation({ summary: 'Authenticate with Google SSO' })
+  @ApiOkResponse({ type: GoogleSsoResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async googleSso(@Body() body: GoogleSsoRequestModel): Promise<GoogleSsoResponseModel> {
+    this.logger.info({
+      hasAuthCode: !!body.authCode,
+      hasAccessToken: !!body.accessToken
+    }, 'googleSso called');
+    const response = await this.authService.googleSso(body);
+    return plainToInstance(GoogleSsoResponseModel, response, {
+      excludeExtraneousValues: true,
+    });
   }
 }

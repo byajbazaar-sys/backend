@@ -8,3 +8,4 @@ export * from './sms';
 export * from './send-grid';
 export * from './ses';
 export * from './cron';
+export * from './google-oauth';

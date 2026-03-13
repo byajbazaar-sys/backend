@@ -68,4 +68,13 @@ export class User {
 
   @Expose()
   public address?: string;
+
+  @Expose()
+  public googleId?: string;
+
+  @Expose()
+  public isGoogleUser?: boolean;
+
+  @Expose()
+  public lastLoginAt?: Date;
 }

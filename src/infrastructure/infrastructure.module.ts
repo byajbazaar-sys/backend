@@ -9,6 +9,8 @@ import {
   DUES_REPOSITORY,
   EMAIL_SERVICE,
   FileStorageOptions,
+  GOOGLE_OAUTH_SERVICE,
+  GoogleOAuthOptions,
   ITEMS_REPOSITORY,
   LAMBDA_SERVICE,
   LOAN_ITEMS_REPOSITORY,
@@ -41,6 +43,7 @@ import CronServices from './cron';
 import { generateDataSourceOptions } from './persistence/type-orm.config';
 import Entities from './persistence/entities';
 import Seeds from './persistence/seeds';
+import { GoogleOAuthService } from './google-oauth';
 
 @Global()
 @Module({
@@ -147,6 +150,16 @@ import Seeds from './persistence/seeds';
         ),
     },
     {
+      provide: GoogleOAuthOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        new GoogleOAuthOptions(
+          configService.get('googleOAuth').clientId,
+          configService.get('googleOAuth').clientSecret,
+          configService.get('googleOAuth').redirectUri,
+        ),
+    },
+    {
       provide: USERS_FILE_STORAGE,
       useClass: process.env.MOCK_STORAGE ? FileStorageMock : UsersFileStorage,
     },
@@ -182,6 +195,10 @@ import Seeds from './persistence/seeds';
       provide: EMAIL_SERVICE,
       useClass: process.env.EMAIL_SERVICE_PROVIDER === 'ses' ? SesService : SendGridService,
     },
+    {
+      provide: GOOGLE_OAUTH_SERVICE,
+      useClass: GoogleOAuthService,
+    }
   ],
   exports: [
     HttpModule,
@@ -199,8 +216,10 @@ import Seeds from './persistence/seeds';
     DUES_REPOSITORY,
     NOTIFICATIONS_REPOSITORY,
     EMAIL_SERVICE,
+    GOOGLE_OAUTH_SERVICE,
     FileStorageOptions,
     WebAppOptions,
+    GoogleOAuthOptions,
     ...Seeds,
     ...CronServices,
   ],

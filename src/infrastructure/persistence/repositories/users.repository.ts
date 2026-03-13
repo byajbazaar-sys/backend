@@ -58,4 +58,10 @@ export class UsersRepository implements IUsersRepository {
     if (!user) return null;
     return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
+
+  async findByGoogleId(googleId: string): Promise<User> {
+    const user = await this.userRepo.findOne({ where: { googleId } });
+    if (!user) return null;
+    return plainToInstance(User, user, { excludeExtraneousValues: true });
+  }
 }

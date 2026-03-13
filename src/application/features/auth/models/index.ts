@@ -5,3 +5,5 @@ export * from './signup-response.model';
 export * from './forgot-password-request.model';
 export * from './reset-password-request.model';
 export * from './verify-email-request.model';
+export * from './google-sso-request.model';
+export * from './google-sso-response.model';

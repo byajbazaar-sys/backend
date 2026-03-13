@@ -1,6 +1,6 @@
 import { User } from '../../users';
 import { IIdentity } from '@shared-libs';
-import { LoginResponseModel } from '../models';
+import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from '../models';
 
 export const AUTH_SERVICE = 'IAuthService';
 
@@ -12,4 +12,5 @@ export interface IAuthService {
   verifyForgotPasswordToken(token: string, newPassword: string): Promise<User>;
   verifyEmail(token: string): Promise<LoginResponseModel>;
   resendVerificationEmail(email: string): Promise<void>;
+  googleSso(request: GoogleSsoRequestModel): Promise<GoogleSsoResponseModel>;
 }
