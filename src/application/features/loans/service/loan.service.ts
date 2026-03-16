@@ -10,6 +10,7 @@ import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FI
 import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../transactions/repository';
 import { Due } from '../../transactions';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus } from '../enums';
+import { ITEMS_REPOSITORY, IItemsRepository } from '../../items';
 
 @Injectable()
 export class LoanService implements ILoanService {
@@ -19,6 +20,7 @@ export class LoanService implements ILoanService {
     @Inject(USERS_FILE_STORAGE) private readonly loansFileStorage: IUsersFileStorage,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
+    @Inject(ITEMS_REPOSITORY) private readonly itemsRepo: IItemsRepository,
     @InjectPinoLogger(LoanService.name) private readonly logger: PinoLogger,
   ) { }
 
@@ -294,7 +296,14 @@ export class LoanService implements ILoanService {
         this.logger.warn({ loanId, itemId }, 'Loan item not found');
         throw new NotFoundException('Loan item not found');
       }
-
+      if (updateData?.itemId) {
+      const item = await this.itemsRepo.findById(updateData?.itemId);
+        if (!item) {
+          this.logger.warn({ itemId }, 'Item not found');
+          throw new NotFoundException('Item not found');
+        }
+        updateData.itemName = item.name;
+      }
       // Handle image update if provided
       if (updateData.image) {
         const fileExtension = updateData.image.mimetype.split('/')[1];

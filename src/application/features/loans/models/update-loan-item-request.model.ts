@@ -1,9 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, Max, IsUUID } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
-import { AMOUNT_MAX, WEIGHT_MAX, RATE_MAX } from '@shared-libs';
+import { AMOUNT_MAX, RATE_MAX } from '@shared-libs';
 
 export class UpdateLoanItemRequestModel {
+  @Expose()
+  @ApiPropertyOptional({ description: 'Item ID', example: 'fc3acf14-8313-44f3-998e-bc67afc1b465' })
+  @IsString()
+  @IsOptional()
+  @IsUUID()
+  itemId: string;
+
   @Expose()
   @Type(() => Number)
   @ApiPropertyOptional({ description: 'Item amount', example: 50000 })
@@ -12,18 +19,6 @@ export class UpdateLoanItemRequestModel {
   @Min(0.001)
   @Max(AMOUNT_MAX)
   amount?: number;
-
-  @Expose()
-  @ApiPropertyOptional({ description: 'Item name', example: 'Gold Necklace' })
-  @IsString()
-  @IsOptional()
-  itemName?: string;
-
-  @Expose()
-  @ApiPropertyOptional({ description: 'Item description', example: '22K gold necklace with intricate design' })
-  @IsString()
-  @IsOptional()
-  itemDescription?: string;
 
   @Expose()
   @Type(() => Number)
@@ -57,5 +52,6 @@ export class UpdateLoanItemRequestModel {
     required: false,
     description: 'Loan item image (JPEG, PNG, WebP) - maximum 5MB',
   })
+  @IsOptional()
   image?: Express.Multer.File[];
 }

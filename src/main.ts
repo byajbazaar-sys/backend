@@ -25,7 +25,12 @@ async function bootstrap(): Promise<void> {
     .getInstance()
     .set('query parser', (str: string) => parse(str, { depth: Infinity }));
   // Global validation pipe
-  app.useGlobalPipes(new ValidationPipe({ transform: true, transformOptions: { enableImplicitConversion: true } }));
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+    transformOptions: { enableImplicitConversion: true }
+  }));
   app.useGlobalInterceptors(new GlobalResponseInterceptor());
   const config = app.get<ConfigService<IMsConfig>>(ConfigService);
   const apiConfig = config.get<IApiOptions>('apiConfig');

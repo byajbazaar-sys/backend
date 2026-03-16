@@ -51,6 +51,7 @@ export class UpdateCustomerRequestModel {
     format: 'binary',
     description: 'Profile photo file (JPEG, PNG, WebP) - maximum 5MB',
   })
+  @IsOptional()
   profilePhoto?: Express.Multer.File;
 
   @Expose()
@@ -59,6 +60,7 @@ export class UpdateCustomerRequestModel {
     format: 'binary',
     description: 'Aadhar card file (JPEG, PNG, WebP) - maximum 5MB',
   })
+  @IsOptional()
   aadharCard?: Express.Multer.File;
 
   @Expose()
@@ -67,5 +69,6 @@ export class UpdateCustomerRequestModel {
     format: 'binary',
     description: 'PAN card file (JPEG, PNG, WebP) - maximum 5MB',
   })
+  @IsOptional()
   panCard?: Express.Multer.File;
 }

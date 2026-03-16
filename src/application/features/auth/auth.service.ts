@@ -389,14 +389,26 @@ export class AuthService implements IAuthService {
         },
       );
     } catch (error) {
-      this.logger.error({ error }, 'Google SSO error');
+      this.logger.error({ 
+        error: error?.message, 
+        stack: error?.stack, 
+        response: error?.response?.data,
+        status: error?.response?.status 
+      }, 'Google SSO error');
+      
       if (error.response?.status === 401) {
         throw new UnauthorizedException('Invalid Google authorization code');
       }
       if (error.response?.status === 400) {
-        throw new BadRequestException('Invalid authorization code or client credentials');
+        const googleError = error.response?.data?.error_description || error.response?.data?.error || error.message;
+        throw new BadRequestException(
+          `Invalid authorization code or client credentials: ${googleError || 'Please check your Google OAuth configuration'}`
+        );
       }
-      throw error;
+      if (error instanceof BadRequestException || error instanceof UnauthorizedException || error instanceof ConflictException) {
+        throw error;
+      }
+      throw new BadRequestException(`Google SSO failed: ${error?.message || 'Unknown error'}`);
     }
   }
 

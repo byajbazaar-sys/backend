@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumber, IsEnum, Min, Max, IsArray, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsEnum, Min, Max, IsArray, IsUUID, IsOptional } from 'class-validator';
 import { Expose, plainToInstance, Transform, Type } from 'class-transformer';
 import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../enums';
 import { INTEREST_PERCENTAGE_MAX, TENURE_MAX } from '@shared-libs';
@@ -69,5 +69,6 @@ export class CreateLoanRequestModel {
     required: false,
     description: 'Loan item images (JPEG, PNG, WebP) - maximum 5MB',
   })
+  @IsOptional()
   loanItemImages?: Express.Multer.File[];
 }

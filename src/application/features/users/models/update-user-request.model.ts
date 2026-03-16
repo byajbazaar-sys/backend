@@ -46,6 +46,7 @@ export class UpdateUserRequestModel {
     required: false,
     description: 'Profile photo file (JPEG, PNG, WebP) - maximum 5MB',
   })
+  @IsOptional()
   profilePhoto?: Express.Multer.File;
 
   @ApiProperty({

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
-import { IsEnum, IsNotEmpty, IsOptional, IsDate } from 'class-validator';
+import { IsDate, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ESortOrder } from '@shared-libs';
 import { ExportFormat } from '../../../shared';
 import { ELoanStatus } from '../enums';
@@ -19,11 +19,13 @@ export class DownloadLoansQueryRequestModel {
   @Expose()
   @ApiPropertyOptional({ enum: ESortOrder, example: ESortOrder.DESC, description: 'Sort order', required: false })
   @IsOptional()
+  @IsEnum(ESortOrder)
   sortOrder?: ESortOrder;
 
   @Expose()
   @ApiPropertyOptional({ example: 'createdAt', description: 'Field to sort by', required: false })
   @IsOptional()
+  @IsString()
   sortField?: string;
 
   @Expose()
@@ -33,6 +35,7 @@ export class DownloadLoansQueryRequestModel {
     required: false,
   })
   @IsOptional()
+  @IsUUID()
   customerId?: string;
 
   @Expose()

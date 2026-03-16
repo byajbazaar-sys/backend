@@ -10,15 +10,42 @@ export class GoogleOAuthService implements IGoogleOAuthService {
     this.client = new OAuth2Client(
       this.options.clientId,
       this.options.clientSecret,
-      this.options.redirectUri || 'postmessage'
+      this.options.redirectUri
     );
     this.logger.info({ options: this.options }, 'GoogleOAuthService constructor');
   }
 
   async exchangeCodeForTokens(code: string): Promise<GoogleTokenResponse> {
-    const { tokens } = await this.client.getToken(code);
-    this.client.setCredentials(tokens);
-    return tokens as GoogleTokenResponse;
+    if (!this.options.redirectUri) {
+      throw new Error('Redirect URI is not configured');
+    }
+
+    try {
+      this.logger.debug({ redirectUri: this.options.redirectUri }, 'Attempting token exchange with redirectUri');
+      
+      const client = new OAuth2Client(
+        this.options.clientId,
+        this.options.clientSecret,
+        this.options.redirectUri
+      );
+      
+      const { tokens } = await client.getToken({
+        code,
+        redirect_uri: this.options.redirectUri,
+      });
+      
+      client.setCredentials(tokens);
+      this.logger.info({ redirectUri: this.options.redirectUri }, 'Successfully exchanged authorization code');
+      return tokens as GoogleTokenResponse;
+    } catch (error: any) {
+      const errorData = error?.response?.data || {};
+      this.logger.error({
+        redirectUri: this.options.redirectUri,
+        error: error?.message,
+        details: errorData,
+      }, 'Token exchange failed');
+      throw error;
+    }
   }
 
   async verifyIdToken(idToken: string): Promise<GoogleUserInfo> {

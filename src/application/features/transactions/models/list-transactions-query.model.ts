@@ -1,25 +1,37 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ESortOrder } from '@shared-libs';
 import { Expose, Type } from 'class-transformer';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class ListTransactionsQueryRequestModel {
   @Expose()
   @Type(() => Number)
   @ApiPropertyOptional({ example: 10, description: 'Number of items per page', required: false })
-  pageSize: number;
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
 
   @Expose()
   @Type(() => Number)
   @ApiPropertyOptional({ example: 0, description: 'Page number (0-based)', required: false })
-  pageNumber: number;
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  pageNumber?: number;
 
   @Expose()
   @ApiPropertyOptional({ enum: ESortOrder, example: ESortOrder.DESC, description: 'Sort order', required: false })
-  sortOrder: ESortOrder;
+  @IsOptional()
+  @IsEnum(ESortOrder)
+  sortOrder?: ESortOrder;
 
   @Expose()
   @ApiPropertyOptional({ example: 'createdAt', description: 'Field to sort by', required: false })
-  sortField: string;
+  @IsOptional()
+  @IsString()
+  sortField?: string;
 
   @Expose()
   @ApiPropertyOptional({
@@ -27,6 +39,8 @@ export class ListTransactionsQueryRequestModel {
     description: 'Filter by loan ID',
     required: false,
   })
+  @IsOptional()
+  @IsUUID()
   loanId?: string;
 }
 

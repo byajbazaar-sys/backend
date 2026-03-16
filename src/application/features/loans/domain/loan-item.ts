@@ -15,7 +15,7 @@ export class LoanItem {
   public amount: number;
 
   @Expose()
-  public itemName: string;
+  public itemName?: string;
 
   @Expose()
   public itemDescription?: string;
