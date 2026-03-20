@@ -28,12 +28,6 @@ export class CreateLoanItemRequestModel {
   itemName: string;
 
   @Expose()
-  @ApiPropertyOptional({ description: 'Item description', example: '22K gold necklace with intricate design' })
-  @IsString()
-  @IsOptional()
-  itemDescription?: string;
-
-  @Expose()
   @Type(() => Number)
   @ApiProperty({ description: 'Net weight in grams', example: 50.5 })
   @IsNumber()

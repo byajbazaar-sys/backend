@@ -35,9 +35,9 @@ export class ItemsController {
   @ApiOperation({ summary: 'Get all items' })
   @ApiOkResponse({ description: 'Items fetched successfully', type: [ItemResponseModel] })
   @HttpCode(HttpStatus.OK)
-  async getAll(): Promise<ItemResponseModel[]> {
-    this.logger.info('getAll items called');
-    const items = await this.itemService.getAll();
+  async getAll(@Identity() identity: IIdentity): Promise<ItemResponseModel[]> {
+    this.logger.info({ identity }, 'getAll items called');
+    const items = await this.itemService.getAll(identity.userId);
     return plainToInstance(ItemResponseModel, items, {
       excludeExtraneousValues: true,
     });

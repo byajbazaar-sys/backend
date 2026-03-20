@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ItemEntity } from '../entities/item.entity';
 import { plainToInstance } from 'class-transformer';
 import { IItemsRepository, Item } from '../../../application/features/items';
+import { SYSTEM_USER_ID } from 'libs/constants/constants';
 
 @Injectable()
 export class ItemsRepository implements IItemsRepository {
@@ -34,8 +35,12 @@ export class ItemsRepository implements IItemsRepository {
     return plainToInstance(Item, item, { excludeExtraneousValues: true });
   }
 
-  async findAll(): Promise<Item[]> {
-    const items = await this.itemRepo.find();
+  async findAll(userId: string): Promise<Item[]> {
+    const items = await this.itemRepo.find({
+      where: {
+        createdBy: In([userId, SYSTEM_USER_ID]),
+      },
+    });
     return plainToInstance(Item, items, { excludeExtraneousValues: true });
   }
 

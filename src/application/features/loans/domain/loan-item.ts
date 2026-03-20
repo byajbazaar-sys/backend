@@ -18,9 +18,6 @@ export class LoanItem {
   public itemName?: string;
 
   @Expose()
-  public itemDescription?: string;
-
-  @Expose()
   @Type(() => Number)
   public netWeightInGrams: number;
 

@@ -43,9 +43,6 @@ export class LoanItemEntity {
   @Column({ type: 'varchar', length: 255 })
   itemName: string;
 
-  @Column({ type: 'varchar', length: 500, nullable: true })
-  itemDescription: string;
-
   @Column({ type: 'decimal', precision: 10, scale: 3 })
   netWeightInGrams: number;
 

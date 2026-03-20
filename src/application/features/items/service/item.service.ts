@@ -61,10 +61,10 @@ export class ItemService implements IItemService {
     }
   }
 
-  async getAll(): Promise<Item[]> {
+  async getAll(userId: string): Promise<Item[]> {
     try {
-      this.logger.info('Getting all items');
-      return await this.itemsRepo.findAll();
+      this.logger.info({ userId }, 'Getting all items');
+      return await this.itemsRepo.findAll(userId);
     } catch (err) {
       this.logger.error({ err }, 'Error getting all items');
       throw err;

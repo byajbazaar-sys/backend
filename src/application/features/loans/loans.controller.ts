@@ -211,7 +211,7 @@ export class LoansController {
   @Patch('items/:itemId')
   @ApiOperation({
     summary: 'Update loan item',
-    description: 'Update loan item details including amount, name, description, weights, rate, and image. Image can be updated by uploading a new file via multipart/form-data.',
+    description: 'Update loan item details including amount, name, weights, rate, and image. Image can be updated by uploading a new file via multipart/form-data.',
   })
   @ApiParam({ name: 'itemId', description: 'Loan Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: LoanItemResponseModel })
