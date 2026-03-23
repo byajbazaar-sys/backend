@@ -32,3 +32,20 @@ updateDuesCron:
           detail:
             job: 'updateDues'
             stage: '${self:provider.stage}'
+
+closeExpiredLoansCron:
+  handler: dist/src/lambda-handlers/cron.handler
+  description: 'Cron job to close open loans after tenure end - triggered by EventBridge daily'
+  timeout: 300
+  memorySize: 1512
+  events:
+    - schedule:
+        rate: cron(30 19 * * ? *)
+        enabled: true
+        description: 'Close expired loans daily at ~1:00 AM Asia/Kolkata (19:30 UTC previous calendar day)'
+        input:
+          source: '${self:service}'
+          'detail-type': 'Scheduled Event'
+          detail:
+            job: 'closeExpiredLoans'
+            stage: '${self:provider.stage}'

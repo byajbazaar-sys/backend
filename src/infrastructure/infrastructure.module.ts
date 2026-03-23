@@ -16,6 +16,7 @@ import {
   LOAN_ITEMS_REPOSITORY,
   LOANS_REPOSITORY,
   NOTIFICATIONS_REPOSITORY,
+  SUPPORT_REQUESTS_REPOSITORY,
   TRANSACTIONS_REPOSITORY,
   TWILIO_SERVICE,
   USERS_FILE_STORAGE,
@@ -28,6 +29,7 @@ import {
   LoanItemsRepository,
   LoansRepository,
   NotificationsRepository,
+  SupportRequestsRepository,
   TransactionsRepository,
   UsersRepository,
 } from './persistence';
@@ -97,6 +99,10 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: NOTIFICATIONS_REPOSITORY,
       useClass: NotificationsRepository,
+    },
+    {
+      provide: SUPPORT_REQUESTS_REPOSITORY,
+      useClass: SupportRequestsRepository,
     },
     {
       provide: AES_ENCRYPT_SERVICE,
@@ -215,6 +221,7 @@ import { GoogleOAuthService } from './google-oauth';
     TRANSACTIONS_REPOSITORY,
     DUES_REPOSITORY,
     NOTIFICATIONS_REPOSITORY,
+    SUPPORT_REQUESTS_REPOSITORY,
     EMAIL_SERVICE,
     GOOGLE_OAUTH_SERVICE,
     FileStorageOptions,

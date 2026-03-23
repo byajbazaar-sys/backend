@@ -34,12 +34,22 @@ Defines the main API Gateway Lambda function that handles all HTTP requests.
 
 Defines scheduled Lambda functions triggered by AWS EventBridge.
 
-#### Update Dues Cron
+#### Update Dues Cron (`updateDuesCron`)
 
 - **Handler**: `dist/src/lambda-handlers/cron.handler`
 - **Schedule**: Every 2 hours (`rate(2 hours)`)
-- **Memory**: 512 MB
+- **Event input**: `detail.job` = `updateDues` (routes in handler)
+- **Memory**: 1512 MB
 - **Timeout**: 300 seconds (5 minutes)
+
+#### Close Expired Loans Cron (`closeExpiredLoansCron`)
+
+- **Handler**: `dist/src/lambda-handlers/cron.handler` (same handler; job is selected via `detail.job`)
+- **Schedule**: Daily at 19:30 UTC (`cron(30 19 * * ? *)`) ≈ 01:00 Asia/Kolkata
+- **Event input**: `detail.job` = `closeExpiredLoans`
+- **Memory**: 1512 MB
+- **Timeout**: 300 seconds (5 minutes)
+- **Behavior**: Sets `status` to `Closed` for all **Open** loans where `created_at + tenure` (days / months / years per `tenure_type`) is on or before now.
 
 ## Providers
 
@@ -80,7 +90,9 @@ myNewCron:
         enabled: true
 ```
 
-2. **Update `CronService`** to include the new job execution logic
+2. **Add a cron service** extending `BaseCronService` (see `src/infrastructure/cron/close-expired-loans.cron.service.ts`)
+3. **Register** it in `src/infrastructure/cron/index.ts` and wire routing in `CronService.runAsync(job)`
+4. **Pass `detail.job`** in the scheduled function `input` and read it in `src/lambda-handlers/cron.ts` via `getJobFromEvent`
 
 ## RDS (PostgreSQL) Deployment
 

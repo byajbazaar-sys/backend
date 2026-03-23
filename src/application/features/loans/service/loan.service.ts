@@ -229,6 +229,29 @@ export class LoanService implements ILoanService {
     }
   }
 
+  async closeOpenLoansPastTenure(): Promise<number> {
+    try {
+      const toClose = await this.loansRepo.findOpenLoanIdsPastMaturity();
+      let closedCount = 0;
+      for (const { id, createdBy } of toClose) {
+        try {
+          await this.updateStatus(id, ELoanStatus.CLOSED, createdBy);
+          closedCount += 1;
+        } catch (err) {
+          this.logger.warn(
+            { err, loanId: id, createdBy },
+            'Skipping loan when closing past tenure (e.g. already closed or not found)',
+          );
+        }
+      }
+      this.logger.info({ closedCount, candidates: toClose.length }, 'Closed open loans past tenure (cron)');
+      return closedCount;
+    } catch (err) {
+      this.logger.error({ err }, 'Error closing open loans past tenure');
+      throw err;
+    }
+  }
+
   async updateStatus(id: string, status: ELoanStatus, createdBy: string): Promise<Loan> {
     try {
       this.logger.info({ loanId: id, status, createdBy }, 'Updating loan status');
@@ -249,10 +272,13 @@ export class LoanService implements ILoanService {
         throw new BadRequestException('Loan is already open');
       }
 
-      // Update loan status
+      const closedAt = status === ELoanStatus.CLOSED ? new Date() : null;
+
+      // Update loan status and closed-at timestamp
       const updatedLoan = await this.loansRepo.update(id, {
         status,
         createdBy,
+        closedAt,
       } as Loan);
 
       if (!updatedLoan) {

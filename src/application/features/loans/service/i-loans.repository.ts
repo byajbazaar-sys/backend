@@ -17,4 +17,5 @@ export interface ILoansRepository {
     delete(id: string, createdBy: string): Promise<void>;
     deleteByCustomerId(customerId: string, createdBy: string): Promise<void>;
     getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;
+    findOpenLoanIdsPastMaturity(): Promise<Array<{ id: string; createdBy: string }>>;
 }

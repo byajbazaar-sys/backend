@@ -73,6 +73,14 @@ export class LoanResponseModel {
   status: ELoanStatus;
 
   @Expose()
+  @ApiPropertyOptional({
+    description: 'When the loan was closed; null while status is Open',
+    type: Date,
+  })
+  @Type(() => Date)
+  closedAt?: Date;
+
+  @Expose()
   @ApiProperty({ description: 'Loan items', type: [LoanItemResponseModel] })
   @Type(() => LoanItemResponseModel)
   loanItems?: LoanItemResponseModel[];

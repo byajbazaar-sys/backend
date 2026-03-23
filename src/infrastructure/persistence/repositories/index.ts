@@ -6,3 +6,4 @@ export * from './items.repository';
 export * from './transactions.repository';
 export * from './dues.repository';
 export * from './notifications.repository';
+export * from './support-requests.repository';

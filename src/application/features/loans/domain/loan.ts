@@ -57,4 +57,8 @@ export class Loan {
 
   @Expose()
   public status: ELoanStatus;
+
+  @Expose()
+  @Type(() => Date)
+  public closedAt?: Date;
 }

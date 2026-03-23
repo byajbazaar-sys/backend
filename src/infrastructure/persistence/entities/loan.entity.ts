@@ -69,6 +69,9 @@ export class LoanEntity {
   @Column({ type: 'enum', enum: ELoanStatus, enumName: 'e_loan_status_enum', default: ELoanStatus.OPEN })
   status: ELoanStatus;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  closedAt?: Date;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   currentRate: number;
 

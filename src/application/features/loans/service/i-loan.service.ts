@@ -16,4 +16,5 @@ export interface ILoanService {
   recalculateDuesForLoan(loanId: string, createdBy: string): Promise<void>;
   delete(id: string, userId: string): Promise<void>;
   getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;
+  closeOpenLoansPastTenure(): Promise<number>;
 }

@@ -6,6 +6,7 @@ import { LoansController } from './loans';
 import { TransactionsController } from './transactions';
 import { ItemsController } from './items';
 import { NotificationsController } from './notifications';
+import { SupportController } from './support';
 
 export * from './users';
 export * from './auth';
@@ -14,6 +15,7 @@ export * from './loans';
 export * from './transactions';
 export * from './items';
 export * from './notifications';
+export * from './support';
 
 export const Controllers = [
   UsersController,
@@ -23,6 +25,7 @@ export const Controllers = [
   TransactionsController,
   ItemsController,
   NotificationsController,
+  SupportController,
 ];
 
 export const Services = [JwtService];

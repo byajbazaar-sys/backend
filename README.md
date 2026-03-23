@@ -84,18 +84,16 @@ serverless/
    - Routes: All endpoints under `/api/v1/`
    - Handler: `dist/lambda-handlers/api.handler`
 
-2. **Cron Function** (`updateDuesCron`)
-   - Scheduled job triggered by AWS EventBridge
-   - Schedule: Every 2 hours
-   - Handler: `dist/lambda-handlers/cron.handler`
-   - Executes: `UpdateDuesCronService` to update loan dues
+2. **Cron Functions** (shared handler `dist/lambda-handlers/cron.handler`; job selected via EventBridge `detail.job`)
+   - **`updateDuesCron`**: every 2 hours — `UpdateDuesCronService`
+   - **`closeExpiredLoansCron`**: daily (~01:00 Asia/Kolkata) — `CloseExpiredLoansCronService` closes open loans past tenure
 
 ### AWS EventBridge Configuration
 
-The cron job is configured to run via AWS EventBridge with the following schedule:
-- **Schedule Expression**: `rate(2 hours)`
-- **Description**: Update dues cron job scheduled to run every 2 hours
-- **Timezone**: Asia/Kolkata (configured in the cron service)
+Scheduled Lambdas use `input.detail.job` (`updateDues` or `closeExpiredLoans`) so one handler runs the correct job.
+
+- **Update dues**: `rate(2 hours)`; in-process schedule also uses **Asia/Kolkata** where applicable
+- **Close expired loans**: `cron(30 19 * * ? *)` (19:30 UTC daily ≈ 01:00 IST); in-process schedule: `EVERY_DAY_AT_1AM` with **Asia/Kolkata**
 
 ### Serverless Commands
 
@@ -124,6 +122,7 @@ $ yarn run sls info
 # View logs
 $ yarn run sls logs --function api --tail
 $ yarn run sls logs --function updateDuesCron --tail
+$ yarn run sls logs --function closeExpiredLoansCron --tail
 ```
 
 ### Environment Variables
@@ -228,6 +227,7 @@ $ yarn run sls logs --function api --tail
 
 # View cron function logs
 $ yarn run sls logs --function updateDuesCron --tail
+$ yarn run sls logs --function closeExpiredLoansCron --tail
 
 # View logs for specific time range
 $ yarn run sls logs --function api --startTime 1h
@@ -253,6 +253,13 @@ The application includes a cron job service that runs on AWS EventBridge:
 - **Handler**: `src/lambda-handlers/cron.handler.ts`
 - **Purpose**: Updates loan dues status and calculations
 
+### Close Expired Loans Cron Job
+
+- **Service**: `CloseExpiredLoansCronService`
+- **Schedule**: Daily at 1:00 AM (Asia/Kolkata) in-app; EventBridge daily at 19:30 UTC
+- **Handler**: `src/lambda-handlers/cron.handler.ts` with `detail.job: closeExpiredLoans`
+- **Purpose**: Sets loans to **Closed** when `created_at + tenure` (days/months/years) has passed
+
 ### Adding New Cron Jobs
 
 1. Create a new cron service extending `BaseCronService`:
@@ -272,7 +279,7 @@ myNewCron:
         rate: rate(1 hour)
 ```
 
-3. Update `CronService` to include the new job
+3. Route the job in `CronService.runAsync(job)` and pass `detail.job` from `serverless/functions.yml`
 
 ## Project Structure
 

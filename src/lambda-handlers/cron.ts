@@ -18,7 +18,20 @@ async function bootstrap() {
   return app;
 }
 
-export const handler: Handler = async (event: any, context: Context) => {
+function getJobFromEvent(event: unknown): string | undefined {
+  if (event === null || typeof event !== 'object') {
+    return undefined;
+  }
+  const e = event as Record<string, unknown>;
+  const detail = e.detail;
+  if (detail !== null && typeof detail === 'object' && 'job' in detail) {
+    const job = (detail as Record<string, unknown>).job;
+    return typeof job === 'string' ? job : undefined;
+  }
+  return undefined;
+}
+
+export const handler: Handler = async (event: unknown, context: Context) => {
   // Set callbackWaitsForEmptyEventLoop to false to allow Lambda to freeze the event loop
   context.callbackWaitsForEmptyEventLoop = false;
 
@@ -26,14 +39,16 @@ export const handler: Handler = async (event: any, context: Context) => {
     const app = await bootstrap();
     const cronService = app.get<CronService>(CronService);
 
-    console.log('Starting cron job execution...');
-    await cronService.runAsync();
+    const job = getJobFromEvent(event);
+    console.log('Starting cron job execution...', job ? { job } : { job: 'updateDues (default)' });
+    await cronService.runAsync(job);
     console.log('Cron job execution completed successfully');
 
     return {
       statusCode: 200,
       body: JSON.stringify({
         message: 'Cron job executed successfully',
+        job: job ?? 'updateDues',
         timestamp: new Date().toISOString(),
       }),
     };

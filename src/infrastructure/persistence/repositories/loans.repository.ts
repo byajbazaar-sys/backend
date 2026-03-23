@@ -5,6 +5,7 @@ import { LoanEntity } from '../entities/loan.entity';
 import { plainToInstance } from 'class-transformer';
 import {
   ELoanStatus,
+  ELoanTenureType,
   ILoansRepository,
   Loan,
   LoanExtended,
@@ -237,5 +238,27 @@ export class LoansRepository implements ILoansRepository {
 
   async deleteByCustomerId(customerId: string, createdBy: string): Promise<void> {
     await this.loanRepo.delete({ customerId, createdBy: createdBy });
+  }
+
+  async findOpenLoanIdsPastMaturity(): Promise<Array<{ id: string; createdBy: string }>> {
+    const rows = await this.loanRepo
+      .createQueryBuilder('loan')
+      .select(['loan.id', 'loan.createdBy'])
+      .where('loan.status = :open', { open: ELoanStatus.OPEN })
+      .andWhere(
+        `(
+          (loan.tenure_type = :days AND loan.created_at + (loan.tenure_value * interval '1 day') <= NOW()) OR
+          (loan.tenure_type = :months AND loan.created_at + (loan.tenure_value * interval '1 month') <= NOW()) OR
+          (loan.tenure_type = :years AND loan.created_at + (loan.tenure_value * interval '1 year') <= NOW())
+        )`,
+        {
+          days: ELoanTenureType.DAYS,
+          months: ELoanTenureType.MONTHS,
+          years: ELoanTenureType.YEARS,
+        },
+      )
+      .getMany();
+
+    return rows.map((r) => ({ id: r.id, createdBy: r.createdBy }));
   }
 }

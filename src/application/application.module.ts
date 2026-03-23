@@ -18,6 +18,8 @@ import {
   LoanService,
   NOTIFICATION_SERVICE,
   NotificationService,
+  SUPPORT_SERVICE,
+  SupportService,
   TRANSACTION_SERVICE,
   TransactionService,
   USERS_SERVICE,
@@ -69,10 +71,14 @@ import {
       useClass: NotificationService,
     },
     {
+      provide: SUPPORT_SERVICE,
+      useClass: SupportService,
+    },
+    {
       provide: USERS_SERVICE,
       useClass: UsersService,
     },
   ],
-  exports: [PassportModule, UserJwtStrategy, TRANSACTION_SERVICE],
+  exports: [PassportModule, UserJwtStrategy, TRANSACTION_SERVICE, LOAN_SERVICE],
 })
 export class ApplicationModule {}
