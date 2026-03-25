@@ -22,10 +22,10 @@ export class CreateCustomerRequestModel {
   lastName: string;
 
   @Expose()
-  @ApiProperty({ description: 'Email address of the customer', example: 'john.doe@example.com' })
+  @ApiPropertyOptional({ description: 'Email address of the customer', example: 'john.doe@example.com' })
   @IsEmail()
-  @IsNotEmpty()
-  email: string;
+  @IsOptional()
+  email?: string;
 
   @Expose()
   @ApiPropertyOptional({ description: 'Phone number of the customer', example: '+1234567890' })

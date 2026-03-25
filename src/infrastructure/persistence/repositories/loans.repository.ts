@@ -176,10 +176,10 @@ export class LoansRepository implements ILoansRepository {
           COUNT(*) FILTER (WHERE l.status = 'Open') AS "open",
           COUNT(*) FILTER (WHERE l.status = 'Closed') AS "closed",
 
-          ROUND(SUM(l.amount_remaining * COALESCE(r.ratio,1)), 2) AS "amountRemaining",
-          ROUND(SUM(l.amount_paid * COALESCE(r.ratio,1)), 2) AS "amountPaid",
-          ROUND(SUM(l.interest_remaining * COALESCE(r.ratio,1)), 2) AS "interestRemaining",
-          ROUND(SUM(l.interest_paid * COALESCE(r.ratio,1)), 2) AS "interestPaid"
+          ROUND(SUM(l.amount_remaining * COALESCE(r.ratio,0)), 2) AS "amountRemaining",
+          ROUND(SUM(l.amount_paid * COALESCE(r.ratio,0)), 2) AS "amountPaid",
+          ROUND(SUM(l.interest_remaining * COALESCE(r.ratio,0)), 2) AS "interestRemaining",
+          ROUND(SUM(l.interest_paid * COALESCE(r.ratio,0)), 2) AS "interestPaid"
 
       FROM loans l
       LEFT JOIN loan_ratio r ON r.loan_id = l.id

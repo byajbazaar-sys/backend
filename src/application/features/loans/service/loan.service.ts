@@ -328,7 +328,6 @@ export class LoanService implements ILoanService {
           this.logger.warn({ itemId }, 'Item not found');
           throw new NotFoundException('Item not found');
         }
-        updateData.itemName = item.name;
       }
       // Handle image update if provided
       if (updateData.image) {

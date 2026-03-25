@@ -36,8 +36,8 @@ export class CustomerEntity {
   @Column({ type: 'varchar', length: 100 })
   lastName: string;
 
-  @Column({ type: 'varchar', length: 255 })
-  email: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  email?: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   phone: string;

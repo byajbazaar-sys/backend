@@ -22,7 +22,6 @@ custom:
     timeout: 29
   includeDependencies:
     enableCaching: true
-    logLevel: error
 
 functions: ${file(serverless/functions.yml)}
 
@@ -40,5 +39,6 @@ package:
     - '!nest-cli.json'
     - '!eslint.config.mjs'
     - '!.git/**'
+    - '!node_modules/aws-sdk/**'
     - 'dist/**'
     - 'package.json'
