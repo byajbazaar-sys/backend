@@ -1,4 +1,4 @@
-import { Item } from '../domain';
+import { Item } from '../../features';
 
 export const ITEMS_REPOSITORY = 'ITEMS_REPOSITORY';
 

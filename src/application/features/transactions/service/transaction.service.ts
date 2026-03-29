@@ -1,13 +1,12 @@
 import { Inject, Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { Transaction, Due } from '../domain';
-import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../repository';
+import { Transaction } from '../domain';
 import { ITransactionService } from './i-transaction.service';
 import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, DuesFilterOptions } from '../options';
 import { Paged, toPaged } from '@shared-libs';
 import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus, Loan, ILoanService, LOAN_SERVICE, EInterestCalculationMethod } from '../../loans';
 import { ETransactionType } from '../enums';
-import { DUES_REPOSITORY, EDueType, IDuesRepository } from '../../../shared';
+import { DUES_REPOSITORY, EDueType, IDuesRepository, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../../shared';
 
 @Injectable()
 export class TransactionService implements ITransactionService {

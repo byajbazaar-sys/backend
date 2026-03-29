@@ -9,6 +9,13 @@
     "editor.formatOnSave": true
   },
   "cSpell.words": [
-    "byajbazaar"
+    "bufferutil",
+    "byajbazaar",
+    "fastify",
+    "fsevents",
+    "hana",
+    "ioredis",
+    "oracledb",
+    "typeorm"
   ]
 }

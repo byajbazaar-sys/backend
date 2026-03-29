@@ -61,6 +61,12 @@ export class LoanItemsRepository implements ILoanItemsRepository {
     return plainToInstance(LoanItem, updated, { excludeExtraneousValues: true });
   }
 
+  async findByItemId(itemId: string): Promise<LoanItem> {
+    const loanItem = await this.loanItemRepo.findOne({ where: { itemId } });
+    if (!loanItem) return null;
+    return plainToInstance(LoanItem, loanItem, { excludeExtraneousValues: true });
+  }
+
   async deleteByLoanId(loanId: string): Promise<void> {
     await this.loanItemRepo.delete({ loanId });
   }

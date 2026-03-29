@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ItemEntity } from '../entities/item.entity';
 import { plainToInstance } from 'class-transformer';
-import { IItemsRepository, Item } from '../../../application/features/items';
+import { IItemsRepository, Item } from '../../../application';
 import { SYSTEM_USER_ID } from 'libs/constants/constants';
 
 @Injectable()

@@ -1,15 +1,17 @@
-import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { Item } from '../domain';
-import { IItemsRepository, ITEMS_REPOSITORY } from './i-items.repository';
+import { IItemsRepository, ITEMS_REPOSITORY } from '../../../shared';
 import { IItemService } from './i-item.service';
 import { CreateItemRequestModel } from '../models';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { SYSTEM_USER_ID } from '@shared-libs';
+import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans';
 
 @Injectable()
 export class ItemService implements IItemService {
   constructor(
     @Inject(ITEMS_REPOSITORY) private readonly itemsRepo: IItemsRepository,
+    @Inject(LOAN_ITEMS_REPOSITORY) private readonly loanItemsRepo: ILoanItemsRepository,
     @InjectPinoLogger(ItemService.name) private readonly logger: PinoLogger,
   ) { }
 
@@ -121,6 +123,10 @@ export class ItemService implements IItemService {
       }
       if (item.createdBy === SYSTEM_USER_ID) {
         throw new ForbiddenException('Cannot delete system-generated items');
+      }
+      const loanItems = await this.loanItemsRepo.findByItemId(id);
+      if (loanItems) {
+        throw new BadRequestException('Cannot delete items associated with loans');
       }
       await this.itemsRepo.delete(id);
       this.logger.info({ itemId: id }, 'Item deleted successfully');

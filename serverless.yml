@@ -22,7 +22,6 @@ custom:
     timeout: 29
   includeDependencies:
     enableCaching: true
-
 functions: ${file(serverless/functions.yml)}
 
 resources: ${file(serverless/resources.yml)}

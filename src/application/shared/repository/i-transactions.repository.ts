@@ -1,7 +1,5 @@
-import { Transaction } from '../domain';
-import { TransactionsFilterOptions, TransactionsDownloadFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
-import { ETransactionType } from '../enums';
+import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, ETransactionType, Transaction } from '../../features';
 
 export const TRANSACTIONS_REPOSITORY = 'ITransactionsRepository';
 

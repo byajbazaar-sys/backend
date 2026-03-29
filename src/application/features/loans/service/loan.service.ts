@@ -4,13 +4,9 @@ import { Loan, LoanExtended, LoanItem, LoanStats } from '../domain';
 import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
 import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
-import { Paged } from '@shared-libs';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
-import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
-import { ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../transactions/repository';
-import { Due } from '../../transactions';
+import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE, IItemsRepository, ITEMS_REPOSITORY, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../../shared';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus } from '../enums';
-import { ITEMS_REPOSITORY, IItemsRepository } from '../../items';
 
 @Injectable()
 export class LoanService implements ILoanService {
@@ -296,7 +292,7 @@ export class LoanService implements ILoanService {
     }
   }
 
-  async updateLoanItem(itemId: string, updateData: Partial<LoanItem>, createdBy: string): Promise<LoanItem> {
+  async updateLoanItem(itemId: string, updateData: LoanItem, createdBy: string): Promise<LoanItem> {
     try {
       this.logger.info({ itemId, createdBy }, 'Updating loan item');
 
@@ -323,7 +319,7 @@ export class LoanService implements ILoanService {
         throw new NotFoundException('Loan item not found');
       }
       if (updateData?.itemId) {
-      const item = await this.itemsRepo.findById(updateData?.itemId);
+        const item = await this.itemsRepo.findById(updateData?.itemId);
         if (!item) {
           this.logger.warn({ itemId }, 'Item not found');
           throw new NotFoundException('Item not found');
