@@ -50,4 +50,11 @@ export class UserResponseModel {
   @Expose()
   @ApiProperty({ example: '123 Main Street, City, State, ZIP Code', nullable: true, required: false, description: 'Business address' })
   address?: string;
+
+  @Expose()
+  @ApiProperty({
+    example: false,
+    description: 'Whether the user has not yet completed a first login (password, Google, or verify-email session).',
+  })
+  isFirstLogin?: boolean;
 }

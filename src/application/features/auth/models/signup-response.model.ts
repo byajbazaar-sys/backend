@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class SignupResponseModel {
   @Expose()
@@ -37,4 +37,16 @@ export class SignupResponseModel {
   @Expose()
   @ApiProperty({ example: '123 Main Street, City, State, ZIP Code', nullable: true, required: false, description: 'Business address' })
   address?: string;
+
+  @Expose()
+  @ApiProperty({ example: '2025-01-01T12:00:00.000Z' })
+  @Type(() => Date)
+  lastLoginAt: Date;
+
+  @Expose()
+  @ApiProperty({
+    example: true,
+    description: 'New accounts start as first-login until they complete a login or email verification that issues a session.',
+  })
+  isFirstLogin: boolean;
 }

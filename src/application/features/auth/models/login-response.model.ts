@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { EUserType } from '@shared-libs';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class LoginResponseModel {
   @Expose()
@@ -38,6 +38,19 @@ export class LoginResponseModel {
   @Expose()
   @ApiProperty({ example: 'https://example.com/profile.jpg', nullable: true })
   profilePhotoUrl: string;
+
+  @Expose()
+  @ApiProperty({ example: '2025-01-01T12:00:00.000Z' })
+  @Type(() => Date)
+  lastLoginAt: Date;
+
+  @Expose()
+  @ApiProperty({
+    example: true,
+    description:
+      "True only when this successful auth was the user's first login; the stored flag is set to false after this response.",
+  })
+  isFirstLogin: boolean;
 
   constructor(
     accessToken: string,

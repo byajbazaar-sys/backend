@@ -76,5 +76,9 @@ export class User {
   public isGoogleUser?: boolean;
 
   @Expose()
+  @Type(() => Date)
   public lastLoginAt?: Date;
+
+  @Expose()
+  public isFirstLogin?: boolean;
 }

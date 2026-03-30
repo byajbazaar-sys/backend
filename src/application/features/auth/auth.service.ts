@@ -67,11 +67,9 @@ export class AuthService implements IAuthService {
       if (!compareSync(password, user.password)) {
         throw new UnauthorizedException('Invalid credentials');
       }
-
-      // Update last login timestamp
-      await this.usersRepo.update(user.id, {
-        lastLoginAt: new Date(),
-      });
+      const now = new Date();
+      const wasFirstLogin = user.isFirstLogin === true;
+      await this.usersRepo.update(user.id, { lastLoginAt: now, isFirstLogin: false });
 
       const identity: IIdentity = {
         userId: user.id,
@@ -85,6 +83,8 @@ export class AuthService implements IAuthService {
         LoginResponseModel,
         {
           ...user,
+          lastLoginAt: now,
+          isFirstLogin: wasFirstLogin,
           accessToken: token,
           profilePhotoUrl: user.profilePhotoRef ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef) : null,
         },
@@ -129,6 +129,7 @@ export class AuthService implements IAuthService {
         ...user,
         emailVerificationToken,
         emailVerificationExpires,
+        isFirstLogin: true,
       });
 
       const verificationUrl = this.webAppOptions.buildVerifyEmailUrl(emailVerificationToken);
@@ -251,14 +252,23 @@ export class AuthService implements IAuthService {
       }
 
       const now = new Date();
+      const wasFirstLogin = user.isFirstLogin === true;
       await this.usersRepo.update(user.id, {
         isEmailVerified: true,
         emailVerifiedAt: now,
+        lastLoginAt: now,
         emailVerificationToken: null,
         emailVerificationExpires: null,
+        isFirstLogin: false,
       });
 
-      const updatedUser = { ...user, isEmailVerified: true, emailVerifiedAt: now };
+      const updatedUser = {
+        ...user,
+        isEmailVerified: true,
+        emailVerifiedAt: now,
+        lastLoginAt: now,
+        isFirstLogin: wasFirstLogin,
+      };
       const identity: IIdentity = {
         userId: updatedUser.id,
         userType: updatedUser.userType,
@@ -287,6 +297,7 @@ export class AuthService implements IAuthService {
   async googleSso(request: GoogleSsoRequestModel): Promise<GoogleSsoResponseModel> {
     try {
       let googleUser: GoogleUserInfo;
+      const now = new Date();
 
       if (request.authCode) {
         // OAuth2 Authorization Code Flow
@@ -325,10 +336,9 @@ export class AuthService implements IAuthService {
             googleId: googleUser.sub,
             isGoogleUser: true,
             isEmailVerified: true, // Google emails are verified
-            emailVerifiedAt: existingUser.emailVerifiedAt || new Date(),
-            lastLoginAt: new Date(),
+            emailVerifiedAt: existingUser.emailVerifiedAt || now,
           });
-          
+
           // Refresh user data
           user = await this.usersRepo.findById(existingUser.id);
           isNewUser = false;
@@ -344,24 +354,28 @@ export class AuthService implements IAuthService {
           firstName: googleUser.given_name || '',
           lastName: googleUser.family_name || '',
           isEmailVerified: true,
-          emailVerifiedAt: new Date(),
+          emailVerifiedAt: now,
           userType: EUserType.User,
           googleId: googleUser.sub,
           isGoogleUser: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          isFirstLogin: true,
+          createdAt: now,
+          updatedAt: now,
           profilePhoto: Buffer.alloc(0),
           profilePhotoFileName: '',
           profilePhotoContentType: '',
         });
         isNewUser = true;
-      } else if (!isNewUser) {
-        // Update last login for existing user (only if we didn't just create it)
-        await this.usersRepo.update(user.id, {
-          lastLoginAt: new Date(),
-        });
-        // Refresh user to get updated timestamp
-        user = await this.usersRepo.findById(user.id);
+      }
+
+      const wasFirstLogin = user.isFirstLogin === true;
+      await this.usersRepo.update(user.id, {
+        lastLoginAt: now,
+        isFirstLogin: false,
+      });
+      user = await this.usersRepo.findById(user.id);
+      if (!user) {
+        throw new BadRequestException('Failed to load user after Google sign-in');
       }
 
       const identity: IIdentity = {
@@ -383,6 +397,7 @@ export class AuthService implements IAuthService {
           accessToken: token,
           profilePhotoUrl,
           isNewUser,
+          isFirstLogin: wasFirstLogin,
         },
         {
           excludeExtraneousValues: true,

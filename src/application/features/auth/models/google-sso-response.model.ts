@@ -42,4 +42,12 @@ export class GoogleSsoResponseModel {
   @Expose()
   @ApiProperty({ example: true, description: 'Whether this is a new user created via Google SSO' })
   isNewUser: boolean;
+
+  @Expose()
+  @ApiProperty({
+    example: true,
+    description:
+      "True only when this successful Google sign-in was the user's first login; the stored flag is cleared after this response.",
+  })
+  isFirstLogin: boolean;
 }

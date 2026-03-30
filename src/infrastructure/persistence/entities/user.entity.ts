@@ -73,6 +73,9 @@ export class UserEntity {
   @Column({ type: 'timestamptz', nullable: true })
   lastLoginAt: Date;
 
+  @Column({ type: 'boolean', default: true })
+  isFirstLogin: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 
