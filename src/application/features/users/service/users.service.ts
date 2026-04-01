@@ -1,9 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { User } from '../domain';
 import { IUsersRepository, USERS_REPOSITORY } from './i-users.repository';
 import { IUsersService } from './i-users.service';
-import { Paged, toPaged } from '@shared-libs';
+import { Paged, toPaged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { USERS_FILE_STORAGE, IUsersFileStorage } from '../../../shared';
 import { plainToInstance } from 'class-transformer';
 
@@ -81,13 +81,13 @@ export class UsersService implements IUsersService {
         }
 
         // Upload new profile photo
-        const fileExtension = updateData.profilePhotoContentType.split('/')[1];
-        const newProfilePhotoRef = `users/profiles/${id}.${fileExtension}`;
-        await this.usersFileStorage.writeAsync(
-          newProfilePhotoRef,
+        const normalized = await normalizeImageBufferForStorageOrThrow(
           updateData.profilePhoto,
           updateData.profilePhotoContentType,
+          updateData.profilePhotoFileName,
         );
+        const newProfilePhotoRef = `users/profiles/${id}.${normalized.fileExtension}`;
+        await this.usersFileStorage.writeAsync(newProfilePhotoRef, normalized.buffer, normalized.mimetype);
 
         updateData.profilePhotoRef = newProfilePhotoRef;
         this.logger.info({ userId: id, profilePhotoRef: newProfilePhotoRef }, 'Profile photo uploaded successfully');
@@ -115,7 +115,7 @@ export class UsersService implements IUsersService {
       this.logger.info({ userId: id }, 'User updated successfully');
       return response;
     } catch (err) {
-      if (err instanceof NotFoundException) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException) {
         throw err;
       }
       this.logger.error({ err, userId: id }, 'Error updating user');

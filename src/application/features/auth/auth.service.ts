@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { JwtService } from '@nestjs/jwt';
-import { IIdentity, UsersAuthOptions, JWT_EXPIRES_IN, BCRYPT_SALT_ROUNDS, EUserType } from '@shared-libs';
+import { IIdentity, UsersAuthOptions, JWT_EXPIRES_IN, BCRYPT_SALT_ROUNDS, EUserType, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { randomBytes } from 'crypto';
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
 import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
@@ -118,9 +118,13 @@ export class AuthService implements IAuthService {
       user.id = userId;
       this.logger.debug({ userId, email: user.email }, 'Creating new user');
       if (user.profilePhoto && user.profilePhotoContentType) {
-        const fileExtension = user.profilePhotoContentType.split('/')[1];
-        user.profilePhotoRef = `users/profiles/${userId}.${fileExtension}`;
-        await this.usersFileStorage.writeAsync(user.profilePhotoRef, user.profilePhoto, user.profilePhotoContentType);
+        const normalized = await normalizeImageBufferForStorageOrThrow(
+          user.profilePhoto,
+          user.profilePhotoContentType,
+          user.profilePhotoFileName,
+        );
+        user.profilePhotoRef = `users/profiles/${userId}.${normalized.fileExtension}`;
+        await this.usersFileStorage.writeAsync(user.profilePhotoRef, normalized.buffer, normalized.mimetype);
       }
 
       const emailVerificationToken = randomBytes(32).toString('hex');

@@ -28,6 +28,10 @@ export class LoanItem {
   @Expose()
   public image?: Express.Multer.File;
 
+  /** Request-only: remove stored image (not a DB column). */
+  @Expose()
+  public removeImage?: boolean;
+
   @Expose()
   public imageRef?: string;
 

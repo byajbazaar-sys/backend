@@ -8,6 +8,7 @@ export interface ILoanItemsRepository {
   findById(id: string, loanId: string): Promise<LoanItem>;
   findByIdOnly(id: string): Promise<LoanItem>;
   findByLoanId(loanId: string): Promise<LoanItem[]>;
+  findByLoanIds(loanIds: string[]): Promise<LoanItem[]>;
   update(id: string, loanId: string, updateData: LoanItem): Promise<LoanItem>;
   deleteByLoanId(loanId: string): Promise<void>;
   findByItemId(itemId: string): Promise<LoanItem>

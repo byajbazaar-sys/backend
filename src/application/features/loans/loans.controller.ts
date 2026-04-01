@@ -78,6 +78,8 @@ export class LoansController {
       loanItemImages?: Express.Multer.File[];
     },
   ): Promise<LoanResponseModel> {
+
+    console.log("files=>", files);
     const loanData = plainToInstance(Loan, body, {
       excludeExtraneousValues: true,
     });
@@ -109,6 +111,7 @@ export class LoansController {
     loanData.amountRemaining = loanAmount;
     loanData.createdBy = identity.userId;
     const loan = await this.loanService.create(loanData);
+    console.log("loan=>", loan);
     return plainToInstance(LoanResponseModel, loan, {
       excludeExtraneousValues: true,
     });
@@ -211,7 +214,8 @@ export class LoansController {
   @Patch('items/:itemId')
   @ApiOperation({
     summary: 'Update loan item',
-    description: 'Update loan item details including amount, name, weights, rate, and image. Image can be updated by uploading a new file via multipart/form-data.',
+    description:
+      'Update loan item details including amount, name, weights, rate, and image. Image can be replaced via multipart upload, or removed by setting removeImage to true (multipart field or JSON).',
   })
   @ApiParam({ name: 'itemId', description: 'Loan Item ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: LoanItemResponseModel })
@@ -233,7 +237,7 @@ export class LoansController {
     const loanItemData = plainToInstance(LoanItem, body, {
       excludeExtraneousValues: true,
     });
-
+    console.log("files=>", files);
     if (files.image && files.image.length > 0) {
       loanItemData.image = files.image[0];
     }

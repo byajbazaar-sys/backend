@@ -7,6 +7,7 @@ import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions 
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE, IItemsRepository, ITEMS_REPOSITORY, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../../shared';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus } from '../enums';
+import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 
 @Injectable()
 export class LoanService implements ILoanService {
@@ -77,9 +78,14 @@ export class LoanService implements ILoanService {
 
       for (const loanItem of data.loanItems) {
         if (loanItem.image) {
-          const fileExtension = loanItem.image.mimetype.split('/')[1];
-          loanItem.imageRef = `loans/items/${loan.id}/${loanItem.id}.${fileExtension}`;
-          await this.loansFileStorage.writeAsync(loanItem.imageRef, loanItem.image.buffer, loanItem.image.mimetype);
+          const normalized = await normalizeImageBufferForStorageOrThrow(
+            loanItem.image.buffer,
+            loanItem.image.mimetype,
+            loanItem.image.originalname,
+          );
+          const proposedRef = `loans/items/${loan.id}/${loanItem.id}.${normalized.fileExtension}`;
+          // Persist S3 key returned by writeAsync (extension may be corrected from buffer sniffing)
+          loanItem.imageRef = await this.loansFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
         }
       }
       await this.loanItemsRepo.bulkInsert(data.loanItems);
@@ -325,11 +331,28 @@ export class LoanService implements ILoanService {
           throw new NotFoundException('Item not found');
         }
       }
+      if (updateData.removeImage && updateData.image) {
+        throw new BadRequestException('Cannot remove image and upload a new image in the same request');
+      }
+      if (updateData.removeImage) {
+        if (existingLoanItem.imageRef) {
+          try {
+            await this.loansFileStorage.removeAsync(existingLoanItem.imageRef);
+          } catch (err) {
+            this.logger.warn({ err, imageRef: existingLoanItem.imageRef }, 'Failed to delete loan item image from storage');
+          }
+        }
+        updateData.imageRef = null;
+      }
       // Handle image update if provided
       if (updateData.image) {
-        const fileExtension = updateData.image.mimetype.split('/')[1];
-        updateData.imageRef = `loans/items/${loanId}/${itemId}.${fileExtension}`;
-        await this.loansFileStorage.writeAsync(updateData.imageRef, updateData.image.buffer, updateData.image.mimetype);
+        const normalized = await normalizeImageBufferForStorageOrThrow(
+          updateData.image.buffer,
+          updateData.image.mimetype,
+          updateData.image.originalname,
+        );
+        const proposedRef = `loans/items/${loanId}/${itemId}.${normalized.fileExtension}`;
+        updateData.imageRef = await this.loansFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
       }
 
       // Update the loan item

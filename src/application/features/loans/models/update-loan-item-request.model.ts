@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, Min, Max, IsUUID, IsNotEmpty } from 'class-validator';
-import { Expose, Type } from 'class-transformer';
+import { IsString, IsNumber, IsOptional, Min, Max, IsUUID, IsBoolean } from 'class-validator';
+import { Expose, Transform, Type } from 'class-transformer';
 import { AMOUNT_MAX, RATE_MAX } from '@shared-libs';
 
 export class UpdateLoanItemRequestModel {
@@ -60,4 +60,14 @@ export class UpdateLoanItemRequestModel {
   })
   @IsOptional()
   image?: Express.Multer.File[];
+
+  @Expose()
+  @Transform(({ value }) => value === true || value === 'true')
+  @ApiPropertyOptional({
+    description: 'If true, deletes the stored image from S3 and removes imageRef from the loan item',
+    example: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  removeImage?: boolean;
 }

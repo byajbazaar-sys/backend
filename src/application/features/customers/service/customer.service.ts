@@ -13,7 +13,7 @@ import { ICustomerService } from './i-customer.service';
 import { UpdateCustomerRequestModel } from '../models';
 import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions, DUES_REPOSITORY, IDuesRepository } from '../../../shared';
 import { CustomersFilterOptions, CustomersDownloadFilterOptions } from '../options';
-import { Paged } from '@shared-libs';
+import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { v4 as uuidv4 } from 'uuid';
 import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans/service/i-loan-items.repository';
@@ -30,46 +30,65 @@ export class CustomerService implements ICustomerService {
     @InjectPinoLogger(CustomerService.name) private readonly logger: PinoLogger,
   ) { }
 
+  private async enrichCustomerSignedUrls(
+    customer: Customer,
+  ): Promise<
+    Customer & {
+      profilePhotoUrl: string | null;
+      aadhaarCardUrl: string | null;
+      panCardUrl: string | null;
+    }
+  > {
+    const [profilePhotoUrl, aadhaarCardUrl, panCardUrl] = await Promise.all([
+      customer.profilePhotoRef ? this.customersFileStorage.getUrlAsync(customer.profilePhotoRef) : Promise.resolve(null),
+      customer.aadhaarCardRef ? this.customersFileStorage.getUrlAsync(customer.aadhaarCardRef) : Promise.resolve(null),
+      customer.panCardRef ? this.customersFileStorage.getUrlAsync(customer.panCardRef) : Promise.resolve(null),
+    ]);
+    return {
+      ...customer,
+      profilePhotoUrl,
+      aadhaarCardUrl,
+      panCardUrl,
+    };
+  }
+
   async create(body: Customer): Promise<Customer> {
     try {
       this.logger.info({ createdBy: body.createdBy }, 'Creating new customer');
       const newId = uuidv4();
       if (body.profilePhoto) {
-        const fileExtension = body.profilePhoto.mimetype.split('/')[1];
-        body.profilePhotoRef = `customers/profiles/${newId}.${fileExtension}`;
-        await this.customersFileStorage.writeAsync(
-          body.profilePhotoRef,
+        const normalized = await normalizeImageBufferForStorageOrThrow(
           body.profilePhoto.buffer,
           body.profilePhoto.mimetype,
+          body.profilePhoto.originalname,
         );
+        const proposedRef = `customers/profiles/${newId}.${normalized.fileExtension}`;
+        body.profilePhotoRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
       }
 
       if (body.aadharCard) {
-        const fileExtension = body.aadharCard.mimetype.split('/')[1];
-        body.aadhaarCardRef = `customers/documents/aadhar/${newId}.${fileExtension}`;
-
-        await this.customersFileStorage.writeAsync(
-          body.aadhaarCardRef,
+        const normalized = await normalizeImageBufferForStorageOrThrow(
           body.aadharCard.buffer,
           body.aadharCard.mimetype,
+          body.aadharCard.originalname,
         );
+        const proposedRef = `customers/documents/aadhar/${newId}.${normalized.fileExtension}`;
+        body.aadhaarCardRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
       }
 
       if (body.panCard) {
-        const fileExtension = body.panCard.mimetype.split('/')[1];
-        body.panCardRef = `customers/documents/pan/${newId}.${fileExtension}`;
-        await this.customersFileStorage.writeAsync(body.panCardRef, body.panCard.buffer, body.panCard.mimetype);
+        const normalized = await normalizeImageBufferForStorageOrThrow(
+          body.panCard.buffer,
+          body.panCard.mimetype,
+          body.panCard.originalname,
+        );
+        const proposedRef = `customers/documents/pan/${newId}.${normalized.fileExtension}`;
+        body.panCardRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
       }
 
       const createdCustomer = await this.customersRepo.create(body);
-      const response = {
-        ...createdCustomer,
-        profilePhotoRef: body.profilePhoto ? await this.customersFileStorage.getUrlAsync(body.profilePhotoRef) : null,
-        aadhaarCardRef: body.aadhaarCardRef ? await this.customersFileStorage.getUrlAsync(body.aadhaarCardRef) : null,
-        panCardRef: body.panCardRef ? await this.customersFileStorage.getUrlAsync(body.panCardRef) : null,
-      };
       this.logger.info({ customerId: createdCustomer.id }, 'Customer created successfully');
-      return response;
+      return this.enrichCustomerSignedUrls(createdCustomer);
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof ConflictException) {
         throw err;
@@ -88,14 +107,7 @@ export class CustomerService implements ICustomerService {
         throw new NotFoundException('Customer not found');
       }
 
-      const response = {
-        ...customer,
-        profilePhotoUrl: customer.profilePhotoRef ? await this.customersFileStorage.getUrlAsync(customer.profilePhotoRef) : null,
-        aadhaarCardUrl: customer.aadhaarCardRef ? await this.customersFileStorage.getUrlAsync(customer.aadhaarCardRef) : null,
-        panCardUrl: customer.panCardRef ? await this.customersFileStorage.getUrlAsync(customer.panCardRef) : null,
-      };
-
-      return response;
+      return this.enrichCustomerSignedUrls(customer);
     } catch (err) {
       if (err instanceof NotFoundException) {
         throw err;
@@ -109,7 +121,8 @@ export class CustomerService implements ICustomerService {
     try {
       this.logger.debug({ createdBy: params.createdBy }, 'Getting customers');
       const result = await this.customersRepo.listCustomers(params);
-      return result;
+      const items = await Promise.all(result.items.map((c) => this.enrichCustomerSignedUrls(c)));
+      return { ...result, items };
     } catch (err) {
       this.logger.error({ err, params }, 'Error getting customers');
       throw err;
@@ -143,13 +156,13 @@ export class CustomerService implements ICustomerService {
             this.logger.warn({ err, customerId: id }, 'Failed to delete old profile photo');
           }
         }
-        const fileExtension = body.profilePhoto.mimetype.split('/')[1];
-        body.profilePhotoRef = `customers/profiles/${id}.${fileExtension}`;
-        await this.customersFileStorage.writeAsync(
-          body.profilePhotoRef,
+        const normalized = await normalizeImageBufferForStorageOrThrow(
           body.profilePhoto.buffer,
           body.profilePhoto.mimetype,
+          body.profilePhoto.originalname,
         );
+        body.profilePhotoRef = `customers/profiles/${id}.${normalized.fileExtension}`;
+        await this.customersFileStorage.writeAsync(body.profilePhotoRef, normalized.buffer, normalized.mimetype);
       }
 
       if (body.aadharCard) {
@@ -160,13 +173,13 @@ export class CustomerService implements ICustomerService {
             this.logger.warn({ err, customerId: id }, 'Failed to delete old aadhaar card');
           }
         }
-        const fileExtension = body.aadharCard.mimetype.split('/')[1];
-        body.aadhaarCardRef = `customers/documents/aadhar/${id}.${fileExtension}`;
-        await this.customersFileStorage.writeAsync(
-          body.aadhaarCardRef,
+        const normalized = await normalizeImageBufferForStorageOrThrow(
           body.aadharCard.buffer,
           body.aadharCard.mimetype,
+          body.aadharCard.originalname,
         );
+        const proposedRef = `customers/documents/aadhar/${id}.${normalized.fileExtension}`;
+        body.aadhaarCardRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
       }
 
       if (body.panCard) {
@@ -177,9 +190,13 @@ export class CustomerService implements ICustomerService {
             this.logger.warn({ err, customerId: id }, 'Failed to delete old pan card');
           }
         }
-        const fileExtension = body.panCard.mimetype.split('/')[1];
-        body.panCardRef = `customers/documents/pan/${id}.${fileExtension}`;
-        await this.customersFileStorage.writeAsync(body.panCardRef, body.panCard.buffer, body.panCard.mimetype);
+        const normalized = await normalizeImageBufferForStorageOrThrow(
+          body.panCard.buffer,
+          body.panCard.mimetype,
+          body.panCard.originalname,
+        );
+        body.panCardRef = `customers/documents/pan/${id}.${normalized.fileExtension}`;
+        await this.customersFileStorage.writeAsync(body.panCardRef, normalized.buffer, normalized.mimetype);
       }
 
       const { profilePhoto, aadharCard, panCard, ...dataToUpdate } = body;
@@ -188,23 +205,15 @@ export class CustomerService implements ICustomerService {
         throw new NotFoundException('Customer not found');
       }
 
-      const response = {
-        ...updatedCustomer,
-        profilePhotoUrl: updatedCustomer.profilePhotoRef
-          ? await this.customersFileStorage.getUrlAsync(updatedCustomer.profilePhotoRef)
-          : null,
-        aadhaarCardUrl: updatedCustomer.aadhaarCardRef
-          ? await this.customersFileStorage.getUrlAsync(updatedCustomer.aadhaarCardRef)
-          : null,
-        panCardUrl: updatedCustomer.panCardRef
-          ? await this.customersFileStorage.getUrlAsync(updatedCustomer.panCardRef)
-          : null,
-      };
-
       this.logger.info({ customerId: id }, 'Customer updated successfully');
-      return response;
+      return this.enrichCustomerSignedUrls(updatedCustomer);
     } catch (err) {
-      if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
+      if (
+        err instanceof NotFoundException ||
+        err instanceof ConflictException ||
+        err instanceof ForbiddenException ||
+        err instanceof BadRequestException
+      ) {
         throw err;
       }
       this.logger.error({ err, customerId: id }, 'Error updating customer');
