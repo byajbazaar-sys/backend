@@ -123,8 +123,8 @@ export class AuthService implements IAuthService {
           user.profilePhotoContentType,
           user.profilePhotoFileName,
         );
-        user.profilePhotoRef = `users/profiles/${userId}.${normalized.fileExtension}`;
-        await this.usersFileStorage.writeAsync(user.profilePhotoRef, normalized.buffer, normalized.mimetype);
+        const proposedRef = `users/profiles/${userId}.${normalized.fileExtension}`;
+        user.profilePhotoRef = await this.usersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
       }
 
       const emailVerificationToken = randomBytes(32).toString('hex');

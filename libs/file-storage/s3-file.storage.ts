@@ -17,6 +17,7 @@ import { IFileUrlResolver } from './i-file-url.resolver';
 import { FileHelper } from './file-helper';
 import { IS3StorageOptions } from './options';
 import { EAttachmentMimeType } from '../enums';
+import { compressImage } from './image-compressor';
 
 const EXPIRATION_MS = 604800;
 
@@ -85,6 +86,11 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
   }
 
   public async writeAsync(path: string, data: Buffer, contentType: string = null): Promise<string> {
+    try {
+      data = await compressImage(data, contentType);
+    } catch (err) {
+      this.logger.warn({ err }, 'Image compression failed; uploading original buffer');
+    }
     const type = await this.helper.getExtFromBufferAsync(data);
     if (!this.validateType(type?.mime)) {
       throw new Error('This file type is invalid');
