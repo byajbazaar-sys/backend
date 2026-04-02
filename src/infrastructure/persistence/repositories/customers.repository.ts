@@ -37,6 +37,8 @@ export class CustomersRepository implements ICustomersRepository {
       profilePhoto: _omitProfilePhoto,
       aadharCard: _omitAadharCard,
       panCard: _omitPanCard,
+      removeAadharCard: _omitRemoveAadhar,
+      removePanCard: _omitRemovePan,
       ...rest
     } = updateDto as Customer & { id?: string; createdBy?: string };
     await this.customerRepo.update({ id, createdBy: createdBy }, rest as Partial<CustomerEntity>);

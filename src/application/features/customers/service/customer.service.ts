@@ -148,6 +148,35 @@ export class CustomerService implements ICustomerService {
         throw new NotFoundException('Customer not found');
       }
 
+      if (body.removeAadharCard && body.aadharCard) {
+        throw new BadRequestException('Cannot remove Aadhaar card and upload a new one in the same request');
+      }
+      if (body.removePanCard && body.panCard) {
+        throw new BadRequestException('Cannot remove PAN card and upload a new one in the same request');
+      }
+
+      if (body.removeAadharCard) {
+        if (existingCustomer.aadhaarCardRef) {
+          try {
+            await this.customersFileStorage.removeAsync(existingCustomer.aadhaarCardRef);
+          } catch (err) {
+            this.logger.warn({ err, customerId: id }, 'Failed to delete Aadhaar card from storage');
+          }
+        }
+        body.aadhaarCardRef = null;
+      }
+
+      if (body.removePanCard) {
+        if (existingCustomer.panCardRef) {
+          try {
+            await this.customersFileStorage.removeAsync(existingCustomer.panCardRef);
+          } catch (err) {
+            this.logger.warn({ err, customerId: id }, 'Failed to delete PAN card from storage');
+          }
+        }
+        body.panCardRef = null;
+      }
+
       if (body.profilePhoto) {
         if (existingCustomer.profilePhotoRef) {
           try {
@@ -161,8 +190,8 @@ export class CustomerService implements ICustomerService {
           body.profilePhoto.mimetype,
           body.profilePhoto.originalname,
         );
-        body.profilePhotoRef = `customers/profiles/${id}.${normalized.fileExtension}`;
-        await this.customersFileStorage.writeAsync(body.profilePhotoRef, normalized.buffer, normalized.mimetype);
+        const proposedRef = `customers/profiles/${id}.${normalized.fileExtension}`;
+        body.profilePhotoRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
       }
 
       if (body.aadharCard) {
@@ -195,11 +224,11 @@ export class CustomerService implements ICustomerService {
           body.panCard.mimetype,
           body.panCard.originalname,
         );
-        body.panCardRef = `customers/documents/pan/${id}.${normalized.fileExtension}`;
-        await this.customersFileStorage.writeAsync(body.panCardRef, normalized.buffer, normalized.mimetype);
+        const proposedRef = `customers/documents/pan/${id}.${normalized.fileExtension}`;
+        body.panCardRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
       }
 
-      const { profilePhoto, aadharCard, panCard, ...dataToUpdate } = body;
+      const { profilePhoto, aadharCard, panCard, removeAadharCard, removePanCard, ...dataToUpdate } = body;
       const updatedCustomer = await this.customersRepo.update(id, { ...dataToUpdate } as Customer, body.createdBy);
       if (!updatedCustomer) {
         throw new NotFoundException('Customer not found');

@@ -189,7 +189,11 @@ export class CustomersController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update customer' })
+  @ApiOperation({
+    summary: 'Update customer',
+    description:
+      'Multipart update. Set removeAadharCard or removePanCard to true to delete stored documents from S3 and clear refs; do not send a new file for the same field in that request.',
+  })
   @ApiParam({ name: 'id', description: 'Customer ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
   @ApiOkResponse({ type: CustomerResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Customer not found' })

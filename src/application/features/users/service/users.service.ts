@@ -21,12 +21,12 @@ export class UsersService implements IUsersService {
       if (!user) {
         throw new NotFoundException('User not found');
       }
-
+      console.log('user in service', user);
       // Get the profile photo URL if it exists
       const profilePhotoUrl = user.profilePhotoRef
         ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef)
         : null;
-
+      console.log('profilePhotoUrl in service', profilePhotoUrl);
       const response: User = {
         ...user,
         profilePhotoUrl,
@@ -61,6 +61,7 @@ export class UsersService implements IUsersService {
 
   async update(id: string, updateData: User): Promise<User> {
     try {
+      console.log('updateData in service', updateData);
       const existingUser = await this.usersRepo.findById(id);
       if (!existingUser) {
         throw new NotFoundException('User not found');
@@ -87,9 +88,8 @@ export class UsersService implements IUsersService {
           updateData.profilePhotoFileName,
         );
         const newProfilePhotoRef = `users/profiles/${id}.${normalized.fileExtension}`;
-        await this.usersFileStorage.writeAsync(newProfilePhotoRef, normalized.buffer, normalized.mimetype);
 
-        updateData.profilePhotoRef = newProfilePhotoRef;
+        updateData.profilePhotoRef = await this.usersFileStorage.writeAsync(newProfilePhotoRef, normalized.buffer, normalized.mimetype);
         this.logger.info({ userId: id, profilePhotoRef: newProfilePhotoRef }, 'Profile photo uploaded successfully');
       }
 

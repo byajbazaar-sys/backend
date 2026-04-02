@@ -13,7 +13,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiExtraModels, ApiTags, ApiBearerAuth, ApiOkResponse, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { EUserType, Identity, IIdentity, Roles, RolesGuard, USER_STRATEGY } from '@shared-libs';

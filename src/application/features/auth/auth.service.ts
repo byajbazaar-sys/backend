@@ -50,7 +50,7 @@ export class AuthService implements IAuthService {
   async login(email: string, password: string): Promise<LoginResponseModel> {
     try {
       const user = await this.usersRepo.findByEmail(email.toLowerCase().trim());
-      
+
       // User doesn't exist
       if (!user) {
         throw new UnauthorizedException('Invalid credentials');
@@ -408,13 +408,13 @@ export class AuthService implements IAuthService {
         },
       );
     } catch (error) {
-      this.logger.error({ 
-        error: error?.message, 
-        stack: error?.stack, 
+      this.logger.error({
+        error: error?.message,
+        stack: error?.stack,
         response: error?.response?.data,
-        status: error?.response?.status 
+        status: error?.response?.status
       }, 'Google SSO error');
-      
+
       if (error.response?.status === 401) {
         throw new UnauthorizedException('Invalid Google authorization code');
       }

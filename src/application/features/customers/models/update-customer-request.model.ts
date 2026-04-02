@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail } from 'class-validator';
-import { Expose } from 'class-transformer';
+import { IsString, IsOptional, IsEmail, IsBoolean } from 'class-validator';
+import { Expose, Transform } from 'class-transformer';
 
 export class UpdateCustomerRequestModel {
   @Expose()
@@ -71,4 +71,24 @@ export class UpdateCustomerRequestModel {
   })
   @IsOptional()
   panCard?: Express.Multer.File;
+
+  @Expose()
+  @Transform(({ value }) => value === true || value === 'true')
+  @ApiPropertyOptional({
+    description: 'If true, deletes the stored Aadhaar card from storage and clears aadhaarCardRef',
+    example: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  removeAadharCard?: boolean;
+
+  @Expose()
+  @Transform(({ value }) => value === true || value === 'true')
+  @ApiPropertyOptional({
+    description: 'If true, deletes the stored PAN card from storage and clears panCardRef',
+    example: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  removePanCard?: boolean;
 }

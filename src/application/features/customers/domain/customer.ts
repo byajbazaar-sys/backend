@@ -34,6 +34,14 @@ export class Customer {
   @Expose()
   public panCard?: Express.Multer.File;
 
+  /** Request-only: remove stored Aadhaar document (not a DB column). */
+  @Expose()
+  public removeAadharCard?: boolean;
+
+  /** Request-only: remove stored PAN document (not a DB column). */
+  @Expose()
+  public removePanCard?: boolean;
+
   @Expose()
   public profilePhotoRef?: string;
 
