@@ -18,7 +18,6 @@
     "sls:deploy:dev": "yarn build && serverless deploy --stage dev && serverless invoke -f runPostDeploy --stage dev",
     "sls:deploy:staging": "yarn build && serverless deploy --stage staging && serverless invoke -f runPostDeploy --stage staging",
     "sls:deploy:production": "yarn build && serverless deploy --stage production && serverless invoke -f runPostDeploy --stage production",
-    "sls:setup-ssm": "bash scripts/setup-ssm-rds.sh",
     "sls:deploy:function": "serverless deploy function",
     "sls:remove": "serverless remove",
     "sls:offline": "npm run build && serverless offline",

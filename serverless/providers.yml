@@ -12,15 +12,15 @@ logRetentionInDays: 30
 #   securityGroupIds:
 #     - !Ref LambdaSecurityGroup
 #   subnetIds:
-#     Fn::Split:
-#       - ','
-#       - '${ssm:/byajbazaar/${sls:stage}/subnet-ids}'
+#     - !Ref PublicSubnet1
+#     - !Ref PublicSubnet2
 environment:
   NODE_ENV: ${self:provider.stage}
   NO_COLOR: 'true'
   AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
-  DB_HOST: !Ref RdsInstance
-  DB_PORT: 5432
+  # !Ref RDS returns the instance id, not the hostname — use Endpoint for clients
+  DB_HOST: !GetAtt RdsInstance.Endpoint.Address
+  DB_PORT: !GetAtt RdsInstance.Endpoint.Port
   DB_NAME: ${env:DB_NAME, 'byajbazaar_db'}
   DB_USER: ${env:DB_MASTER_USERNAME, 'postgres'}
   DB_PASS: ${env:DB_MASTER_PASSWORD}

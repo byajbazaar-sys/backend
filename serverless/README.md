@@ -96,17 +96,9 @@ myNewCron:
 
 ## RDS (PostgreSQL) Deployment
 
-The `resources.yml` defines an RDS PostgreSQL instance. VPC and Subnets are read from **AWS SSM Parameter Store**.
+The `resources.yml` stack creates a **VPC**, two **public subnets** (two AZs), routes, and **RDS**. It writes the VPC ID and comma-separated subnet IDs to **SSM** (`/byajbazaar/{stage}/vpc-id`, `/byajbazaar/{stage}/subnet-ids`). Security groups and the **DB subnet group** use `!Ref` to the VPC/subnets in-template (so the first deploy works without pre-existing SSM). SSM is still updated for tooling and anything that reads Parameter Store outside this stack.
 
 > **Note:** RDS Query Editor requires Aurora. This uses standard RDS PostgreSQL (free tier compatible). For Query Editor, use pgAdmin, DBeaver, or an SSH tunnel to connect.
-
-**One-time setup** (run once per stage):
-
-```bash
-VPC_ID=vpc-xxx SUBNET_IDS=subnet-a,subnet-b yarn sls:setup-ssm dev
-```
-
-Or add `VPC_ID` and `SUBNET_IDS` to `.env`, then run `yarn sls:setup-ssm dev`.
 
 **Deploy** (builds, deploys, then runs migrations + seeds):
 

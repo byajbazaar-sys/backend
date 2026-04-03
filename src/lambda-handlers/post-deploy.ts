@@ -7,11 +7,13 @@ import { SeedingService } from '../infrastructure/persistence/seeds/seeding.serv
 export const handler: Handler = async (_event: unknown, context: Context) => {
   context.callbackWaitsForEmptyEventLoop = false;
 
-  const app = await NestFactory.createApplicationContext(AppModule, {
-    logger: ['error', 'warn', 'log'],
-  });
+  let app: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
 
   try {
+    app = await NestFactory.createApplicationContext(AppModule, {
+      logger: ['error', 'warn', 'log'],
+    });
+
     // 1. Run migrations
     const dataSource = app.get(DataSource);
     const migrations = await dataSource.runMigrations();
@@ -30,7 +32,12 @@ export const handler: Handler = async (_event: unknown, context: Context) => {
         timestamp: new Date().toISOString(),
       }),
     };
+  } catch (err) {
+    console.error('[PostDeploy] Failed:', err);
+    throw err;
   } finally {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   }
 };
