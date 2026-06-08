@@ -24,6 +24,18 @@ import {
   TransactionService,
   USERS_SERVICE,
   UsersService,
+  INVENTORY_CATEGORY_SERVICE,
+  InventoryCategoryService,
+  INVENTORY_ITEM_SERVICE,
+  InventoryItemService,
+  BARCODE_SERVICE,
+  BarcodeService,
+  INVENTORY_REPORT_SERVICE,
+  InventoryReportService,
+  POS_SESSION_SERVICE,
+  PosSessionService,
+  WEBSOCKET_HANDLER_SERVICE,
+  WebSocketHandlerService,
 } from './features';
 import {
   EMAIL_TEMPLATE_SERVICE,
@@ -77,6 +89,30 @@ import {
     {
       provide: USERS_SERVICE,
       useClass: UsersService,
+    },
+    {
+      provide: INVENTORY_CATEGORY_SERVICE,
+      useClass: InventoryCategoryService,
+    },
+    {
+      provide: INVENTORY_ITEM_SERVICE,
+      useClass: InventoryItemService,
+    },
+    {
+      provide: BARCODE_SERVICE,
+      useClass: BarcodeService,
+    },
+    {
+      provide: INVENTORY_REPORT_SERVICE,
+      useClass: InventoryReportService,
+    },
+    {
+      provide: POS_SESSION_SERVICE,
+      useClass: PosSessionService,
+    },
+    {
+      provide: WEBSOCKET_HANDLER_SERVICE,
+      useClass: WebSocketHandlerService,
     },
   ],
   exports: [PassportModule, UserJwtStrategy, TRANSACTION_SERVICE, LOAN_SERVICE],

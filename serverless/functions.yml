@@ -49,3 +49,67 @@ closeExpiredLoansCron:
           detail:
             job: 'closeExpiredLoans'
             stage: '${self:provider.stage}'
+
+wsConnect:
+  handler: dist/src/lambda-handlers/websocket-connect.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: $connect
+
+wsDisconnect:
+  handler: dist/src/lambda-handlers/websocket-disconnect.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: $disconnect
+
+wsCreateSession:
+  handler: dist/src/lambda-handlers/websocket-message.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: createSession
+
+wsJoinSession:
+  handler: dist/src/lambda-handlers/websocket-message.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: joinSession
+
+wsBarcodeScanned:
+  handler: dist/src/lambda-handlers/websocket-message.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: barcodeScanned
+
+wsCartUpdated:
+  handler: dist/src/lambda-handlers/websocket-message.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: cartUpdated
+
+wsHeartbeat:
+  handler: dist/src/lambda-handlers/websocket-message.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: heartbeat
+
+wsDefault:
+  handler: dist/src/lambda-handlers/websocket-message.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: $default

@@ -1,0 +1,79 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { SYSTEM_USER_ID } from '@shared-libs';
+import {
+  IInventoryCategoriesRepository,
+  INVENTORY_CATEGORIES_REPOSITORY,
+  IInventoryItemsRepository,
+  INVENTORY_ITEMS_REPOSITORY,
+} from '../../../shared';
+import { InventoryCategory } from '../domain';
+import { CreateInventoryCategoryRequestModel } from '../models';
+import { IInventoryCategoryService } from './i-inventory-category.service';
+
+@Injectable()
+export class InventoryCategoryService implements IInventoryCategoryService {
+  constructor(
+    @Inject(INVENTORY_CATEGORIES_REPOSITORY)
+    private readonly categoriesRepo: IInventoryCategoriesRepository,
+    @Inject(INVENTORY_ITEMS_REPOSITORY)
+    private readonly itemsRepo: IInventoryItemsRepository,
+    @InjectPinoLogger(InventoryCategoryService.name) private readonly logger: PinoLogger,
+  ) {}
+
+  async create(data: CreateInventoryCategoryRequestModel, userId: string): Promise<InventoryCategory> {
+    const existing = await this.categoriesRepo.findByName(data.name, userId);
+    if (existing) {
+      throw new ConflictException(`Category with name ${data.name} already exists`);
+    }
+    return this.categoriesRepo.create({ ...data, createdBy: userId });
+  }
+
+  async getAll(userId: string): Promise<InventoryCategory[]> {
+    return this.categoriesRepo.findAll(userId);
+  }
+
+  async getById(id: string, userId: string): Promise<InventoryCategory> {
+    const category = await this.categoriesRepo.findById(id);
+    if (!category) throw new NotFoundException('Category not found');
+    if (category.createdBy !== userId && category.createdBy !== SYSTEM_USER_ID) {
+      throw new ForbiddenException('Access denied');
+    }
+    return category;
+  }
+
+  async update(
+    id: string,
+    data: Partial<CreateInventoryCategoryRequestModel>,
+    userId: string,
+  ): Promise<InventoryCategory> {
+    const category = await this.getById(id, userId);
+    if (category.isSystem || category.createdBy === SYSTEM_USER_ID) {
+      throw new ForbiddenException('Cannot update system categories');
+    }
+    if (data.name && data.name !== category.name) {
+      const existing = await this.categoriesRepo.findByName(data.name, userId);
+      if (existing) throw new ConflictException(`Category with name ${data.name} already exists`);
+    }
+    return this.categoriesRepo.update(id, data);
+  }
+
+  async delete(id: string, userId: string): Promise<void> {
+    const category = await this.getById(id, userId);
+    if (category.isSystem || category.createdBy === SYSTEM_USER_ID) {
+      throw new ForbiddenException('Cannot delete system categories');
+    }
+    const items = await this.itemsRepo.findAll({ createdBy: userId, categoryId: id }, { pageNumber: 0, pageSize: 1 });
+    if (items.totalCount > 0) {
+      throw new BadRequestException('Cannot delete category with associated inventory items');
+    }
+    await this.categoriesRepo.delete(id);
+  }
+}

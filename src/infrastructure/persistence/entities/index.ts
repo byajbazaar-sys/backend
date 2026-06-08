@@ -8,6 +8,10 @@ import { DueEntity } from './due.entity';
 import { NotificationEntity } from './notification.entity';
 import { SeedEntity } from './seed.entity';
 import { SupportRequestEntity } from './support-request.entity';
+import { InventoryCategoryEntity } from './inventory-category.entity';
+import { InventoryItemEntity } from './inventory-item.entity';
+import { PosSessionEntity } from './pos-session.entity';
+import { WebSocketConnectionEntity } from './websocket-connection.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -19,6 +23,10 @@ export { DueEntity } from './due.entity';
 export { NotificationEntity } from './notification.entity';
 export { SeedEntity } from './seed.entity';
 export { SupportRequestEntity } from './support-request.entity';
+export { InventoryCategoryEntity } from './inventory-category.entity';
+export { InventoryItemEntity } from './inventory-item.entity';
+export { PosSessionEntity } from './pos-session.entity';
+export { WebSocketConnectionEntity } from './websocket-connection.entity';
 
 export default [
   UserEntity,
@@ -31,4 +39,8 @@ export default [
   NotificationEntity,
   SeedEntity,
   SupportRequestEntity,
+  InventoryCategoryEntity,
+  InventoryItemEntity,
+  PosSessionEntity,
+  WebSocketConnectionEntity,
 ];

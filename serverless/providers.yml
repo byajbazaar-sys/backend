@@ -24,8 +24,30 @@ environment:
   DB_NAME: ${env:DB_NAME, 'byajbazaar_db'}
   DB_USER: ${env:DB_MASTER_USERNAME, 'postgres'}
   DB_PASS: ${env:DB_MASTER_PASSWORD}
+  # Use CloudFormation Refs only inside Fn::Join — ${aws:region}/${sls:stage} break Serverless variable resolution
+  WEBSOCKET_API_ENDPOINT:
+    Fn::Join:
+      - ''
+      - - 'https://'
+        - Ref: WebsocketsApi
+        - '.execute-api.'
+        - Ref: AWS::Region
+        - '.amazonaws.com/'
+        - ${self:provider.stage}
+  WEBSOCKET_API_URL:
+    Fn::Join:
+      - ''
+      - - 'wss://'
+        - Ref: WebsocketsApi
+        - '.execute-api.'
+        - Ref: AWS::Region
+        - '.amazonaws.com/'
+        - ${self:provider.stage}
 httpApi:
   cors: true
+websocket:
+  useProviderTags: true
+  routeSelectionExpression: $request.body.action
 iam:
   role:
     statements:
@@ -55,6 +77,11 @@ iam:
           - logs:CreateLogStream
           - logs:PutLogEvents
         Resource: 'arn:aws:logs:*:*:*'
+      - Effect: Allow
+        Action:
+          - execute-api:ManageConnections
+        Resource:
+          - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${sls:stage}/POST/@connections/*
       - Effect: Allow
         Action:
           - s3:GetObject

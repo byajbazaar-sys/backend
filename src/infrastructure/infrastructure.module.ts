@@ -21,6 +21,10 @@ import {
   TWILIO_SERVICE,
   USERS_FILE_STORAGE,
   USERS_REPOSITORY,
+  INVENTORY_CATEGORIES_REPOSITORY,
+  INVENTORY_ITEMS_REPOSITORY,
+  POS_SESSIONS_REPOSITORY,
+  WEBSOCKET_CONNECTIONS_REPOSITORY,
 } from '../application';
 import {
   CustomersRepository,
@@ -32,7 +36,13 @@ import {
   SupportRequestsRepository,
   TransactionsRepository,
   UsersRepository,
+  InventoryCategoriesRepository,
+  InventoryItemsRepository,
+  PosSessionsRepository,
+  WebSocketConnectionsRepository,
 } from './persistence';
+import { WEBSOCKET_MESSAGE_SERVICE } from './websocket/i-websocket-message.service';
+import { WebSocketMessageService } from './websocket/websocket-message.service';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
 import { FileStorageMock, UsersFileStorage } from './s3';
 import { LambdaOptions, LambdaService } from './lambda';
@@ -103,6 +113,26 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: SUPPORT_REQUESTS_REPOSITORY,
       useClass: SupportRequestsRepository,
+    },
+    {
+      provide: INVENTORY_CATEGORIES_REPOSITORY,
+      useClass: InventoryCategoriesRepository,
+    },
+    {
+      provide: INVENTORY_ITEMS_REPOSITORY,
+      useClass: InventoryItemsRepository,
+    },
+    {
+      provide: POS_SESSIONS_REPOSITORY,
+      useClass: PosSessionsRepository,
+    },
+    {
+      provide: WEBSOCKET_CONNECTIONS_REPOSITORY,
+      useClass: WebSocketConnectionsRepository,
+    },
+    {
+      provide: WEBSOCKET_MESSAGE_SERVICE,
+      useClass: WebSocketMessageService,
     },
     {
       provide: AES_ENCRYPT_SERVICE,
@@ -222,6 +252,11 @@ import { GoogleOAuthService } from './google-oauth';
     DUES_REPOSITORY,
     NOTIFICATIONS_REPOSITORY,
     SUPPORT_REQUESTS_REPOSITORY,
+    INVENTORY_CATEGORIES_REPOSITORY,
+    INVENTORY_ITEMS_REPOSITORY,
+    POS_SESSIONS_REPOSITORY,
+    WEBSOCKET_CONNECTIONS_REPOSITORY,
+    WEBSOCKET_MESSAGE_SERVICE,
     EMAIL_SERVICE,
     GOOGLE_OAUTH_SERVICE,
     FileStorageOptions,

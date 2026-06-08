@@ -107,7 +107,7 @@ Resources:
       DBInstanceIdentifier: !Sub ${AWS::StackName}-postgres
       DBInstanceClass: db.t3.micro
       Engine: postgres
-      EngineVersion: '16.8'
+      EngineVersion: '16.9'
       AllocatedStorage: 20
       StorageEncrypted: true
       MasterUsername: postgres

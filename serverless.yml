@@ -22,12 +22,14 @@ custom:
     dev: .env
   dotenv:
     path: ${self:custom.dotenvPathByStage.${sls:stage}}
-    # Keep RDS connection from CloudFormation (!GetAtt), not .env
-    exclude:
-      - DB_HOST
-      - DB_PORT
+        # Keep RDS connection from CloudFormation (!GetAtt), not .env
+    # exclude:
+    #   - DB_HOST
+    #   - DB_PORT
+    # DB_HOST/DB_PORT must come from .env for serverless-offline (!GetAtt is unresolved locally).
+    # When set in .env, dotenv overrides provider.environment and wins over CloudFormation refs.
   serverless-offline:
-    httpPort: 3000
+    httpPort: 3003
     lambdaPort: 3002
     noPrependStageInUrl: true
     noAuth: true
