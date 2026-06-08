@@ -26,8 +26,8 @@ export class WebSocketMessageService implements IWebSocketMessageService {
     return this.client;
   }
 
-  async sendToConnection(connectionId: string, payload: Record<string, unknown>): Promise<void> {
-    if (!process.env.WEBSOCKET_API_ENDPOINT) return;
+  async sendToConnection(connectionId: string, payload: Record<string, unknown>): Promise<boolean> {
+    if (!process.env.WEBSOCKET_API_ENDPOINT) return false;
 
     try {
       await this.getClient().send(
@@ -36,14 +36,19 @@ export class WebSocketMessageService implements IWebSocketMessageService {
           Data: Buffer.from(JSON.stringify(payload)),
         }),
       );
+      return true;
     } catch (err) {
       if (err instanceof GoneException || (err as { name?: string })?.name === 'GoneException') {
         this.logger.warn({ connectionId }, 'Stale WebSocket connection');
-        return;
+        return false;
       }
       this.logger.error({ err, connectionId }, 'Failed to send WebSocket message');
       throw err;
     }
+  }
+
+  async probeConnection(connectionId: string): Promise<boolean> {
+    return this.sendToConnection(connectionId, { type: 'ping' });
   }
 
   async broadcastToSession(

@@ -47,7 +47,8 @@ httpApi:
   cors: true
 websocket:
   useProviderTags: true
-  routeSelectionExpression: $request.body.action
+  # Route by message body.action is handled via named routes + wsDefault ($default) in functions.yml.
+  # provider.websocket.routeSelectionExpression is not a valid Serverless Framework property.
 iam:
   role:
     statements:

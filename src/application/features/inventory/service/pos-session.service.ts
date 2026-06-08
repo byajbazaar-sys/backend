@@ -169,10 +169,6 @@ export class PosSessionService implements IPosSessionService {
     if (!session) throw new NotFoundException('Session not found');
     if (!this.isSessionActive(session)) throw new ForbiddenException('Session is not active');
 
-    if (session.mobileConnectionId && session.mobileConnectionId !== connectionId) {
-      throw new ForbiddenException('Session already has an active mobile scanner');
-    }
-
     return this.sessionsRepo.update(sessionId, {
       mobileConnectionId: connectionId,
       status: EPosSessionStatus.Connected,

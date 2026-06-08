@@ -86,10 +86,52 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
         userId,
         deviceType: resolvedDevice,
       });
+      this.logger.info({ connectionId, userId, deviceType: resolvedDevice }, 'WebSocket connected');
       return { statusCode: 200 };
-    } catch {
+    } catch (err) {
+      this.logger.warn(
+        {
+          connectionId,
+          deviceType,
+          hasToken: !!token,
+          reason: err instanceof Error ? err.message : 'auth failed',
+        },
+        'WebSocket connect rejected',
+      );
       return { statusCode: 401 };
     }
+  }
+
+  private async releaseMobileSlot(sessionId: string, previousConnectionId: string | undefined): Promise<void> {
+    if (!previousConnectionId) return;
+
+    await this.connectionsRepo.markDisconnected(previousConnectionId);
+    await this.sessionsRepo.update(sessionId, { mobileConnectionId: undefined });
+    this.logger.info({ sessionId, previousConnectionId }, 'Released previous mobile scanner slot');
+  }
+
+  private async ensureMobileSlotAvailable(
+    sessionId: string,
+    connectionId: string,
+    previousMobileId: string | undefined,
+  ): Promise<void> {
+    if (!previousMobileId || previousMobileId === connectionId) return;
+
+    const previousConn = await this.connectionsRepo.findByConnectionId(previousMobileId);
+    if (previousConn?.disconnectedAt) {
+      await this.releaseMobileSlot(sessionId, previousMobileId);
+      return;
+    }
+
+    const alive = await this.wsMessage.probeConnection(previousMobileId);
+    if (!alive) {
+      await this.releaseMobileSlot(sessionId, previousMobileId);
+      return;
+    }
+
+    // Last-connect-wins: notify and replace stale tab that failed to disconnect cleanly
+    await this.wsMessage.sendToConnection(previousMobileId, { type: 'sessionReplaced' });
+    await this.releaseMobileSlot(sessionId, previousMobileId);
   }
 
   async handleDisconnect(connectionId: string): Promise<void> {
@@ -98,14 +140,25 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     if (connection?.sessionId) {
       const session = await this.sessionsRepo.findById(connection.sessionId);
       if (session) {
+        const wasMobile = session.mobileConnectionId === connectionId;
+        const desktopId = session.desktopConnectionId;
         const updates: Record<string, string | undefined> = {};
         if (session.desktopConnectionId === connectionId) updates.desktopConnectionId = undefined;
-        if (session.mobileConnectionId === connectionId) updates.mobileConnectionId = undefined;
+        if (wasMobile) updates.mobileConnectionId = undefined;
         if (Object.keys(updates).length) {
           await this.sessionsRepo.update(session.id, updates);
         }
+
+        if (wasMobile && desktopId) {
+          await this.wsMessage.sendToConnection(desktopId, {
+            type: 'scannerDisconnected',
+            sessionId: session.id,
+            timestamp: new Date().toISOString(),
+          });
+        }
       }
     }
+    this.logger.info({ connectionId }, 'WebSocket disconnected');
   }
 
   async handleCreateSession(
@@ -121,16 +174,31 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     await this.connectionsRepo.updateSessionId(connectionId, sessionId);
     await this.connectionsRepo.updateDeviceType(connectionId, deviceType);
 
+    let session = await this.sessionsRepo.findById(sessionId);
+
     if (deviceType === EDeviceType.Desktop) {
-      await this.posSessionService.attachDesktopConnection(sessionId, connectionId, userId);
+      session = await this.posSessionService.attachDesktopConnection(sessionId, connectionId, userId);
+
+      if (session.mobileConnectionId) {
+        await this.wsMessage.sendToConnection(session.mobileConnectionId, {
+          type: 'desktopConnected',
+          sessionId,
+          timestamp: new Date().toISOString(),
+        });
+        await this.wsMessage.sendToConnection(connectionId, {
+          type: 'scannerConnected',
+          sessionId,
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
 
-    const session = await this.sessionsRepo.findById(sessionId);
     return {
       type: 'sessionRegistered',
       sessionId,
       status: session?.status,
       deviceType,
+      mobileConnected: !!session?.mobileConnectionId,
     };
   }
 
@@ -148,13 +216,23 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     await this.connectionsRepo.updateSessionId(connectionId, sessionId);
     await this.connectionsRepo.updateDeviceType(connectionId, EDeviceType.Mobile);
 
+    await this.ensureMobileSlotAvailable(sessionId, connectionId, session.mobileConnectionId);
+
     const existingMobile = await this.connectionsRepo.findActiveBySessionAndDevice(
       sessionId,
       EDeviceType.Mobile,
     );
     if (existingMobile && existingMobile.connectionId !== connectionId) {
-      throw new ForbiddenException('Session already has an active mobile scanner');
+      const alive = await this.wsMessage.probeConnection(existingMobile.connectionId);
+      if (!alive) {
+        await this.connectionsRepo.markDisconnected(existingMobile.connectionId);
+      } else {
+        await this.wsMessage.sendToConnection(existingMobile.connectionId, { type: 'sessionReplaced' });
+        await this.connectionsRepo.markDisconnected(existingMobile.connectionId);
+      }
     }
+
+    this.logger.info({ sessionId, connectionId }, 'Mobile joining POS session');
 
     const updatedSession = await this.posSessionService.attachMobileConnection(
       sessionId,
@@ -174,6 +252,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
       type: 'sessionJoined',
       sessionId,
       status: 'CONNECTED',
+      desktopConnected: !!updatedSession.desktopConnectionId,
     };
   }
 
@@ -186,6 +265,8 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     const sessionId = body.sessionId as string;
 
     if (!barcode || !sessionId) throw new ForbiddenException('barcode and sessionId required');
+
+    this.logger.info({ barcode, sessionId, connectionId }, 'Barcode received from mobile');
 
     const session = await this.sessionsRepo.findById(sessionId);
     if (!session) throw new NotFoundException('Session not found');
@@ -203,6 +284,8 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     if (!item) throw new NotFoundException('Inventory item not found for barcode');
     if (item.createdBy !== session.createdBy) throw new ForbiddenException('Item does not belong to session owner');
 
+    this.logger.info({ sessionId, barcode, itemId: item.id, sku: item.sku }, 'Session validated — emitting to desktop');
+
     const payload = {
       type: 'barcodeScanned',
       barcode,
@@ -211,9 +294,49 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
       timestamp: new Date().toISOString(),
     };
 
-    await this.wsMessage.sendToConnection(session.desktopConnectionId, payload);
+    const delivered = await this.wsMessage.sendToConnection(session.desktopConnectionId, payload);
+    if (!delivered) {
+      await this.sessionsRepo.update(sessionId, { desktopConnectionId: undefined });
+      this.logger.warn({ sessionId, desktopConnectionId: session.desktopConnectionId }, 'Desktop connection stale');
+      throw new ForbiddenException('Desktop POS disconnected — refresh the POS page');
+    }
 
-    return { type: 'barcodeAck', barcode, success: true };
+    this.logger.info({ sessionId, barcode }, 'Barcode emitted to desktop');
+
+    return { type: 'barcodeAck', barcode, success: true, item };
+  }
+
+  async handleCartItemRemoved(
+    connectionId: string,
+    userId: string,
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const sessionId = body.sessionId as string;
+    const barcode = body.barcode as string;
+
+    if (!sessionId || !barcode) throw new ForbiddenException('sessionId and barcode required');
+
+    const session = await this.sessionsRepo.findById(sessionId);
+    if (!session) throw new NotFoundException('Session not found');
+    if (!this.posSessionService.isSessionActive(session)) {
+      throw new ForbiddenException('Session is not active');
+    }
+    if (session.desktopConnectionId !== connectionId) {
+      throw new ForbiddenException('Only desktop POS can release barcodes');
+    }
+
+    if (session.mobileConnectionId) {
+      const payload = {
+        type: 'barcodeReleased',
+        barcode,
+        sessionId,
+        timestamp: new Date().toISOString(),
+      };
+      const delivered = await this.wsMessage.sendToConnection(session.mobileConnectionId, payload);
+      this.logger.info({ sessionId, barcode, delivered }, 'Barcode released to mobile');
+    }
+
+    return { type: 'cartItemRemovedAck', barcode, success: true };
   }
 
   async handleCartUpdated(
@@ -245,6 +368,6 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
   }
 
   async handleHeartbeat(connectionId: string): Promise<Record<string, unknown>> {
-    return { type: 'heartbeat', connectionId, timestamp: new Date().toISOString() };
+    return { type: 'heartbeatAck', connectionId, timestamp: new Date().toISOString() };
   }
 }
