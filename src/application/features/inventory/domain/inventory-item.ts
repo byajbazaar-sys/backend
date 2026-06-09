@@ -12,6 +12,15 @@ export class InventoryItem {
   barcode?: string;
 
   @Expose()
+  qrValue?: string;
+
+  @Expose()
+  barcodeImageUrl?: string;
+
+  @Expose()
+  qrImageUrl?: string;
+
+  @Expose()
   itemCode?: string;
 
   @Expose()

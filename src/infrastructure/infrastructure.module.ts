@@ -25,6 +25,7 @@ import {
   INVENTORY_ITEMS_REPOSITORY,
   POS_SESSIONS_REPOSITORY,
   WEBSOCKET_CONNECTIONS_REPOSITORY,
+  SALES_BILLS_REPOSITORY,
 } from '../application';
 import {
   CustomersRepository,
@@ -40,6 +41,7 @@ import {
   InventoryItemsRepository,
   PosSessionsRepository,
   WebSocketConnectionsRepository,
+  SalesBillsRepository,
 } from './persistence';
 import { WEBSOCKET_MESSAGE_SERVICE } from './websocket/i-websocket-message.service';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
@@ -129,6 +131,10 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: WEBSOCKET_CONNECTIONS_REPOSITORY,
       useClass: WebSocketConnectionsRepository,
+    },
+    {
+      provide: SALES_BILLS_REPOSITORY,
+      useClass: SalesBillsRepository,
     },
     {
       provide: WEBSOCKET_MESSAGE_SERVICE,
@@ -256,6 +262,7 @@ import { GoogleOAuthService } from './google-oauth';
     INVENTORY_ITEMS_REPOSITORY,
     POS_SESSIONS_REPOSITORY,
     WEBSOCKET_CONNECTIONS_REPOSITORY,
+    SALES_BILLS_REPOSITORY,
     WEBSOCKET_MESSAGE_SERVICE,
     EMAIL_SERVICE,
     GOOGLE_OAUTH_SERVICE,

@@ -4,15 +4,26 @@ declare module 'bwip-js' {
     text: string;
     scale?: number;
     height?: number;
+    paddingwidth?: number;
+    paddingheight?: number;
     includetext?: boolean;
     textxalign?: string;
+    textsize?: number;
   }
   function toBuffer(options: BwipOptions): Promise<Buffer>;
   export default { toBuffer };
 }
 
 declare module 'qrcode' {
-  export function toDataURL(text: string, options?: { width?: number; margin?: number }): Promise<string>;
+  export function toDataURL(
+    text: string,
+    options?: {
+      width?: number;
+      margin?: number;
+      errorCorrectionLevel?: 'L' | 'M' | 'Q' | 'H';
+      color?: { dark?: string; light?: string };
+    },
+  ): Promise<string>;
 }
 
 declare module '@aws-sdk/client-apigatewaymanagementapi' {

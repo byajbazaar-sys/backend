@@ -67,7 +67,12 @@ export class PosSessionService implements IPosSessionService {
     const scannerUrl = `${webAppDomain}/scanner?sessionId=${session.id}&token=${encodeURIComponent(token)}&websocketUrl=${encodeURIComponent(this.getWebsocketUrl())}`;
     const qrPayload = scannerUrl;
 
-    const qrCodeDataUrl = await QRCode.toDataURL(qrPayload, { width: 280, margin: 2 });
+    const qrCodeDataUrl = await QRCode.toDataURL(qrPayload, {
+      width: 320,
+      margin: 4,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#000000', light: '#FFFFFF' },
+    });
 
     return {
       sessionId: session.id,

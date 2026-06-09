@@ -36,6 +36,8 @@ import {
   PosSessionService,
   WEBSOCKET_HANDLER_SERVICE,
   WebSocketHandlerService,
+  SALES_BILL_SERVICE,
+  SalesBillService,
 } from './features';
 import {
   EMAIL_TEMPLATE_SERVICE,
@@ -113,6 +115,10 @@ import {
     {
       provide: WEBSOCKET_HANDLER_SERVICE,
       useClass: WebSocketHandlerService,
+    },
+    {
+      provide: SALES_BILL_SERVICE,
+      useClass: SalesBillService,
     },
   ],
   exports: [PassportModule, UserJwtStrategy, TRANSACTION_SERVICE, LOAN_SERVICE],

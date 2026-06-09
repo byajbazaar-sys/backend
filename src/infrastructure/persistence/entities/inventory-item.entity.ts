@@ -35,6 +35,15 @@ export class InventoryItemEntity {
   @Column({ type: 'varchar', length: 20, unique: true })
   barcode: string;
 
+  @Column({ type: 'text', nullable: true })
+  qrValue: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  barcodeImageUrl: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  qrImageUrl: string | null;
+
   @Column({ type: 'varchar', length: 50, nullable: true })
   itemCode: string;
 

@@ -190,6 +190,11 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
           sessionId,
           timestamp: new Date().toISOString(),
         });
+        await this.wsMessage.sendToConnection(connectionId, {
+          type: 'requestCartSync',
+          sessionId,
+          timestamp: new Date().toISOString(),
+        });
       }
     }
 
@@ -243,6 +248,11 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     if (updatedSession.desktopConnectionId) {
       await this.wsMessage.sendToConnection(updatedSession.desktopConnectionId, {
         type: 'scannerConnected',
+        sessionId,
+        timestamp: new Date().toISOString(),
+      });
+      await this.wsMessage.sendToConnection(updatedSession.desktopConnectionId, {
+        type: 'requestCartSync',
         sessionId,
         timestamp: new Date().toISOString(),
       });
@@ -339,6 +349,91 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     return { type: 'cartItemRemovedAck', barcode, success: true };
   }
 
+  private async assertSessionParticipant(
+    sessionId: string,
+    connectionId: string,
+    allowed: 'desktop' | 'mobile' | 'either',
+  ) {
+    const session = await this.sessionsRepo.findById(sessionId);
+    if (!session) throw new NotFoundException('Session not found');
+    if (!this.posSessionService.isSessionActive(session)) {
+      throw new ForbiddenException('Session is not active');
+    }
+
+    const connection = await this.connectionsRepo.findByConnectionId(connectionId);
+    if (connection?.sessionId && connection.sessionId !== sessionId) {
+      throw new ForbiddenException('Connection does not belong to this session');
+    }
+
+    if (allowed === 'desktop' && session.desktopConnectionId !== connectionId) {
+      throw new ForbiddenException('Only desktop POS can perform this action');
+    }
+    if (allowed === 'mobile' && session.mobileConnectionId !== connectionId) {
+      throw new ForbiddenException('Only the paired mobile scanner can perform this action');
+    }
+    if (
+      allowed === 'either' &&
+      session.desktopConnectionId !== connectionId &&
+      session.mobileConnectionId !== connectionId
+    ) {
+      throw new ForbiddenException('Connection is not part of this session');
+    }
+
+    return session;
+  }
+
+  async handleSyncCartState(
+    connectionId: string,
+    userId: string,
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const sessionId = body.sessionId as string;
+    const barcodes = body.barcodes as string[] | undefined;
+    const entries = body.entries;
+
+    if (!sessionId || !Array.isArray(barcodes)) {
+      throw new ForbiddenException('sessionId and barcodes array required');
+    }
+
+    const session = await this.assertSessionParticipant(sessionId, connectionId, 'desktop');
+
+    if (session.mobileConnectionId) {
+      const payload = {
+        type: 'cartStateSync',
+        sessionId,
+        barcodes,
+        entries,
+        timestamp: new Date().toISOString(),
+      };
+      await this.wsMessage.sendToConnection(session.mobileConnectionId, payload);
+      this.logger.info({ sessionId, count: barcodes.length }, 'Cart state synced to mobile');
+    }
+
+    return { type: 'cartStateSyncAck', success: true, count: barcodes.length };
+  }
+
+  async handleCartCleared(
+    connectionId: string,
+    userId: string,
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const sessionId = body.sessionId as string;
+    if (!sessionId) throw new ForbiddenException('sessionId required');
+
+    const session = await this.assertSessionParticipant(sessionId, connectionId, 'desktop');
+
+    if (session.mobileConnectionId) {
+      await this.wsMessage.sendToConnection(session.mobileConnectionId, {
+        type: 'cartCleared',
+        sessionId,
+        timestamp: new Date().toISOString(),
+      });
+      this.logger.info({ sessionId }, 'Cart cleared notification sent to mobile');
+    }
+
+    return { type: 'cartClearedAck', success: true };
+  }
+
   async handleCartUpdated(
     connectionId: string,
     userId: string,
@@ -347,8 +442,9 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     const sessionId = body.sessionId as string;
     const cart = body.cart;
 
-    const session = await this.sessionsRepo.findById(sessionId);
-    if (!session) throw new NotFoundException('Session not found');
+    if (!sessionId) throw new ForbiddenException('sessionId required');
+
+    const session = await this.assertSessionParticipant(sessionId, connectionId, 'either');
 
     const payload = {
       type: 'cartUpdated',

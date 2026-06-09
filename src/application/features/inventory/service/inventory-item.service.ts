@@ -17,6 +17,7 @@ import {
 import { InventoryItem } from '../domain';
 import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel } from '../models';
 import { IInventoryItemService } from './i-inventory-item.service';
+import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
 import { EInventoryItemStatus } from '../enums';
 
 @Injectable()
@@ -24,6 +25,7 @@ export class InventoryItemService implements IInventoryItemService {
   constructor(
     @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly itemsRepo: IInventoryItemsRepository,
     @Inject(INVENTORY_CATEGORIES_REPOSITORY) private readonly categoriesRepo: IInventoryCategoriesRepository,
+    @Inject(BARCODE_SERVICE) private readonly barcodeService: IBarcodeService,
     @InjectPinoLogger(InventoryItemService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -59,6 +61,12 @@ export class InventoryItemService implements IInventoryItemService {
 
       try {
         const created = await this.itemsRepo.create(item);
+        if (created.id) {
+          const qrValue = this.barcodeService.buildInventoryQrPayload(created.id, created.sku!);
+          const withQr = await this.itemsRepo.update(created.id, { qrValue });
+          this.logger.info({ itemId: withQr.id, sku }, 'Inventory item created');
+          return withQr;
+        }
         this.logger.info({ itemId: created.id, sku }, 'Inventory item created');
         return created;
       } catch (err) {

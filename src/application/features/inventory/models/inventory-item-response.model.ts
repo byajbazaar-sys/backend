@@ -16,6 +16,18 @@ export class InventoryItemResponseModel {
   barcode: string;
 
   @Expose()
+  @ApiPropertyOptional({ description: 'JSON payload encoded in item QR label' })
+  qrValue?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  barcodeImageUrl?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  qrImageUrl?: string;
+
+  @Expose()
   @ApiPropertyOptional()
   itemCode?: string;
 

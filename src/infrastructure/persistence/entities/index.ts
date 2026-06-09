@@ -12,6 +12,8 @@ import { InventoryCategoryEntity } from './inventory-category.entity';
 import { InventoryItemEntity } from './inventory-item.entity';
 import { PosSessionEntity } from './pos-session.entity';
 import { WebSocketConnectionEntity } from './websocket-connection.entity';
+import { SalesBillEntity } from './sales-bill.entity';
+import { SalesBillItemEntity } from './sales-bill-item.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -27,6 +29,8 @@ export { InventoryCategoryEntity } from './inventory-category.entity';
 export { InventoryItemEntity } from './inventory-item.entity';
 export { PosSessionEntity } from './pos-session.entity';
 export { WebSocketConnectionEntity } from './websocket-connection.entity';
+export { SalesBillEntity } from './sales-bill.entity';
+export { SalesBillItemEntity } from './sales-bill-item.entity';
 
 export default [
   UserEntity,
@@ -43,4 +47,6 @@ export default [
   InventoryItemEntity,
   PosSessionEntity,
   WebSocketConnectionEntity,
+  SalesBillEntity,
+  SalesBillItemEntity,
 ];

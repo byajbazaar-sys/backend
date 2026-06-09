@@ -152,6 +152,18 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
         logWs('info', 'cartItemRemoved OK', { connectionId, barcode: body.barcode });
         break;
       }
+      case 'syncCartState': {
+        const userId = await resolveUserId(connectionId, token);
+        result = await wsHandler.handleSyncCartState(connectionId, userId, body);
+        logWs('info', 'syncCartState OK', { connectionId, count: (body.barcodes as unknown[])?.length });
+        break;
+      }
+      case 'cartCleared': {
+        const userId = await resolveUserId(connectionId, token);
+        result = await wsHandler.handleCartCleared(connectionId, userId, body);
+        logWs('info', 'cartCleared OK', { connectionId, sessionId: body.sessionId });
+        break;
+      }
       case 'heartbeat':
         result = await wsHandler.handleHeartbeat(connectionId);
         break;

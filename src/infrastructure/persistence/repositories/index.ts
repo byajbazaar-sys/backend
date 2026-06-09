@@ -11,3 +11,4 @@ export * from './inventory-categories.repository';
 export * from './inventory-items.repository';
 export * from './pos-sessions.repository';
 export * from './websocket-connections.repository';
+export * from './sales-bills.repository';
