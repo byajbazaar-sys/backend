@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { SalesBillEntity } from '../entities/sales-bill.entity';
@@ -14,6 +14,7 @@ import {
   SalesAnalyticsFilterOptions,
   ESalesBillSortField,
   EInventoryItemStatus,
+  InventoryStockDeduction,
 } from '../../../application';
 
 @Injectable()
@@ -66,7 +67,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return qb;
   }
 
-  async create(data: SalesBill, markSoldInventoryIds: string[] = []): Promise<SalesBill> {
+  async create(data: SalesBill, stockDeductions: InventoryStockDeduction[] = []): Promise<SalesBill> {
     const { items, ...billData } = data;
 
     return this.billsRepo.manager.transaction(async (manager) => {
@@ -84,11 +85,15 @@ export class SalesBillsRepository implements ISalesBillsRepository {
         await itemsRepo.save(lineEntities);
       }
 
-      if (markSoldInventoryIds.length) {
-        await inventoryRepo.update(
-          { id: In(markSoldInventoryIds) },
-          { status: EInventoryItemStatus.Sold },
-        );
+      for (const deduction of stockDeductions) {
+        const inv = await inventoryRepo.findOne({ where: { id: deduction.inventoryItemId } });
+        if (!inv) continue;
+        const currentStock = Number(inv.stockQuantity ?? 0);
+        const nextStock = Math.max(0, currentStock - deduction.quantity);
+        await inventoryRepo.update(deduction.inventoryItemId, {
+          stockQuantity: nextStock,
+          status: nextStock <= 0 ? EInventoryItemStatus.Sold : EInventoryItemStatus.Available,
+        });
       }
 
       const withItems = await billsRepo.findOne({

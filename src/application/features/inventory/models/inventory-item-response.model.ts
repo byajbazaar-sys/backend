@@ -100,6 +100,14 @@ export class InventoryItemResponseModel {
   hallmarked?: boolean;
 
   @Expose()
+  @ApiPropertyOptional({ example: 1 })
+  stockQuantity?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  supplierName?: string;
+
+  @Expose()
   @ApiProperty()
   createdAt: Date;
 

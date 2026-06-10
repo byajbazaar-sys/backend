@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { EInventoryItemStatus, EMetalType } from '../enums';
 
 export class CreateInventoryItemRequestModel {
@@ -93,4 +93,16 @@ export class CreateInventoryItemRequestModel {
   @IsOptional()
   @IsBoolean()
   hallmarked?: boolean;
+
+  @ApiPropertyOptional({ example: 1, description: 'Available stock quantity' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  stockQuantity?: number;
+
+  @ApiPropertyOptional({ example: 'Shree Gold Suppliers' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  supplierName?: string;
 }

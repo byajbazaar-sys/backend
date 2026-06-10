@@ -165,13 +165,15 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
   }
 
   async countLowStock(createdBy: string, threshold: number): Promise<InventoryItem[]> {
+    const stockThreshold = Math.max(0, Math.floor(threshold));
     const entities = await this.repo
       .createQueryBuilder('item')
       .leftJoinAndSelect('item.category', 'category')
       .where('item.created_by = :createdBy', { createdBy })
       .andWhere('item.status = :status', { status: 'AVAILABLE' })
-      .andWhere('item.net_weight <= :threshold', { threshold })
-      .orderBy('item.netWeight', 'ASC')
+      .andWhere('item.stock_quantity <= :stockThreshold', { stockThreshold })
+      .orderBy('item.stockQuantity', 'ASC')
+      .addOrderBy('item.itemName', 'ASC')
       .getMany();
     return entities.map((e) => this.mapEntity(e));
   }

@@ -104,6 +104,12 @@ export class InventoryItemEntity {
   @Column({ type: 'boolean', default: false })
   hallmarked: boolean;
 
+  @Column({ type: 'int', default: 1, name: 'stock_quantity' })
+  stockQuantity: number;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'supplier_name' })
+  supplierName: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

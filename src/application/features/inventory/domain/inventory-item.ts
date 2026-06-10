@@ -75,6 +75,12 @@ export class InventoryItem {
   hallmarked?: boolean;
 
   @Expose()
+  stockQuantity?: number;
+
+  @Expose()
+  supplierName?: string;
+
+  @Expose()
   createdBy?: string;
 
   @Expose()

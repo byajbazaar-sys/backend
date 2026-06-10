@@ -83,6 +83,7 @@ export class InventoryItemService implements IInventoryItemService {
         sku,
         barcode: sku,
         status: data.status ?? EInventoryItemStatus.Available,
+        stockQuantity: data.stockQuantity ?? 1,
         imageUrls: [],
         createdBy: userId,
       };
@@ -167,7 +168,14 @@ export class InventoryItemService implements IInventoryItemService {
       if (!category) throw new NotFoundException('Category not found');
     }
     const { imageUrls: _ignored, ...rest } = data;
-    const updated = await this.itemsRepo.update(id, rest);
+    const patch: Partial<InventoryItem> = { ...rest };
+    if (patch.stockQuantity != null && patch.stockQuantity > 0) {
+      patch.status = EInventoryItemStatus.Available;
+    }
+    if (patch.stockQuantity === 0) {
+      patch.status = EInventoryItemStatus.Sold;
+    }
+    const updated = await this.itemsRepo.update(id, patch);
     return this.enrichItem(updated);
   }
 

@@ -15,7 +15,11 @@ import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder } f
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel } from '../models';
 import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options';
 import { ISalesBillService } from './i-sales-bill.service';
-import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
+import {
+  ISalesBillsRepository,
+  InventoryStockDeduction,
+  SALES_BILLS_REPOSITORY,
+} from './i-sales-bills.repository';
 
 @Injectable()
 export class SalesBillService implements ISalesBillService {
@@ -47,38 +51,48 @@ export class SalesBillService implements ISalesBillService {
     };
   }
 
-  private async resolveInventoryItemsForSale(
+  private async resolveInventoryStockDeductions(
     lineItems: SalesBillLineItem[],
     userId: string,
     billStatus: EBillStatus,
-  ): Promise<string[]> {
+  ): Promise<InventoryStockDeduction[]> {
     if (billStatus !== EBillStatus.Completed) return [];
 
-    const linkedIds = lineItems
-      .map((line) => line.inventoryItemId)
-      .filter((id): id is string => !!id);
+    const linkedLines = lineItems.filter((line) => line.inventoryItemId);
+    const linkedIds = linkedLines.map((line) => line.inventoryItemId!);
 
     const uniqueIds = [...new Set(linkedIds)];
     if (uniqueIds.length !== linkedIds.length) {
       throw new BadRequestException('Each inventory item can only appear once per bill');
     }
 
-    for (const line of lineItems) {
-      if (line.inventoryItemId && line.quantity !== 1) {
-        throw new BadRequestException('Linked inventory items must have quantity 1');
-      }
-    }
+    const deductions: InventoryStockDeduction[] = [];
 
-    for (const id of uniqueIds) {
+    for (const line of linkedLines) {
+      const id = line.inventoryItemId!;
+      const qty = Number(line.quantity);
+      if (!Number.isFinite(qty) || qty < 1) {
+        throw new BadRequestException('Linked inventory items must have quantity of at least 1');
+      }
+
       const item = await this.inventoryItemsRepo.findById(id);
       if (!item) throw new NotFoundException(`Inventory item ${id} not found`);
       if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
       if (item.status !== EInventoryItemStatus.Available) {
         throw new ConflictException(`Item ${item.sku} is not available for sale`);
       }
+
+      const availableStock = Number(item.stockQuantity ?? 0);
+      if (availableStock < qty) {
+        throw new ConflictException(
+          `Insufficient stock for ${item.sku}. Available: ${availableStock}, requested: ${qty}`,
+        );
+      }
+
+      deductions.push({ inventoryItemId: id, quantity: qty });
     }
 
-    return uniqueIds;
+    return deductions;
   }
 
   async create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill> {
@@ -106,7 +120,7 @@ export class SalesBillService implements ISalesBillService {
     const grandTotal = Math.max(0, subtotal - discount + taxAmount);
     const status = data.status ?? EBillStatus.Completed;
 
-    const markSoldIds = await this.resolveInventoryItemsForSale(lineItems, userId, status);
+    const stockDeductions = await this.resolveInventoryStockDeductions(lineItems, userId, status);
 
     const bill: SalesBill = {
       billNumber: await this.generateBillNumber(userId),
@@ -124,9 +138,13 @@ export class SalesBillService implements ISalesBillService {
       items: lineItems,
     };
 
-    const created = await this.billsRepo.create(bill, markSoldIds);
+    const created = await this.billsRepo.create(bill, stockDeductions);
     this.logger.info(
-      { billId: created.id, billNumber: created.billNumber, soldItems: markSoldIds.length },
+      {
+        billId: created.id,
+        billNumber: created.billNumber,
+        stockLines: stockDeductions.length,
+      },
       'Sales bill created',
     );
     return created;

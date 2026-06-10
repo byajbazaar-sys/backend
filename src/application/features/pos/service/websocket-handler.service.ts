@@ -326,7 +326,24 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     if (!this.posSessionService.isSessionActive(session)) {
       throw new ForbiddenException('Session is not active');
     }
-    if (session.desktopConnectionId !== connectionId) {
+
+    let desktopConnectionId = session.desktopConnectionId;
+    if (desktopConnectionId !== connectionId) {
+      const connection = await this.connectionsRepo.findByConnectionId(connectionId);
+      if (
+        connection?.deviceType === EDeviceType.Desktop &&
+        session.createdBy === userId
+      ) {
+        const updated = await this.posSessionService.attachDesktopConnection(
+          sessionId,
+          connectionId,
+          userId,
+        );
+        desktopConnectionId = updated.desktopConnectionId;
+      }
+    }
+
+    if (desktopConnectionId !== connectionId) {
       throw new ForbiddenException('Only desktop POS can release barcodes');
     }
 
@@ -348,8 +365,9 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     sessionId: string,
     connectionId: string,
     allowed: 'desktop' | 'mobile' | 'either',
+    userId?: string,
   ) {
-    const session = await this.sessionsRepo.findById(sessionId);
+    let session = await this.sessionsRepo.findById(sessionId);
     if (!session) throw new NotFoundException('Session not found');
     if (!this.posSessionService.isSessionActive(session)) {
       throw new ForbiddenException('Session is not active');
@@ -361,7 +379,19 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     }
 
     if (allowed === 'desktop' && session.desktopConnectionId !== connectionId) {
-      throw new ForbiddenException('Only desktop POS can perform this action');
+      if (
+        userId &&
+        connection?.deviceType === EDeviceType.Desktop &&
+        session.createdBy === userId
+      ) {
+        session = await this.posSessionService.attachDesktopConnection(
+          sessionId,
+          connectionId,
+          userId,
+        );
+      } else {
+        throw new ForbiddenException('Only desktop POS can perform this action');
+      }
     }
     if (allowed === 'mobile' && session.mobileConnectionId !== connectionId) {
       throw new ForbiddenException('Only the paired mobile scanner can perform this action');
@@ -390,7 +420,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
       throw new ForbiddenException('sessionId and barcodes array required');
     }
 
-    const session = await this.assertSessionParticipant(sessionId, connectionId, 'desktop');
+    const session = await this.assertSessionParticipant(sessionId, connectionId, 'desktop', userId);
 
     if (session.mobileConnectionId) {
       const payload = {
@@ -415,7 +445,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     const sessionId = body.sessionId as string;
     if (!sessionId) throw new ForbiddenException('sessionId required');
 
-    const session = await this.assertSessionParticipant(sessionId, connectionId, 'desktop');
+    const session = await this.assertSessionParticipant(sessionId, connectionId, 'desktop', userId);
 
     if (session.mobileConnectionId) {
       await this.wsMessage.sendToConnection(session.mobileConnectionId, {
