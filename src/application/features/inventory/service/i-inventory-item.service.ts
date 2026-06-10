@@ -11,7 +11,7 @@ export interface IInventoryItemService {
   getByBarcode(barcode: string, userId: string): Promise<InventoryItem>;
   update(id: string, data: Partial<CreateInventoryItemRequestModel>, userId: string): Promise<InventoryItem>;
   delete(id: string, userId: string): Promise<void>;
-  generateSku(userId: string): Promise<string>;
+  generateSku(): Promise<string>;
   uploadImage(
     id: string,
     userId: string,

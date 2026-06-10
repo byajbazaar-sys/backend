@@ -14,8 +14,9 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, USER_STRATEGY } from '@shared-libs';
-import { BARCODE_SERVICE, IBarcodeService, INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
 import { InventoryItem } from './domain';
+import { EBarcodeFormat, EBarcodeSize } from './enums';
+import { BARCODE_SERVICE, IBarcodeService, INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
 
 @ApiTags('inventory-barcode')
 @ApiBearerAuth('user')
@@ -124,15 +125,15 @@ export class BarcodeController {
     qrMode?: string,
     customQrValue?: string,
   ) {
-    const fmt = ['CODE128', 'CODE39', 'EAN13', 'UPC'].includes(barcodeFormat ?? '')
-      ? (barcodeFormat as 'CODE128' | 'CODE39' | 'EAN13' | 'UPC')
-      : 'CODE128';
-    const bSize = ['small', 'medium', 'large'].includes(barcodeSize ?? '')
-      ? (barcodeSize as 'small' | 'medium' | 'large')
-      : 'medium';
-    const qSize = ['small', 'medium', 'large'].includes(qrSize ?? '')
-      ? (qrSize as 'small' | 'medium' | 'large')
-      : 'medium';
+    const fmt = Object.values(EBarcodeFormat).includes(barcodeFormat as EBarcodeFormat)
+      ? (barcodeFormat as EBarcodeFormat)
+      : EBarcodeFormat.CODE128;
+    const bSize = Object.values(EBarcodeSize).includes(barcodeSize as EBarcodeSize)
+      ? (barcodeSize as EBarcodeSize)
+      : EBarcodeSize.Medium;
+    const qSize = Object.values(EBarcodeSize).includes(qrSize as EBarcodeSize)
+      ? (qrSize as EBarcodeSize)
+      : EBarcodeSize.Medium;
     const mode = ['inventory', 'sku', 'barcode', 'url', 'custom'].includes(qrMode ?? '')
       ? (qrMode as 'inventory' | 'sku' | 'barcode' | 'url' | 'custom')
       : 'inventory';
@@ -162,16 +163,16 @@ export class BarcodeController {
   private async buildLabelPreview(
     item: InventoryItem,
     opts?: {
-      barcodeFormat?: 'CODE128' | 'CODE39' | 'EAN13' | 'UPC';
-      barcodeSize?: 'small' | 'medium' | 'large';
-      qrSize?: 'small' | 'medium' | 'large';
+      barcodeFormat?: EBarcodeFormat;
+      barcodeSize?: EBarcodeSize;
+      qrSize?: EBarcodeSize;
       qrMode?: 'inventory' | 'sku' | 'barcode' | 'url' | 'custom';
       customQrValue?: string;
     },
   ) {
-    const format = opts?.barcodeFormat ?? 'CODE128';
-    const barcodeSize = opts?.barcodeSize ?? 'medium';
-    const qrSize = opts?.qrSize ?? 'medium';
+    const format = opts?.barcodeFormat ?? EBarcodeFormat.CODE128;
+    const barcodeSize = opts?.barcodeSize ?? EBarcodeSize.Medium;
+    const qrSize = opts?.qrSize ?? EBarcodeSize.Medium;
     const qrMode = opts?.qrMode ?? 'inventory';
     const qrPayload = this.resolveQrPayloadForMode(item, qrMode, opts?.customQrValue);
 

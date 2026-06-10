@@ -26,6 +26,7 @@ import { plainToInstance } from 'class-transformer';
 import {
   CreateInventoryItemRequestModel,
   InventoryItemResponseModel,
+  InventoryItemsPagedResponseModel,
   ListInventoryItemsQueryModel,
 } from './models';
 import { INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
@@ -53,12 +54,19 @@ export class InventoryItemsController {
 
   @Get()
   @ApiOperation({ summary: 'List inventory items with pagination and filters' })
-  async getAll(@Query() query: ListInventoryItemsQueryModel, @Identity() identity: IIdentity) {
+  async getAll(
+    @Query() query: ListInventoryItemsQueryModel,
+    @Identity() identity: IIdentity,
+  ): Promise<InventoryItemsPagedResponseModel> {
     const paged = await this.itemService.getAll(identity.userId, query);
-    return {
-      ...paged,
-      items: plainToInstance(InventoryItemResponseModel, paged.items, { excludeExtraneousValues: true }),
-    };
+    return plainToInstance(
+      InventoryItemsPagedResponseModel,
+      {
+        ...paged,
+        items: plainToInstance(InventoryItemResponseModel, paged.items, { excludeExtraneousValues: true }),
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Get('barcode/:barcode')

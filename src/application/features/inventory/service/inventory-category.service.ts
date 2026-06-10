@@ -11,9 +11,11 @@ import { SYSTEM_USER_ID } from '@shared-libs';
 import {
   IInventoryCategoriesRepository,
   INVENTORY_CATEGORIES_REPOSITORY,
+} from './i-inventory-categories.repository';
+import {
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
-} from '../../../shared';
+} from './i-inventory-items.repository';
 import { InventoryCategory } from '../domain';
 import { CreateInventoryCategoryRequestModel } from '../models';
 import { IInventoryCategoryService } from './i-inventory-category.service';
@@ -70,7 +72,12 @@ export class InventoryCategoryService implements IInventoryCategoryService {
     if (category.isSystem || category.createdBy === SYSTEM_USER_ID) {
       throw new ForbiddenException('Cannot delete system categories');
     }
-    const items = await this.itemsRepo.findAll({ createdBy: userId, categoryId: id }, { pageNumber: 0, pageSize: 1 });
+    const items = await this.itemsRepo.findAll({
+      createdBy: userId,
+      categoryId: id,
+      pageNumber: 0,
+      pageSize: 1,
+    });
     if (items.totalCount > 0) {
       throw new BadRequestException('Cannot delete category with associated inventory items');
     }

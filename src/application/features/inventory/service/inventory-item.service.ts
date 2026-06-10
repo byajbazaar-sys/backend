@@ -9,14 +9,16 @@ import {
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { QueryFailedError } from 'typeorm';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import { IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
 import {
   IInventoryCategoriesRepository,
   INVENTORY_CATEGORIES_REPOSITORY,
+} from './i-inventory-categories.repository';
+import {
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
-  IUsersFileStorage,
-  USERS_FILE_STORAGE,
-} from '../../../shared';
+} from './i-inventory-items.repository';
+import { InventoryItemsFilterOptions } from '../options';
 import { InventoryItem } from '../domain';
 import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel } from '../models';
 import { IInventoryItemService } from './i-inventory-item.service';
@@ -110,17 +112,20 @@ export class InventoryItemService implements IInventoryItemService {
     throw new ConflictException('Unable to generate a unique SKU. Please try again.');
   }
 
+  private mapListQuery(userId: string, query: ListInventoryItemsQueryModel): InventoryItemsFilterOptions {
+    return {
+      createdBy: userId,
+      search: query.search,
+      categoryId: query.categoryId,
+      status: query.status,
+      metalType: query.metalType,
+      pageNumber: query.pageNumber,
+      pageSize: query.pageSize,
+    };
+  }
+
   async getAll(userId: string, query: ListInventoryItemsQueryModel): Promise<Paged<InventoryItem>> {
-    const paged = await this.itemsRepo.findAll(
-      {
-        createdBy: userId,
-        search: query.search,
-        categoryId: query.categoryId,
-        status: query.status,
-        metalType: query.metalType,
-      },
-      { pageNumber: query.pageNumber, pageSize: query.pageSize },
-    );
+    const paged = await this.itemsRepo.findAll(this.mapListQuery(userId, query));
     const items = await Promise.all(paged.items.map((item) => this.enrichItem(item)));
     return { ...paged, items };
   }

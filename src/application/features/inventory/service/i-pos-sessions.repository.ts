@@ -1,5 +1,5 @@
-import { PosSession } from '../../features/inventory/domain';
-import { EPosSessionStatus } from '../../features/inventory/enums';
+import { PosSession } from '../domain';
+import { EPosSessionStatus } from '../enums';
 
 export const POS_SESSIONS_REPOSITORY = 'POS_SESSIONS_REPOSITORY';
 

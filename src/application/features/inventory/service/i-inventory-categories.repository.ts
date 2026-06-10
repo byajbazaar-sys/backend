@@ -1,4 +1,4 @@
-import { InventoryCategory } from '../../features/inventory/domain';
+import { InventoryCategory } from '../domain';
 
 export const INVENTORY_CATEGORIES_REPOSITORY = 'INVENTORY_CATEGORIES_REPOSITORY';
 

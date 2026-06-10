@@ -1,5 +1,5 @@
-import { WebSocketConnection } from '../../features/inventory/domain';
-import { EDeviceType } from '../../features/inventory/enums';
+import { WebSocketConnection } from '../domain';
+import { EDeviceType } from '../enums';
 
 export const WEBSOCKET_CONNECTIONS_REPOSITORY = 'WEBSOCKET_CONNECTIONS_REPOSITORY';
 

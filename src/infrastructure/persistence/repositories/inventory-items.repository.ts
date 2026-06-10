@@ -7,8 +7,7 @@ import { InventoryItemEntity } from '../entities/inventory-item.entity';
 import {
   IInventoryItemsRepository,
   InventoryItem,
-  InventoryItemFilter,
-  InventoryPaginationParams,
+  InventoryItemsFilterOptions,
 } from '../../../application';
 
 @Injectable()
@@ -18,7 +17,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     private readonly repo: Repository<InventoryItemEntity>,
   ) {}
 
-  private buildQuery(filter: InventoryItemFilter) {
+  private buildQuery(filter: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>) {
     const qb = this.repo
       .createQueryBuilder('item')
       .leftJoinAndSelect('item.category', 'category')
@@ -97,8 +96,9 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return this.mapEntity(entity);
   }
 
-  async findAll(filter: InventoryItemFilter, pagination: InventoryPaginationParams): Promise<Paged<InventoryItem>> {
-    const { pageNumber, pageSize, skip } = getPaginationValues(pagination);
+  async findAll(params: InventoryItemsFilterOptions): Promise<Paged<InventoryItem>> {
+    const { pageNumber, pageSize, skip } = getPaginationValues(params);
+    const filter = params;
     const qb = this.buildQuery(filter).orderBy('item.createdAt', 'DESC').skip(skip).take(pageSize);
     const [items, totalCount] = await qb.getManyAndCount();
     return toPaged(InventoryItem, {
@@ -109,7 +109,9 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     });
   }
 
-  async findAllForReport(filter: InventoryItemFilter): Promise<InventoryItem[]> {
+  async findAllForReport(
+    filter: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>,
+  ): Promise<InventoryItem[]> {
     const entities = await this.buildQuery(filter).orderBy('item.createdAt', 'DESC').getMany();
     return entities.map((e) => this.mapEntity(e));
   }

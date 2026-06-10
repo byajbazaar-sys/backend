@@ -5,7 +5,7 @@ import {
   GoneException,
 } from '@aws-sdk/client-apigatewaymanagementapi';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { IWebSocketMessageService } from './i-websocket-message.service';
+import { IWebSocketMessageService } from '../../application';
 
 @Injectable()
 export class WebSocketMessageService implements IWebSocketMessageService {
@@ -48,7 +48,22 @@ export class WebSocketMessageService implements IWebSocketMessageService {
   }
 
   async probeConnection(connectionId: string): Promise<boolean> {
-    return this.sendToConnection(connectionId, { type: 'ping' });
+    if (!process.env.WEBSOCKET_API_ENDPOINT) return false;
+
+    try {
+      await this.getClient().send(
+        new PostToConnectionCommand({
+          ConnectionId: connectionId,
+          Data: Buffer.from(JSON.stringify({ type: 'ping' })),
+        }),
+      );
+      return true;
+    } catch (err) {
+      if (err instanceof GoneException || (err as { name?: string })?.name === 'GoneException') {
+        return false;
+      }
+      throw err;
+    }
   }
 
   async broadcastToSession(

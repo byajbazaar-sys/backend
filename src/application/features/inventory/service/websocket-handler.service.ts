@@ -8,15 +8,10 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { IIdentity, UsersAuthOptions } from '@shared-libs';
-import {
-  IInventoryItemsRepository,
-  INVENTORY_ITEMS_REPOSITORY,
-  IPosSessionsRepository,
-  POS_SESSIONS_REPOSITORY,
-  IWebSocketConnectionsRepository,
-  WEBSOCKET_CONNECTIONS_REPOSITORY,
-} from '../../../shared';
-import { WEBSOCKET_MESSAGE_SERVICE, IWebSocketMessageService } from '../../../../infrastructure/websocket/i-websocket-message.service';
+import { IWebSocketMessageService, WEBSOCKET_MESSAGE_SERVICE } from '../../../shared';
+import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
+import { IPosSessionsRepository, POS_SESSIONS_REPOSITORY } from './i-pos-sessions.repository';
+import { IWebSocketConnectionsRepository, WEBSOCKET_CONNECTIONS_REPOSITORY } from './i-websocket-connections.repository';
 import { EDeviceType } from '../enums';
 import { IWebSocketHandlerService } from './i-websocket-handler.service';
 import { POS_SESSION_SERVICE, IPosSessionService } from './i-pos-session.service';

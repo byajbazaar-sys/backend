@@ -4,8 +4,9 @@ import { UsersAuthOptions } from '@shared-libs';
 import {
   IWebSocketConnectionsRepository,
   WEBSOCKET_CONNECTIONS_REPOSITORY,
-} from '../application/shared/repository/i-websocket-connections.repository';
-import { WEBSOCKET_MESSAGE_SERVICE, IWebSocketMessageService } from '../infrastructure/websocket/i-websocket-message.service';
+  WEBSOCKET_MESSAGE_SERVICE,
+  IWebSocketMessageService,
+} from '../application';
 import {
   getTokenFromEvent,
   getWebSocketApp,

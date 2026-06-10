@@ -1,11 +1,12 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged } from '@shared-libs';
-import { SALES_BILLS_REPOSITORY, ISalesBillsRepository } from '../../../shared/repository/i-sales-bills.repository';
-import { SalesBill, SalesBillLineItem } from '../domain';
-import { EBillStatus, EPaymentMode } from '../enums';
+import { SalesBill, SalesBillLineItem, SalesAnalytics } from '../domain';
+import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder } from '../enums';
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel } from '../models';
+import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options';
 import { ISalesBillService } from './i-sales-bill.service';
+import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
 
 const INVENTORY_ITEM_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,7 +24,7 @@ export class SalesBillService implements ISalesBillService {
     return `INV-${year}-${String(seq).padStart(5, '0')}`;
   }
 
-  private mapQuery(userId: string, query: ListSalesBillsQueryModel) {
+  private mapListQuery(userId: string, query: ListSalesBillsQueryModel): SalesBillsFilterOptions {
     return {
       createdBy: userId,
       search: query.search,
@@ -32,8 +33,10 @@ export class SalesBillService implements ISalesBillService {
       paymentMode: query.paymentMode,
       status: query.status,
       customerId: query.customerId,
-      sortField: query.sortField ?? 'createdAt',
-      sortOrder: query.sortOrder ?? 'desc',
+      sortField: (query.sortField as ESalesBillSortField) ?? ESalesBillSortField.CreatedAt,
+      sortOrder: (query.sortOrder as ESalesBillSortOrder) ?? ESalesBillSortOrder.Desc,
+      pageNumber: query.pageNumber,
+      pageSize: query.pageSize,
     };
   }
 
@@ -65,15 +68,11 @@ export class SalesBillService implements ISalesBillService {
     const taxAmount = Number(data.taxAmount ?? 0);
     const grandTotal = Math.max(0, subtotal - discount + taxAmount);
 
-    let customerId = data.customerId;
-    let customerName = data.customerName?.trim() || 'Walk-in';
-    const customerMobile = data.customerMobile?.trim() || undefined;
-
     const bill: SalesBill = {
       billNumber: await this.generateBillNumber(userId),
-      customerName,
-      customerMobile,
-      customerId,
+      customerName: data.customerName?.trim() || 'Walk-in',
+      customerMobile: data.customerMobile?.trim() || undefined,
+      customerId: data.customerId,
       subtotal,
       discount,
       taxAmount,
@@ -98,10 +97,7 @@ export class SalesBillService implements ISalesBillService {
   }
 
   async list(userId: string, query: ListSalesBillsQueryModel): Promise<Paged<SalesBill>> {
-    return this.billsRepo.findAll(this.mapQuery(userId, query), {
-      pageNumber: query.pageNumber ?? 0,
-      pageSize: query.pageSize ?? 20,
-    });
+    return this.billsRepo.findAll(this.mapListQuery(userId, query));
   }
 
   async listByCustomer(
@@ -109,9 +105,26 @@ export class SalesBillService implements ISalesBillService {
     userId: string,
     query: ListSalesBillsQueryModel,
   ): Promise<Paged<SalesBill>> {
-    return this.billsRepo.findByCustomerId(userId, customerId, {
-      pageNumber: query.pageNumber ?? 0,
-      pageSize: query.pageSize ?? 20,
+    return this.billsRepo.findByCustomerId(customerId, {
+      ...this.mapListQuery(userId, query),
+      customerId,
     });
+  }
+
+  async getAnalytics(userId: string, dateFrom?: string, dateTo?: string): Promise<SalesAnalytics> {
+    const params: SalesAnalyticsFilterOptions = { createdBy: userId };
+
+    if (!dateFrom && !dateTo) {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 30);
+      params.dateFrom = start;
+      params.dateTo = end;
+    } else {
+      if (dateFrom) params.dateFrom = new Date(dateFrom);
+      if (dateTo) params.dateTo = new Date(dateTo);
+    }
+
+    return this.billsRepo.getAnalytics(params);
   }
 }

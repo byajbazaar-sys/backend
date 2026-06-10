@@ -5,12 +5,14 @@ import { plainToInstance } from 'class-transformer';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { SalesBillEntity } from '../entities/sales-bill.entity';
 import { SalesBillItemEntity } from '../entities/sales-bill-item.entity';
-import { SalesBill } from '../../../application/features/sales-bills/domain';
 import {
   ISalesBillsRepository,
-  SalesBillFilter,
-  SalesBillPagination,
-} from '../../../application/shared/repository/i-sales-bills.repository';
+  SalesBill,
+  SalesAnalytics,
+  SalesBillsFilterOptions,
+  SalesAnalyticsFilterOptions,
+  ESalesBillSortField,
+} from '../../../application';
 
 @Injectable()
 export class SalesBillsRepository implements ISalesBillsRepository {
@@ -25,7 +27,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return plainToInstance(SalesBill, entity, { excludeExtraneousValues: true });
   }
 
-  private buildQuery(filter: SalesBillFilter) {
+  private buildQuery(filter: Omit<SalesBillsFilterOptions, 'pageNumber' | 'pageSize'>) {
     const qb = this.billsRepo
       .createQueryBuilder('bill')
       .leftJoinAndSelect('bill.items', 'items')
@@ -54,7 +56,8 @@ export class SalesBillsRepository implements ISalesBillsRepository {
       qb.andWhere('bill.customerId = :customerId', { customerId: filter.customerId });
     }
 
-    const sortColumn = filter.sortField === 'grandTotal' ? 'bill.grandTotal' : 'bill.createdAt';
+    const sortColumn =
+      filter.sortField === ESalesBillSortField.GrandTotal ? 'bill.grandTotal' : 'bill.createdAt';
     const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
     qb.orderBy(sortColumn, sortOrder as 'ASC' | 'DESC');
 
@@ -85,9 +88,9 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return this.mapBill(entity);
   }
 
-  async findAll(filter: SalesBillFilter, pagination: SalesBillPagination): Promise<Paged<SalesBill>> {
-    const { pageNumber, pageSize, skip } = getPaginationValues(pagination);
-    const qb = this.buildQuery(filter).skip(skip).take(pageSize);
+  async findAll(params: SalesBillsFilterOptions): Promise<Paged<SalesBill>> {
+    const { pageNumber, pageSize, skip } = getPaginationValues(params);
+    const qb = this.buildQuery(params).skip(skip).take(pageSize);
     const [rows, totalCount] = await qb.getManyAndCount();
     return toPaged(SalesBill, {
       items: rows.map((e) => this.mapBill(e)),
@@ -98,11 +101,10 @@ export class SalesBillsRepository implements ISalesBillsRepository {
   }
 
   async findByCustomerId(
-    createdBy: string,
     customerId: string,
-    pagination: SalesBillPagination,
+    params: SalesBillsFilterOptions,
   ): Promise<Paged<SalesBill>> {
-    return this.findAll({ createdBy, customerId }, pagination);
+    return this.findAll({ ...params, customerId });
   }
 
   async getNextBillSequence(createdBy: string, year: number): Promise<number> {
@@ -119,5 +121,105 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     if (!result?.billNumber) return 1;
     const seq = parseInt(String(result.billNumber).replace(prefix, ''), 10);
     return isNaN(seq) ? 1 : seq + 1;
+  }
+
+  async getAnalytics(params: SalesAnalyticsFilterOptions): Promise<SalesAnalytics> {
+    const { createdBy, dateFrom, dateTo } = params;
+    const billQb = this.billsRepo
+      .createQueryBuilder('bill')
+      .where('bill.createdBy = :createdBy', { createdBy })
+      .andWhere('bill.status = :status', { status: 'COMPLETED' });
+
+    if (dateFrom) billQb.andWhere('bill.issuedAt >= :dateFrom', { dateFrom });
+    if (dateTo) billQb.andWhere('bill.issuedAt <= :dateTo', { dateTo });
+
+    const summary = await billQb
+      .clone()
+      .select('COUNT(bill.id)', 'billCount')
+      .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
+      .getRawOne();
+
+    const billCount = parseInt(summary?.billCount ?? '0', 10);
+    const revenue = parseFloat(summary?.revenue ?? '0');
+    const avgBillValue = billCount > 0 ? Math.round((revenue / billCount) * 100) / 100 : 0;
+
+    const dailyRows = await billQb
+      .clone()
+      .select("TO_CHAR(bill.issuedAt AT TIME ZONE 'UTC', 'YYYY-MM-DD')", 'date')
+      .addSelect('COUNT(bill.id)', 'billCount')
+      .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
+      .groupBy("TO_CHAR(bill.issuedAt AT TIME ZONE 'UTC', 'YYYY-MM-DD')")
+      .orderBy('date', 'ASC')
+      .getRawMany();
+
+    const paymentRows = await billQb
+      .clone()
+      .select('bill.paymentMode', 'paymentMode')
+      .addSelect('COUNT(bill.id)', 'count')
+      .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
+      .groupBy('bill.paymentMode')
+      .getRawMany();
+
+    const itemQb = this.itemsRepo
+      .createQueryBuilder('item')
+      .innerJoin('item.bill', 'bill')
+      .where('bill.createdBy = :createdBy', { createdBy })
+      .andWhere('bill.status = :status', { status: 'COMPLETED' });
+
+    if (dateFrom) itemQb.andWhere('bill.issuedAt >= :dateFrom', { dateFrom });
+    if (dateTo) itemQb.andWhere('bill.issuedAt <= :dateTo', { dateTo });
+
+    const topRows = await itemQb
+      .clone()
+      .select('item.sku', 'sku')
+      .addSelect('item.itemName', 'itemName')
+      .addSelect('item.metalType', 'metalType')
+      .addSelect('SUM(item.quantity)', 'quantity')
+      .addSelect('COALESCE(SUM(item.lineTotal), 0)', 'revenue')
+      .groupBy('item.sku')
+      .addGroupBy('item.itemName')
+      .addGroupBy('item.metalType')
+      .orderBy('revenue', 'DESC')
+      .limit(10)
+      .getRawMany();
+
+    const metalRows = await itemQb
+      .clone()
+      .select("COALESCE(item.metalType, 'OTHER')", 'metalType')
+      .addSelect('SUM(item.quantity)', 'quantity')
+      .addSelect('COALESCE(SUM(item.lineTotal), 0)', 'revenue')
+      .addSelect('COALESCE(SUM(item.netWeight), 0)', 'netWeight')
+      .groupBy('item.metalType')
+      .orderBy('revenue', 'DESC')
+      .getRawMany();
+
+    return {
+      billCount,
+      revenue,
+      avgBillValue,
+      dailySeries: dailyRows.map((r) => ({
+        date: r.date,
+        billCount: parseInt(r.billCount, 10),
+        revenue: parseFloat(r.revenue),
+      })),
+      topItems: topRows.map((r) => ({
+        sku: r.sku,
+        itemName: r.itemName,
+        metalType: r.metalType ?? undefined,
+        quantity: parseInt(r.quantity, 10),
+        revenue: parseFloat(r.revenue),
+      })),
+      byMetalType: metalRows.map((r) => ({
+        metalType: r.metalType,
+        quantity: parseInt(r.quantity, 10),
+        revenue: parseFloat(r.revenue),
+        netWeight: parseFloat(r.netWeight),
+      })),
+      byPaymentMode: paymentRows.map((r) => ({
+        paymentMode: r.paymentMode,
+        count: parseInt(r.count, 10),
+        revenue: parseFloat(r.revenue),
+      })),
+    };
   }
 }

@@ -1,21 +1,8 @@
-import { InventoryItem } from '../../features/inventory/domain';
-import { EInventoryItemStatus } from '../../features/inventory/enums';
 import { Paged } from '@shared-libs';
-
-export interface InventoryPaginationParams {
-  pageNumber?: number;
-  pageSize?: number;
-}
+import { InventoryItem } from '../domain';
+import { InventoryItemsFilterOptions } from '../options';
 
 export const INVENTORY_ITEMS_REPOSITORY = 'INVENTORY_ITEMS_REPOSITORY';
-
-export interface InventoryItemFilter {
-  createdBy: string;
-  search?: string;
-  categoryId?: string;
-  status?: EInventoryItemStatus;
-  metalType?: string;
-}
 
 export interface IInventoryItemsRepository {
   create(data: InventoryItem): Promise<InventoryItem>;
@@ -23,8 +10,8 @@ export interface IInventoryItemsRepository {
   findBySku(sku: string): Promise<InventoryItem | null>;
   findByBarcode(barcode: string): Promise<InventoryItem | null>;
   findByScanCode(code: string): Promise<InventoryItem | null>;
-  findAll(filter: InventoryItemFilter, pagination: InventoryPaginationParams): Promise<Paged<InventoryItem>>;
-  findAllForReport(filter: InventoryItemFilter): Promise<InventoryItem[]>;
+  findAll(params: InventoryItemsFilterOptions): Promise<Paged<InventoryItem>>;
+  findAllForReport(params: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>): Promise<InventoryItem[]>;
   getNextSkuSequence(yearSuffix: string): Promise<number>;
   update(id: string, data: Partial<InventoryItem>): Promise<InventoryItem>;
   delete(id: string): Promise<void>;

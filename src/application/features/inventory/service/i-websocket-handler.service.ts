@@ -1,4 +1,4 @@
-import { InventoryItem } from '../domain';
+import { BarcodeScannedPayload } from '../domain';
 import { EDeviceType } from '../enums';
 
 export const WEBSOCKET_HANDLER_SERVICE = 'WEBSOCKET_HANDLER_SERVICE';
@@ -20,9 +20,4 @@ export interface IWebSocketHandlerService {
   handleHeartbeat(connectionId: string): Promise<Record<string, unknown>>;
 }
 
-export interface BarcodeScannedPayload {
-  type: 'barcodeScanned';
-  barcode: string;
-  item?: InventoryItem;
-  timestamp: string;
-}
+export type { BarcodeScannedPayload };

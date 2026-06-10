@@ -43,7 +43,7 @@ import {
   WebSocketConnectionsRepository,
   SalesBillsRepository,
 } from './persistence';
-import { WEBSOCKET_MESSAGE_SERVICE } from './websocket/i-websocket-message.service';
+import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
 import { FileStorageMock, UsersFileStorage } from './s3';

@@ -16,6 +16,7 @@ import { Identity, IIdentity, RolesGuard, USER_STRATEGY, toCSV, toPDF, IPdfColum
 import { plainToInstance } from 'class-transformer';
 import { ExportFormat } from '../../shared/enums/e-export-format.enum';
 import { InventoryItemResponseModel } from './models';
+import { InventoryAnalytics } from './domain';
 import { INVENTORY_REPORT_SERVICE, IInventoryReportService } from './service';
 
 @ApiTags('inventory-reports')
@@ -31,6 +32,12 @@ export class InventoryReportsController {
   @ApiOperation({ summary: 'Inventory dashboard statistics' })
   async dashboard(@Identity() identity: IIdentity) {
     return this.reportService.getDashboardStats(identity.userId);
+  }
+
+  @Get('analytics')
+  @ApiOperation({ summary: 'Jewellery inventory analytics for dashboard charts' })
+  async analytics(@Identity() identity: IIdentity): Promise<InventoryAnalytics> {
+    return this.reportService.getAnalytics(identity.userId);
   }
 
   @Get('current')

@@ -1,6 +1,7 @@
 export * from './domain';
 export * from './enums';
 export * from './models';
+export * from './options';
 export * from './service';
 export * from './inventory-categories.controller';
 export * from './inventory-items.controller';

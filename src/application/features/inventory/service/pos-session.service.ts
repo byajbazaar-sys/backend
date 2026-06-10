@@ -10,10 +10,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import * as QRCode from 'qrcode';
 import { randomBytes } from 'crypto';
 import { UsersAuthOptions } from '@shared-libs';
-import {
-  IPosSessionsRepository,
-  POS_SESSIONS_REPOSITORY,
-} from '../../../shared';
+import { IPosSessionsRepository, POS_SESSIONS_REPOSITORY } from './i-pos-sessions.repository';
 import { PosSession } from '../domain';
 import { PosSessionQrResponseModel, PosSessionValidateResponseModel } from '../models';
 import { EPosSessionStatus } from '../enums';
