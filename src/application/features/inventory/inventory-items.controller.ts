@@ -12,10 +12,13 @@ import {
   Post,
   Query,
   StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, USER_STRATEGY } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -76,6 +79,25 @@ export class InventoryItemsController {
     @Identity() identity: IIdentity,
   ): Promise<InventoryItemResponseModel> {
     const item = await this.itemService.getById(id, identity.userId);
+    return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
+  }
+
+  @Patch(':id/image')
+  @ApiOperation({ summary: 'Upload or remove inventory item image' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('image'))
+  async uploadImage(
+    @Param('id') id: string,
+    @UploadedFile() image: Express.Multer.File,
+    @Body('removeImage') removeImage: string | undefined,
+    @Identity() identity: IIdentity,
+  ): Promise<InventoryItemResponseModel> {
+    const item = await this.itemService.uploadImage(
+      id,
+      identity.userId,
+      image,
+      removeImage === 'true' || removeImage === '1',
+    );
     return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
   }
 

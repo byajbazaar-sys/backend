@@ -30,17 +30,32 @@ export class BarcodeController {
   @Get('bulk/preview')
   @ApiOperation({ summary: 'Get barcode + QR previews for multiple items (label printing)' })
   @ApiQuery({ name: 'ids', description: 'Comma-separated inventory item IDs' })
-  async bulkPreview(@Query('ids') idsParam: string, @Identity() identity: IIdentity) {
+  @ApiQuery({ name: 'barcodeFormat', required: false, enum: ['CODE128', 'CODE39', 'EAN13', 'UPC'] })
+  @ApiQuery({ name: 'barcodeSize', required: false, enum: ['small', 'medium', 'large'] })
+  @ApiQuery({ name: 'qrSize', required: false, enum: ['small', 'medium', 'large'] })
+  @ApiQuery({ name: 'qrMode', required: false, enum: ['inventory', 'sku', 'barcode', 'url', 'custom'] })
+  @ApiQuery({ name: 'customQrValue', required: false })
+  async bulkPreview(
+    @Query('ids') idsParam: string,
+    @Query('barcodeFormat') barcodeFormat: string,
+    @Query('barcodeSize') barcodeSize: string,
+    @Query('qrSize') qrSize: string,
+    @Query('qrMode') qrMode: string,
+    @Query('customQrValue') customQrValue: string,
+    @Identity() identity: IIdentity,
+  ) {
     const ids = (idsParam ?? '')
       .split(',')
       .map((id) => id.trim())
       .filter(Boolean)
       .slice(0, 50);
 
+    const opts = this.parsePreviewOptions(barcodeFormat, barcodeSize, qrSize, qrMode, customQrValue);
+
     const labels = await Promise.all(
       ids.map(async (id) => {
         const item = await this.itemService.getById(id, identity.userId);
-        return this.buildLabelPreview(item);
+        return this.buildLabelPreview(item, opts);
       }),
     );
 
@@ -50,9 +65,23 @@ export class BarcodeController {
   @Get(':id/preview')
   @ApiOperation({ summary: 'Get barcode + QR preview as base64 data URLs' })
   @ApiParam({ name: 'id', description: 'Inventory item ID' })
-  async preview(@Param('id') id: string, @Identity() identity: IIdentity) {
+  @ApiQuery({ name: 'barcodeFormat', required: false })
+  @ApiQuery({ name: 'barcodeSize', required: false })
+  @ApiQuery({ name: 'qrSize', required: false })
+  @ApiQuery({ name: 'qrMode', required: false })
+  @ApiQuery({ name: 'customQrValue', required: false })
+  async preview(
+    @Param('id') id: string,
+    @Query('barcodeFormat') barcodeFormat: string,
+    @Query('barcodeSize') barcodeSize: string,
+    @Query('qrSize') qrSize: string,
+    @Query('qrMode') qrMode: string,
+    @Query('customQrValue') customQrValue: string,
+    @Identity() identity: IIdentity,
+  ) {
     const item = await this.itemService.getById(id, identity.userId);
-    return this.buildLabelPreview(item);
+    const opts = this.parsePreviewOptions(barcodeFormat, barcodeSize, qrSize, qrMode, customQrValue);
+    return this.buildLabelPreview(item, opts);
   }
 
   @Get(':id/download')
@@ -88,22 +117,85 @@ export class BarcodeController {
     });
   }
 
-  private async buildLabelPreview(item: InventoryItem) {
-    const qrPayload = this.barcodeService.resolveQrPayload(item.qrValue, item.id!, item.sku!);
+  private parsePreviewOptions(
+    barcodeFormat?: string,
+    barcodeSize?: string,
+    qrSize?: string,
+    qrMode?: string,
+    customQrValue?: string,
+  ) {
+    const fmt = ['CODE128', 'CODE39', 'EAN13', 'UPC'].includes(barcodeFormat ?? '')
+      ? (barcodeFormat as 'CODE128' | 'CODE39' | 'EAN13' | 'UPC')
+      : 'CODE128';
+    const bSize = ['small', 'medium', 'large'].includes(barcodeSize ?? '')
+      ? (barcodeSize as 'small' | 'medium' | 'large')
+      : 'medium';
+    const qSize = ['small', 'medium', 'large'].includes(qrSize ?? '')
+      ? (qrSize as 'small' | 'medium' | 'large')
+      : 'medium';
+    const mode = ['inventory', 'sku', 'barcode', 'url', 'custom'].includes(qrMode ?? '')
+      ? (qrMode as 'inventory' | 'sku' | 'barcode' | 'url' | 'custom')
+      : 'inventory';
+    return { barcodeFormat: fmt, barcodeSize: bSize, qrSize: qSize, qrMode: mode, customQrValue };
+  }
+
+  private resolveQrPayloadForMode(
+    item: InventoryItem,
+    mode: 'inventory' | 'sku' | 'barcode' | 'url' | 'custom',
+    customQrValue?: string,
+  ): string {
+    switch (mode) {
+      case 'sku':
+        return item.sku!;
+      case 'barcode':
+        return item.barcode ?? item.sku!;
+      case 'url':
+        return `/inventory/${item.id}`;
+      case 'custom':
+        return customQrValue?.trim() || item.sku!;
+      case 'inventory':
+      default:
+        return this.barcodeService.resolveQrPayload(item.qrValue, item.id!, item.sku!);
+    }
+  }
+
+  private async buildLabelPreview(
+    item: InventoryItem,
+    opts?: {
+      barcodeFormat?: 'CODE128' | 'CODE39' | 'EAN13' | 'UPC';
+      barcodeSize?: 'small' | 'medium' | 'large';
+      qrSize?: 'small' | 'medium' | 'large';
+      qrMode?: 'inventory' | 'sku' | 'barcode' | 'url' | 'custom';
+      customQrValue?: string;
+    },
+  ) {
+    const format = opts?.barcodeFormat ?? 'CODE128';
+    const barcodeSize = opts?.barcodeSize ?? 'medium';
+    const qrSize = opts?.qrSize ?? 'medium';
+    const qrMode = opts?.qrMode ?? 'inventory';
+    const qrPayload = this.resolveQrPayloadForMode(item, qrMode, opts?.customQrValue);
+
     const [barcodeDataUrl, qrDataUrl] = await Promise.all([
-      this.barcodeService.generateBarcodeDataUrl(item.sku!),
-      this.barcodeService.generateQrDataUrl(qrPayload),
+      this.barcodeService.generateBarcodeDataUrl(item.sku!, format, barcodeSize),
+      this.barcodeService.generateQrDataUrl(qrPayload, qrSize),
     ]);
 
     return {
       id: item.id,
       itemName: item.itemName,
       sku: item.sku,
+      itemCode: item.itemCode,
       barcode: item.barcode,
       barcodeValue: item.barcode,
       qrValue: qrPayload,
+      categoryName: item.categoryName,
+      metalType: item.metalType,
+      purity: item.purity,
+      grossWeight: item.grossWeight,
       netWeight: item.netWeight,
+      stoneWeight: item.stoneWeight,
       sellingPrice: item.sellingPrice,
+      location: item.location,
       dataUrl: barcodeDataUrl,
       barcodeDataUrl,
       qrDataUrl,

@@ -7,6 +7,9 @@ import { EBillStatus, EPaymentMode } from '../enums';
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel } from '../models';
 import { ISalesBillService } from './i-sales-bill.service';
 
+const INVENTORY_ITEM_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class SalesBillService implements ISalesBillService {
   constructor(
@@ -37,8 +40,12 @@ export class SalesBillService implements ISalesBillService {
   async create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill> {
     const lineItems: SalesBillLineItem[] = data.items.map((item) => {
       const lineTotal = Number(item.sellingPrice) * item.quantity;
+      const inventoryItemId =
+        item.inventoryItemId && INVENTORY_ITEM_UUID_RE.test(item.inventoryItemId)
+          ? item.inventoryItemId
+          : undefined;
       return {
-        inventoryItemId: item.inventoryItemId,
+        inventoryItemId,
         itemName: item.itemName,
         sku: item.sku,
         barcode: item.barcode,

@@ -78,6 +78,25 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return this.mapEntity(entity);
   }
 
+  async findByScanCode(code: string): Promise<InventoryItem | null> {
+    const trimmed = code.trim();
+    if (!trimmed) return null;
+
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const qb = this.repo
+      .createQueryBuilder('item')
+      .leftJoinAndSelect('item.category', 'category')
+      .where('item.barcode = :code OR item.sku = :code OR item.itemCode = :code', { code: trimmed });
+
+    if (uuidRe.test(trimmed)) {
+      qb.orWhere('item.id = :id', { id: trimmed });
+    }
+
+    const entity = await qb.getOne();
+    if (!entity) return null;
+    return this.mapEntity(entity);
+  }
+
   async findAll(filter: InventoryItemFilter, pagination: InventoryPaginationParams): Promise<Paged<InventoryItem>> {
     const { pageNumber, pageSize, skip } = getPaginationValues(pagination);
     const qb = this.buildQuery(filter).orderBy('item.createdAt', 'DESC').skip(skip).take(pageSize);

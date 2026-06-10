@@ -22,6 +22,7 @@ export interface IInventoryItemsRepository {
   findById(id: string): Promise<InventoryItem | null>;
   findBySku(sku: string): Promise<InventoryItem | null>;
   findByBarcode(barcode: string): Promise<InventoryItem | null>;
+  findByScanCode(code: string): Promise<InventoryItem | null>;
   findAll(filter: InventoryItemFilter, pagination: InventoryPaginationParams): Promise<Paged<InventoryItem>>;
   findAllForReport(filter: InventoryItemFilter): Promise<InventoryItem[]>;
   getNextSkuSequence(yearSuffix: string): Promise<number>;

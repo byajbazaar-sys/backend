@@ -29,34 +29,34 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     const qb = this.billsRepo
       .createQueryBuilder('bill')
       .leftJoinAndSelect('bill.items', 'items')
-      .where('bill.created_by = :createdBy', { createdBy: filter.createdBy });
+      .where('bill.createdBy = :createdBy', { createdBy: filter.createdBy });
 
     if (filter.search?.trim()) {
       const term = `%${filter.search.trim()}%`;
       qb.andWhere(
-        '(bill.bill_number ILIKE :term OR bill.customer_name ILIKE :term OR bill.customer_mobile ILIKE :term)',
+        '(bill.billNumber ILIKE :term OR bill.customerName ILIKE :term OR bill.customerMobile ILIKE :term)',
         { term },
       );
     }
     if (filter.dateFrom) {
-      qb.andWhere('bill.issued_at >= :dateFrom', { dateFrom: filter.dateFrom });
+      qb.andWhere('bill.issuedAt >= :dateFrom', { dateFrom: filter.dateFrom });
     }
     if (filter.dateTo) {
-      qb.andWhere('bill.issued_at <= :dateTo', { dateTo: filter.dateTo });
+      qb.andWhere('bill.issuedAt <= :dateTo', { dateTo: filter.dateTo });
     }
     if (filter.paymentMode) {
-      qb.andWhere('bill.payment_mode = :paymentMode', { paymentMode: filter.paymentMode });
+      qb.andWhere('bill.paymentMode = :paymentMode', { paymentMode: filter.paymentMode });
     }
     if (filter.status) {
       qb.andWhere('bill.status = :status', { status: filter.status });
     }
     if (filter.customerId) {
-      qb.andWhere('bill.customer_id = :customerId', { customerId: filter.customerId });
+      qb.andWhere('bill.customerId = :customerId', { customerId: filter.customerId });
     }
 
-    const sortField = filter.sortField === 'grandTotal' ? 'bill.grand_total' : 'bill.created_at';
+    const sortColumn = filter.sortField === 'grandTotal' ? 'bill.grandTotal' : 'bill.createdAt';
     const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    qb.orderBy(sortField, sortOrder as 'ASC' | 'DESC');
+    qb.orderBy(sortColumn, sortOrder as 'ASC' | 'DESC');
 
     return qb;
   }
@@ -109,10 +109,10 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     const prefix = `INV-${year}-`;
     const result = await this.billsRepo
       .createQueryBuilder('bill')
-      .select('bill.bill_number', 'billNumber')
-      .where('bill.created_by = :createdBy', { createdBy })
-      .andWhere('bill.bill_number LIKE :prefix', { prefix: `${prefix}%` })
-      .orderBy('bill.bill_number', 'DESC')
+      .select('bill.billNumber', 'billNumber')
+      .where('bill.createdBy = :createdBy', { createdBy })
+      .andWhere('bill.billNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('bill.billNumber', 'DESC')
       .limit(1)
       .getRawOne();
 

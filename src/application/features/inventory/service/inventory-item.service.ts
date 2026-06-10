@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -7,12 +8,14 @@ import {
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { QueryFailedError } from 'typeorm';
-import { Paged } from '@shared-libs';
+import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import {
   IInventoryCategoriesRepository,
   INVENTORY_CATEGORIES_REPOSITORY,
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
+  IUsersFileStorage,
+  USERS_FILE_STORAGE,
 } from '../../../shared';
 import { InventoryItem } from '../domain';
 import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel } from '../models';
@@ -26,8 +29,31 @@ export class InventoryItemService implements IInventoryItemService {
     @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly itemsRepo: IInventoryItemsRepository,
     @Inject(INVENTORY_CATEGORIES_REPOSITORY) private readonly categoriesRepo: IInventoryCategoriesRepository,
     @Inject(BARCODE_SERVICE) private readonly barcodeService: IBarcodeService,
+    @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @InjectPinoLogger(InventoryItemService.name) private readonly logger: PinoLogger,
   ) {}
+
+  private isStorageKey(value: string): boolean {
+    return !!value && !value.startsWith('http');
+  }
+
+  private async resolveImageUrls(keys: string[] | undefined): Promise<string[]> {
+    if (!keys?.length) return [];
+    return Promise.all(
+      keys.map(async (key) => {
+        if (!key || !this.isStorageKey(key)) return key;
+        const url = await this.fileStorage.getUrlAsync(key);
+        return url ?? key;
+      }),
+    );
+  }
+
+  private async enrichItem(item: InventoryItem): Promise<InventoryItem> {
+    return {
+      ...item,
+      imageUrls: await this.resolveImageUrls(item.imageUrls),
+    };
+  }
 
   async generateSku(): Promise<string> {
     const yearSuffix = String(new Date().getFullYear()).slice(-2);
@@ -55,7 +81,7 @@ export class InventoryItemService implements IInventoryItemService {
         sku,
         barcode: sku,
         status: data.status ?? EInventoryItemStatus.Available,
-        imageUrls: data.imageUrls ?? [],
+        imageUrls: [],
         createdBy: userId,
       };
 
@@ -65,10 +91,10 @@ export class InventoryItemService implements IInventoryItemService {
           const qrValue = this.barcodeService.buildInventoryQrPayload(created.id, created.sku!);
           const withQr = await this.itemsRepo.update(created.id, { qrValue });
           this.logger.info({ itemId: withQr.id, sku }, 'Inventory item created');
-          return withQr;
+          return this.enrichItem(withQr);
         }
         this.logger.info({ itemId: created.id, sku }, 'Inventory item created');
-        return created;
+        return this.enrichItem(created);
       } catch (err) {
         if (this.isSkuCollision(err) && attempt < maxAttempts - 1) {
           this.logger.warn({ attempt, sku }, 'SKU collision, retrying with next sequence');
@@ -85,7 +111,7 @@ export class InventoryItemService implements IInventoryItemService {
   }
 
   async getAll(userId: string, query: ListInventoryItemsQueryModel): Promise<Paged<InventoryItem>> {
-    return this.itemsRepo.findAll(
+    const paged = await this.itemsRepo.findAll(
       {
         createdBy: userId,
         search: query.search,
@@ -95,20 +121,34 @@ export class InventoryItemService implements IInventoryItemService {
       },
       { pageNumber: query.pageNumber, pageSize: query.pageSize },
     );
+    const items = await Promise.all(paged.items.map((item) => this.enrichItem(item)));
+    return { ...paged, items };
   }
 
   async getById(id: string, userId: string): Promise<InventoryItem> {
     const item = await this.itemsRepo.findById(id);
     if (!item) throw new NotFoundException('Inventory item not found');
     if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
-    return item;
+    return this.enrichItem(item);
   }
 
   async getByBarcode(barcode: string, userId: string): Promise<InventoryItem> {
-    const item = await this.itemsRepo.findByBarcode(barcode);
+    const raw = decodeURIComponent(barcode).trim();
+    const qrPayload = this.barcodeService.parseInventoryQrPayload(raw);
+
+    if (qrPayload?.inventoryId) {
+      const byId = await this.itemsRepo.findById(qrPayload.inventoryId);
+      if (byId) {
+        if (byId.createdBy !== userId) throw new ForbiddenException('Access denied');
+        return this.enrichItem(byId);
+      }
+    }
+
+    const lookupCode = qrPayload?.sku?.trim() || raw;
+    const item = await this.itemsRepo.findByScanCode(lookupCode);
     if (!item) throw new NotFoundException('Inventory item not found for barcode');
     if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
-    return item;
+    return this.enrichItem(item);
   }
 
   async update(
@@ -121,11 +161,72 @@ export class InventoryItemService implements IInventoryItemService {
       const category = await this.categoriesRepo.findById(data.categoryId);
       if (!category) throw new NotFoundException('Category not found');
     }
-    return this.itemsRepo.update(id, data);
+    const { imageUrls: _ignored, ...rest } = data;
+    const updated = await this.itemsRepo.update(id, rest);
+    return this.enrichItem(updated);
+  }
+
+  async uploadImage(
+    id: string,
+    userId: string,
+    file?: Express.Multer.File,
+    removeImage?: boolean,
+  ): Promise<InventoryItem> {
+    const existing = await this.itemsRepo.findById(id);
+    if (!existing) throw new NotFoundException('Inventory item not found');
+    if (existing.createdBy !== userId) throw new ForbiddenException('Access denied');
+
+    const currentKey = existing.imageUrls?.[0];
+
+    if (removeImage) {
+      if (currentKey && this.isStorageKey(currentKey)) {
+        try {
+          await this.fileStorage.removeAsync(currentKey);
+        } catch (err) {
+          this.logger.warn({ err, key: currentKey }, 'Failed to delete inventory image');
+        }
+      }
+      const updated = await this.itemsRepo.update(id, { imageUrls: [] });
+      return this.enrichItem(updated);
+    }
+
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Image file is required');
+    }
+
+    const normalized = await normalizeImageBufferForStorageOrThrow(
+      file.buffer,
+      file.mimetype,
+      file.originalname,
+    );
+    const storageKey = `inventory/${userId}/${id}/image.${normalized.fileExtension}`;
+
+    if (currentKey && this.isStorageKey(currentKey)) {
+      try {
+        await this.fileStorage.removeAsync(currentKey);
+      } catch (err) {
+        this.logger.warn({ err, key: currentKey }, 'Failed to delete old inventory image');
+      }
+    }
+
+    await this.fileStorage.writeAsync(storageKey, normalized.buffer, normalized.mimetype);
+    const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] });
+    this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
+    return this.enrichItem(updated);
   }
 
   async delete(id: string, userId: string): Promise<void> {
-    await this.getById(id, userId);
+    const existing = await this.itemsRepo.findById(id);
+    if (!existing) throw new NotFoundException('Inventory item not found');
+    if (existing.createdBy !== userId) throw new ForbiddenException('Access denied');
+    const key = existing.imageUrls?.[0];
+    if (key && this.isStorageKey(key)) {
+      try {
+        await this.fileStorage.removeAsync(key);
+      } catch (err) {
+        this.logger.warn({ err, key }, 'Failed to delete inventory image on item delete');
+      }
+    }
     await this.itemsRepo.delete(id);
   }
 }

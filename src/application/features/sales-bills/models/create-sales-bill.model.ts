@@ -13,9 +13,9 @@ import {
 import { EPaymentMode, EBillStatus } from '../enums';
 
 export class CreateSalesBillLineItemModel {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Inventory item UUID when linked to stock' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   inventoryItemId?: string;
 
   @ApiProperty()
