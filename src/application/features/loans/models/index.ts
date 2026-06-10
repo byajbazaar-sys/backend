@@ -12,3 +12,4 @@ export * from './download-loans-query.model';
 export * from './loans-paged-response.model';
 export * from './loan-stats-query.request.model';
 export * from './loan-stats.response.model';
+export * from './upload-loan-voucher-signatures-request.model';

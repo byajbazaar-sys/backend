@@ -44,6 +44,7 @@ import {
   LoanItemResponseModel,
   LoanStatsQueryRequestModel,
   LoanStatsResponseModel,
+  UploadLoanVoucherSignaturesRequestModel,
 } from './models';
 import { ILoanService, LOAN_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
@@ -281,6 +282,44 @@ export class LoansController {
   async getById(@Param() params: GetLoanParamsModel, @Identity() identity: IIdentity): Promise<LoanResponseModel> {
     this.logger.info({ params, identity }, 'getById called');
     const loan = await this.loanService.getById(params.id, identity.userId);
+    return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
+  }
+
+  @Patch(':id/voucher-signatures')
+  @ApiOperation({
+    summary: 'Upload borrower signature and fingerprint for loan voucher',
+    description: 'Stores signature (required) and optional fingerprint images in S3 and links them to the loan.',
+  })
+  @ApiParam({ name: 'id', description: 'Loan ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
+  @ApiOkResponse({ type: LoanResponseModel })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'signature', maxCount: 1 },
+      { name: 'fingerprint', maxCount: 1 },
+    ]),
+  )
+  @HttpCode(HttpStatus.OK)
+  async uploadVoucherSignatures(
+    @Param() params: GetLoanParamsModel,
+    @Body() body: UploadLoanVoucherSignaturesRequestModel,
+    @Identity() identity: IIdentity,
+    @UploadedFiles()
+    files: {
+      signature?: Express.Multer.File[];
+      fingerprint?: Express.Multer.File[];
+    },
+  ): Promise<LoanResponseModel> {
+    this.logger.info({ params, identity }, 'uploadVoucherSignatures called');
+    const loan = await this.loanService.uploadVoucherSignatures(
+      params.id,
+      identity.userId,
+      body.signerName,
+      files.signature?.[0],
+      files.fingerprint?.[0],
+      body.removeFingerprint === 'true' || body.removeFingerprint === '1',
+    );
     return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });
   }
 

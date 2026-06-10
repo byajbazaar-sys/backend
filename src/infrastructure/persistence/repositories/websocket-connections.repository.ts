@@ -4,7 +4,7 @@ import { IsNull, Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
 import { WebSocketConnectionEntity } from '../entities/websocket-connection.entity';
 import { IWebSocketConnectionsRepository, WebSocketConnection } from '../../../application';
-import { EDeviceType } from '../../../application/features/inventory/enums';
+import { EDeviceType } from '../../../application';
 
 @Injectable()
 export class WebSocketConnectionsRepository implements IWebSocketConnectionsRepository {

@@ -61,4 +61,13 @@ export class Loan {
   @Expose()
   @Type(() => Date)
   public closedAt?: Date;
+
+  @Expose()
+  public signerName?: string;
+
+  @Expose()
+  public signatureRef?: string;
+
+  @Expose()
+  public fingerprintRef?: string;
 }

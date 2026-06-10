@@ -21,6 +21,10 @@ export class LoanService implements ILoanService {
     @InjectPinoLogger(LoanService.name) private readonly logger: PinoLogger,
   ) { }
 
+  private isStorageKey(value: string): boolean {
+    return !!value && !value.startsWith('http');
+  }
+
   private async enrichLoanItemsWithImageUrls(items: LoanItem[]): Promise<void> {
     if (!items?.length) return;
     await Promise.all(
@@ -31,6 +35,17 @@ export class LoanService implements ILoanService {
         }
       }),
     );
+  }
+
+  private async enrichLoanWithVoucherSignatureUrls(loan: Loan): Promise<void> {
+    if (loan.signatureRef && this.isStorageKey(loan.signatureRef)) {
+      const url = await this.loansFileStorage.getUrlAsync(loan.signatureRef);
+      if (url) loan.signatureRef = url;
+    }
+    if (loan.fingerprintRef && this.isStorageKey(loan.fingerprintRef)) {
+      const url = await this.loansFileStorage.getUrlAsync(loan.fingerprintRef);
+      if (url) loan.fingerprintRef = url;
+    }
   }
 
   async create(data: Loan): Promise<Loan> {
@@ -95,6 +110,7 @@ export class LoanService implements ILoanService {
 
       this.logger.info({ loanId: loan.id }, 'Loan created successfully with dues');
       await this.enrichLoanItemsWithImageUrls(data.loanItems);
+      await this.enrichLoanWithVoucherSignatureUrls(loan);
       return { ...loan, loanItems: data.loanItems };
     } catch (err) {
       this.logger.error({ err, customerId: data.customerId }, 'Error creating loan');
@@ -197,6 +213,7 @@ export class LoanService implements ILoanService {
         throw new NotFoundException('Loan not found');
       }
       await this.enrichLoanItemsWithImageUrls(loan.loanItems ?? []);
+      await this.enrichLoanWithVoucherSignatureUrls(loan);
       return loan;
     } catch (err) {
       if (err instanceof NotFoundException) {
@@ -492,6 +509,113 @@ export class LoanService implements ILoanService {
         throw err;
       }
       this.logger.error({ err, itemId, createdBy }, 'Error updating loan item');
+      throw err;
+    }
+  }
+
+  async uploadVoucherSignatures(
+    loanId: string,
+    createdBy: string,
+    signerName: string,
+    signatureFile: Express.Multer.File,
+    fingerprintFile?: Express.Multer.File | null,
+    removeFingerprint?: boolean,
+  ): Promise<Loan> {
+    try {
+      this.logger.info({ loanId, createdBy }, 'Uploading loan voucher signatures');
+
+      const existingLoan = await this.loansRepo.findById(loanId, createdBy);
+      if (!existingLoan) {
+        throw new NotFoundException('Loan not found');
+      }
+
+      if (!signatureFile?.buffer?.length) {
+        throw new BadRequestException('Signature image is required');
+      }
+
+      const trimmedSignerName = signerName?.trim();
+      if (!trimmedSignerName) {
+        throw new BadRequestException('Signer name is required');
+      }
+
+      const signatureNormalized = await normalizeImageBufferForStorageOrThrow(
+        signatureFile.buffer,
+        signatureFile.mimetype,
+        signatureFile.originalname,
+      );
+      const signatureKey = `loans/signatures/${loanId}/signature.${signatureNormalized.fileExtension}`;
+
+      if (existingLoan.signatureRef && this.isStorageKey(existingLoan.signatureRef)) {
+        try {
+          await this.loansFileStorage.removeAsync(existingLoan.signatureRef);
+        } catch (err) {
+          this.logger.warn({ err, key: existingLoan.signatureRef }, 'Failed to delete old signature from storage');
+        }
+      }
+
+      const storedSignatureKey = await this.loansFileStorage.writeAsync(
+        signatureKey,
+        signatureNormalized.buffer,
+        signatureNormalized.mimetype,
+      );
+
+      let storedFingerprintKey = existingLoan.fingerprintRef;
+
+      if (removeFingerprint) {
+        if (existingLoan.fingerprintRef && this.isStorageKey(existingLoan.fingerprintRef)) {
+          try {
+            await this.loansFileStorage.removeAsync(existingLoan.fingerprintRef);
+          } catch (err) {
+            this.logger.warn({ err, key: existingLoan.fingerprintRef }, 'Failed to delete fingerprint from storage');
+          }
+        }
+        storedFingerprintKey = null;
+      } else if (fingerprintFile?.buffer?.length) {
+        const fingerprintNormalized = await normalizeImageBufferForStorageOrThrow(
+          fingerprintFile.buffer,
+          fingerprintFile.mimetype,
+          fingerprintFile.originalname,
+        );
+        const fingerprintKey = `loans/signatures/${loanId}/fingerprint.${fingerprintNormalized.fileExtension}`;
+
+        if (existingLoan.fingerprintRef && this.isStorageKey(existingLoan.fingerprintRef)) {
+          try {
+            await this.loansFileStorage.removeAsync(existingLoan.fingerprintRef);
+          } catch (err) {
+            this.logger.warn({ err, key: existingLoan.fingerprintRef }, 'Failed to delete old fingerprint from storage');
+          }
+        }
+
+        storedFingerprintKey = await this.loansFileStorage.writeAsync(
+          fingerprintKey,
+          fingerprintNormalized.buffer,
+          fingerprintNormalized.mimetype,
+        );
+      }
+
+      const updatedLoan = await this.loansRepo.update(loanId, {
+        ...existingLoan,
+        createdBy,
+        signerName: trimmedSignerName,
+        signatureRef: storedSignatureKey,
+        fingerprintRef: storedFingerprintKey,
+      } as Loan);
+
+      if (!updatedLoan) {
+        throw new NotFoundException('Loan not found');
+      }
+
+      updatedLoan.loanItems = existingLoan.loanItems;
+      await this.enrichLoanItemsWithImageUrls(updatedLoan.loanItems ?? []);
+      await this.enrichLoanWithVoucherSignatureUrls(updatedLoan);
+
+      this.logger.info({ loanId }, 'Loan voucher signatures stored');
+      return updatedLoan;
+    } catch (err) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException) {
+        throw err;
+      }
+      this.logger.error({ err, loanId, createdBy }, 'Error uploading loan voucher signatures');
       throw err;
     }
   }

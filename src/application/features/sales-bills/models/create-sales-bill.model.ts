@@ -11,61 +11,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { EPaymentMode, EBillStatus } from '../enums';
-
-export class CreateSalesBillLineItemModel {
-  @ApiPropertyOptional({ description: 'Inventory item UUID when linked to stock' })
-  @IsOptional()
-  @IsString()
-  inventoryItemId?: string;
-
-  @ApiProperty()
-  @IsString()
-  itemName: string;
-
-  @ApiProperty()
-  @IsString()
-  sku: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  barcode?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  metalType?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  purity?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  grossWeight?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  netWeight?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  makingCharges?: number;
-
-  @ApiProperty()
-  @IsNumber()
-  @Min(0)
-  sellingPrice: number;
-
-  @ApiProperty()
-  @IsNumber()
-  @Min(1)
-  quantity: number;
-}
+import { CreateSalesBillLineItemModel } from './create-sales-bill-line-item.model';
 
 export class CreateSalesBillRequestModel {
   @ApiPropertyOptional()

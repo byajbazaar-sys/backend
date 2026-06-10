@@ -32,13 +32,15 @@ import {
   BarcodeService,
   INVENTORY_REPORT_SERVICE,
   InventoryReportService,
+  SALES_BILL_SERVICE,
+  SalesBillService,
+} from './features';
+import {
   POS_SESSION_SERVICE,
   PosSessionService,
   WEBSOCKET_HANDLER_SERVICE,
   WebSocketHandlerService,
-  SALES_BILL_SERVICE,
-  SalesBillService,
-} from './features';
+} from './features/pos';
 import {
   EMAIL_TEMPLATE_SERVICE,
   EmailTemplateService,

@@ -12,9 +12,8 @@ import {
   InventoryItemsController,
   InventoryReportsController,
   BarcodeController,
-  PosSessionsController,
-  PosSessionPublicController,
 } from './inventory';
+import { PosSessionsController, PosSessionPublicController } from './pos';
 import { SalesBillsController } from './sales-bills';
 
 export * from './users';
@@ -26,6 +25,7 @@ export * from './items';
 export * from './notifications';
 export * from './support';
 export * from './inventory';
+export * from './pos';
 export * from './sales-bills';
 
 export const Controllers = [

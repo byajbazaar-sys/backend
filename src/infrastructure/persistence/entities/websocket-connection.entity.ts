@@ -5,7 +5,7 @@ import {
   CreateDateColumn,
   Index,
 } from 'typeorm';
-import { EDeviceType } from '../../../application/features/inventory/enums';
+import { EDeviceType } from '../../../application';
 
 @Entity('websocket_connections')
 @Index('IDX_websocket_connections_connection_id', ['connectionId'], { unique: true })

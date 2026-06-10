@@ -5,7 +5,7 @@ import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options
 export const SALES_BILLS_REPOSITORY = 'SALES_BILLS_REPOSITORY';
 
 export interface ISalesBillsRepository {
-  create(bill: SalesBill): Promise<SalesBill>;
+  create(bill: SalesBill, markSoldInventoryIds?: string[]): Promise<SalesBill>;
   findById(id: string): Promise<SalesBill | null>;
   findAll(params: SalesBillsFilterOptions): Promise<Paged<SalesBill>>;
   findByCustomerId(customerId: string, params: SalesBillsFilterOptions): Promise<Paged<SalesBill>>;

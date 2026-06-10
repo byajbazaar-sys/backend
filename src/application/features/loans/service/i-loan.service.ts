@@ -13,6 +13,14 @@ export interface ILoanService {
   update(id: string, updateData: Loan): Promise<Loan>;
   updateStatus(id: string, status: ELoanStatus, createdBy: string): Promise<Loan>;
   updateLoanItem(itemId: string, updateData: Partial<LoanItem>, createdBy: string): Promise<LoanItem>;
+  uploadVoucherSignatures(
+    loanId: string,
+    createdBy: string,
+    signerName: string,
+    signatureFile: Express.Multer.File,
+    fingerprintFile?: Express.Multer.File | null,
+    removeFingerprint?: boolean,
+  ): Promise<Loan>;
   recalculateDuesForLoan(loanId: string, createdBy: string): Promise<void>;
   delete(id: string, userId: string): Promise<void>;
   getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;

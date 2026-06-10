@@ -72,6 +72,15 @@ export class LoanEntity {
   @Column({ type: 'timestamptz', nullable: true })
   closedAt?: Date;
 
+  @Column({ type: 'varchar', nullable: true })
+  signerName?: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  signatureRef?: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  fingerprintRef?: string;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   currentRate: number;
 

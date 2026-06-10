@@ -1,3 +1,4 @@
+export * from './create-sales-bill-line-item.model';
 export * from './create-sales-bill.model';
 export * from './list-sales-bills-query.model';
 export * from './sales-bill-response.model';

@@ -7,5 +7,3 @@ export * from './inventory-categories.controller';
 export * from './inventory-items.controller';
 export * from './inventory-reports.controller';
 export * from './barcode.controller';
-export * from './pos-sessions.controller';
-export * from './pos-session-public.controller';

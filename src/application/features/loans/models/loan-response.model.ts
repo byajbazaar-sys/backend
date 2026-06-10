@@ -84,5 +84,17 @@ export class LoanResponseModel {
   @ApiProperty({ description: 'Loan items', type: [LoanItemResponseModel] })
   @Type(() => LoanItemResponseModel)
   loanItems?: LoanItemResponseModel[];
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Signer name recorded on the loan voucher' })
+  signerName?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Signed URL for borrower signature image' })
+  signatureRef?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Signed URL for borrower fingerprint image' })
+  fingerprintRef?: string;
 }
 

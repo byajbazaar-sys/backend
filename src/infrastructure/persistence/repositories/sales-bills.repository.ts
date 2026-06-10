@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { SalesBillEntity } from '../entities/sales-bill.entity';
 import { SalesBillItemEntity } from '../entities/sales-bill-item.entity';
+import { InventoryItemEntity } from '../entities/inventory-item.entity';
 import {
   ISalesBillsRepository,
   SalesBill,
@@ -12,6 +13,7 @@ import {
   SalesBillsFilterOptions,
   SalesAnalyticsFilterOptions,
   ESalesBillSortField,
+  EInventoryItemStatus,
 } from '../../../application';
 
 @Injectable()
@@ -64,19 +66,37 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return qb;
   }
 
-  async create(data: SalesBill): Promise<SalesBill> {
+  async create(data: SalesBill, markSoldInventoryIds: string[] = []): Promise<SalesBill> {
     const { items, ...billData } = data;
-    const entity = this.billsRepo.create(billData as Partial<SalesBillEntity>);
-    const saved = await this.billsRepo.save(entity);
 
-    if (items?.length) {
-      const lineEntities = items.map((item) =>
-        this.itemsRepo.create({ ...item, billId: saved.id } as Partial<SalesBillItemEntity>),
-      );
-      await this.itemsRepo.save(lineEntities);
-    }
+    return this.billsRepo.manager.transaction(async (manager) => {
+      const billsRepo = manager.getRepository(SalesBillEntity);
+      const itemsRepo = manager.getRepository(SalesBillItemEntity);
+      const inventoryRepo = manager.getRepository(InventoryItemEntity);
 
-    return this.findById(saved.id) as Promise<SalesBill>;
+      const entity = billsRepo.create(billData as Partial<SalesBillEntity>);
+      const saved = await billsRepo.save(entity);
+
+      if (items?.length) {
+        const lineEntities = items.map((item) =>
+          itemsRepo.create({ ...item, billId: saved.id } as Partial<SalesBillItemEntity>),
+        );
+        await itemsRepo.save(lineEntities);
+      }
+
+      if (markSoldInventoryIds.length) {
+        await inventoryRepo.update(
+          { id: In(markSoldInventoryIds) },
+          { status: EInventoryItemStatus.Sold },
+        );
+      }
+
+      const withItems = await billsRepo.findOne({
+        where: { id: saved.id },
+        relations: ['items'],
+      });
+      return this.mapBill(withItems!);
+    });
   }
 
   async findById(id: string): Promise<SalesBill | null> {

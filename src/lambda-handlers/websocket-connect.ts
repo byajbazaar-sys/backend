@@ -1,5 +1,5 @@
 import { APIGatewayProxyWebsocketEventV2, APIGatewayProxyWebsocketHandlerV2 } from 'aws-lambda';
-import { EDeviceType } from '../application/features/inventory/enums';
+import { EDeviceType } from '../application/features/pos/enums';
 import { getTokenFromEvent, getWebSocketHandler, wsResponse } from './websocket-bootstrap';
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context) => {

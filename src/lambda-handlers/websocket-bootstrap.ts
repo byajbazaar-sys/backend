@@ -3,7 +3,7 @@ import { AppModule } from '../app.module';
 import {
   WEBSOCKET_HANDLER_SERVICE,
   IWebSocketHandlerService,
-} from '../application/features/inventory/service';
+} from '../application/features/pos/service';
 
 let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
 

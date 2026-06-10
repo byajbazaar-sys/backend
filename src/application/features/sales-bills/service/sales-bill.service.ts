@@ -1,6 +1,15 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged } from '@shared-libs';
+import { EInventoryItemStatus } from '../../inventory/enums';
+import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from '../../inventory/service';
 import { SalesBill, SalesBillLineItem, SalesAnalytics } from '../domain';
 import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder } from '../enums';
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel } from '../models';
@@ -8,13 +17,11 @@ import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options
 import { ISalesBillService } from './i-sales-bill.service';
 import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
 
-const INVENTORY_ITEM_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 @Injectable()
 export class SalesBillService implements ISalesBillService {
   constructor(
     @Inject(SALES_BILLS_REPOSITORY) private readonly billsRepo: ISalesBillsRepository,
+    @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly inventoryItemsRepo: IInventoryItemsRepository,
     @InjectPinoLogger(SalesBillService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -40,15 +47,45 @@ export class SalesBillService implements ISalesBillService {
     };
   }
 
+  private async resolveInventoryItemsForSale(
+    lineItems: SalesBillLineItem[],
+    userId: string,
+    billStatus: EBillStatus,
+  ): Promise<string[]> {
+    if (billStatus !== EBillStatus.Completed) return [];
+
+    const linkedIds = lineItems
+      .map((line) => line.inventoryItemId)
+      .filter((id): id is string => !!id);
+
+    const uniqueIds = [...new Set(linkedIds)];
+    if (uniqueIds.length !== linkedIds.length) {
+      throw new BadRequestException('Each inventory item can only appear once per bill');
+    }
+
+    for (const line of lineItems) {
+      if (line.inventoryItemId && line.quantity !== 1) {
+        throw new BadRequestException('Linked inventory items must have quantity 1');
+      }
+    }
+
+    for (const id of uniqueIds) {
+      const item = await this.inventoryItemsRepo.findById(id);
+      if (!item) throw new NotFoundException(`Inventory item ${id} not found`);
+      if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
+      if (item.status !== EInventoryItemStatus.Available) {
+        throw new ConflictException(`Item ${item.sku} is not available for sale`);
+      }
+    }
+
+    return uniqueIds;
+  }
+
   async create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill> {
     const lineItems: SalesBillLineItem[] = data.items.map((item) => {
       const lineTotal = Number(item.sellingPrice) * item.quantity;
-      const inventoryItemId =
-        item.inventoryItemId && INVENTORY_ITEM_UUID_RE.test(item.inventoryItemId)
-          ? item.inventoryItemId
-          : undefined;
       return {
-        inventoryItemId,
+        inventoryItemId: item.inventoryItemId,
         itemName: item.itemName,
         sku: item.sku,
         barcode: item.barcode,
@@ -67,6 +104,9 @@ export class SalesBillService implements ISalesBillService {
     const discount = Number(data.discount ?? 0);
     const taxAmount = Number(data.taxAmount ?? 0);
     const grandTotal = Math.max(0, subtotal - discount + taxAmount);
+    const status = data.status ?? EBillStatus.Completed;
+
+    const markSoldIds = await this.resolveInventoryItemsForSale(lineItems, userId, status);
 
     const bill: SalesBill = {
       billNumber: await this.generateBillNumber(userId),
@@ -78,14 +118,17 @@ export class SalesBillService implements ISalesBillService {
       taxAmount,
       grandTotal,
       paymentMode: data.paymentMode ?? EPaymentMode.Cash,
-      status: data.status ?? EBillStatus.Completed,
+      status,
       issuedAt: new Date(),
       createdBy: userId,
       items: lineItems,
     };
 
-    const created = await this.billsRepo.create(bill);
-    this.logger.info({ billId: created.id, billNumber: created.billNumber }, 'Sales bill created');
+    const created = await this.billsRepo.create(bill, markSoldIds);
+    this.logger.info(
+      { billId: created.id, billNumber: created.billNumber, soldItems: markSoldIds.length },
+      'Sales bill created',
+    );
     return created;
   }
 
