@@ -64,6 +64,42 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   address: string;
 
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  gstin: string;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  pan: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  state: string;
+
+  @Column({ type: 'varchar', length: 2, nullable: true })
+  stateCode: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  proprietorName: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  shopLogoRef: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  alternatePhoneNumber: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  bankName: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  bankBranch: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  bankAccountNumber: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  bankIfsc: string;
+
+  @Column({ type: 'boolean', default: true, name: 'show_bank_details_on_bill' })
+  showBankDetailsOnBill: boolean;
+
   @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
   googleId: string;
 

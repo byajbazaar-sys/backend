@@ -40,6 +40,18 @@ export class SalesBillLineItemResponseModel {
 
   @Expose()
   @ApiPropertyOptional()
+  lessWeight?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  hsnCode?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  huid?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
   makingCharges?: number;
 
   @Expose()

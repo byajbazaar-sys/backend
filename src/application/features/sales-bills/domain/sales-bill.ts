@@ -22,6 +22,24 @@ export class SalesBill {
   customerId?: string;
 
   @Expose()
+  customerAddress?: string;
+
+  @Expose()
+  customerState?: string;
+
+  @Expose()
+  customerStateCode?: string;
+
+  @Expose()
+  customerGstin?: string;
+
+  @Expose()
+  customerPan?: string;
+
+  @Expose()
+  customerPropName?: string;
+
+  @Expose()
   subtotal: number;
 
   @Expose()
@@ -29,6 +47,27 @@ export class SalesBill {
 
   @Expose()
   taxAmount: number;
+
+  @Expose()
+  cgstRate?: number;
+
+  @Expose()
+  sgstRate?: number;
+
+  @Expose()
+  cgstAmount?: number;
+
+  @Expose()
+  sgstAmount?: number;
+
+  @Expose()
+  roundOff?: number;
+
+  @Expose()
+  goldRate24k?: number;
+
+  @Expose()
+  metalRates?: Record<string, number>;
 
   @Expose()
   grandTotal: number;

@@ -70,6 +70,52 @@ export class User {
   public address?: string;
 
   @Expose()
+  public gstin?: string;
+
+  @Expose()
+  public pan?: string;
+
+  @Expose()
+  public state?: string;
+
+  @Expose()
+  public stateCode?: string;
+
+  @Expose()
+  public proprietorName?: string;
+
+  @Expose()
+  public shopLogoRef?: string;
+
+  @Expose()
+  @Type(() => Buffer)
+  public shopLogo?: Buffer;
+
+  @Expose()
+  public shopLogoFileName?: string;
+
+  @Expose()
+  public shopLogoContentType?: string;
+
+  @Expose()
+  public alternatePhoneNumber?: string;
+
+  @Expose()
+  public bankName?: string;
+
+  @Expose()
+  public bankBranch?: string;
+
+  @Expose()
+  public bankAccountNumber?: string;
+
+  @Expose()
+  public bankIfsc?: string;
+
+  @Expose()
+  public showBankDetailsOnBill?: boolean;
+
+  @Expose()
   public googleId?: string;
 
   @Expose()

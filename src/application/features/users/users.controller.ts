@@ -9,11 +9,11 @@ import {
   Param,
   Patch,
   Query,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiExtraModels, ApiTags, ApiBearerAuth, ApiOkResponse, ApiResponse, ApiConsumes } from '@nestjs/swagger';
 import { EUserType, Identity, IIdentity, Roles, RolesGuard, USER_STRATEGY } from '@shared-libs';
@@ -83,15 +83,26 @@ export class UsersController {
   @Patch(':id')
   @ApiResponse({ status: HttpStatus.OK, type: UserResponseModel })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('profilePhoto'))
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'profilePhoto', maxCount: 1 },
+      { name: 'shopLogo', maxCount: 1 },
+    ]),
+  )
   @HttpCode(HttpStatus.OK)
   async update(
     @Param() params: GetUserParamsModel,
     @Body() body: UpdateUserRequestModel,
-    @UploadedFile() profilePhoto: Express.Multer.File,
+    @UploadedFiles()
+    files: { profilePhoto?: Express.Multer.File[]; shopLogo?: Express.Multer.File[] },
     @Identity() identity: IIdentity,
   ): Promise<UserResponseModel> {
-    this.logger.info({ params, body, identity, hasProfilePhoto: !!profilePhoto }, 'update called');
+    const profilePhoto = files?.profilePhoto?.[0];
+    const shopLogo = files?.shopLogo?.[0];
+    this.logger.info(
+      { params, body, identity, hasProfilePhoto: !!profilePhoto, hasShopLogo: !!shopLogo },
+      'update called',
+    );
     if (params.id !== identity.userId && identity.userType !== EUserType.Admin) {
       throw new ForbiddenException('You are not authorized to update this user');
     }
@@ -106,8 +117,21 @@ export class UsersController {
       userData.profilePhotoContentType = profilePhoto.mimetype;
       userData.profilePhotoFileName = profilePhoto.originalname;
     }
+    if (shopLogo) {
+      userData.shopLogo = shopLogo.buffer;
+      userData.shopLogoContentType = shopLogo.mimetype;
+      userData.shopLogoFileName = shopLogo.originalname;
+    }
 
     const user = await this.usersService.update(params.id, userData);
-    return plainToInstance(UserResponseModel, { ...user, profilePhotoUrl: user.profilePhotoRef }, { excludeExtraneousValues: true });
+    return plainToInstance(
+      UserResponseModel,
+      {
+        ...user,
+        profilePhotoUrl: (user as User & { profilePhotoUrl?: string }).profilePhotoUrl ?? user.profilePhotoRef,
+        shopLogoUrl: (user as User & { shopLogoUrl?: string }).shopLogoUrl ?? user.shopLogoRef,
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 }

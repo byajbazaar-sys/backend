@@ -47,6 +47,9 @@ export class InventoryItemEntity {
   @Column({ type: 'varchar', length: 50, nullable: true })
   itemCode: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  huid: string | null;
+
   @Column({ type: 'varchar', length: 255 })
   itemName: string;
 

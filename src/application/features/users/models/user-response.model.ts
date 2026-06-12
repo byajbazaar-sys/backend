@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EUserType } from '@shared-libs';
 import { Expose, Type } from 'class-transformer';
 
@@ -50,6 +50,54 @@ export class UserResponseModel {
   @Expose()
   @ApiProperty({ example: '123 Main Street, City, State, ZIP Code', nullable: true, required: false, description: 'Business address' })
   address?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: '23AEVPJ0064L1ZA' })
+  gstin?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: 'AEVPJ0064L' })
+  pan?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: 'Madhya Pradesh' })
+  state?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: '23' })
+  stateCode?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: 'Rajendra Jewellers' })
+  proprietorName?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: 'https://example.com/logo.png' })
+  shopLogoUrl?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: '9827229924' })
+  alternatePhoneNumber?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: 'UNION BANK OF INDIA' })
+  bankName?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: 'KATRA BAZAR SAGAR (M.P)' })
+  bankBranch?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: '325405040053176' })
+  bankAccountNumber?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: 'UBIN0532541' })
+  bankIfsc?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: true, description: 'Show bank details block on GST invoices' })
+  showBankDetailsOnBill?: boolean;
 
   @Expose()
   @ApiProperty({

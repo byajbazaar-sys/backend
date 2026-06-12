@@ -35,6 +35,24 @@ export class SalesBillEntity {
   @Column({ type: 'uuid', nullable: true })
   customerId: string | null;
 
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  customerAddress: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  customerState: string | null;
+
+  @Column({ type: 'varchar', length: 2, nullable: true })
+  customerStateCode: string | null;
+
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  customerGstin: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  customerPan: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  customerPropName: string | null;
+
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   subtotal: number;
 
@@ -43,6 +61,27 @@ export class SalesBillEntity {
 
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   taxAmount: number;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, default: 1.5 })
+  cgstRate: number;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, default: 1.5 })
+  sgstRate: number;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  cgstAmount: number;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  sgstAmount: number;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  roundOff: number;
+
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  goldRate24k: number | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metalRates: Record<string, number> | null;
 
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   grandTotal: number;

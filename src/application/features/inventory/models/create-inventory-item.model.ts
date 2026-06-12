@@ -105,4 +105,10 @@ export class CreateInventoryItemRequestModel {
   @IsString()
   @MaxLength(255)
   supplierName?: string;
+
+  @ApiPropertyOptional({ description: 'Hallmark Unique Identification' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  huid?: string;
 }

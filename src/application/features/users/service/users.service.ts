@@ -5,7 +5,6 @@ import { IUsersRepository, USERS_REPOSITORY } from './i-users.repository';
 import { IUsersService } from './i-users.service';
 import { Paged, toPaged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { USERS_FILE_STORAGE, IUsersFileStorage } from '../../../shared';
-import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class UsersService implements IUsersService {
@@ -13,7 +12,26 @@ export class UsersService implements IUsersService {
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(USERS_FILE_STORAGE) private readonly usersFileStorage: IUsersFileStorage,
     @InjectPinoLogger(UsersService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
+
+  private async resolvePhotoUrl(ref?: string | null): Promise<string | null> {
+    if (!ref) return null;
+    return this.usersFileStorage.getUrlAsync(ref);
+  }
+
+  private async withAssetUrls(user: User): Promise<User> {
+    const [profilePhotoUrl, shopLogoUrl] = await Promise.all([
+      this.resolvePhotoUrl(user.profilePhotoRef),
+      this.resolvePhotoUrl(user.shopLogoRef),
+    ]);
+    return {
+      ...user,
+      profilePhotoUrl,
+      shopLogoUrl,
+      profilePhotoRef: profilePhotoUrl ?? user.profilePhotoRef,
+      shopLogoRef: shopLogoUrl ?? user.shopLogoRef,
+    } as User;
+  }
 
   async findOne(id: string): Promise<User> {
     try {
@@ -21,18 +39,7 @@ export class UsersService implements IUsersService {
       if (!user) {
         throw new NotFoundException('User not found');
       }
-      console.log('user in service', user);
-      // Get the profile photo URL if it exists
-      const profilePhotoUrl = user.profilePhotoRef
-        ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef)
-        : null;
-      console.log('profilePhotoUrl in service', profilePhotoUrl);
-      const response: User = {
-        ...user,
-        profilePhotoUrl,
-      } as User;
-
-      return response;
+      return this.withAssetUrls(user);
     } catch (err) {
       if (err instanceof NotFoundException) {
         throw err;
@@ -44,8 +51,6 @@ export class UsersService implements IUsersService {
 
   async findAll(query: any): Promise<Paged<User>> {
     try {
-      // TODO: Implement proper filtering and pagination
-      // For now, return empty result as the repository doesn't have listUsers method
       this.logger.warn({ query }, 'findAll not fully implemented');
       return toPaged(User, {
         items: [],
@@ -59,61 +64,80 @@ export class UsersService implements IUsersService {
     }
   }
 
+  private async uploadImage(
+    userId: string,
+    buffer: Buffer,
+    contentType: string,
+    fileName: string,
+    existingRef: string | undefined,
+    storagePath: string,
+  ): Promise<string> {
+    if (existingRef) {
+      try {
+        await this.usersFileStorage.removeAsync(existingRef);
+      } catch (err) {
+        this.logger.warn({ err, userId, existingRef }, 'Failed to delete old image, continuing');
+      }
+    }
+
+    const normalized = await normalizeImageBufferForStorageOrThrow(buffer, contentType, fileName);
+    return this.usersFileStorage.writeAsync(
+      `${storagePath}.${normalized.fileExtension}`,
+      normalized.buffer,
+      normalized.mimetype,
+    );
+  }
+
   async update(id: string, updateData: User): Promise<User> {
     try {
-      console.log('updateData in service', updateData);
       const existingUser = await this.usersRepo.findById(id);
       if (!existingUser) {
         throw new NotFoundException('User not found');
       }
 
-      // Handle profile photo upload if provided
       if (updateData.profilePhoto && updateData.profilePhotoContentType) {
-        this.logger.info({ userId: id }, 'Uploading profile photo to S3');
-
-        // Delete old profile photo if it exists
-        if (existingUser.profilePhotoRef) {
-          try {
-            await this.usersFileStorage.removeAsync(existingUser.profilePhotoRef);
-            this.logger.debug({ userId: id, oldPhotoRef: existingUser.profilePhotoRef }, 'Old profile photo deleted');
-          } catch (err) {
-            this.logger.warn({ err, userId: id, oldPhotoRef: existingUser.profilePhotoRef }, 'Failed to delete old profile photo, continuing');
-          }
-        }
-
-        // Upload new profile photo
-        const normalized = await normalizeImageBufferForStorageOrThrow(
+        updateData.profilePhotoRef = await this.uploadImage(
+          id,
           updateData.profilePhoto,
           updateData.profilePhotoContentType,
           updateData.profilePhotoFileName,
+          existingUser.profilePhotoRef,
+          `users/profiles/${id}`,
         );
-        const newProfilePhotoRef = `users/profiles/${id}.${normalized.fileExtension}`;
-
-        updateData.profilePhotoRef = await this.usersFileStorage.writeAsync(newProfilePhotoRef, normalized.buffer, normalized.mimetype);
-        this.logger.info({ userId: id, profilePhotoRef: newProfilePhotoRef }, 'Profile photo uploaded successfully');
       }
 
-      // Remove file-related fields from updateData before saving to database
-      const { profilePhoto, profilePhotoContentType, profilePhotoFileName, ...dataToUpdate } = updateData;
-      const updatedUser = await this.usersRepo.update(id, dataToUpdate as Partial<User> as User);
+      if (updateData.shopLogo && updateData.shopLogoContentType) {
+        updateData.shopLogoRef = await this.uploadImage(
+          id,
+          updateData.shopLogo,
+          updateData.shopLogoContentType,
+          updateData.shopLogoFileName,
+          existingUser.shopLogoRef,
+          `users/shop-logos/${id}`,
+        );
+      }
+
+      const {
+        profilePhoto,
+        profilePhotoContentType,
+        profilePhotoFileName,
+        shopLogo,
+        shopLogoContentType,
+        shopLogoFileName,
+        ...dataToUpdate
+      } = updateData;
+
+      const definedUpdates = Object.fromEntries(
+        Object.entries(dataToUpdate).filter(([, value]) => value !== undefined),
+      ) as Partial<User>;
+
+      const updatedUser = await this.usersRepo.update(id, definedUpdates as Partial<User> as User);
       if (!updatedUser) {
         throw new NotFoundException('User not found');
       }
 
-      // Get the profile photo URL if it exists
-      const profilePhotoUrl = updatedUser.profilePhotoRef
-        ? await this.usersFileStorage.getUrlAsync(updatedUser.profilePhotoRef)
-        : null;
-
-      this.logger.info({ profilePhotoUrl }, 'Profile photo URL');
-
-      const response: User = {
-        ...updatedUser,
-        profilePhotoRef: profilePhotoUrl,
-      } as User;
-
       this.logger.info({ userId: id }, 'User updated successfully');
-      return response;
+      return this.withAssetUrls(updatedUser);
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof BadRequestException) {
         throw err;

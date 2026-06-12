@@ -25,6 +25,30 @@ export class SalesBillResponseModel {
   customerId?: string;
 
   @Expose()
+  @ApiPropertyOptional()
+  customerAddress?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  customerState?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  customerStateCode?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  customerGstin?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  customerPan?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  customerPropName?: string;
+
+  @Expose()
   @ApiProperty()
   subtotal: number;
 
@@ -35,6 +59,34 @@ export class SalesBillResponseModel {
   @Expose()
   @ApiProperty()
   taxAmount: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  cgstRate?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  sgstRate?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  cgstAmount?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  sgstAmount?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  roundOff?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  goldRate24k?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  metalRates?: Record<string, number>;
 
   @Expose()
   @ApiProperty()

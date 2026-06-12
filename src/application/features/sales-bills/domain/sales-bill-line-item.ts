@@ -32,6 +32,15 @@ export class SalesBillLineItem {
   netWeight?: number;
 
   @Expose()
+  lessWeight?: number;
+
+  @Expose()
+  hsnCode?: string;
+
+  @Expose()
+  huid?: string;
+
+  @Expose()
   makingCharges?: number;
 
   @Expose()

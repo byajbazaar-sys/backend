@@ -14,6 +14,6 @@ export interface ISalesBillsRepository {
   findById(id: string): Promise<SalesBill | null>;
   findAll(params: SalesBillsFilterOptions): Promise<Paged<SalesBill>>;
   findByCustomerId(customerId: string, params: SalesBillsFilterOptions): Promise<Paged<SalesBill>>;
-  getNextBillSequence(createdBy: string, year: number): Promise<number>;
+  getNextBillSequence(createdBy: string, year: number, month: number): Promise<number>;
   getAnalytics(params: SalesAnalyticsFilterOptions): Promise<SalesAnalytics>;
 }

@@ -28,6 +28,7 @@ import {
   InventoryItemResponseModel,
   InventoryItemsPagedResponseModel,
   ListInventoryItemsQueryModel,
+  UpdateInventoryItemRequestModel,
 } from './models';
 import { INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
 
@@ -113,7 +114,7 @@ export class InventoryItemsController {
   @ApiOperation({ summary: 'Update inventory item' })
   async update(
     @Param('id') id: string,
-    @Body() body: CreateInventoryItemRequestModel,
+    @Body() body: UpdateInventoryItemRequestModel,
     @Identity() identity: IIdentity,
   ): Promise<InventoryItemResponseModel> {
     const item = await this.itemService.update(id, body, identity.userId);

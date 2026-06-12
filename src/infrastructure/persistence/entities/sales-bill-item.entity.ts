@@ -38,6 +38,15 @@ export class SalesBillItemEntity {
   @Column({ type: 'numeric', precision: 10, scale: 3, nullable: true })
   netWeight: number | null;
 
+  @Column({ type: 'numeric', precision: 10, scale: 3, nullable: true })
+  lessWeight: number | null;
+
+  @Column({ type: 'varchar', length: 8, nullable: true })
+  hsnCode: string | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  huid: string | null;
+
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   makingCharges: number;
 

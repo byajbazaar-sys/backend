@@ -15,6 +15,10 @@ export class InventoryCategoryResponseModel {
   description?: string;
 
   @Expose()
+  @ApiPropertyOptional({ example: '7113' })
+  hsnCode?: string;
+
+  @Expose()
   @ApiPropertyOptional()
   isSystem?: boolean;
 

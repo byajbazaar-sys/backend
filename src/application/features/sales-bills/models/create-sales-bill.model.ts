@@ -29,6 +29,46 @@ export class CreateSalesBillRequestModel {
   @IsUUID()
   customerId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  customerAddress?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  customerState?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  customerStateCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  customerGstin?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  customerPan?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  customerPropName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  goldRate24k?: number;
+
+  @ApiPropertyOptional({ description: 'Per-gram metal rates used for this bill, keyed by metal/purity' })
+  @IsOptional()
+  metalRates?: Record<string, number>;
+
   @ApiPropertyOptional({ enum: EPaymentMode })
   @IsOptional()
   @IsEnum(EPaymentMode)

@@ -12,7 +12,7 @@ export interface IInventoryItemsRepository {
   findByScanCode(code: string): Promise<InventoryItem | null>;
   findAll(params: InventoryItemsFilterOptions): Promise<Paged<InventoryItem>>;
   findAllForReport(params: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>): Promise<InventoryItem[]>;
-  getNextSkuSequence(yearSuffix: string): Promise<number>;
+  getNextSkuSequence(skuPrefix: string, createdBy: string): Promise<number>;
   update(id: string, data: Partial<InventoryItem>): Promise<InventoryItem>;
   delete(id: string): Promise<void>;
   countByCategory(createdBy: string): Promise<{ categoryId: string; categoryName: string; count: number; totalValue: number }[]>;

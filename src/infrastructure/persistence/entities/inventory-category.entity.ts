@@ -32,6 +32,9 @@ export class InventoryCategoryEntity {
   @Column({ type: 'boolean', default: false })
   isSystem: boolean;
 
+  @Column({ type: 'varchar', length: 8, nullable: true })
+  hsnCode: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -13,4 +13,10 @@ export class CreateInventoryCategoryRequestModel {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiPropertyOptional({ example: '7113', description: 'HSN code for GST invoices' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  hsnCode?: string;
 }

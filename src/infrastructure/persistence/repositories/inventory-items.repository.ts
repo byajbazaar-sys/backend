@@ -116,18 +116,18 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return entities.map((e) => this.mapEntity(e));
   }
 
-  async getNextSkuSequence(yearSuffix: string): Promise<number> {
-    const prefix = `RK${yearSuffix}`;
+  async getNextSkuSequence(skuPrefix: string, createdBy: string): Promise<number> {
     const result = await this.repo
       .createQueryBuilder('item')
       .select('item.sku', 'sku')
-      .where('item.sku LIKE :prefix', { prefix: `${prefix}%` })
+      .where('item.created_by = :createdBy', { createdBy })
+      .andWhere('item.sku LIKE :prefix', { prefix: `${skuPrefix}%` })
       .orderBy('item.sku', 'DESC')
       .limit(1)
       .getRawOne();
 
     if (!result?.sku) return 1;
-    const seq = parseInt(String(result.sku).replace(prefix, ''), 10);
+    const seq = parseInt(String(result.sku).slice(skuPrefix.length), 10);
     return isNaN(seq) ? 1 : seq + 1;
   }
 

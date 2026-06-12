@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { EUserType, NAME_REGEX, NAME_MIN_LENGTH, NAME_MAX_LENGTH, PHONE_E164_REGEX } from '@shared-libs';
+import { EUserType, NAME_REGEX, NAME_MIN_LENGTH, NAME_MAX_LENGTH, PHONE_E164_REGEX, parseMultipartBoolean } from '@shared-libs';
+import { Transform, Type } from 'class-transformer';
 import { IsOptional, IsString, IsBoolean, IsEnum, MinLength, MaxLength, Matches } from 'class-validator';
 
 export class UpdateUserRequestModel {
@@ -68,4 +69,79 @@ export class UpdateUserRequestModel {
   @IsOptional()
   @IsString({ message: 'Address must be a string' })
   address?: string;
+
+  @ApiProperty({ example: '23AEVPJ0064L1ZA', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(15)
+  gstin?: string;
+
+  @ApiProperty({ example: 'AEVPJ0064L', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  pan?: string;
+
+  @ApiProperty({ example: 'Madhya Pradesh', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  state?: string;
+
+  @ApiProperty({ example: '23', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  stateCode?: string;
+
+  @ApiProperty({ example: 'Rajendra Jewellers', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  proprietorName?: string;
+
+  @ApiProperty({ example: '9827229924', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  alternatePhoneNumber?: string;
+
+  @ApiProperty({ example: 'UNION BANK OF INDIA', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  bankName?: string;
+
+  @ApiProperty({ example: 'KATRA BAZAR SAGAR (M.P)', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  bankBranch?: string;
+
+  @ApiProperty({ example: '325405040053176', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  bankAccountNumber?: string;
+
+  @ApiProperty({ example: 'UBIN0532541', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  bankIfsc?: string;
+
+  @ApiProperty({ example: true, required: false, description: 'Show bank details on GST invoices' })
+  @IsOptional()
+  @Transform(({ value }) => parseMultipartBoolean(value))
+  @Type(() => String)
+  @IsBoolean()
+  showBankDetailsOnBill?: boolean;
+
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    required: false,
+    description: 'Shop logo for invoices (JPEG, PNG, WebP) - maximum 5MB',
+  })
+  @IsOptional()
+  shopLogo?: Express.Multer.File;
 }

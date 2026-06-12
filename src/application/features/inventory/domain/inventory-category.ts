@@ -11,6 +11,9 @@ export class InventoryCategory {
   description?: string;
 
   @Expose()
+  hsnCode?: string;
+
+  @Expose()
   isSystem?: boolean;
 
   @Expose()

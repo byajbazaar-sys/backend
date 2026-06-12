@@ -20,10 +20,12 @@ import {
 } from './i-inventory-items.repository';
 import { InventoryItemsFilterOptions } from '../options';
 import { InventoryItem } from '../domain';
-import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel } from '../models';
+import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel, UpdateInventoryItemRequestModel } from '../models';
 import { IInventoryItemService } from './i-inventory-item.service';
 import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
 import { EInventoryItemStatus } from '../enums';
+import { IUsersRepository, USERS_REPOSITORY } from '../../users';
+import { deriveBusinessSkuPrefix } from '../utils/business-sku-prefix';
 
 @Injectable()
 export class InventoryItemService implements IInventoryItemService {
@@ -32,6 +34,7 @@ export class InventoryItemService implements IInventoryItemService {
     @Inject(INVENTORY_CATEGORIES_REPOSITORY) private readonly categoriesRepo: IInventoryCategoriesRepository,
     @Inject(BARCODE_SERVICE) private readonly barcodeService: IBarcodeService,
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
+    @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @InjectPinoLogger(InventoryItemService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -57,10 +60,13 @@ export class InventoryItemService implements IInventoryItemService {
     };
   }
 
-  async generateSku(): Promise<string> {
+  async generateSku(userId: string): Promise<string> {
+    const user = await this.usersRepo.findById(userId);
+    const businessPrefix = deriveBusinessSkuPrefix(user?.businessName);
     const yearSuffix = String(new Date().getFullYear()).slice(-2);
-    const seq = await this.itemsRepo.getNextSkuSequence(yearSuffix);
-    return `RK${yearSuffix}${String(seq).padStart(4, '0')}`;
+    const skuPrefix = `${businessPrefix}${yearSuffix}`;
+    const seq = await this.itemsRepo.getNextSkuSequence(skuPrefix, userId);
+    return `${skuPrefix}${String(seq).padStart(4, '0')}`;
   }
 
   private isSkuCollision(err: unknown): boolean {
@@ -77,7 +83,7 @@ export class InventoryItemService implements IInventoryItemService {
 
     const maxAttempts = 5;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const sku = await this.generateSku();
+      const sku = await this.generateSku(userId);
       const item: InventoryItem = {
         ...data,
         sku,
@@ -159,7 +165,7 @@ export class InventoryItemService implements IInventoryItemService {
 
   async update(
     id: string,
-    data: Partial<CreateInventoryItemRequestModel>,
+    data: UpdateInventoryItemRequestModel,
     userId: string,
   ): Promise<InventoryItem> {
     await this.getById(id, userId);
@@ -168,7 +174,9 @@ export class InventoryItemService implements IInventoryItemService {
       if (!category) throw new NotFoundException('Category not found');
     }
     const { imageUrls: _ignored, ...rest } = data;
-    const patch: Partial<InventoryItem> = { ...rest };
+    const patch = Object.fromEntries(
+      Object.entries(rest).filter(([, value]) => value !== undefined),
+    ) as Partial<InventoryItem>;
     if (patch.stockQuantity != null && patch.stockQuantity > 0) {
       patch.status = EInventoryItemStatus.Available;
     }

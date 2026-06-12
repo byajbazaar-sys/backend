@@ -108,6 +108,10 @@ export class InventoryItemResponseModel {
   supplierName?: string;
 
   @Expose()
+  @ApiPropertyOptional()
+  huid?: string;
+
+  @Expose()
   @ApiProperty()
   createdAt: Date;
 

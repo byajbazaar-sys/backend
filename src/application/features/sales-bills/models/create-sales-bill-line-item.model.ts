@@ -42,6 +42,16 @@ export class CreateSalesBillLineItemModel {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  hsnCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  huid?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   makingCharges?: number;
 

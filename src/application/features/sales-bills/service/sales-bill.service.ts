@@ -10,6 +10,10 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged } from '@shared-libs';
 import { EInventoryItemStatus } from '../../inventory/enums';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from '../../inventory/service';
+import {
+  IInventoryCategoriesRepository,
+  INVENTORY_CATEGORIES_REPOSITORY,
+} from '../../inventory/service/i-inventory-categories.repository';
 import { SalesBill, SalesBillLineItem, SalesAnalytics } from '../domain';
 import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder } from '../enums';
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel } from '../models';
@@ -21,18 +25,25 @@ import {
   SALES_BILLS_REPOSITORY,
 } from './i-sales-bills.repository';
 
+const DEFAULT_CGST_RATE = 1.5;
+const DEFAULT_SGST_RATE = 1.5;
+
 @Injectable()
 export class SalesBillService implements ISalesBillService {
   constructor(
     @Inject(SALES_BILLS_REPOSITORY) private readonly billsRepo: ISalesBillsRepository,
     @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly inventoryItemsRepo: IInventoryItemsRepository,
+    @Inject(INVENTORY_CATEGORIES_REPOSITORY)
+    private readonly categoriesRepo: IInventoryCategoriesRepository,
     @InjectPinoLogger(SalesBillService.name) private readonly logger: PinoLogger,
   ) {}
 
   private async generateBillNumber(createdBy: string): Promise<string> {
-    const year = new Date().getFullYear();
-    const seq = await this.billsRepo.getNextBillSequence(createdBy, year);
-    return `INV-${year}-${String(seq).padStart(5, '0')}`;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const seq = await this.billsRepo.getNextBillSequence(createdBy, year, month);
+    return `INV-${year}-${String(month).padStart(2, '0')}-${String(seq).padStart(4, '0')}`;
   }
 
   private mapListQuery(userId: string, query: ListSalesBillsQueryModel): SalesBillsFilterOptions {
@@ -95,10 +106,59 @@ export class SalesBillService implements ISalesBillService {
     return deductions;
   }
 
+  private computeGstTotals(subtotal: number, discount: number) {
+    const taxable = Math.max(0, subtotal - discount);
+    const cgstRate = DEFAULT_CGST_RATE;
+    const sgstRate = DEFAULT_SGST_RATE;
+    const cgstAmount = Math.round(taxable * (cgstRate / 100) * 100) / 100;
+    const sgstAmount = Math.round(taxable * (sgstRate / 100) * 100) / 100;
+    const totalWithTax = taxable + cgstAmount + sgstAmount;
+    const grandTotal = Math.round(totalWithTax);
+    const roundOff = Math.round((grandTotal - totalWithTax) * 100) / 100;
+    return {
+      cgstRate,
+      sgstRate,
+      cgstAmount,
+      sgstAmount,
+      taxAmount: cgstAmount + sgstAmount,
+      roundOff,
+      grandTotal,
+    };
+  }
+
+  private async resolveLineItemExtras(
+    item: CreateSalesBillRequestModel['items'][number],
+  ): Promise<Pick<SalesBillLineItem, 'hsnCode' | 'huid' | 'lessWeight'>> {
+    let hsnCode: string | undefined;
+    let huid: string | undefined;
+
+    if (item.inventoryItemId) {
+      const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId);
+      if (inv) {
+        if (inv.categoryId) {
+          const category = await this.categoriesRepo.findById(inv.categoryId);
+          const code = category?.hsnCode?.trim();
+          if (code) hsnCode = code;
+        }
+        const invHuid = inv.huid?.trim();
+        if (invHuid) huid = invHuid;
+      }
+    }
+
+    const gross = item.grossWeight != null ? Number(item.grossWeight) : undefined;
+    const net = item.netWeight != null ? Number(item.netWeight) : undefined;
+    const lessWeight =
+      gross != null && net != null && gross >= net ? Math.round((gross - net) * 1000) / 1000 : undefined;
+
+    return { hsnCode, huid, lessWeight };
+  }
+
   async create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill> {
-    const lineItems: SalesBillLineItem[] = data.items.map((item) => {
+    const lineItems: SalesBillLineItem[] = [];
+    for (const item of data.items) {
+      const extras = await this.resolveLineItemExtras(item);
       const lineTotal = Number(item.sellingPrice) * item.quantity;
-      return {
+      lineItems.push({
         inventoryItemId: item.inventoryItemId,
         itemName: item.itemName,
         sku: item.sku,
@@ -107,17 +167,19 @@ export class SalesBillService implements ISalesBillService {
         purity: item.purity,
         grossWeight: item.grossWeight,
         netWeight: item.netWeight,
+        lessWeight: extras.lessWeight,
+        hsnCode: extras.hsnCode,
+        huid: extras.huid,
         makingCharges: item.makingCharges ?? 0,
         sellingPrice: item.sellingPrice,
         quantity: item.quantity,
         lineTotal,
-      };
-    });
+      });
+    }
 
     const subtotal = lineItems.reduce((sum, l) => sum + Number(l.lineTotal), 0);
     const discount = Number(data.discount ?? 0);
-    const taxAmount = Number(data.taxAmount ?? 0);
-    const grandTotal = Math.max(0, subtotal - discount + taxAmount);
+    const gst = this.computeGstTotals(subtotal, discount);
     const status = data.status ?? EBillStatus.Completed;
 
     const stockDeductions = await this.resolveInventoryStockDeductions(lineItems, userId, status);
@@ -127,10 +189,23 @@ export class SalesBillService implements ISalesBillService {
       customerName: data.customerName?.trim() || 'Walk-in',
       customerMobile: data.customerMobile?.trim() || undefined,
       customerId: data.customerId,
+      customerAddress: data.customerAddress?.trim() || undefined,
+      customerState: data.customerState?.trim() || undefined,
+      customerStateCode: data.customerStateCode?.trim() || undefined,
+      customerGstin: data.customerGstin?.trim() || undefined,
+      customerPan: data.customerPan?.trim() || undefined,
+      customerPropName: data.customerPropName?.trim() || undefined,
       subtotal,
       discount,
-      taxAmount,
-      grandTotal,
+      taxAmount: gst.taxAmount,
+      cgstRate: gst.cgstRate,
+      sgstRate: gst.sgstRate,
+      cgstAmount: gst.cgstAmount,
+      sgstAmount: gst.sgstAmount,
+      roundOff: gst.roundOff,
+      goldRate24k: data.goldRate24k,
+      metalRates: data.metalRates,
+      grandTotal: gst.grandTotal,
       paymentMode: data.paymentMode ?? EPaymentMode.Cash,
       status,
       issuedAt: new Date(),

@@ -132,8 +132,9 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return this.findAll({ ...params, customerId });
   }
 
-  async getNextBillSequence(createdBy: string, year: number): Promise<number> {
-    const prefix = `INV-${year}-`;
+  async getNextBillSequence(createdBy: string, year: number, month: number): Promise<number> {
+    const monthStr = String(month).padStart(2, '0');
+    const prefix = `INV-${year}-${monthStr}-`;
     const result = await this.billsRepo
       .createQueryBuilder('bill')
       .select('bill.billNumber', 'billNumber')
@@ -144,8 +145,10 @@ export class SalesBillsRepository implements ISalesBillsRepository {
       .getRawOne();
 
     if (!result?.billNumber) return 1;
-    const seq = parseInt(String(result.billNumber).replace(prefix, ''), 10);
-    return isNaN(seq) ? 1 : seq + 1;
+    const billNumber = String(result.billNumber);
+    const seqPart = billNumber.slice(prefix.length);
+    const seq = parseInt(seqPart, 10);
+    return Number.isNaN(seq) ? 1 : seq + 1;
   }
 
   async getAnalytics(params: SalesAnalyticsFilterOptions): Promise<SalesAnalytics> {
