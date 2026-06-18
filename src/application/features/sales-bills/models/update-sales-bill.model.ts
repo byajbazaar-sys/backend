@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -6,19 +6,13 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Min,
   ValidateNested,
 } from 'class-validator';
-import { EPaymentMode, EBillStatus, EDocumentType } from '../enums';
-import { CreateSalesBillLineItemModel } from './create-sales-bill-line-item.model';
+import { EBillStatus, EPaymentMode } from '../enums';
+import { UpdateSalesBillLineItemModel } from './update-sales-bill-line-item.model';
 
-export class CreateSalesBillRequestModel {
-  @ApiPropertyOptional({ enum: EDocumentType, default: EDocumentType.NormalBill })
-  @IsOptional()
-  @IsEnum(EDocumentType)
-  documentType?: EDocumentType;
-
+export class UpdateSalesBillRequestModel {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -28,11 +22,6 @@ export class CreateSalesBillRequestModel {
   @IsOptional()
   @IsString()
   customerMobile?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  customerId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -68,37 +57,22 @@ export class CreateSalesBillRequestModel {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  goldRate24k?: number;
-
-  @ApiPropertyOptional({ description: 'Per-gram metal rates used for this bill, keyed by metal/purity' })
-  @IsOptional()
-  metalRates?: Record<string, number>;
+  discount?: number;
 
   @ApiPropertyOptional({ enum: EPaymentMode })
   @IsOptional()
   @IsEnum(EPaymentMode)
   paymentMode?: EPaymentMode;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  discount?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  taxAmount?: number;
-
   @ApiPropertyOptional({ enum: EBillStatus })
   @IsOptional()
   @IsEnum(EBillStatus)
   status?: EBillStatus;
 
-  @ApiProperty({ type: [CreateSalesBillLineItemModel] })
+  @ApiPropertyOptional({ type: [UpdateSalesBillLineItemModel] })
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateSalesBillLineItemModel)
-  items: CreateSalesBillLineItemModel[];
+  @Type(() => UpdateSalesBillLineItemModel)
+  items?: UpdateSalesBillLineItemModel[];
 }

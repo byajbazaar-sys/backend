@@ -1,5 +1,7 @@
 export * from './create-sales-bill-line-item.model';
 export * from './create-sales-bill.model';
+export * from './update-sales-bill-line-item.model';
+export * from './update-sales-bill.model';
 export * from './list-sales-bills-query.model';
 export * from './sales-bill-response.model';
 export * from './sales-bill-line-item-response.model';

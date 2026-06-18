@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
-import { EPaymentMode, EBillStatus } from '../enums';
+import { EPaymentMode, EBillStatus, EDocumentType } from '../enums';
 
 export class ListSalesBillsQueryModel {
   @ApiPropertyOptional({ default: 0 })
@@ -42,6 +42,11 @@ export class ListSalesBillsQueryModel {
   @IsOptional()
   @IsEnum(EBillStatus)
   status?: EBillStatus;
+
+  @ApiPropertyOptional({ enum: EDocumentType })
+  @IsOptional()
+  @IsEnum(EDocumentType)
+  documentType?: EDocumentType;
 
   @ApiPropertyOptional()
   @IsOptional()

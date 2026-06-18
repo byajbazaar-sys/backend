@@ -15,6 +15,7 @@ import {
   ESalesBillSortField,
   EInventoryItemStatus,
   InventoryStockDeduction,
+  BillLineUpdate,
 } from '../../../application';
 
 @Injectable()
@@ -54,6 +55,9 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     }
     if (filter.status) {
       qb.andWhere('bill.status = :status', { status: filter.status });
+    }
+    if (filter.documentType) {
+      qb.andWhere('bill.documentType = :documentType', { documentType: filter.documentType });
     }
     if (filter.customerId) {
       qb.andWhere('bill.customerId = :customerId', { customerId: filter.customerId });
@@ -132,23 +136,90 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return this.findAll({ ...params, customerId });
   }
 
-  async getNextBillSequence(createdBy: string, year: number, month: number): Promise<number> {
+  async getNextBillSequence(createdBy: string, year: number, month: number, prefix: string): Promise<number> {
     const monthStr = String(month).padStart(2, '0');
-    const prefix = `INV-${year}-${monthStr}-`;
+    const billPrefix = `${prefix}-${year}-${monthStr}-`;
     const result = await this.billsRepo
       .createQueryBuilder('bill')
       .select('bill.billNumber', 'billNumber')
       .where('bill.createdBy = :createdBy', { createdBy })
-      .andWhere('bill.billNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .andWhere('bill.billNumber LIKE :prefix', { prefix: `${billPrefix}%` })
       .orderBy('bill.billNumber', 'DESC')
       .limit(1)
       .getRawOne();
 
     if (!result?.billNumber) return 1;
     const billNumber = String(result.billNumber);
-    const seqPart = billNumber.slice(prefix.length);
+    const seqPart = billNumber.slice(billPrefix.length);
     const seq = parseInt(seqPart, 10);
     return Number.isNaN(seq) ? 1 : seq + 1;
+  }
+
+  async updateBill(
+    id: string,
+    patch: Partial<SalesBill>,
+    lineUpdates: BillLineUpdate[] = [],
+  ): Promise<SalesBill> {
+    return this.billsRepo.manager.transaction(async (manager) => {
+      const billsRepo = manager.getRepository(SalesBillEntity);
+      const itemsRepo = manager.getRepository(SalesBillItemEntity);
+
+      const bill = await billsRepo.findOne({ where: { id }, relations: ['items'] });
+      if (!bill) throw new Error('Bill not found');
+
+      if (lineUpdates.length > 0) {
+        const lineMap = new Map(bill.items.map((l) => [l.id, l]));
+        for (const update of lineUpdates) {
+          const line = lineMap.get(update.id);
+          if (!line) throw new Error(`Line item ${update.id} not found on bill`);
+
+          if (update.itemName != null) line.itemName = update.itemName;
+          if (update.sellingPrice != null) line.sellingPrice = update.sellingPrice;
+          if (update.makingCharges != null) line.makingCharges = update.makingCharges;
+          if (update.quantity != null) line.quantity = update.quantity;
+
+          const qty = Number(line.quantity) || 1;
+          const price = Number(line.sellingPrice) || 0;
+          line.lineTotal = Math.round(price * qty * 100) / 100;
+          await itemsRepo.save(line);
+        }
+      }
+
+      await billsRepo.update(id, patch as Partial<SalesBillEntity>);
+
+      const updated = await billsRepo.findOne({ where: { id }, relations: ['items'] });
+      if (!updated) throw new Error('Bill not found after update');
+      return this.mapBill(updated);
+    });
+  }
+
+  async deleteBill(id: string, restoreStock: boolean): Promise<void> {
+    await this.billsRepo.manager.transaction(async (manager) => {
+      const billsRepo = manager.getRepository(SalesBillEntity);
+      const inventoryRepo = manager.getRepository(InventoryItemEntity);
+
+      const bill = await billsRepo.findOne({ where: { id }, relations: ['items'] });
+      if (!bill) throw new Error('Bill not found');
+
+      if (restoreStock) {
+        for (const line of bill.items ?? []) {
+          if (!line.inventoryItemId) continue;
+          const qty = Number(line.quantity) || 0;
+          if (qty <= 0) continue;
+
+          const inv = await inventoryRepo.findOne({ where: { id: line.inventoryItemId } });
+          if (!inv) continue;
+
+          const nextStock = Number(inv.stockQuantity ?? 0) + qty;
+          await inventoryRepo.update(line.inventoryItemId, {
+            stockQuantity: nextStock,
+            status: EInventoryItemStatus.Available,
+          });
+        }
+      }
+
+      await billsRepo.delete(id);
+    });
   }
 
   async getAnalytics(params: SalesAnalyticsFilterOptions): Promise<SalesAnalytics> {
@@ -160,6 +231,9 @@ export class SalesBillsRepository implements ISalesBillsRepository {
 
     if (dateFrom) billQb.andWhere('bill.issuedAt >= :dateFrom', { dateFrom });
     if (dateTo) billQb.andWhere('bill.issuedAt <= :dateTo', { dateTo });
+    if (params.documentType) {
+      billQb.andWhere('bill.documentType = :documentType', { documentType: params.documentType });
+    }
 
     const summary = await billQb
       .clone()
@@ -188,6 +262,14 @@ export class SalesBillsRepository implements ISalesBillsRepository {
       .groupBy('bill.paymentMode')
       .getRawMany();
 
+    const documentTypeRows = await billQb
+      .clone()
+      .select('bill.documentType', 'documentType')
+      .addSelect('COUNT(bill.id)', 'count')
+      .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
+      .groupBy('bill.documentType')
+      .getRawMany();
+
     const itemQb = this.itemsRepo
       .createQueryBuilder('item')
       .innerJoin('item.bill', 'bill')
@@ -196,6 +278,9 @@ export class SalesBillsRepository implements ISalesBillsRepository {
 
     if (dateFrom) itemQb.andWhere('bill.issuedAt >= :dateFrom', { dateFrom });
     if (dateTo) itemQb.andWhere('bill.issuedAt <= :dateTo', { dateTo });
+    if (params.documentType) {
+      itemQb.andWhere('bill.documentType = :documentType', { documentType: params.documentType });
+    }
 
     const topRows = await itemQb
       .clone()
@@ -245,6 +330,11 @@ export class SalesBillsRepository implements ISalesBillsRepository {
       })),
       byPaymentMode: paymentRows.map((r) => ({
         paymentMode: r.paymentMode,
+        count: parseInt(r.count, 10),
+        revenue: parseFloat(r.revenue),
+      })),
+      byDocumentType: documentTypeRows.map((r) => ({
+        documentType: r.documentType,
         count: parseInt(r.count, 10),
         revenue: parseFloat(r.revenue),
       })),

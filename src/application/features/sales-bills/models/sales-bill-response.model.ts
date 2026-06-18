@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
-import { EBillStatus, EPaymentMode } from '../enums';
+import { EBillStatus, EPaymentMode, EDocumentType } from '../enums';
 import { SalesBillLineItemResponseModel } from './sales-bill-line-item-response.model';
 
 export class SalesBillResponseModel {
@@ -11,6 +11,10 @@ export class SalesBillResponseModel {
   @Expose()
   @ApiProperty()
   billNumber: string;
+
+  @Expose()
+  @ApiProperty({ enum: EDocumentType })
+  documentType: EDocumentType;
 
   @Expose()
   @ApiProperty()

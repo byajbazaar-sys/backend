@@ -7,7 +7,7 @@ import {
   OneToMany,
   Index,
 } from 'typeorm';
-import { EPaymentMode, EBillStatus } from '../../../application/features/sales-bills/enums';
+import { EPaymentMode, EBillStatus, EDocumentType } from '../../../application/features/sales-bills/enums';
 import { SalesBillItemEntity } from './sales-bill-item.entity';
 
 @Entity('sales_bills')
@@ -25,6 +25,14 @@ export class SalesBillEntity {
 
   @Column({ type: 'varchar', length: 32 })
   billNumber: string;
+
+  @Column({
+    type: 'enum',
+    enum: EDocumentType,
+    enumName: 'e_document_type_enum',
+    default: EDocumentType.NormalBill,
+  })
+  documentType: EDocumentType;
 
   @Column({ type: 'varchar', length: 255, default: 'Walk-in' })
   customerName: string;

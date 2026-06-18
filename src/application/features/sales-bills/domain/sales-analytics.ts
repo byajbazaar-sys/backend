@@ -25,6 +25,12 @@ export interface SalesPaymentBreakdown {
   revenue: number;
 }
 
+export interface SalesDocumentTypeBreakdown {
+  documentType: string;
+  count: number;
+  revenue: number;
+}
+
 export interface SalesAnalytics {
   billCount: number;
   revenue: number;
@@ -33,4 +39,5 @@ export interface SalesAnalytics {
   topItems: SalesTopItem[];
   byMetalType: SalesMetalBreakdown[];
   byPaymentMode: SalesPaymentBreakdown[];
+  byDocumentType: SalesDocumentTypeBreakdown[];
 }

@@ -1,4 +1,5 @@
 import { Expose } from 'class-transformer';
+import { EDocumentType } from '../enums';
 
 export class SalesAnalyticsFilterOptions {
   @Expose()
@@ -9,4 +10,7 @@ export class SalesAnalyticsFilterOptions {
 
   @Expose()
   dateTo?: Date;
+
+  @Expose()
+  documentType?: EDocumentType;
 }

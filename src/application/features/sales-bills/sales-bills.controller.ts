@@ -6,7 +6,9 @@ import {
   HttpStatus,
   Inject,
   Param,
+  Patch,
   Post,
+  Delete,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -28,6 +30,7 @@ import {
   ListSalesBillsQueryModel,
   SalesBillResponseModel,
   SalesBillsPagedResponseModel,
+  UpdateSalesBillRequestModel,
 } from './models';
 import { SALES_BILL_SERVICE, ISalesBillService } from './service';
 
@@ -79,8 +82,9 @@ export class SalesBillsController {
     @Identity() identity: IIdentity,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('documentType') documentType?: string,
   ): Promise<SalesAnalytics> {
-    return this.billService.getAnalytics(identity.userId, dateFrom, dateTo);
+    return this.billService.getAnalytics(identity.userId, dateFrom, dateTo, documentType);
   }
 
   @Get('customer/:customerId')
@@ -94,6 +98,37 @@ export class SalesBillsController {
   ): Promise<SalesBillsPagedResponseModel> {
     const paged = await this.billService.listByCustomer(customerId, identity.userId, query);
     return plainToInstance(SalesBillsPagedResponseModel, paged, { excludeExtraneousValues: true });
+  }
+
+  @Post(':id/convert-to-normal')
+  @ApiOperation({ summary: 'Convert an informal bill to a normal GST bill' })
+  @ApiParam({ name: 'id', type: String })
+  async convertToNormal(
+    @Param('id') id: string,
+    @Identity() identity: IIdentity,
+  ): Promise<SalesBillResponseModel> {
+    const bill = await this.billService.convertToNormalBill(id, identity.userId);
+    return plainToInstance(SalesBillResponseModel, bill, { excludeExtraneousValues: true });
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update a sales bill' })
+  @ApiParam({ name: 'id', type: String })
+  async update(
+    @Param('id') id: string,
+    @Body() body: UpdateSalesBillRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<SalesBillResponseModel> {
+    const bill = await this.billService.update(id, body, identity.userId);
+    return plainToInstance(SalesBillResponseModel, bill, { excludeExtraneousValues: true });
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a sales bill' })
+  @ApiParam({ name: 'id', type: String })
+  async delete(@Param('id') id: string, @Identity() identity: IIdentity): Promise<void> {
+    await this.billService.delete(id, identity.userId);
   }
 
   @Get(':id')

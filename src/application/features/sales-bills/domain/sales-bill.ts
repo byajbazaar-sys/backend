@@ -1,5 +1,5 @@
 import { Expose, Type } from 'class-transformer';
-import { EPaymentMode, EBillStatus } from '../enums';
+import { EPaymentMode, EBillStatus, EDocumentType } from '../enums';
 import { SalesBillLineItem } from './sales-bill-line-item';
 
 export class SalesBill {
@@ -11,6 +11,9 @@ export class SalesBill {
 
   @Expose()
   billNumber: string;
+
+  @Expose()
+  documentType: EDocumentType;
 
   @Expose()
   customerName: string;
