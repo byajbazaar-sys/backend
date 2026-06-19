@@ -14,6 +14,7 @@ import { PosSessionEntity } from './pos-session.entity';
 import { WebSocketConnectionEntity } from './websocket-connection.entity';
 import { SalesBillEntity } from './sales-bill.entity';
 import { SalesBillItemEntity } from './sales-bill-item.entity';
+import { MetalRateEntity } from './metal-rate.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -31,6 +32,7 @@ export { PosSessionEntity } from './pos-session.entity';
 export { WebSocketConnectionEntity } from './websocket-connection.entity';
 export { SalesBillEntity } from './sales-bill.entity';
 export { SalesBillItemEntity } from './sales-bill-item.entity';
+export { MetalRateEntity } from './metal-rate.entity';
 
 export default [
   UserEntity,
@@ -49,4 +51,5 @@ export default [
   WebSocketConnectionEntity,
   SalesBillEntity,
   SalesBillItemEntity,
+  MetalRateEntity,
 ];

@@ -15,6 +15,7 @@ import {
 } from './inventory';
 import { PosSessionsController, PosSessionPublicController } from './pos';
 import { SalesBillsController } from './sales-bills';
+import { MetalRatesController } from './metal-rates';
 
 export * from './users';
 export * from './auth';
@@ -27,6 +28,7 @@ export * from './support';
 export * from './inventory';
 export * from './pos';
 export * from './sales-bills';
+export * from './metal-rates';
 
 export const Controllers = [
   UsersController,
@@ -44,6 +46,7 @@ export const Controllers = [
   PosSessionPublicController,
   PosSessionsController,
   SalesBillsController,
+  MetalRatesController,
 ];
 
 export const Services = [JwtService];

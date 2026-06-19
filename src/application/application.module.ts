@@ -34,6 +34,8 @@ import {
   InventoryReportService,
   SALES_BILL_SERVICE,
   SalesBillService,
+  METAL_RATE_SERVICE,
+  MetalRateService,
 } from './features';
 import {
   POS_SESSION_SERVICE,
@@ -121,6 +123,10 @@ import {
     {
       provide: SALES_BILL_SERVICE,
       useClass: SalesBillService,
+    },
+    {
+      provide: METAL_RATE_SERVICE,
+      useClass: MetalRateService,
     },
   ],
   exports: [PassportModule, UserJwtStrategy, TRANSACTION_SERVICE, LOAN_SERVICE],
