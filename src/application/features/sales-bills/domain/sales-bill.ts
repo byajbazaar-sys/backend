@@ -76,6 +76,12 @@ export class SalesBill {
   grandTotal: number;
 
   @Expose()
+  totalPurchaseCost?: number;
+
+  @Expose()
+  totalProfit?: number;
+
+  @Expose()
   paymentMode: EPaymentMode;
 
   @Expose()

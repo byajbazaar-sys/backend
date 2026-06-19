@@ -94,6 +94,12 @@ export class SalesBillEntity {
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   grandTotal: number;
 
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  totalPurchaseCost: number;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  totalProfit: number;
+
   @Column({ type: 'enum', enum: EPaymentMode, enumName: 'e_payment_mode_enum', default: EPaymentMode.Cash })
   paymentMode: EPaymentMode;
 

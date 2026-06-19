@@ -63,6 +63,9 @@ export class InventoryItem {
   purchasePrice?: number;
 
   @Expose()
+  purchaseRatePerGram?: number;
+
+  @Expose()
   sellingPrice?: number;
 
   @Expose()

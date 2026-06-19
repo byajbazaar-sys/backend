@@ -69,6 +69,12 @@ export class CreateInventoryItemRequestModel {
   @Min(0)
   purchasePrice?: number;
 
+  @ApiPropertyOptional({ description: 'Purchase rate per gram (₹)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchaseRatePerGram?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

@@ -1,4 +1,5 @@
 import { Paged } from '@shared-libs';
+import { InventoryItemSale } from '../../inventory/domain';
 import { SalesBill, SalesAnalytics } from '../domain';
 import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options';
 
@@ -15,6 +16,9 @@ export interface BillLineUpdate {
   sellingPrice?: number;
   makingCharges?: number;
   quantity?: number;
+  lineTotal?: number;
+  purchaseCost?: number;
+  profitAmount?: number;
 }
 
 export interface ISalesBillsRepository {
@@ -26,4 +30,5 @@ export interface ISalesBillsRepository {
   updateBill(id: string, patch: Partial<SalesBill>, lineUpdates?: BillLineUpdate[]): Promise<SalesBill>;
   deleteBill(id: string, restoreStock: boolean): Promise<void>;
   getAnalytics(params: SalesAnalyticsFilterOptions): Promise<SalesAnalytics>;
+  findSalesByInventoryItemId(inventoryItemId: string, createdBy: string): Promise<InventoryItemSale[]>;
 }

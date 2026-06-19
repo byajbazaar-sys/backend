@@ -16,6 +16,7 @@ import {
   EInventoryItemStatus,
   InventoryStockDeduction,
   BillLineUpdate,
+  InventoryItemSale,
 } from '../../../application';
 
 @Injectable()
@@ -180,7 +181,9 @@ export class SalesBillsRepository implements ISalesBillsRepository {
 
           const qty = Number(line.quantity) || 1;
           const price = Number(line.sellingPrice) || 0;
-          line.lineTotal = Math.round(price * qty * 100) / 100;
+          line.lineTotal = update.lineTotal ?? Math.round(price * qty * 100) / 100;
+          if (update.purchaseCost != null) line.purchaseCost = update.purchaseCost;
+          if (update.profitAmount != null) line.profitAmount = update.profitAmount;
           await itemsRepo.save(line);
         }
       }
@@ -239,10 +242,14 @@ export class SalesBillsRepository implements ISalesBillsRepository {
       .clone()
       .select('COUNT(bill.id)', 'billCount')
       .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
+      .addSelect('COALESCE(SUM(bill.totalPurchaseCost), 0)', 'totalPurchaseCost')
+      .addSelect('COALESCE(SUM(bill.totalProfit), 0)', 'totalProfit')
       .getRawOne();
 
     const billCount = parseInt(summary?.billCount ?? '0', 10);
     const revenue = parseFloat(summary?.revenue ?? '0');
+    const totalPurchaseCost = parseFloat(summary?.totalPurchaseCost ?? '0');
+    const totalProfit = parseFloat(summary?.totalProfit ?? '0');
     const avgBillValue = billCount > 0 ? Math.round((revenue / billCount) * 100) / 100 : 0;
 
     const dailyRows = await billQb
@@ -310,6 +317,8 @@ export class SalesBillsRepository implements ISalesBillsRepository {
       billCount,
       revenue,
       avgBillValue,
+      totalPurchaseCost,
+      totalProfit,
       dailySeries: dailyRows.map((r) => ({
         date: r.date,
         billCount: parseInt(r.billCount, 10),
@@ -339,5 +348,37 @@ export class SalesBillsRepository implements ISalesBillsRepository {
         revenue: parseFloat(r.revenue),
       })),
     };
+  }
+
+  async findSalesByInventoryItemId(
+    inventoryItemId: string,
+    createdBy: string,
+  ): Promise<InventoryItemSale[]> {
+    const rows = await this.itemsRepo
+      .createQueryBuilder('item')
+      .innerJoinAndSelect('item.bill', 'bill')
+      .where('item.inventoryItemId = :inventoryItemId', { inventoryItemId })
+      .andWhere('bill.createdBy = :createdBy', { createdBy })
+      .andWhere('bill.status = :status', { status: 'COMPLETED' })
+      .orderBy('bill.issuedAt', 'DESC')
+      .getMany();
+
+    return rows.map((item) =>
+      plainToInstance(
+        InventoryItemSale,
+        {
+          lineItemId: item.id,
+          billId: item.billId,
+          billNumber: item.bill.billNumber,
+          issuedAt: item.bill.issuedAt,
+          quantity: item.quantity,
+          sellingPrice: Number(item.sellingPrice),
+          lineTotal: Number(item.lineTotal),
+          purchaseCost: Number(item.purchaseCost),
+          profitAmount: Number(item.profitAmount),
+        },
+        { excludeExtraneousValues: true },
+      ),
+    );
   }
 }

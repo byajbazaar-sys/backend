@@ -19,13 +19,14 @@ import {
   INVENTORY_ITEMS_REPOSITORY,
 } from './i-inventory-items.repository';
 import { InventoryItemsFilterOptions } from '../options';
-import { InventoryItem } from '../domain';
+import { InventoryItem, InventoryItemSale } from '../domain';
 import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel, UpdateInventoryItemRequestModel } from '../models';
 import { IInventoryItemService } from './i-inventory-item.service';
 import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
 import { EInventoryItemStatus } from '../enums';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { deriveBusinessSkuPrefix } from '../utils/business-sku-prefix';
+import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from '../../sales-bills/service/i-sales-bills.repository';
 
 @Injectable()
 export class InventoryItemService implements IInventoryItemService {
@@ -35,6 +36,7 @@ export class InventoryItemService implements IInventoryItemService {
     @Inject(BARCODE_SERVICE) private readonly barcodeService: IBarcodeService,
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
+    @Inject(SALES_BILLS_REPOSITORY) private readonly salesBillsRepo: ISalesBillsRepository,
     @InjectPinoLogger(InventoryItemService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -142,6 +144,11 @@ export class InventoryItemService implements IInventoryItemService {
     if (!item) throw new NotFoundException('Inventory item not found');
     if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
     return this.enrichItem(item);
+  }
+
+  async getSalesHistory(id: string, userId: string): Promise<InventoryItemSale[]> {
+    await this.getById(id, userId);
+    return this.salesBillsRepo.findSalesByInventoryItemId(id, userId);
   }
 
   async getByBarcode(barcode: string, userId: string): Promise<InventoryItem> {

@@ -97,6 +97,14 @@ export class SalesBillResponseModel {
   grandTotal: number;
 
   @Expose()
+  @ApiPropertyOptional()
+  totalPurchaseCost?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  totalProfit?: number;
+
+  @Expose()
   @ApiProperty({ enum: EPaymentMode })
   paymentMode: EPaymentMode;
 

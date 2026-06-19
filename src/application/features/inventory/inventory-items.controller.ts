@@ -26,6 +26,7 @@ import { plainToInstance } from 'class-transformer';
 import {
   CreateInventoryItemRequestModel,
   InventoryItemResponseModel,
+  InventoryItemSaleResponseModel,
   InventoryItemsPagedResponseModel,
   ListInventoryItemsQueryModel,
   UpdateInventoryItemRequestModel,
@@ -78,6 +79,24 @@ export class InventoryItemsController {
   ): Promise<InventoryItemResponseModel> {
     const item = await this.itemService.getByBarcode(barcode, identity.userId);
     return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
+  }
+
+  @Get(':id/sales-history')
+  @ApiOperation({ summary: 'List completed bill sales for an inventory item with profit/loss' })
+  @ApiParam({ name: 'id' })
+  async getSalesHistory(
+    @Param('id') id: string,
+    @Identity() identity: IIdentity,
+  ): Promise<InventoryItemSaleResponseModel[]> {
+    const sales = await this.itemService.getSalesHistory(id, identity.userId);
+    return plainToInstance(
+      InventoryItemSaleResponseModel,
+      sales.map((sale) => ({
+        ...sale,
+        issuedAt: sale.issuedAt instanceof Date ? sale.issuedAt.toISOString() : sale.issuedAt,
+      })),
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Get(':id')

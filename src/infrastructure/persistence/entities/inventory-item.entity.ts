@@ -88,6 +88,9 @@ export class InventoryItemEntity {
   purchasePrice: number;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
+  purchaseRatePerGram: number;
+
+  @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   sellingPrice: number;
 
   @Column({

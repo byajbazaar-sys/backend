@@ -65,4 +65,16 @@ export class SalesBillLineItemResponseModel {
   @Expose()
   @ApiProperty()
   lineTotal: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  purchaseRatePerGram?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  purchaseCost?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  profitAmount?: number;
 }

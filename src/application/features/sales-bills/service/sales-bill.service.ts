@@ -9,7 +9,7 @@ import {
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged } from '@shared-libs';
 import { EInventoryItemStatus } from '../../inventory/enums';
-import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from '../../inventory/service';
+import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from '../../inventory/service/i-inventory-items.repository';
 import {
   IInventoryCategoriesRepository,
   INVENTORY_CATEGORIES_REPOSITORY,
@@ -19,6 +19,11 @@ import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder, ED
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel, UpdateSalesBillRequestModel } from '../models';
 import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options';
 import { ISalesBillService } from './i-sales-bill.service';
+import {
+  computeUnitPurchaseCost,
+  computeLineProfit,
+  recalcLineProfitFromExisting,
+} from '../utils/purchase-profit.util';
 import {
   ISalesBillsRepository,
   InventoryStockDeduction,
@@ -170,11 +175,50 @@ export class SalesBillService implements ISalesBillService {
     return { hsnCode, huid, lessWeight };
   }
 
+  private async resolveLinePurchaseSnapshot(
+    item: CreateSalesBillRequestModel['items'][number],
+    lineTotal: number,
+  ): Promise<Pick<SalesBillLineItem, 'purchaseRatePerGram' | 'purchaseCost' | 'profitAmount'>> {
+    let purchaseRatePerGram: number | undefined;
+    let netWeight = item.netWeight != null ? Number(item.netWeight) : undefined;
+    let makingCharges = item.makingCharges != null ? Number(item.makingCharges) : 0;
+    let purchasePrice: number | undefined;
+
+    if (item.inventoryItemId) {
+      const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId);
+      if (inv) {
+        const rate = Number(inv.purchaseRatePerGram);
+        if (rate > 0) purchaseRatePerGram = rate;
+        const price = Number(inv.purchasePrice);
+        if (price > 0) purchasePrice = price;
+        if (netWeight == null && inv.netWeight != null) netWeight = Number(inv.netWeight);
+        if ((item.makingCharges == null || item.makingCharges === 0) && inv.makingCharges != null) {
+          makingCharges = Number(inv.makingCharges);
+        }
+      }
+    }
+
+    const unitCost = computeUnitPurchaseCost({
+      purchaseRatePerGram,
+      netWeight,
+      makingCharges,
+      purchasePrice,
+    });
+    const { purchaseCost, profitAmount } = computeLineProfit(lineTotal, unitCost, item.quantity);
+
+    return {
+      purchaseRatePerGram: purchaseRatePerGram && purchaseRatePerGram > 0 ? purchaseRatePerGram : undefined,
+      purchaseCost,
+      profitAmount,
+    };
+  }
+
   async create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill> {
     const lineItems: SalesBillLineItem[] = [];
     for (const item of data.items) {
       const extras = await this.resolveLineItemExtras(item);
-      const lineTotal = Number(item.sellingPrice) * item.quantity;
+      const lineTotal = Math.round(Number(item.sellingPrice) * item.quantity * 100) / 100;
+      const purchase = await this.resolveLinePurchaseSnapshot(item, lineTotal);
       lineItems.push({
         inventoryItemId: item.inventoryItemId,
         itemName: item.itemName,
@@ -191,8 +235,14 @@ export class SalesBillService implements ISalesBillService {
         sellingPrice: item.sellingPrice,
         quantity: item.quantity,
         lineTotal,
+        purchaseRatePerGram: purchase.purchaseRatePerGram,
+        purchaseCost: purchase.purchaseCost,
+        profitAmount: purchase.profitAmount,
       });
     }
+
+    const totalPurchaseCost = lineItems.reduce((sum, l) => sum + Number(l.purchaseCost ?? 0), 0);
+    const totalProfit = lineItems.reduce((sum, l) => sum + Number(l.profitAmount ?? 0), 0);
 
     const subtotal = lineItems.reduce((sum, l) => sum + Number(l.lineTotal), 0);
     const discount = Number(data.discount ?? 0);
@@ -232,6 +282,8 @@ export class SalesBillService implements ISalesBillService {
       goldRate24k: data.goldRate24k,
       metalRates: data.metalRates,
       grandTotal: totals.grandTotal,
+      totalPurchaseCost: Math.round(totalPurchaseCost * 100) / 100,
+      totalProfit: Math.round(totalProfit * 100) / 100,
       paymentMode: data.paymentMode ?? EPaymentMode.Cash,
       status,
       issuedAt: new Date(),
@@ -335,19 +387,40 @@ export class SalesBillService implements ISalesBillService {
   async update(id: string, data: UpdateSalesBillRequestModel, userId: string): Promise<SalesBill> {
     const bill = await this.getById(id, userId);
 
-    const lineUpdates: BillLineUpdate[] =
-      data.items?.map((item) => ({
-        id: item.id,
-        itemName: item.itemName,
-        sellingPrice: item.sellingPrice,
-        makingCharges: item.makingCharges,
-        quantity: item.quantity,
-      })) ?? [];
+    const lineUpdates: BillLineUpdate[] = [];
+    let totalPurchaseCost = Number(bill.totalPurchaseCost ?? 0);
+    let totalProfit = Number(bill.totalProfit ?? 0);
 
-    const billLineIds = new Set((bill.items ?? []).map((l) => l.id));
-    for (const update of lineUpdates) {
-      if (!billLineIds.has(update.id)) {
-        throw new BadRequestException(`Line item ${update.id} not found on this bill`);
+    if (data.items?.length) {
+      totalPurchaseCost = 0;
+      totalProfit = 0;
+      const billLineIds = new Set((bill.items ?? []).map((l) => l.id));
+      for (const patch of data.items) {
+        if (!billLineIds.has(patch.id)) {
+          throw new BadRequestException(`Line item ${patch.id} not found on this bill`);
+        }
+        const line = (bill.items ?? []).find((l) => l.id === patch.id)!;
+        const qty = patch.quantity ?? Number(line.quantity);
+        const price = patch.sellingPrice ?? Number(line.sellingPrice);
+        const lineTotal = Math.round(price * qty * 100) / 100;
+        const profitCalc = recalcLineProfitFromExisting(
+          lineTotal,
+          Number(line.purchaseCost ?? 0),
+          Number(line.quantity),
+          qty,
+        );
+        totalPurchaseCost += profitCalc.purchaseCost;
+        totalProfit += profitCalc.profitAmount;
+        lineUpdates.push({
+          id: patch.id,
+          itemName: patch.itemName,
+          sellingPrice: patch.sellingPrice,
+          makingCharges: patch.makingCharges,
+          quantity: patch.quantity,
+          lineTotal,
+          purchaseCost: profitCalc.purchaseCost,
+          profitAmount: profitCalc.profitAmount,
+        });
       }
     }
 
@@ -378,6 +451,8 @@ export class SalesBillService implements ISalesBillService {
       sgstAmount: totals.sgstAmount,
       roundOff: totals.roundOff,
       grandTotal: totals.grandTotal,
+      totalPurchaseCost: Math.round(totalPurchaseCost * 100) / 100,
+      totalProfit: Math.round(totalProfit * 100) / 100,
     };
 
     if (data.customerName !== undefined) {

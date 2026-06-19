@@ -51,4 +51,13 @@ export class SalesBillLineItem {
 
   @Expose()
   lineTotal: number;
+
+  @Expose()
+  purchaseRatePerGram?: number;
+
+  @Expose()
+  purchaseCost?: number;
+
+  @Expose()
+  profitAmount?: number;
 }

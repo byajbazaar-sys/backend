@@ -53,6 +53,15 @@ export class SalesBillItemEntity {
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   sellingPrice: number;
 
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  purchaseRatePerGram: number | null;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  purchaseCost: number;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  profitAmount: number;
+
   @Column({ type: 'int', default: 1 })
   quantity: number;
 

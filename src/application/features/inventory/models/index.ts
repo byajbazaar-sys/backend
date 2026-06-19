@@ -5,3 +5,4 @@ export * from './update-inventory-item.model';
 export * from './inventory-item-response.model';
 export * from './inventory-items-paged-response.model';
 export * from './list-inventory-items-query.model';
+export * from './inventory-item-sale-response.model';

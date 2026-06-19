@@ -80,6 +80,10 @@ export class InventoryItemResponseModel {
   purchasePrice?: number;
 
   @Expose()
+  @ApiPropertyOptional({ description: 'Purchase rate per gram (₹)' })
+  purchaseRatePerGram?: number;
+
+  @Expose()
   @ApiPropertyOptional()
   sellingPrice?: number;
 

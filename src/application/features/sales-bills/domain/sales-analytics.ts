@@ -35,6 +35,8 @@ export interface SalesAnalytics {
   billCount: number;
   revenue: number;
   avgBillValue: number;
+  totalPurchaseCost: number;
+  totalProfit: number;
   dailySeries: SalesDailyPoint[];
   topItems: SalesTopItem[];
   byMetalType: SalesMetalBreakdown[];
