@@ -130,6 +130,7 @@ export class InventoryItemService implements IInventoryItemService {
       metalType: query.metalType,
       pageNumber: query.pageNumber,
       pageSize: query.pageSize,
+      sortOrder: query.sortOrder,
     };
   }
 
@@ -256,5 +257,19 @@ export class InventoryItemService implements IInventoryItemService {
       }
     }
     await this.itemsRepo.delete(id);
+  }
+
+  async bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }> {
+    const uniqueIds = [...new Set(ids)];
+    if (!uniqueIds.length) {
+      throw new BadRequestException('No item ids provided');
+    }
+
+    for (const id of uniqueIds) {
+      await this.delete(id, userId);
+    }
+
+    this.logger.info({ count: uniqueIds.length, userId }, 'Inventory items bulk deleted');
+    return { deletedCount: uniqueIds.length };
   }
 }

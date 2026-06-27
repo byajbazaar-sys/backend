@@ -148,16 +148,16 @@ export class SalesBillService implements ISalesBillService {
     };
   }
 
-  private async resolveLineItemExtras(
+  private async resolveLineHsnHuid(
     item: CreateSalesBillRequestModel['items'][number],
-  ): Promise<Pick<SalesBillLineItem, 'hsnCode' | 'huid' | 'lessWeight'>> {
-    let hsnCode: string | undefined;
+  ): Promise<Pick<SalesBillLineItem, 'hsnCode' | 'huid'>> {
+    let hsnCode = item.hsnCode?.trim() || undefined;
     let huid: string | undefined;
 
     if (item.inventoryItemId) {
       const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId);
       if (inv) {
-        if (inv.categoryId) {
+        if (!hsnCode && inv.categoryId) {
           const category = await this.categoriesRepo.findById(inv.categoryId);
           const code = category?.hsnCode?.trim();
           if (code) hsnCode = code;
@@ -167,12 +167,21 @@ export class SalesBillService implements ISalesBillService {
       }
     }
 
+    return { hsnCode, huid };
+  }
+
+  private resolveBillLineWeights(
+    item: CreateSalesBillRequestModel['items'][number],
+  ): Pick<SalesBillLineItem, 'grossWeight' | 'netWeight' | 'lessWeight'> {
     const gross = item.grossWeight != null ? Number(item.grossWeight) : undefined;
     const net = item.netWeight != null ? Number(item.netWeight) : undefined;
-    const lessWeight =
-      gross != null && net != null && gross >= net ? Math.round((gross - net) * 1000) / 1000 : undefined;
+    let less = item.lessWeight != null ? Number(item.lessWeight) : undefined;
 
-    return { hsnCode, huid, lessWeight };
+    if (less == null && gross != null && net != null && gross >= net) {
+      less = Math.round((gross - net) * 1000) / 1000;
+    }
+
+    return { grossWeight: gross, netWeight: net, lessWeight: less };
   }
 
   private async resolveLinePurchaseSnapshot(
@@ -180,8 +189,8 @@ export class SalesBillService implements ISalesBillService {
     lineTotal: number,
   ): Promise<Pick<SalesBillLineItem, 'purchaseRatePerGram' | 'purchaseCost' | 'profitAmount'>> {
     let purchaseRatePerGram: number | undefined;
-    let netWeight = item.netWeight != null ? Number(item.netWeight) : undefined;
-    let makingCharges = item.makingCharges != null ? Number(item.makingCharges) : 0;
+    const netWeight = item.netWeight != null ? Number(item.netWeight) : undefined;
+    const makingCharges = item.makingCharges != null ? Number(item.makingCharges) : 0;
     let purchasePrice: number | undefined;
 
     if (item.inventoryItemId) {
@@ -191,10 +200,6 @@ export class SalesBillService implements ISalesBillService {
         if (rate > 0) purchaseRatePerGram = rate;
         const price = Number(inv.purchasePrice);
         if (price > 0) purchasePrice = price;
-        if (netWeight == null && inv.netWeight != null) netWeight = Number(inv.netWeight);
-        if ((item.makingCharges == null || item.makingCharges === 0) && inv.makingCharges != null) {
-          makingCharges = Number(inv.makingCharges);
-        }
       }
     }
 
@@ -216,7 +221,8 @@ export class SalesBillService implements ISalesBillService {
   async create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill> {
     const lineItems: SalesBillLineItem[] = [];
     for (const item of data.items) {
-      const extras = await this.resolveLineItemExtras(item);
+      const hsnHuid = await this.resolveLineHsnHuid(item);
+      const weights = this.resolveBillLineWeights(item);
       const lineTotal = Math.round(Number(item.sellingPrice) * item.quantity * 100) / 100;
       const purchase = await this.resolveLinePurchaseSnapshot(item, lineTotal);
       lineItems.push({
@@ -226,11 +232,11 @@ export class SalesBillService implements ISalesBillService {
         barcode: item.barcode,
         metalType: item.metalType,
         purity: item.purity,
-        grossWeight: item.grossWeight,
-        netWeight: item.netWeight,
-        lessWeight: extras.lessWeight,
-        hsnCode: extras.hsnCode,
-        huid: extras.huid,
+        grossWeight: weights.grossWeight,
+        netWeight: weights.netWeight,
+        lessWeight: weights.lessWeight,
+        hsnCode: hsnHuid.hsnCode,
+        huid: hsnHuid.huid,
         makingCharges: item.makingCharges ?? 0,
         sellingPrice: item.sellingPrice,
         quantity: item.quantity,

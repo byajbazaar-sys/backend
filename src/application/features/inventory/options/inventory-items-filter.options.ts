@@ -1,5 +1,5 @@
 import { Expose, Type } from 'class-transformer';
-import { EInventoryItemStatus } from '../enums';
+import { EInventoryItemStatus, EInventoryItemSortOrder } from '../enums';
 
 export class InventoryItemsFilterOptions {
   @Expose()
@@ -16,6 +16,9 @@ export class InventoryItemsFilterOptions {
 
   @Expose()
   metalType?: string;
+
+  @Expose()
+  sortOrder?: EInventoryItemSortOrder;
 
   @Expose()
   @Type(() => Number)

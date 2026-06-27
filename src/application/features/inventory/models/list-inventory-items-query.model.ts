@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
-import { EInventoryItemStatus } from '../enums';
+import { EInventoryItemStatus, EInventoryItemSortOrder } from '../enums';
 
 export class ListInventoryItemsQueryModel {
   @Expose()
@@ -40,4 +40,9 @@ export class ListInventoryItemsQueryModel {
   @IsOptional()
   @IsString()
   metalType?: string;
+
+  @ApiPropertyOptional({ enum: EInventoryItemSortOrder, default: EInventoryItemSortOrder.Desc })
+  @IsOptional()
+  @IsEnum(EInventoryItemSortOrder)
+  sortOrder?: EInventoryItemSortOrder;
 }

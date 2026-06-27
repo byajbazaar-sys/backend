@@ -17,7 +17,12 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     private readonly repo: Repository<InventoryItemEntity>,
   ) {}
 
-  private buildQuery(filter: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>) {
+  private buildQuery(
+    filter: Pick<
+      InventoryItemsFilterOptions,
+      'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'
+    >,
+  ) {
     const qb = this.repo
       .createQueryBuilder('item')
       .leftJoinAndSelect('item.category', 'category')
@@ -99,7 +104,11 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
   async findAll(params: InventoryItemsFilterOptions): Promise<Paged<InventoryItem>> {
     const { pageNumber, pageSize, skip } = getPaginationValues(params);
     const filter = params;
-    const qb = this.buildQuery(filter).orderBy('item.createdAt', 'DESC').skip(skip).take(pageSize);
+    const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const qb = this.buildQuery(filter)
+      .orderBy('item.createdAt', sortOrder as 'ASC' | 'DESC')
+      .skip(skip)
+      .take(pageSize);
     const [items, totalCount] = await qb.getManyAndCount();
     return toPaged(InventoryItem, {
       items: items.map((e) => this.mapEntity(e)),
@@ -110,9 +119,15 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
   }
 
   async findAllForReport(
-    filter: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>,
+    filter: Pick<
+      InventoryItemsFilterOptions,
+      'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType' | 'sortOrder'
+    >,
   ): Promise<InventoryItem[]> {
-    const entities = await this.buildQuery(filter).orderBy('item.createdAt', 'DESC').getMany();
+    const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const entities = await this.buildQuery(filter)
+      .orderBy('item.createdAt', sortOrder as 'ASC' | 'DESC')
+      .getMany();
     return entities.map((e) => this.mapEntity(e));
   }
 

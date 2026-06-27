@@ -30,6 +30,8 @@ import {
   InventoryItemsPagedResponseModel,
   ListInventoryItemsQueryModel,
   UpdateInventoryItemRequestModel,
+  BulkDeleteInventoryItemsRequestModel,
+  BulkDeleteInventoryItemsResponseModel,
 } from './models';
 import { INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
 
@@ -79,6 +81,19 @@ export class InventoryItemsController {
   ): Promise<InventoryItemResponseModel> {
     const item = await this.itemService.getByBarcode(barcode, identity.userId);
     return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
+  }
+
+  @Post('bulk-delete')
+  @ApiOperation({ summary: 'Delete multiple inventory items' })
+  @HttpCode(HttpStatus.OK)
+  async bulkDelete(
+    @Body() body: BulkDeleteInventoryItemsRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<BulkDeleteInventoryItemsResponseModel> {
+    const result = await this.itemService.bulkDelete(body.ids, identity.userId);
+    return plainToInstance(BulkDeleteInventoryItemsResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Get(':id/sales-history')

@@ -12,6 +12,7 @@ export interface IInventoryItemService {
   getSalesHistory(id: string, userId: string): Promise<InventoryItemSale[]>;
   update(id: string, data: UpdateInventoryItemRequestModel, userId: string): Promise<InventoryItem>;
   delete(id: string, userId: string): Promise<void>;
+  bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }>;
   generateSku(userId: string): Promise<string>;
   uploadImage(
     id: string,
