@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import bwipjs from 'bwip-js';
 import * as QRCode from 'qrcode';
 import { InventoryQrPayload } from '../domain';
@@ -12,10 +12,11 @@ const BCID_MAP: Record<EBarcodeFormat, string> = {
   [EBarcodeFormat.UPC]: 'upca',
 };
 
-const BARCODE_DIMS: Record<EBarcodeSize, { scale: number; height: number; textsize: number }> = {
-  [EBarcodeSize.Small]: { scale: 2, height: 8, textsize: 9 },
-  [EBarcodeSize.Medium]: { scale: 4, height: 14, textsize: 11 },
-  [EBarcodeSize.Large]: { scale: 5, height: 18, textsize: 13 },
+/** Module scale and bar height (mm). Text is omitted — labels print the code separately. */
+const BARCODE_DIMS: Record<EBarcodeSize, { scale: number; height: number }> = {
+  [EBarcodeSize.Small]: { scale: 3, height: 12 },
+  [EBarcodeSize.Medium]: { scale: 4, height: 16 },
+  [EBarcodeSize.Large]: { scale: 5, height: 20 },
 };
 
 const QR_WIDTH: Record<EBarcodeSize, number> = {
@@ -54,15 +55,24 @@ export class BarcodeService implements IBarcodeService {
     return this.buildInventoryQrPayload(inventoryId, sku);
   }
 
+  resolveBarcodeText(barcode?: string | null, sku?: string | null): string {
+    const value = (barcode ?? sku ?? '').trim();
+    if (!value) throw new BadRequestException('Barcode value is required');
+    return value;
+  }
+
   private resolveBcid(format: EBarcodeFormat): string {
     return BCID_MAP[format] ?? BCID_MAP[EBarcodeFormat.CODE128];
   }
 
   async generateBarcodePng(
-    sku: string,
+    text: string,
     format: EBarcodeFormat = EBarcodeFormat.CODE128,
     size: EBarcodeSize = EBarcodeSize.Medium,
   ): Promise<Buffer> {
+    const encoded = text.trim();
+    if (!encoded) throw new BadRequestException('Barcode value is required');
+
     const dims = BARCODE_DIMS[size] ?? BARCODE_DIMS[EBarcodeSize.Medium];
     const formatsToTry: EBarcodeFormat[] =
       format === EBarcodeFormat.CODE128 ? [EBarcodeFormat.CODE128] : [format, EBarcodeFormat.CODE128];
@@ -72,14 +82,12 @@ export class BarcodeService implements IBarcodeService {
       try {
         const png = await bwipjs.toBuffer({
           bcid: this.resolveBcid(fmt),
-          text: sku,
+          text: encoded,
           scale: dims.scale,
           height: dims.height,
-          paddingwidth: 10,
-          paddingheight: 8,
-          includetext: true,
-          textxalign: 'center',
-          textsize: dims.textsize,
+          paddingwidth: 12,
+          paddingheight: 6,
+          includetext: false,
         });
         return png;
       } catch (err) {
@@ -90,11 +98,11 @@ export class BarcodeService implements IBarcodeService {
   }
 
   async generateBarcodeDataUrl(
-    sku: string,
+    text: string,
     format: EBarcodeFormat = EBarcodeFormat.CODE128,
     size: EBarcodeSize = EBarcodeSize.Medium,
   ): Promise<string> {
-    const buffer = await this.generateBarcodePng(sku, format, size);
+    const buffer = await this.generateBarcodePng(text, format, size);
     return `data:image/png;base64,${buffer.toString('base64')}`;
   }
 

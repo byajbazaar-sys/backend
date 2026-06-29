@@ -6,9 +6,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { instanceToPlain } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { IIdentity, UsersAuthOptions } from '@shared-libs';
 import { IWebSocketMessageService, WEBSOCKET_MESSAGE_SERVICE } from '../../../shared';
+import { InventoryItem } from '../../inventory/domain';
+import { BARCODE_SERVICE, IBarcodeService } from '../../inventory/service/i-barcode.service';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from '../../inventory/service/i-inventory-items.repository';
 import { IPosSessionsRepository, POS_SESSIONS_REPOSITORY } from './i-pos-sessions.repository';
 import { IWebSocketConnectionsRepository, WEBSOCKET_CONNECTIONS_REPOSITORY } from './i-websocket-connections.repository';
@@ -23,6 +26,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     private readonly connectionsRepo: IWebSocketConnectionsRepository,
     @Inject(POS_SESSIONS_REPOSITORY) private readonly sessionsRepo: IPosSessionsRepository,
     @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly itemsRepo: IInventoryItemsRepository,
+    @Inject(BARCODE_SERVICE) private readonly barcodeService: IBarcodeService,
     @Inject(WEBSOCKET_MESSAGE_SERVICE) private readonly wsMessage: IWebSocketMessageService,
     @Inject(POS_SESSION_SERVICE) private readonly posSessionService: IPosSessionService,
     private readonly jwtService: JwtService,
@@ -261,6 +265,32 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     };
   }
 
+  private serializeInventoryItem(item: InventoryItem): Record<string, unknown> {
+    return instanceToPlain(item, { excludeExtraneousValues: true }) as Record<string, unknown>;
+  }
+
+  /** Match inventory lookup API — barcode, SKU, item code, inventory QR JSON, or item id. */
+  private async resolveInventoryFromScan(code: string, ownerUserId: string): Promise<InventoryItem> {
+    const raw = code.trim();
+    const qrPayload = this.barcodeService.parseInventoryQrPayload(raw);
+
+    if (qrPayload?.inventoryId) {
+      const byId = await this.itemsRepo.findById(qrPayload.inventoryId);
+      if (byId) {
+        if (byId.createdBy !== ownerUserId) {
+          throw new ForbiddenException('Item does not belong to session owner');
+        }
+        return byId;
+      }
+    }
+
+    const lookupCode = qrPayload?.sku?.trim() || raw;
+    const item = await this.itemsRepo.findByScanCode(lookupCode);
+    if (!item) throw new NotFoundException('Inventory item not found for barcode');
+    if (item.createdBy !== ownerUserId) throw new ForbiddenException('Item does not belong to session owner');
+    return item;
+  }
+
   async handleBarcodeScanned(
     connectionId: string,
     userId: string,
@@ -285,16 +315,15 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
       throw new ForbiddenException('Desktop POS is not connected');
     }
 
-    const item = await this.itemsRepo.findByBarcode(barcode);
-    if (!item) throw new NotFoundException('Inventory item not found for barcode');
-    if (item.createdBy !== session.createdBy) throw new ForbiddenException('Item does not belong to session owner');
+    const item = await this.resolveInventoryFromScan(barcode, session.createdBy);
+    const itemPayload = this.serializeInventoryItem(item);
 
     this.logger.info({ sessionId, barcode, itemId: item.id, sku: item.sku }, 'Session validated — emitting to desktop');
 
     const payload = {
       type: 'barcodeScanned',
       barcode,
-      item,
+      item: itemPayload,
       sessionId,
       timestamp: new Date().toISOString(),
     };
@@ -308,7 +337,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
 
     this.logger.info({ sessionId, barcode }, 'Barcode emitted to desktop');
 
-    return { type: 'barcodeAck', barcode, success: true, item };
+    return { type: 'barcodeAck', barcode, success: true, item: itemPayload };
   }
 
   async handleCartItemRemoved(

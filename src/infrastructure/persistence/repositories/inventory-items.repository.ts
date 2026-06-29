@@ -90,7 +90,10 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     const qb = this.repo
       .createQueryBuilder('item')
       .leftJoinAndSelect('item.category', 'category')
-      .where('item.barcode = :code OR item.sku = :code OR item.itemCode = :code', { code: trimmed });
+      .where(
+        'UPPER(item.barcode) = UPPER(:code) OR UPPER(item.sku) = UPPER(:code) OR UPPER(COALESCE(item.itemCode, \'\')) = UPPER(:code)',
+        { code: trimmed },
+      );
 
     if (uuidRe.test(trimmed)) {
       qb.orWhere('item.id = :id', { id: trimmed });

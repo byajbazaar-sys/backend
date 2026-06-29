@@ -93,10 +93,11 @@ export class BarcodeController {
   @Header('Access-Control-Expose-Headers', 'Content-Disposition')
   async download(@Param('id') id: string, @Identity() identity: IIdentity): Promise<StreamableFile> {
     const item = await this.itemService.getById(id, identity.userId);
-    const buffer = await this.barcodeService.generateBarcodePng(item.sku!);
+    const barcodeText = this.barcodeService.resolveBarcodeText(item.barcode, item.sku);
+    const buffer = await this.barcodeService.generateBarcodePng(barcodeText);
     return new StreamableFile(buffer, {
       type: 'image/png',
-      disposition: `attachment; filename="barcode-${item.sku}.png"`,
+      disposition: `attachment; filename="barcode-${barcodeText}.png"`,
       length: buffer.length,
     });
   }
@@ -175,9 +176,10 @@ export class BarcodeController {
     const qrSize = opts?.qrSize ?? EBarcodeSize.Medium;
     const qrMode = opts?.qrMode ?? 'inventory';
     const qrPayload = this.resolveQrPayloadForMode(item, qrMode, opts?.customQrValue);
+    const barcodeText = this.barcodeService.resolveBarcodeText(item.barcode, item.sku);
 
     const [barcodeDataUrl, qrDataUrl] = await Promise.all([
-      this.barcodeService.generateBarcodeDataUrl(item.sku!, format, barcodeSize),
+      this.barcodeService.generateBarcodeDataUrl(barcodeText, format, barcodeSize),
       this.barcodeService.generateQrDataUrl(qrPayload, qrSize),
     ]);
 
@@ -187,7 +189,7 @@ export class BarcodeController {
       sku: item.sku,
       itemCode: item.itemCode,
       barcode: item.barcode,
-      barcodeValue: item.barcode,
+      barcodeValue: barcodeText,
       qrValue: qrPayload,
       categoryName: item.categoryName,
       metalType: item.metalType,
