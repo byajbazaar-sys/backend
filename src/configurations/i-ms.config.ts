@@ -9,6 +9,7 @@ import {
   TwilioOptions,
   SendGridOptions,
   SesOptions,
+  ResendOptions,
 } from '../infrastructure';
 
 
@@ -23,6 +24,7 @@ export interface IMsConfig {
   twilio: TwilioOptions;
   sendGrid: SendGridOptions;
   ses: SesOptions;
+  resend: ResendOptions;
   webApp: WebAppOptions;
   googleOAuth: GoogleOAuthOptions;
   logger: Params;

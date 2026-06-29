@@ -14,4 +14,5 @@ export interface ISalesBillService {
   convertToNormalBill(id: string, userId: string): Promise<SalesBill>;
   update(id: string, data: UpdateSalesBillRequestModel, userId: string): Promise<SalesBill>;
   delete(id: string, userId: string): Promise<void>;
+  bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }>;
 }

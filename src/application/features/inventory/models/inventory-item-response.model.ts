@@ -65,6 +65,10 @@ export class InventoryItemResponseModel {
 
   @Expose()
   @ApiPropertyOptional()
+  lessWeight?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
   stoneWeight?: number;
 
   @Expose()

@@ -51,6 +51,9 @@ export class InventoryItem {
   netWeight?: number;
 
   @Expose()
+  lessWeight?: number;
+
+  @Expose()
   stoneWeight?: number;
 
   @Expose()

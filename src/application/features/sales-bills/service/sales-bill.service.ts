@@ -505,4 +505,18 @@ export class SalesBillService implements ISalesBillService {
       'Sales bill deleted',
     );
   }
+
+  async bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }> {
+    const uniqueIds = [...new Set(ids)];
+    if (!uniqueIds.length) {
+      throw new BadRequestException('No bill ids provided');
+    }
+
+    for (const id of uniqueIds) {
+      await this.delete(id, userId);
+    }
+
+    this.logger.info({ count: uniqueIds.length, userId }, 'Sales bills bulk deleted');
+    return { deletedCount: uniqueIds.length };
+  }
 }

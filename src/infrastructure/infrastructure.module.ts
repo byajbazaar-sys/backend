@@ -54,6 +54,8 @@ import { AIOptions, AIResumeService } from './ai';
 import { TwilioOptions, TwilioService } from './sms';
 import { SendGridOptions, SendGridService } from './send-grid';
 import { SesOptions, SesService } from './ses';
+import { ResendOptions, ResendService } from './resend';
+import { resolveEmailServiceProvider } from './email/resolve-email-service';
 import { WebAppOptions } from '../application';
 import CronServices from './cron';
 import { generateDataSourceOptions } from './persistence/type-orm.config';
@@ -233,7 +235,13 @@ import { GoogleOAuthService } from './google-oauth';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('ses'),
     },
+    {
+      provide: ResendOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('resend'),
+    },
     SesService,
+    ResendService,
     {
       provide: WebAppOptions,
       inject: [ConfigService],
@@ -241,7 +249,7 @@ import { GoogleOAuthService } from './google-oauth';
     },
     {
       provide: EMAIL_SERVICE,
-      useClass: process.env.EMAIL_SERVICE_PROVIDER === 'ses' ? SesService : SendGridService,
+      useClass: resolveEmailServiceProvider(),
     },
     {
       provide: GOOGLE_OAUTH_SERVICE,

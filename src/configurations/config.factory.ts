@@ -9,6 +9,7 @@ import {
   TwilioOptions,
   SendGridOptions,
   SesOptions,
+  ResendOptions,
 } from '../infrastructure';
 
 export const configFactory = (): IMsConfig => ({
@@ -65,6 +66,11 @@ export const configFactory = (): IMsConfig => ({
     process.env.SES_AWS_SECRET_ACCESS_KEY ?? process.env.S3_AWS_SECRET_ACCESS_KEY ?? '',
     process.env.SES_SENDER ?? '',
     process.env.SES_SENDER_NAME ?? '',
+  ),
+  resend: new ResendOptions(
+    process.env.RESEND_API_KEY ?? '',
+    process.env.RESEND_SENDER ?? '',
+    process.env.RESEND_SENDER_NAME ?? '',
   ),
   webApp: new WebAppOptions(process.env.WEB_APP_DOMAIN),
   googleOAuth: new GoogleOAuthOptions(

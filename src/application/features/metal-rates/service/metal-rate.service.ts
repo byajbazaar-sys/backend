@@ -96,6 +96,20 @@ export class MetalRateService implements IMetalRateService {
     this.logger.info({ userId, entryId: id }, 'Metal rate history entry deleted');
   }
 
+  async bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }> {
+    const uniqueIds = [...new Set(ids)];
+    if (!uniqueIds.length) {
+      throw new BadRequestException('No rate entry ids provided');
+    }
+
+    for (const id of uniqueIds) {
+      await this.deleteEntry(id, userId);
+    }
+
+    this.logger.info({ count: uniqueIds.length, userId }, 'Metal rate entries bulk deleted');
+    return { deletedCount: uniqueIds.length };
+  }
+
   async getChart(
     userId: string,
     startDate?: string,

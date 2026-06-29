@@ -49,6 +49,12 @@ export class CreateInventoryItemRequestModel {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  lessWeight?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   stoneWeight?: number;
 
   @ApiPropertyOptional()

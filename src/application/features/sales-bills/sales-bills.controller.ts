@@ -31,6 +31,8 @@ import {
   SalesBillResponseModel,
   SalesBillsPagedResponseModel,
   UpdateSalesBillRequestModel,
+  BulkDeleteSalesBillsRequestModel,
+  BulkDeleteSalesBillsResponseModel,
 } from './models';
 import { SALES_BILL_SERVICE, ISalesBillService } from './service';
 
@@ -85,6 +87,19 @@ export class SalesBillsController {
     @Query('documentType') documentType?: string,
   ): Promise<SalesAnalytics> {
     return this.billService.getAnalytics(identity.userId, dateFrom, dateTo, documentType);
+  }
+
+  @Post('bulk-delete')
+  @ApiOperation({ summary: 'Delete multiple sales bills' })
+  @HttpCode(HttpStatus.OK)
+  async bulkDelete(
+    @Body() body: BulkDeleteSalesBillsRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<BulkDeleteSalesBillsResponseModel> {
+    const result = await this.billService.bulkDelete(body.ids, identity.userId);
+    return plainToInstance(BulkDeleteSalesBillsResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Get('customer/:customerId')

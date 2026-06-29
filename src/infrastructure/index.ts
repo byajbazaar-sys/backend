@@ -7,5 +7,6 @@ export * from './ai';
 export * from './sms';
 export * from './send-grid';
 export * from './ses';
+export * from './resend';
 export * from './cron';
 export * from './google-oauth';

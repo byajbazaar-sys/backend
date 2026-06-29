@@ -194,6 +194,7 @@ export class BarcodeController {
       purity: item.purity,
       grossWeight: item.grossWeight,
       netWeight: item.netWeight,
+      lessWeight: item.lessWeight,
       stoneWeight: item.stoneWeight,
       sellingPrice: item.sellingPrice,
       location: item.location,

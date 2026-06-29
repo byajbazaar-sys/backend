@@ -75,6 +75,9 @@ export class InventoryItemEntity {
   @Column({ type: 'numeric', precision: 10, scale: 3, default: 0 })
   netWeight: number;
 
+  @Column({ type: 'numeric', precision: 10, scale: 3, default: 0, name: 'less_weight' })
+  lessWeight: number;
+
   @Column({ type: 'numeric', precision: 10, scale: 3, default: 0 })
   stoneWeight: number;
 

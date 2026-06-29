@@ -31,6 +31,8 @@ import {
   MetalRateChartQueryModel,
   MetalRateEntryResponseModel,
   MetalRatesPagedResponseModel,
+  BulkDeleteMetalRatesRequestModel,
+  BulkDeleteMetalRatesResponseModel,
 } from './models';
 import { IMetalRateService, METAL_RATE_SERVICE } from './service';
 
@@ -91,6 +93,19 @@ export class MetalRatesController {
   ): Promise<MetalRateEntryResponseModel> {
     const created = await this.rateService.create(body, identity.userId);
     return plainToInstance(MetalRateEntryResponseModel, created, { excludeExtraneousValues: true });
+  }
+
+  @Post('bulk-delete')
+  @ApiOperation({ summary: 'Delete multiple metal rate history entries' })
+  @HttpCode(HttpStatus.OK)
+  async bulkDelete(
+    @Body() body: BulkDeleteMetalRatesRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<BulkDeleteMetalRatesResponseModel> {
+    const result = await this.rateService.bulkDelete(body.ids, identity.userId);
+    return plainToInstance(BulkDeleteMetalRatesResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Delete(':id')
