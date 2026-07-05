@@ -130,6 +130,13 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     });
   }
 
+  async findAllForExport(
+    filter: Omit<SalesBillsFilterOptions, 'pageNumber' | 'pageSize'>,
+  ): Promise<SalesBill[]> {
+    const rows = await this.buildQuery(filter).getMany();
+    return rows.map((e) => this.mapBill(e));
+  }
+
   async findByCustomerId(
     customerId: string,
     params: SalesBillsFilterOptions,

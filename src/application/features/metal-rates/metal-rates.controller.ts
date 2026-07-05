@@ -11,7 +11,6 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -20,7 +19,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { Identity, IIdentity, RolesGuard, USER_STRATEGY } from '@shared-libs';
+import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -38,7 +37,7 @@ import { IMetalRateService, METAL_RATE_SERVICE } from './service';
 
 @ApiTags('metal-rates')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('metal-rates')
 export class MetalRatesController {
   constructor(

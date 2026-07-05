@@ -1,8 +1,7 @@
 import { UseGuards, Controller, Post, Get, Patch, Delete, HttpStatus, HttpCode, Body, Param, Inject } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { USER_STRATEGY, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { CreateItemRequestModel, UpdateItemRequestModel, ItemResponseModel, GetItemParamsModel } from './models';
 import { IItemService, ITEM_SERVICE } from './service';
@@ -11,7 +10,7 @@ import { Item } from './domain';
 
 @ApiTags('items')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('items')
 export class ItemsController {
   constructor(

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Inject,
@@ -10,9 +11,9 @@ import {
   Post,
   Delete,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -21,7 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { Identity, IIdentity, RolesGuard, USER_STRATEGY } from '@shared-libs';
+import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
 import { SalesAnalytics } from './domain';
@@ -38,7 +39,7 @@ import { SALES_BILL_SERVICE, ISalesBillService } from './service';
 
 @ApiTags('bills')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('bills')
 export class SalesBillsController {
   constructor(
@@ -87,6 +88,25 @@ export class SalesBillsController {
     @Query('documentType') documentType?: string,
   ): Promise<SalesAnalytics> {
     return this.billService.getAnalytics(identity.userId, dateFrom, dateTo, documentType);
+  }
+
+  @Get('export/gst')
+  @ApiOperation({ summary: 'Export filtered sales bills as GST CSV (one row per line item)' })
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  @Header('X-Content-Type-Options', 'nosniff')
+  @Header('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length')
+  async exportGstCsv(
+    @Query() query: ListSalesBillsQueryModel,
+    @Identity() identity: IIdentity,
+  ): Promise<StreamableFile> {
+    this.logger.info({ query }, 'exportGstCsv called');
+    const { buffer, filename } = await this.billService.exportGstCsv(identity.userId, query);
+    return new StreamableFile(buffer, {
+      type: 'text/csv; charset=utf-8',
+      disposition: `attachment; filename="${filename}"`,
+      length: buffer.length,
+    });
   }
 
   @Post('bulk-delete')

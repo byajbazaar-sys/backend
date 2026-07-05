@@ -25,6 +25,9 @@ export interface ISalesBillsRepository {
   create(bill: SalesBill, stockDeductions?: InventoryStockDeduction[]): Promise<SalesBill>;
   findById(id: string): Promise<SalesBill | null>;
   findAll(params: SalesBillsFilterOptions): Promise<Paged<SalesBill>>;
+  findAllForExport(
+    filter: Omit<SalesBillsFilterOptions, 'pageNumber' | 'pageSize'>,
+  ): Promise<SalesBill[]>;
   findByCustomerId(customerId: string, params: SalesBillsFilterOptions): Promise<Paged<SalesBill>>;
   getNextBillSequence(createdBy: string, year: number, month: number, prefix: string): Promise<number>;
   updateBill(id: string, patch: Partial<SalesBill>, lineUpdates?: BillLineUpdate[]): Promise<SalesBill>;

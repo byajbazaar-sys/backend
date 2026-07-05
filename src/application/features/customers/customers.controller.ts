@@ -16,7 +16,6 @@ import {
   StreamableFile,
   Header,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiConsumes,
@@ -29,7 +28,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { USER_STRATEGY, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   CreateCustomerRequestModel,
@@ -50,7 +49,7 @@ import { ExportFormat } from '../../shared';
 
 @ApiTags('customers')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('customers')
 export class CustomersController {
   constructor(

@@ -10,17 +10,16 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { Identity, IIdentity, RolesGuard, USER_STRATEGY } from '@shared-libs';
+import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { InventoryItem } from './domain';
 import { EBarcodeFormat, EBarcodeSize } from './enums';
 import { BARCODE_SERVICE, IBarcodeService, INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
 
 @ApiTags('inventory-barcode')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('inventory/barcode')
 export class BarcodeController {
   constructor(

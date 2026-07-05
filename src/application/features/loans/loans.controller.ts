@@ -17,7 +17,6 @@ import {
   StreamableFile,
   Header,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiResponse,
@@ -28,7 +27,7 @@ import {
   ApiConsumes,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { USER_STRATEGY, RolesGuard, Identity, IIdentity, ParseFormDataJsonPipe } from '@shared-libs';
+import { UserAuthGuard, RolesGuard, Identity, IIdentity, ParseFormDataJsonPipe } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   CreateLoanRequestModel,
@@ -57,7 +56,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 @ApiTags('loans')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('loans')
 export class LoansController {
   constructor(

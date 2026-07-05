@@ -9,10 +9,9 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { Identity, IIdentity, RolesGuard, USER_STRATEGY, toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { Identity, IIdentity, RolesGuard, UserAuthGuard, toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { ExportFormat } from '../../shared/enums/e-export-format.enum';
 import { InventoryItemResponseModel } from './models';
@@ -21,7 +20,7 @@ import { INVENTORY_REPORT_SERVICE, IInventoryReportService } from './service';
 
 @ApiTags('inventory-reports')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('inventory/reports')
 export class InventoryReportsController {
   constructor(

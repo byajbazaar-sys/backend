@@ -8,17 +8,16 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { Identity, IIdentity, RolesGuard, USER_STRATEGY } from '@shared-libs';
+import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { PosSessionQrResponseModel, PosSessionResponseModel } from './models';
 import { POS_SESSION_SERVICE, IPosSessionService } from './service';
 
 @ApiTags('pos-sessions')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('pos/sessions')
 export class PosSessionsController {
   constructor(@Inject(POS_SESSION_SERVICE) private readonly sessionService: IPosSessionService) {}

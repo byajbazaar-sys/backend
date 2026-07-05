@@ -9,6 +9,10 @@ export interface ISalesBillService {
   create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill>;
   getById(id: string, userId: string): Promise<SalesBill>;
   list(userId: string, query: ListSalesBillsQueryModel): Promise<Paged<SalesBill>>;
+  exportGstCsv(
+    userId: string,
+    query: ListSalesBillsQueryModel,
+  ): Promise<{ buffer: Buffer; filename: string }>;
   listByCustomer(customerId: string, userId: string, query: ListSalesBillsQueryModel): Promise<Paged<SalesBill>>;
   getAnalytics(userId: string, dateFrom?: string, dateTo?: string, documentType?: string): Promise<SalesAnalytics>;
   convertToNormalBill(id: string, userId: string): Promise<SalesBill>;

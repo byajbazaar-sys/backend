@@ -13,3 +13,5 @@ export * from './pos-sessions.repository';
 export * from './websocket-connections.repository';
 export * from './sales-bills.repository';
 export * from './metal-rates.repository';
+export * from './api-configuration.repository';
+export * from './api-access-token.repository';

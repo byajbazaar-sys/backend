@@ -1,8 +1,7 @@
 import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { USER_STRATEGY, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -17,7 +16,7 @@ import { NotificationsFilterOptions } from './options';
 
 @ApiTags('notifications')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('notifications')
 export class NotificationsController {
   constructor(

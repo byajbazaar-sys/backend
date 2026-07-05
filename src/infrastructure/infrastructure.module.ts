@@ -27,6 +27,8 @@ import {
   WEBSOCKET_CONNECTIONS_REPOSITORY,
   SALES_BILLS_REPOSITORY,
   METAL_RATES_REPOSITORY,
+  API_CONFIGURATION_REPOSITORY,
+  API_ACCESS_TOKEN_REPOSITORY,
 } from '../application';
 import {
   CustomersRepository,
@@ -44,6 +46,8 @@ import {
   WebSocketConnectionsRepository,
   SalesBillsRepository,
   MetalRatesRepository,
+  ApiConfigurationRepository,
+  ApiAccessTokenRepository,
 } from './persistence';
 import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
@@ -143,6 +147,14 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: METAL_RATES_REPOSITORY,
       useClass: MetalRatesRepository,
+    },
+    {
+      provide: API_CONFIGURATION_REPOSITORY,
+      useClass: ApiConfigurationRepository,
+    },
+    {
+      provide: API_ACCESS_TOKEN_REPOSITORY,
+      useClass: ApiAccessTokenRepository,
     },
     {
       provide: WEBSOCKET_MESSAGE_SERVICE,
@@ -278,6 +290,8 @@ import { GoogleOAuthService } from './google-oauth';
     WEBSOCKET_CONNECTIONS_REPOSITORY,
     SALES_BILLS_REPOSITORY,
     METAL_RATES_REPOSITORY,
+    API_CONFIGURATION_REPOSITORY,
+    API_ACCESS_TOKEN_REPOSITORY,
     WEBSOCKET_MESSAGE_SERVICE,
     EMAIL_SERVICE,
     GOOGLE_OAUTH_SERVICE,

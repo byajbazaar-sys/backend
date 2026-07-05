@@ -18,6 +18,7 @@ import { SalesBill, SalesBillLineItem, SalesAnalytics } from '../domain';
 import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder, EDocumentType, BILL_NUMBER_PREFIX } from '../enums';
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel, UpdateSalesBillRequestModel } from '../models';
 import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options';
+import { toGstExportCsv } from '../utils/gst-export.util';
 import { ISalesBillService } from './i-sales-bill.service';
 import {
   computeUnitPurchaseCost,
@@ -319,6 +320,18 @@ export class SalesBillService implements ISalesBillService {
 
   async list(userId: string, query: ListSalesBillsQueryModel): Promise<Paged<SalesBill>> {
     return this.billsRepo.findAll(this.mapListQuery(userId, query));
+  }
+
+  async exportGstCsv(
+    userId: string,
+    query: ListSalesBillsQueryModel,
+  ): Promise<{ buffer: Buffer; filename: string }> {
+    const filter = this.mapListQuery(userId, query);
+    const { pageNumber: _pageNumber, pageSize: _pageSize, ...exportFilter } = filter;
+    const bills = await this.billsRepo.findAllForExport(exportFilter);
+    const csv = toGstExportCsv(bills);
+    const filename = `GST_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+    return { buffer: Buffer.from(csv, 'utf-8'), filename };
   }
 
   async listByCustomer(

@@ -1,5 +1,7 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UploadedFile, UseInterceptors, Inject } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiOkResponse, ApiConsumes } from '@nestjs/swagger';
+import { Body, Controller, HttpCode, HttpStatus, Post, UploadedFile, UseInterceptors, Inject, UnauthorizedException, Req } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiConsumes, ApiHeader } from '@nestjs/swagger';
+import { Request } from 'express';
+import { readRequestHeader } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { IAuthService } from './interfaces';
 import {
@@ -17,12 +19,15 @@ import { User } from '../users';
 import { plainToInstance } from 'class-transformer';
 import { AUTH_SERVICE } from './interfaces';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { API_AUTH_SERVICE, IApiAuthService } from '../api-access';
+import { ApiTokenResponseModel } from '../api-access/models';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(
     @Inject(AUTH_SERVICE) private readonly authService: IAuthService,
+    @Inject(API_AUTH_SERVICE) private readonly apiAuthService: IApiAuthService,
     @InjectPinoLogger(AuthController.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -122,5 +127,27 @@ export class AuthController {
     return plainToInstance(GoogleSsoResponseModel, response, {
       excludeExtraneousValues: true,
     });
+  }
+
+  @Post('api-token')
+  @ApiOperation({
+    summary: 'Exchange API key and secret for an access token',
+    description:
+      'Provide x-api-key and x-api-secret in the two header fields below (do not use the global Authorize dialog for this call — it duplicates headers). Copy accessToken into the user Bearer authorize dialog for other APIs.',
+  })
+  @ApiHeader({ name: 'x-api-key', required: true, description: 'Public API key (pk_live_...)' })
+  @ApiHeader({ name: 'x-api-secret', required: true, description: 'Private API secret (sk_live_...)' })
+  @ApiOkResponse({ type: ApiTokenResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async exchangeApiToken(@Req() request: Request): Promise<ApiTokenResponseModel> {
+    const apiKey = readRequestHeader(request, 'x-api-key');
+    const apiSecret = readRequestHeader(request, 'x-api-secret');
+    if (!apiKey || !apiSecret) {
+      throw new UnauthorizedException('x-api-key and x-api-secret headers are required');
+    }
+
+    this.logger.info({ hasApiKey: true }, 'api-token exchange called');
+    const result = await this.apiAuthService.exchangeCredentials(apiKey, apiSecret);
+    return plainToInstance(ApiTokenResponseModel, result, { excludeExtraneousValues: true });
   }
 }

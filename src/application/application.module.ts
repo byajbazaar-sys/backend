@@ -2,7 +2,13 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { UserJwtStrategy, UsersAuthOptions } from '@shared-libs';
+import {
+  UserJwtStrategy,
+  UsersAuthOptions,
+  JwtAuthenticationProvider,
+  AUTHENTICATION_ORCHESTRATOR,
+  UserAuthGuard,
+} from '@shared-libs';
 
 import { IMsConfig } from '../configurations';
 import {
@@ -36,6 +42,10 @@ import {
   SalesBillService,
   METAL_RATE_SERVICE,
   MetalRateService,
+  API_AUTH_SERVICE,
+  ApiAuthService,
+  ApiAccessAuthenticationProvider,
+  AuthenticationOrchestrator,
 } from './features';
 import {
   POS_SESSION_SERVICE,
@@ -64,6 +74,13 @@ import {
       useFactory: (config: ConfigService<IMsConfig>): UsersAuthOptions => config.get<UsersAuthOptions>('userJwt'),
     },
     UserJwtStrategy,
+    JwtAuthenticationProvider,
+    ApiAccessAuthenticationProvider,
+    UserAuthGuard,
+    {
+      provide: AUTHENTICATION_ORCHESTRATOR,
+      useClass: AuthenticationOrchestrator,
+    },
     {
       provide: AUTH_SERVICE,
       useClass: AuthService,
@@ -128,7 +145,11 @@ import {
       provide: METAL_RATE_SERVICE,
       useClass: MetalRateService,
     },
+    {
+      provide: API_AUTH_SERVICE,
+      useClass: ApiAuthService,
+    },
   ],
-  exports: [PassportModule, UserJwtStrategy, TRANSACTION_SERVICE, LOAN_SERVICE],
+  exports: [PassportModule, UserJwtStrategy, UserAuthGuard, AUTHENTICATION_ORCHESTRATOR, TRANSACTION_SERVICE, LOAN_SERVICE],
 })
 export class ApplicationModule {}

@@ -15,6 +15,8 @@ import { WebSocketConnectionEntity } from './websocket-connection.entity';
 import { SalesBillEntity } from './sales-bill.entity';
 import { SalesBillItemEntity } from './sales-bill-item.entity';
 import { MetalRateEntity } from './metal-rate.entity';
+import { ApiConfigurationEntity } from './api-configuration.entity';
+import { ApiAccessTokenEntity } from './api-access-token.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -33,6 +35,8 @@ export { WebSocketConnectionEntity } from './websocket-connection.entity';
 export { SalesBillEntity } from './sales-bill.entity';
 export { SalesBillItemEntity } from './sales-bill-item.entity';
 export { MetalRateEntity } from './metal-rate.entity';
+export { ApiConfigurationEntity } from './api-configuration.entity';
+export { ApiAccessTokenEntity } from './api-access-token.entity';
 
 export default [
   UserEntity,
@@ -52,4 +56,6 @@ export default [
   SalesBillEntity,
   SalesBillItemEntity,
   MetalRateEntity,
+  ApiConfigurationEntity,
+  ApiAccessTokenEntity,
 ];

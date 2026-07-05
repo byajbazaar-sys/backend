@@ -1,8 +1,7 @@
 import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query, BadRequestException, StreamableFile, Header } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { USER_STRATEGY, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   CreateTransactionRequestModel,
@@ -25,7 +24,7 @@ import { ETransactionType } from './enums';
 
 @ApiTags('transactions')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('transactions')
 export class TransactionsController {
   constructor(

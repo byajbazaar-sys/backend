@@ -14,9 +14,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { AuthGuard } from '@nestjs/passport';
 import { ApiExtraModels, ApiTags, ApiBearerAuth, ApiOkResponse, ApiResponse, ApiConsumes } from '@nestjs/swagger';
-import { EUserType, Identity, IIdentity, Roles, RolesGuard, USER_STRATEGY } from '@shared-libs';
+import { EUserType, Identity, IIdentity, Roles, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   GetUserParamsModel,
@@ -32,7 +31,7 @@ import { User } from './domain';
 
 @ApiTags('users')
 @ApiBearerAuth('user')
-@UseGuards(ThrottlerGuard, AuthGuard(USER_STRATEGY), RolesGuard)
+@UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @ApiExtraModels(UserResponseModel, PaginatedUserResponseModel)
 @Controller('users')
 export class UsersController {

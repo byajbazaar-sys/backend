@@ -40,13 +40,21 @@ async function bootstrap(): Promise<void> {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('byajbazaar Microservice')
-    .setDescription('The byajbazaar Microservice API description')
+    .setDescription(
+      '## Authentication\n\n' +
+        '**Web app (JWT):** Authorize **user** with the JWT from `POST /auth/login`.\n\n' +
+        '**External apps (API access):**\n' +
+        '1. On `POST /auth/api-token`, enter **x-api-key** and **x-api-secret** in the two header fields (do not also use Authorize for api-key on this request).\n' +
+        '2. Copy `accessToken` from the response (`at_live_...`).\n' +
+        '3. Authorize **user** with that access token (Bearer). Inventory and all other protected APIs use **user** only.\n',
+    )
     .addBearerAuth(
       {
         type: 'http',
         scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Enter client user auth token',
+        bearerFormat: 'Token',
+        description:
+          'JWT from login OR access token from POST /auth/api-token (at_live_...). Required for inventory, bills, customers, etc.',
       },
       'user',
     )
