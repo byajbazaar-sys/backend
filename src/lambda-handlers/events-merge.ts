@@ -2,10 +2,10 @@ import { Context, Handler } from 'aws-lambda';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import {
+  DiscoveredEvent,
   IJewelleryEventService,
   JEWELLERY_EVENT_SERVICE,
 } from '../application';
-import { DiscoveredEvent } from '../infrastructure/ai';
 
 let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
 

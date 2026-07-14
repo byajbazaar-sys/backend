@@ -11,13 +11,12 @@ import {
 } from '../exceptions/aivot-try-on.errors';
 import type {
   AiImageInput,
-  GeneratedAiImage,
   JewelleryTryOnRequest,
   OutfitRecolorRequest,
 } from '../interfaces/ai-media.types';
-import type { ITryOnAiService } from '../interfaces/i-try-on-ai.service';
 import { stripDataUrl } from '../utils/image.util';
 import { BedrockService } from './bedrock.service';
+import { ITryOnAiService, GeneratedAiImage } from '../../../application';
 
 interface AivotGenerateResponse {
   statusCode?: number;

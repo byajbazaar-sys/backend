@@ -12,16 +12,16 @@ import { AIOptions } from '../ai.options';
 import { ResumeAnalysisResult } from '../interfaces';
 import type {
   AiImageInput,
-  GeneratedAiImage,
   JewelleryTryOnRequest,
   OutfitRecolorRequest,
 } from '../interfaces/ai-media.types';
 import type {
   DiscoveredEvent,
   DiscoveredEventsPayload,
+  GeneratedAiImage,
   IEventsDiscoveryService,
-} from '../interfaces/i-events-discovery.service';
-import type { ITryOnAiService } from '../interfaces/i-try-on-ai.service';
+  ITryOnAiService,
+} from '../../../application';
 import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
 import {
   buildJewelleryTryOnPrompt,

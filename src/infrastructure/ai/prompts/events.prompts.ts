@@ -1,4 +1,4 @@
-import type { DiscoveredEvent } from '../interfaces/i-events-discovery.service';
+import { DiscoveredEvent } from '../../../application';
 
 export function buildBasicEventsPrompt(state: string): string {
   return `

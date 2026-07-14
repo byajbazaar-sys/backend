@@ -1,4 +1,5 @@
-import type { GeneratedAiImage, JewelleryTryOnRequest, OutfitRecolorRequest } from './ai-media.types';
+import { JewelleryTryOnRequest, OutfitRecolorRequest } from "../../features";
+import { GeneratedAiImage } from "../interfaces";
 
 export const TRY_ON_AI_SERVICE = 'TRY_ON_AI_SERVICE';
 

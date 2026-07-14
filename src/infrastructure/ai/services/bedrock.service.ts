@@ -11,16 +11,16 @@ import {
 } from '../ai.constants';
 import { AIOptions } from '../ai.options';
 import type {
-  GeneratedAiImage,
   JewelleryTryOnRequest,
   OutfitRecolorRequest,
 } from '../interfaces/ai-media.types';
 import type {
   DiscoveredEvent,
   DiscoveredEventsPayload,
+  GeneratedAiImage,
   IEventsDiscoveryService,
-} from '../interfaces/i-events-discovery.service';
-import type { ITryOnAiService } from '../interfaces/i-try-on-ai.service';
+  ITryOnAiService,
+} from '../../../application';
 import {
   buildJewelleryTryOnPrompt,
   buildOutfitRecolorPrompt,

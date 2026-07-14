@@ -5,11 +5,6 @@ export interface AiImageInput {
   heightInInches?: number;
 }
 
-export interface GeneratedAiImage {
-  base64: string;
-  mimeType: string;
-}
-
 export interface JewelleryTryOnRequest {
   personImage: AiImageInput;
   jewelleryItems: AiImageInput[];

@@ -1,4 +1,5 @@
-import type { AiImageInput, GeneratedAiImage } from '../interfaces/ai-media.types';
+import { GeneratedAiImage } from '../../../application';
+import { AiImageInput } from '../interfaces/ai-media.types';
 
 export function stripDataUrl(base64: string): string {
   const idx = base64.indexOf('base64,');

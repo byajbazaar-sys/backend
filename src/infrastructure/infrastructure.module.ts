@@ -39,6 +39,8 @@ import {
   PLANS_REPOSITORY,
   JEWELLERY_EVENTS_REPOSITORY,
   RazorpayOptions,
+  EVENTS_DISCOVERY_SERVICE,
+  TRY_ON_AI_SERVICE,
 } from '../application';
 import {
   CustomersRepository,
@@ -77,8 +79,7 @@ import {
   AIOptions,
   AIResumeService,
   AivotTryOnOptions,
-  EVENTS_DISCOVERY_SERVICE,
-  TRY_ON_AI_SERVICE,
+
 } from './ai';
 import { AivotService } from './ai/services/aivot.service';
 import { BedrockService } from './ai/services/bedrock.service';
