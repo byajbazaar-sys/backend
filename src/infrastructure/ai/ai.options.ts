@@ -1,10 +1,18 @@
+export type AiProvider = 'bedrock' | 'gemini';
+
+/** Provider used specifically for virtual try-on image generation. */
+export type TryOnAiProvider = 'bedrock' | 'gemini' | 'aivot';
+
 export class AIOptions {
-  public openaiApiKey: string;
-  public geminiApiKey: string;
-  public claudeApiKey: string;
-  constructor(openaiApiKey: string, geminiApiKey: string, claudeApiKey: string) {
-    this.openaiApiKey = openaiApiKey;
-    this.geminiApiKey = geminiApiKey;
-    this.claudeApiKey = claudeApiKey;
-  }
+  constructor(
+    public openaiApiKey: string,
+    public geminiApiKey: string,
+    public claudeApiKey: string,
+    public provider: AiProvider = 'bedrock',
+    public geminiApiKeys: string[] = [],
+    public bedrockRegion: string = 'ap-south-1',
+    public bedrockModelId: string = 'global.amazon.nova-2-lite-v1:0',
+    /** Defaults to AI_PROVIDER when unset; set TRY_ON_PROVIDER=aivot to use Aivot. */
+    public tryOnProvider: TryOnAiProvider = 'bedrock',
+  ) {}
 }

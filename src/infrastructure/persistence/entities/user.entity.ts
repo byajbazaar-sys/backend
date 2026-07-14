@@ -112,6 +112,9 @@ export class UserEntity {
   @Column({ type: 'boolean', default: true })
   isFirstLogin: boolean;
 
+  @Column({ type: 'timestamptz', nullable: true, name: 'trial_ends_at' })
+  trialEndsAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

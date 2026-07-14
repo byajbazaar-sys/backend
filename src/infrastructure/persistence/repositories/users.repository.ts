@@ -2,10 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { hashSync } from 'bcrypt';
-import { BCRYPT_SALT_ROUNDS } from '@shared-libs';
+import { BCRYPT_SALT_ROUNDS, EUserType } from '@shared-libs';
 import { UserEntity } from '../entities/user.entity';
 import { plainToInstance } from 'class-transformer';
 import { IUsersRepository, User } from '../../../application';
+import { defaultTrialEndsAt } from '../../../application/features/payments/utils/trial.util';
+
+const DEFAULT_TRIAL_DAYS = Number(process.env.DEFAULT_TRIAL_DAYS ?? 7);
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {
@@ -16,7 +19,12 @@ export class UsersRepository implements IUsersRepository {
     if (dto.password) {
       dto.password = hashSync(dto.password, BCRYPT_SALT_ROUNDS);
     }
-    console.log(dto);
+    if (
+      !dto.trialEndsAt &&
+      dto.userType !== EUserType.Admin
+    ) {
+      dto.trialEndsAt = defaultTrialEndsAt(DEFAULT_TRIAL_DAYS);
+    }
     const entity = this.userRepo.create(dto);
     const created = await this.userRepo.save(entity);
     return plainToInstance(User, created, { excludeExtraneousValues: true });

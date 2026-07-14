@@ -5,3 +5,5 @@ export * from './i-twilio.service';
 export * from './i-email.service';
 export * from './i-google-oauth.service';
 export * from './i-websocket-message.service';
+export * from './i-events-discovery.service';
+export * from './i-try-on-ai.service';

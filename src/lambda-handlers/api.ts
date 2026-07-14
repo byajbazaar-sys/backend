@@ -1,5 +1,6 @@
 import { Context, Handler } from 'aws-lambda';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { GlobalResponseInterceptor } from '@shared-libs';
@@ -18,9 +19,14 @@ async function bootstrap(): Promise<Handler> {
   }
 
   try {
-    const app = await NestFactory.create(AppModule, {
+    const app = await NestFactory.create<NestExpressApplication>(AppModule, {
       logger: ['error', 'warn', 'log'],
+      rawBody: true,
+      bodyParser: false,
     });
+
+    app.useBodyParser('json', { limit: '10mb' });
+    app.useBodyParser('urlencoded', { limit: '10mb', extended: true });
 
     // Enable CORS
     app.enableCors({

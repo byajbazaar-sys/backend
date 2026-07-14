@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { LoanEntity } from '../entities/loan.entity';
+import { DueEntity } from '../entities/due.entity';
 import { plainToInstance } from 'class-transformer';
 import {
   ELoanStatus,
@@ -14,6 +15,7 @@ import {
   LoanStats,
   LoanStatsFilterOptions,
 } from '../../../application';
+import { Due, EDueType } from '../../../application/shared';
 import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 
 @Injectable()
@@ -35,19 +37,68 @@ export class LoansRepository implements ILoansRepository {
     return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, updateDto: Loan): Promise<Loan> {
+  async update(id: string, updateDto: Loan): Promise<Loan| null> {
     const { loanItems, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
-    await this.loanRepo.update(
-      { id, createdBy },
-      { ...data },
-    );
-    const updated = await this.loanRepo.findOne({ where: { id, createdBy } });
-    if (!updated) return null;
-    return plainToInstance(Loan, updated, { excludeExtraneousValues: true });
+    const existing = await this.loanRepo.findOne({ where: { id, createdBy } });
+    if (!existing) return null;
+
+    // save() so loan start date (createdAt) can be updated — update() skips @CreateDateColumn
+    Object.assign(existing, data);
+    delete (existing as { loanItems?: unknown }).loanItems;
+    const saved = await this.loanRepo.save(existing);
+    return plainToInstance(Loan, saved, { excludeExtraneousValues: true });
   }
 
-  async findById(id: string, createdBy: string): Promise<Loan> {
+  async updateAndReplaceUnpaidDues(
+    id: string,
+    updateDto: Loan,
+    unpaidDues: Due[],
+    unpaidTypes: EDueType[] = [EDueType.UPCOMING_DUE, EDueType.PAST_DUE, EDueType.OVERDUE],
+  ): Promise<Loan| null> {
+    const { loanItems, ...data } = updateDto;
+    const createdBy = updateDto.createdBy;
+
+    return this.loanRepo.manager.transaction(async (manager) => {
+      const loanRepo = manager.getRepository(LoanEntity);
+      const dueRepo = manager.getRepository(DueEntity);
+
+      const existing = await loanRepo.findOne({ where: { id, createdBy } });
+      if (!existing) return null;
+
+      Object.assign(existing, data);
+      delete (existing as { loanItems?: unknown }).loanItems;
+      await loanRepo.save(existing);
+
+      const deleteQb = dueRepo
+        .createQueryBuilder()
+        .delete()
+        .from(DueEntity)
+        .where('loanId = :loanId', { loanId: id });
+      if (unpaidTypes.length) {
+        deleteQb.andWhere('type IN (:...types)', { types: unpaidTypes });
+      }
+      await deleteQb.execute();
+
+      if (unpaidDues.length > 0) {
+        const entities = dueRepo.create(
+          unpaidDues.map((d) => ({
+            ...d,
+            createdBy: d.createdBy,
+            customer: d.customerId ? { id: d.customerId } : undefined,
+            loan: d.loanId ? { id: d.loanId } : undefined,
+          })),
+        );
+        await dueRepo.save(entities);
+      }
+
+      const updated = await loanRepo.findOne({ where: { id, createdBy } });
+      if (!updated) return null;
+      return plainToInstance(Loan, updated, { excludeExtraneousValues: true });
+    });
+  }
+
+  async findById(id: string, createdBy: string): Promise<Loan| null> {
     const loan = await this.loanRepo.findOne({
       where: { id, createdBy: createdBy },
       relations: ['loanItems'],

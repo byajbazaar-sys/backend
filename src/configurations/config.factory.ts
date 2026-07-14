@@ -1,16 +1,32 @@
 import { generateLoggerConfig, UsersAuthOptions, type Environment } from '@shared-libs';
 import { Algorithm } from 'jsonwebtoken';
 import { IMsConfig } from './i-ms.config';
-import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions } from '../application';
+import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions } from '../application';
 import {
   AESEncryptOptions,
   LambdaOptions,
   AIOptions,
+  AivotTryOnOptions,
   TwilioOptions,
   SendGridOptions,
   SesOptions,
   ResendOptions,
+  type TryOnAiProvider,
+  AIVOT_TRYON_TIMEOUT_MS,
+  AIVOT_TRYON_MAX_RETRIES,
 } from '../infrastructure';
+
+function resolveTryOnProvider(): TryOnAiProvider {
+  const explicit = (process.env.TRY_ON_PROVIDER || '').trim().toLowerCase();
+  if (explicit === 'aivot' || explicit === 'gemini' || explicit === 'bedrock') {
+    return explicit;
+  }
+  // Prefer Aivot when base URL is configured and no explicit provider is set
+  if (process.env.TRYON_API_BASE_URL?.trim()) {
+    return 'aivot';
+  }
+  return process.env.AI_PROVIDER === 'gemini' ? 'gemini' : 'bedrock';
+}
 
 export const configFactory = (): IMsConfig => ({
   logger: generateLoggerConfig(),
@@ -45,15 +61,32 @@ export const configFactory = (): IMsConfig => ({
     process.env.AES_ALGORITHM ?? 'aes-256-cbc',
   ),
   lambda: new LambdaOptions(
-    process.env.LAMBDA_AWS_REGION,
-    process.env.LAMBDA_AWS_ACCESS_KEY_ID,
-    process.env.LAMBDA_AWS_SECRET_ACCESS_KEY,
+    process.env.LAMBDA_AWS_REGION ?? '',
+    process.env.LAMBDA_AWS_ACCESS_KEY_ID ?? '',
+    process.env.LAMBDA_AWS_SECRET_ACCESS_KEY ?? '',
   ),
-  ai: new AIOptions(process.env.AI_OPENAI_API_KEY, process.env.AI_GEMINI_API_KEY, process.env.AI_CLAUDE_API_KEY),
+  ai: new AIOptions(
+    process.env.AI_OPENAI_API_KEY ?? '',
+    process.env.AI_GEMINI_API_KEY ?? '',
+    process.env.AI_CLAUDE_API_KEY ?? '',
+    process.env.AI_PROVIDER === 'gemini' ? 'gemini' : 'bedrock',
+    (process.env.GEMINI_API_KEYS || process.env.AI_GEMINI_API_KEY || '')
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean),
+    process.env.BEDROCK_AWS_REGION || process.env.AWS_REGION || 'ap-south-1',
+    process.env.BEDROCK_MODEL_ID || 'global.amazon.nova-2-lite-v1:0',
+    resolveTryOnProvider(),
+  ),
+  aivotTryOn: new AivotTryOnOptions(
+    process.env.TRYON_API_BASE_URL?.trim() || '',
+    Number(process.env.TRYON_API_TIMEOUT_MS) || AIVOT_TRYON_TIMEOUT_MS,
+    Number(process.env.TRYON_API_MAX_RETRIES) || AIVOT_TRYON_MAX_RETRIES,
+  ),
   twilio: new TwilioOptions(
-    process.env.TWILIO_ACCOUNT_SID,
-    process.env.TWILIO_AUTH_TOKEN,
-    process.env.TWILIO_PHONE_NUMBER,
+    process.env.TWILIO_ACCOUNT_SID ?? '',
+    process.env.TWILIO_AUTH_TOKEN ?? '',
+    process.env.TWILIO_PHONE_NUMBER ?? '',
   ),
   sendGrid: new SendGridOptions(
     process.env.SENDGRID_API_KEY ?? '',
@@ -77,5 +110,12 @@ export const configFactory = (): IMsConfig => ({
     process.env.GOOGLE_CLIENT_ID ?? '',
     process.env.GOOGLE_CLIENT_SECRET ?? '',
     process.env.GOOGLE_REDIRECT_URI,
+  ),
+  razorpay: new RazorpayOptions(
+    process.env.RAZORPAY_KEY_ID ?? '',
+    process.env.RAZORPAY_KEY_SECRET ?? '',
+    process.env.RAZORPAY_WEBHOOK_SECRET ?? '',
+    'INR',
+    Number(process.env.DEFAULT_TRIAL_DAYS ?? 7),
   ),
 });

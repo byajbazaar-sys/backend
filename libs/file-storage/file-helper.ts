@@ -48,6 +48,16 @@ export class FileHelper {
       return type;
     }
 
+    const text = data.toString('utf8').trim();
+    if (text.startsWith('{') || text.startsWith('[')) {
+      try {
+        JSON.parse(text);
+        return { ext: 'json', mime: 'application/json' };
+      } catch {
+        // not valid JSON
+      }
+    }
+
     // Check for CSV by trying to parse it
     const parseResult = Papa.parse(data.toString('utf8'));
     if (parseResult.errors.length === 0) {

@@ -1,84 +1,303 @@
 import { Injectable } from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import {
+  GEMINI_EVENTS_MODEL,
+  GEMINI_TRYON_FALLBACK_MODEL,
+  GEMINI_TRYON_MODEL,
+  GEMINI_TRYON_TIMEOUT_MS,
+} from '../ai.constants';
 import { AIBase } from '../ai-base.interface';
-import { ResumeOCRData, ResumeAnalysisResult, CandidatePhotoAnalysis } from '../interfaces';
 import { AIOptions } from '../ai.options';
+import { ResumeAnalysisResult } from '../interfaces';
+import type {
+  AiImageInput,
+  GeneratedAiImage,
+  JewelleryTryOnRequest,
+  OutfitRecolorRequest,
+} from '../interfaces/ai-media.types';
+import type {
+  DiscoveredEvent,
+  DiscoveredEventsPayload,
+  IEventsDiscoveryService,
+} from '../interfaces/i-events-discovery.service';
+import type { ITryOnAiService } from '../interfaces/i-try-on-ai.service';
+import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
+import {
+  buildJewelleryTryOnPrompt,
+  buildOutfitRecolorPrompt,
+  buildOutfitTryOnPrompt,
+} from '../prompts/try-on.prompts';
+import { extractJsonObject } from '../utils/ai-response.util';
+import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 
-export class GeminiService implements AIBase {
-  private client: GoogleGenerativeAI;
+type GoogleGenAICtor = new (opts: { apiKey: string }) => {
+  models: { generateContent: (args: Record<string, unknown>) => Promise<unknown> };
+};
 
-  constructor(protected apiKey: string) {
-    this.initializeClient();
-  }
+type GeminiGenClient = {
+  models: { generateContent: (args: Record<string, unknown>) => Promise<unknown> };
+};
 
-  private initializeClient(): void {
-    if (this.apiKey) {
-      this.client = new GoogleGenerativeAI(this.apiKey);
+type GeminiPart =
+  | { text: string }
+  | { inlineData: { data: string; mimeType: string } };
+
+@Injectable()
+export class GeminiService implements ITryOnAiService, IEventsDiscoveryService, AIBase {
+  private resumeClient: GoogleGenerativeAI | null = null;
+  private genClients: GeminiGenClient[] = [];
+  private keyPointer = 0;
+  private keyInitPromise: Promise<void> | null = null;
+
+  constructor(
+    private readonly options: AIOptions,
+    @InjectPinoLogger(GeminiService.name) private readonly logger: PinoLogger,
+  ) {
+    const resumeKey = options.geminiApiKey || options.geminiApiKeys[0];
+    if (resumeKey) {
+      this.resumeClient = new GoogleGenerativeAI(resumeKey);
     }
-  }
-
-  isAvailable(): boolean {
-    return !!this.client;
   }
 
   getProvider(): string {
     return 'gemini';
   }
 
-  /**
-   * Generates interview questions based on candidate profile data
-   * @param profile The candidate profile data
-   * @returns Promise with an array of interview questions
-   */
-  async generateInterviewQuestions(profile: any): Promise<string[]> {
-    if (!this.isAvailable()) {
-      throw new Error('Gemini client not initialized');
+  isAvailable(): boolean {
+    return !!this.resumeClient || this.options.geminiApiKeys.length > 0 || !!this.options.geminiApiKey;
+  }
+
+  // --- Key pool (@google/genai) ---
+
+  private async ensureGenClients(): Promise<void> {
+    if (this.genClients.length) return;
+    if (this.keyInitPromise) return this.keyInitPromise;
+
+    this.keyInitPromise = (async () => {
+      const keys = this.options.geminiApiKeys.length
+        ? this.options.geminiApiKeys
+        : this.options.geminiApiKey
+          ? [this.options.geminiApiKey]
+          : [];
+      if (!keys.length) {
+        this.logger.warn('No Gemini API keys configured');
+        return;
+      }
+      const mod = (await import('@google/genai')) as unknown as { GoogleGenAI: GoogleGenAICtor };
+      this.genClients = keys.map((apiKey) => new mod.GoogleGenAI({ apiKey }));
+      this.logger.info({ keyCount: keys.length }, 'Gemini gen clients ready');
+    })();
+
+    await this.keyInitPromise;
+  }
+
+  private getGenClient(): GeminiGenClient {
+    if (!this.genClients.length) {
+      throw new Error('No Gemini API keys configured (GEMINI_API_KEYS)');
     }
+    const client = this.genClients[this.keyPointer];
+    this.keyPointer = (this.keyPointer + 1) % this.genClients.length;
+    return client;
+  }
 
+  private rotateKey(): void {
+    if (!this.genClients.length) return;
+    this.keyPointer = (this.keyPointer + 1) % this.genClients.length;
+    this.logger.warn({ pointer: this.keyPointer }, 'Rotated Gemini API key');
+  }
+
+  private shouldRotateKey(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return (
+      msg.includes('429') ||
+      msg.includes('RESOURCE_EXHAUSTED') ||
+      msg.includes('401') ||
+      msg.includes('403') ||
+      msg.toLowerCase().includes('quota') ||
+      msg.toLowerCase().includes('rate limit')
+    );
+  }
+
+  // --- Try-on ---
+
+  async generateJewelleryTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
+    const prompt = buildJewelleryTryOnPrompt(request.jewelleryItems);
+    this.logger.info({ jewelleryCount: request.jewelleryItems.length }, 'Gemini jewellery try-on');
+    return this.generateImage([request.personImage, ...request.jewelleryItems, prompt]);
+  }
+
+  async generateOutfitTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
+    const prompt = buildOutfitTryOnPrompt({
+      items: request.jewelleryItems,
+      outfit: request.outfit,
+      occasion: request.occasion,
+      color: request.color,
+    });
+    this.logger.info({ outfit: request.outfit, occasion: request.occasion }, 'Gemini outfit try-on');
+    return this.generateImage([request.personImage, ...request.jewelleryItems, prompt]);
+  }
+
+  async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {
+    const prompt = buildOutfitRecolorPrompt(request.color);
+    this.logger.info({ color: request.color }, 'Gemini outfit recolor');
+    return this.generateImage([request.image, prompt]);
+  }
+
+  private async generateImage(parts: Array<AiImageInput | string>): Promise<GeneratedAiImage> {
+    await this.ensureGenClients();
+    const geminiParts: GeminiPart[] = parts.map((p) =>
+      typeof p === 'string'
+        ? { text: p }
+        : {
+            inlineData: {
+              data: stripDataUrl(p.base64),
+              mimeType: p.mimeType || 'image/jpeg',
+            },
+          },
+    );
+
+    const runModel = async (model: string): Promise<GeneratedAiImage> => {
+      let lastError: unknown;
+      const maxAttempts = Math.max(3, this.genClients.length || 1);
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const ai = this.getGenClient();
+          const response = await ai.models.generateContent({
+            model,
+            contents: [{ parts: geminiParts }],
+            config: {
+              responseModalities: ['IMAGE'],
+              outputImageDimensions: { width: 1024, height: 1024 },
+            },
+          });
+          const image = this.extractGeneratedImage(response);
+          if (!image) throw new Error(`No image returned from ${model}`);
+          return image;
+        } catch (err) {
+          lastError = err;
+          this.logger.warn({ err, attempt, model }, 'Gemini image generation failed');
+          if (this.shouldRotateKey(err)) this.rotateKey();
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    };
+
+    const timeoutMs = GEMINI_TRYON_TIMEOUT_MS;
     try {
-      const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-      const prompt = `Based on the following candidate profile, generate 10 relevant interview questions that would help assess their skills and experience. 
-      Focus on their technical skills, experience, and projects. Make the questions specific and tailored to their background.
-      
-      Candidate Profile:
-      ${JSON.stringify(profile, null, 2)}
-      
-      Return the questions as a JSON array of strings.`;
-
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      let text = response.text();
-      // Remove markdown code blocks if present
-      if (text.includes('```json')) {
-        text = text.replace(/```json\s*/, '').replace(/```\s*$/, '');
-      } else if (text.includes('```')) {
-        text = text.replace(/```\s*/, '').replace(/```\s*$/, '');
-      }
-
-      // Try to parse the response as JSON, fallback to splitting by newlines if not valid JSON
-      try {
-        const parsedResponse = JSON.parse(text);
-        return Array.isArray(parsedResponse) ? parsedResponse : [text];
-      } catch (e) {
-        // If JSON parsing fails, split by newlines and clean up
-        return text
-          .split('\n')
-          .map((q) => q.trim())
-          .filter((q) => q.length > 0 && !q.match(/^\d+\.?/));
-      }
-    } catch (error) {
-      throw new Error(`Failed to generate interview questions: ${error.message}`);
+      return await withTimeout(runModel(GEMINI_TRYON_MODEL), timeoutMs, GEMINI_TRYON_MODEL);
+    } catch (primaryErr) {
+      this.logger.warn({ err: primaryErr }, 'Primary try-on model failed — racing fallback');
+      const primaryRetry = withTimeout(runModel(GEMINI_TRYON_MODEL), timeoutMs * 2, GEMINI_TRYON_MODEL);
+      const fallback = withTimeout(runModel(GEMINI_TRYON_FALLBACK_MODEL), timeoutMs * 2, GEMINI_TRYON_FALLBACK_MODEL);
+      return await new Promise<GeneratedAiImage>((resolve, reject) => {
+        let settled = false;
+        const failReasons: unknown[] = [];
+        const onDone = (result: PromiseSettledResult<GeneratedAiImage>) => {
+          if (settled) return;
+          if (result.status === 'fulfilled') {
+            settled = true;
+            resolve(result.value);
+            return;
+          }
+          failReasons.push(result.reason);
+          if (failReasons.length >= 2) {
+            settled = true;
+            reject(failReasons[0] instanceof Error ? failReasons[0] : new Error(String(failReasons[0])));
+          }
+        };
+        primaryRetry.then(
+          (v) => onDone({ status: 'fulfilled', value: v }),
+          (e) => onDone({ status: 'rejected', reason: e }),
+        );
+        fallback.then(
+          (v) => onDone({ status: 'fulfilled', value: v }),
+          (e) => onDone({ status: 'rejected', reason: e }),
+        );
+      });
     }
   }
 
-  /**
-   * Calculates a ranking score based on interview questions and answers
-   * @param questions Array of questions asked during the interview
-   * @param answers Array of answers provided by the candidate
-   * @param jobDescription Optional job description for context
-   * @returns Promise with the ranking score and detailed feedback
-   */
+  private extractGeneratedImage(response: unknown): GeneratedAiImage | null {
+    const res = response as {
+      candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }>;
+    };
+    for (const part of res?.candidates?.[0]?.content?.parts ?? []) {
+      if (part.inlineData?.data) {
+        return toGeneratedImage(part.inlineData.data, part.inlineData.mimeType || 'image/png');
+      }
+    }
+    return null;
+  }
+
+  // --- Events discovery ---
+
+  async fetchBasicEventsForState(state: string): Promise<DiscoveredEvent[]> {
+    const payload = await this.callEventsPrompt(buildBasicEventsPrompt(state));
+    return payload.events.filter((e) => (e.name ?? '').trim().length > 0);
+  }
+
+  async enrichEvents(events: DiscoveredEvent[]): Promise<DiscoveredEvent[]> {
+    if (!events.length) return [];
+    const payload = await this.callEventsPrompt(buildEnrichEventsPrompt(events));
+    const detailMap = new Map<string, DiscoveredEvent>();
+    for (const e of payload.events) {
+      if (e.name) detailMap.set(e.name, e);
+    }
+    return events.map((event) => ({
+      ...event,
+      ...(detailMap.get(event.name ?? '') || {}),
+    }));
+  }
+
+  private async callEventsPrompt(prompt: string): Promise<DiscoveredEventsPayload> {
+    await this.ensureGenClients();
+    let lastError: unknown;
+    for (let retry = 0; retry < Math.max(4, this.genClients.length || 1); retry++) {
+      try {
+        const ai = this.getGenClient();
+        const response = (await ai.models.generateContent({
+          model: GEMINI_EVENTS_MODEL,
+          contents: prompt,
+          config: {
+            maxOutputTokens: 4096,
+            responseMimeType: 'application/json',
+            tools: [{ googleSearch: {} }],
+          },
+        })) as { text?: string };
+        const parsed = JSON.parse(extractJsonObject(response.text ?? '', 'Gemini')) as DiscoveredEventsPayload;
+        return { events: Array.isArray(parsed.events) ? parsed.events : [] };
+      } catch (err) {
+        lastError = err;
+        this.logger.warn({ err, retry }, 'Gemini events call failed');
+        if (this.shouldRotateKey(err)) this.rotateKey();
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  // --- Resume analysis (@google/generative-ai) ---
+
+  async analyzeResume(resumeData: any): Promise<ResumeAnalysisResult> {
+    if (!this.resumeClient) {
+      throw new Error('Gemini client not initialized');
+    }
+
+    const candidateProfile = await this.extractCandidateProfile(resumeData);
+    const interviewQuestions = await this.generateInterviewQuestions(candidateProfile);
+    candidateProfile.summary = null;
+
+    return {
+      candidateProfile,
+      photoAnalysis: null,
+      aiProvider: 'gemini',
+      generatedInsights: null,
+      interviewQuestions,
+    };
+  }
+
   async calculateRankingScore(
     questions: string[],
     answers: string[],
@@ -89,14 +308,12 @@ export class GeminiService implements AIBase {
     strengths: string[];
     areasForImprovement: string[];
   }> {
-    if (!this.isAvailable()) {
+    if (!this.resumeClient) {
       throw new Error('Gemini client not initialized');
     }
 
-    try {
-      const model = this.client.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-      const prompt = `You are an expert interviewer analyzing interview responses. 
+    const model = this.resumeClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const prompt = `You are an expert interviewer analyzing interview responses. 
       Rate the candidate's answers on a scale of 0-100 based on the following criteria:
       - Relevance and accuracy of the answers (40%)
       - Depth of knowledge demonstrated (30%)
@@ -115,57 +332,55 @@ export class GeminiService implements AIBase {
         "areasForImprovement": ["area1", "area2", ...]
       }`;
 
-      const result = await model.generateContent(prompt);
-      const response = result.response;
-      const text = response.text();
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const jsonMatch = text.match(/\{.*\}/s);
+    if (!jsonMatch) throw new Error('Failed to parse AI response');
 
-      // Extract JSON from the response
-      const jsonMatch = text.match(/\{.*\}/s);
-      if (!jsonMatch) {
-        throw new Error('Failed to parse AI response');
-      }
-
-      const resultData = JSON.parse(jsonMatch[0]);
-
-      return {
-        score: Math.min(100, Math.max(0, resultData.score || 0)), // Ensure score is between 0-100
-        feedback: resultData.feedback || 'No feedback provided',
-        strengths: Array.isArray(resultData.strengths) ? resultData.strengths : [],
-        areasForImprovement: Array.isArray(resultData.areasForImprovement) ? resultData.areasForImprovement : [],
-      };
-    } catch (error) {
-      throw new Error(`Failed to calculate ranking score: ${error.message}`);
-    }
-  }
-
-  async analyzeResume(resumeData: any): Promise<ResumeAnalysisResult> {
-    if (!this.isAvailable()) {
-      throw new Error('Gemini client not initialized');
-    }
-
-    const candidateProfile = await this.extractCandidateProfile(resumeData);
-    // const photoAnalysis = resumeData?.images ? await this.analyzeImages(resumeData?.images) : null;
-    // const generatedInsights = await this.generateInsights(resumeData, candidateProfile);
-    const interviewQuestions = await this.generateInterviewQuestions(candidateProfile);
-
-    // Update the candidate profile with the generated insights as summary
-    candidateProfile.summary = null;
-
+    const resultData = JSON.parse(jsonMatch[0]);
     return {
-      candidateProfile,
-      photoAnalysis: null,
-      aiProvider: 'gemini',
-      generatedInsights: null,
-      interviewQuestions,
+      score: Math.min(100, Math.max(0, resultData.score || 0)),
+      feedback: resultData.feedback || 'No feedback provided',
+      strengths: Array.isArray(resultData.strengths) ? resultData.strengths : [],
+      areasForImprovement: Array.isArray(resultData.areasForImprovement) ? resultData.areasForImprovement : [],
     };
   }
 
-  private async extractCandidateProfile(resumeData: any): Promise<any> {
-    // Use Gemini to extract candidate profile from raw text for better accuracy
-    const model = this.client.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-    });
+  async generateInterviewQuestions(profile: any): Promise<string[]> {
+    if (!this.resumeClient) {
+      throw new Error('Gemini client not initialized');
+    }
 
+    const model = this.resumeClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const prompt = `Based on the following candidate profile, generate 10 relevant interview questions that would help assess their skills and experience. 
+      Focus on their technical skills, experience, and projects. Make the questions specific and tailored to their background.
+      
+      Candidate Profile:
+      ${JSON.stringify(profile, null, 2)}
+      
+      Return the questions as a JSON array of strings.`;
+
+    const result = await model.generateContent(prompt);
+    let text = result.response.text();
+    if (text.includes('```json')) {
+      text = text.replace(/```json\s*/, '').replace(/```\s*$/, '');
+    } else if (text.includes('```')) {
+      text = text.replace(/```\s*/, '').replace(/```\s*$/, '');
+    }
+
+    try {
+      const parsedResponse = JSON.parse(text);
+      return Array.isArray(parsedResponse) ? parsedResponse : [text];
+    } catch {
+      return text
+        .split('\n')
+        .map((q) => q.trim())
+        .filter((q) => q.length > 0 && !q.match(/^\d+\.?/));
+    }
+  }
+
+  private async extractCandidateProfile(resumeData: any): Promise<any> {
+    const model = this.resumeClient!.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const prompt = `Extract structured candidate information from this resume text. 
 Focus on accuracy and use the provided raw text content.
 
@@ -195,8 +410,6 @@ Return ONLY the JSON object, no additional text.`;
     try {
       const response = await model.generateContent(prompt);
       let responseText = response.response.text();
-
-      // Remove markdown code blocks if present
       if (responseText.includes('```json')) {
         responseText = responseText.replace(/```json\s*/, '').replace(/```\s*$/, '');
       } else if (responseText.includes('```')) {
@@ -204,8 +417,6 @@ Return ONLY the JSON object, no additional text.`;
       }
 
       const aiExtractedProfile = JSON.parse(responseText.trim());
-
-      // Validate and ensure required fields
       return {
         fullName: aiExtractedProfile.fullName || 'Unknown',
         email: aiExtractedProfile.email || 'N/A',
@@ -214,136 +425,17 @@ Return ONLY the JSON object, no additional text.`;
         yearsOfExperience: aiExtractedProfile.yearsOfExperience || 0,
         topSkills: Array.isArray(aiExtractedProfile.topSkills) ? aiExtractedProfile.topSkills.slice(0, 5) : [],
       };
-    } catch (error) {
-      // Fallback to manual extraction if AI fails
+    } catch {
       const fullName = resumeData?.personal_info?.names?.[0] || 'Unknown';
       const email = resumeData?.personal_info?.emails?.[0] || 'N/A';
       const phone = resumeData?.personal_info?.phone_numbers?.[0] || 'N/A';
       const currentRole = resumeData?.professional_info?.job_titles?.[0] || 'Not specified';
       const skills = resumeData?.skills_and_expertise?.technical_skills || [];
-
-      // Calculate years of experience from experience array
       let yearsOfExperience = 0;
       if (resumeData?.experience && Array.isArray(resumeData.experience)) {
         yearsOfExperience = resumeData.experience.length > 0 ? resumeData.experience.length : 0;
       }
-
-      return {
-        fullName,
-        email,
-        phone,
-        currentRole,
-        yearsOfExperience,
-        topSkills: skills.slice(0, 5),
-      };
+      return { fullName, email, phone, currentRole, yearsOfExperience, topSkills: skills.slice(0, 5) };
     }
-  }
-
-  private async analyzeImages(images: any): Promise<ResumeAnalysisResult['photoAnalysis']> {
-    const model = this.client.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-    });
-
-    const photoAnalysis: CandidatePhotoAnalysis[] = [];
-    let bestPhoto: ResumeAnalysisResult['photoAnalysis']['bestPhoto'] = null;
-    let highestConfidence = 0;
-
-    for (let i = 0; i < images?.length; i++) {
-      const image = images[i];
-
-      try {
-        const response = await model.generateContent([
-          {
-            inlineData: {
-              data: image?.image_base64,
-              mimeType: `image/${image.image_format}`,
-            },
-          },
-          {
-            text: `Is this a professional headshot/photo of a person suitable for a resume?
-Reply in JSON format:
-{
-  "isCandidatePhoto": boolean,
-  "confidence": 0-1,
-  "description": "brief description",
-  "reasoning": "why or why not"
-}`,
-          },
-        ]);
-
-        const analysisText = response.response.text();
-
-        // Remove markdown code blocks if present
-        let cleanedText = analysisText;
-        if (analysisText.includes('```json')) {
-          cleanedText = analysisText.replace(/```json\s*/, '').replace(/```\s*$/, '');
-        } else if (analysisText.includes('```')) {
-          cleanedText = analysisText.replace(/```\s*/, '').replace(/```\s*$/, '');
-        }
-
-        const analysis = JSON.parse(cleanedText.trim());
-        photoAnalysis.push(analysis);
-
-        if (analysis.isCandidatePhoto && analysis.confidence > highestConfidence) {
-          highestConfidence = analysis.confidence;
-          bestPhoto = {
-            index: i,
-            base64: image.image_base64,
-            reasoning: analysis.reasoning,
-          };
-        }
-      } catch (error) {
-        // Skip failed image analysis
-        photoAnalysis.push({
-          isCandidatePhoto: false,
-          confidence: 0,
-          description: 'Analysis failed',
-          reasoning: error.message,
-        });
-      }
-    }
-
-    return {
-      identifiedPhotoIndex: bestPhoto?.index ?? null,
-      photoDetails: photoAnalysis,
-      bestPhoto,
-    };
-  }
-
-  private async generateInsights(
-    resumeData: any,
-    candidateProfile: ResumeAnalysisResult['candidateProfile'],
-  ): Promise<string> {
-    const model = this.client.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-    });
-
-    const prompt = `Based on the following resume data, generate a professional short  summary under 50 words and key insights:
-
-Candidate: ${candidateProfile?.fullName}
-Current Role: ${candidateProfile?.currentRole}
-Years of Experience: ${candidateProfile?.yearsOfExperience}
-Top Skills: ${candidateProfile?.topSkills?.join(', ')}
-
-Education:
-${resumeData?.education?.map((e) => `- ${e.degree} in ${e.field} from ${e.institution}`).join('\n')}
-
-Experience:
-${resumeData?.experience
-  ?.slice(0, 5)
-  ?.map((e) => `- ${e.job_title} at ${e.company}`)
-  ?.join('\n')}
-
-Skills:
-${resumeData?.skills_and_expertise?.technical_skills?.join(', ')}
-
-Provide:
-1. A professional 2-3 sentence summary of the candidate
-2. Key strengths
-3. Potential areas for growth
-4. Recommended next roles or career paths`;
-
-    const response = await model.generateContent(prompt);
-    return response.response.text();
   }
 }

@@ -17,6 +17,9 @@ import { PosSessionsController, PosSessionPublicController } from './pos';
 import { SalesBillsController } from './sales-bills';
 import { MetalRatesController } from './metal-rates';
 import { SettingsApiController } from './api-access';
+import { PaymentsController, PlansController, AdminSubscriptionsController } from './payments';
+import { EventsController, AdminEventsController } from './events';
+import { TryOnController } from './try-on';
 
 export * from './users';
 export * from './auth';
@@ -31,6 +34,9 @@ export * from './pos';
 export * from './sales-bills';
 export * from './metal-rates';
 export * from './api-access';
+export * from './payments';
+export * from './events';
+export * from './try-on';
 
 export const Controllers = [
   UsersController,
@@ -50,6 +56,12 @@ export const Controllers = [
   SalesBillsController,
   MetalRatesController,
   SettingsApiController,
+  PaymentsController,
+  PlansController,
+  AdminSubscriptionsController,
+  AdminEventsController,
+  EventsController,
+  TryOnController,
 ];
 
 export const Services = [JwtService];

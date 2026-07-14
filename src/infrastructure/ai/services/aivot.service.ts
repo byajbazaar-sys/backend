@@ -1,0 +1,249 @@
+import { randomUUID } from 'crypto';
+import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
+import axios, { AxiosError, type AxiosInstance } from 'axios';
+import FormData from 'form-data';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { AivotTryOnOptions } from '../aivot-try-on.options';
+import { AIVOT_TRYON_GENERATE_PATH, AIVOT_TRYON_MIME } from '../ai.constants';
+import {
+  isTransientTryOnStatus,
+  mapAivotHttpError,
+} from '../exceptions/aivot-try-on.errors';
+import type {
+  AiImageInput,
+  GeneratedAiImage,
+  JewelleryTryOnRequest,
+  OutfitRecolorRequest,
+} from '../interfaces/ai-media.types';
+import type { ITryOnAiService } from '../interfaces/i-try-on-ai.service';
+import { stripDataUrl } from '../utils/image.util';
+import { BedrockService } from './bedrock.service';
+
+interface AivotGenerateResponse {
+  statusCode?: number;
+  success?: boolean;
+  message?: string;
+  data?: {
+    variation1?: string;
+    variation2?: string;
+  };
+}
+
+type JewelleryField = 'necklace' | 'earring';
+
+@Injectable()
+export class AivotService implements ITryOnAiService {
+  private readonly http: AxiosInstance;
+
+  constructor(
+    private readonly options: AivotTryOnOptions,
+    private readonly bedrock: BedrockService,
+    @InjectPinoLogger(AivotService.name) private readonly logger: PinoLogger,
+  ) {
+    this.http = axios.create({
+      baseURL: this.options.baseUrl.replace(/\/+$/, ''),
+      timeout: this.options.timeoutMs,
+      validateStatus: () => true,
+    });
+  }
+
+  async generateJewelleryTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
+    return (await this.generateTryOnImages(request, 'jewellery'))[0];
+  }
+
+  async generateOutfitTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
+    return (await this.generateTryOnImages(request, 'outfit'))[0];
+  }
+
+  async generateTryOnImages(
+    request: JewelleryTryOnRequest,
+    _mode: 'jewellery' | 'outfit',
+  ): Promise<GeneratedAiImage[]> {
+    this.assertConfigured();
+    const images = await this.callGenerateStyledImage(request);
+    if (!images.length) {
+      throw new BadRequestException('Try-on AI provider returned no images');
+    }
+    return images;
+  }
+
+  async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {
+    return this.bedrock.recolorOutfit(request);
+  }
+
+  private assertConfigured(): void {
+    if (!this.options.isConfigured) {
+      throw new BadRequestException(
+        'Try-on AI provider is not configured (TRYON_API_BASE_URL is missing)',
+      );
+    }
+  }
+
+  private resolveJewellery(request: JewelleryTryOnRequest): {
+    field: JewelleryField;
+    item: AiImageInput;
+  } {
+    const items = request.jewelleryItems ?? [];
+    if (!items.length) {
+      throw new BadRequestException('At least one jewellery item is required');
+    }
+    const earring = items.find((i) => i.type === 'earring');
+    if (earring) return { field: 'earring', item: earring };
+    return { field: 'necklace', item: items.find((i) => i.type === 'necklace') ?? items[0] };
+  }
+
+  private mapVariation(variations?: number): '1' | '2' | 'both' {
+    const count = Math.min(2, Math.max(1, variations ?? 2));
+    return count >= 2 ? 'both' : '1';
+  }
+
+  private buildFormData(request: JewelleryTryOnRequest): FormData {
+    if (!request.personImage?.base64) {
+      throw new BadRequestException('personImage is required');
+    }
+
+    const outfit = request.outfit?.trim();
+    if (!outfit) {
+      throw new BadRequestException('outfit is required and must be a non-empty string');
+    }
+
+    const { field, item } = this.resolveJewellery(request);
+    if (!item.base64) {
+      throw new BadRequestException('jewellery image is required');
+    }
+
+    const form = new FormData();
+    form.append('personImage', Buffer.from(stripDataUrl(request.personImage.base64), 'base64'), {
+      filename: 'person.jpg',
+      contentType: request.personImage.mimeType || AIVOT_TRYON_MIME,
+    });
+    form.append(field, Buffer.from(stripDataUrl(item.base64), 'base64'), {
+      filename: `${field}.jpg`,
+      contentType: item.mimeType || AIVOT_TRYON_MIME,
+    });
+
+    if (field === 'earring' && item.heightInInches != null && item.heightInInches > 0) {
+      form.append('earringHeightInInches', String(item.heightInInches));
+    }
+
+    form.append('outfit', outfit);
+    if (request.occasion?.trim()) form.append('occasion', request.occasion.trim());
+    if (request.color?.trim()) form.append('outfitColor', request.color.trim());
+    form.append('variation', this.mapVariation(request.variations));
+    return form;
+  }
+
+  private mapResponseImages(data: AivotGenerateResponse['data']): GeneratedAiImage[] {
+    const images: GeneratedAiImage[] = [];
+    if (data?.variation1) images.push({ base64: data.variation1, mimeType: AIVOT_TRYON_MIME });
+    if (data?.variation2) images.push({ base64: data.variation2, mimeType: AIVOT_TRYON_MIME });
+    return images;
+  }
+
+  private extractProviderMessage(data: unknown): string | undefined {
+    if (!data || typeof data !== 'object') return undefined;
+    const body = data as { message?: unknown; error?: unknown };
+    if (typeof body.message === 'string') return body.message;
+    if (typeof body.error === 'string') return body.error;
+    return undefined;
+  }
+
+  private async callGenerateStyledImage(
+    request: JewelleryTryOnRequest,
+    signal?: AbortSignal,
+  ): Promise<GeneratedAiImage[]> {
+    const endpoint = AIVOT_TRYON_GENERATE_PATH;
+    const correlationId = randomUUID();
+    const maxAttempts = Math.max(1, this.options.maxRetries + 1);
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const started = Date.now();
+      try {
+        const form = this.buildFormData(request);
+        const response = await this.http.post<AivotGenerateResponse>(endpoint, form, {
+          headers: form.getHeaders(),
+          signal,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+        });
+
+        const durationMs = Date.now() - started;
+        const status = response.status;
+        this.logger.info({ endpoint, status, durationMs, correlationId, attempt }, 'Aivot try-on done');
+
+        if (status >= 200 && status < 300) {
+          const body = response.data;
+          if (body?.success === false) {
+            throw mapAivotHttpError(body.statusCode ?? 422, body.message);
+          }
+          const images = this.mapResponseImages(body?.data);
+          if (!images.length) {
+            throw new BadRequestException(body?.message || 'Try-on AI provider returned an empty result');
+          }
+          return images;
+        }
+
+        if (isTransientTryOnStatus(status) && attempt < maxAttempts) {
+          await this.delay(this.retryDelayMs(attempt));
+          continue;
+        }
+        throw mapAivotHttpError(status, this.extractProviderMessage(response.data));
+      } catch (err) {
+        lastError = err;
+        const durationMs = Date.now() - started;
+
+        if (err instanceof HttpException) throw err;
+
+        if (axios.isCancel(err) || (err as Error)?.name === 'CanceledError') {
+          throw new BadRequestException('Try-on request was cancelled');
+        }
+
+        const axiosErr = err as AxiosError;
+        const status = axiosErr.response?.status;
+
+        if (
+          (axiosErr.code === 'ECONNABORTED' || axiosErr.code === 'ETIMEDOUT') &&
+          attempt < maxAttempts
+        ) {
+          await this.delay(this.retryDelayMs(attempt));
+          continue;
+        }
+        if (axiosErr.code === 'ECONNABORTED' || axiosErr.code === 'ETIMEDOUT') {
+          throw mapAivotHttpError(408, 'Try-on AI provider request timed out');
+        }
+
+        if (status != null) {
+          if (isTransientTryOnStatus(status) && attempt < maxAttempts) {
+            await this.delay(this.retryDelayMs(attempt));
+            continue;
+          }
+          throw mapAivotHttpError(status, this.extractProviderMessage(axiosErr.response?.data));
+        }
+
+        if (attempt < maxAttempts) {
+          await this.delay(this.retryDelayMs(attempt));
+          continue;
+        }
+
+        this.logger.error(
+          { endpoint, durationMs, correlationId, message: axiosErr.message || 'Unknown error' },
+          'Aivot try-on failed',
+        );
+        throw mapAivotHttpError(502, 'Try-on AI provider is unreachable');
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : mapAivotHttpError(502, 'Try-on AI provider request failed');
+  }
+
+  private retryDelayMs(attempt: number): number {
+    return Math.min(2_000 * attempt, 6_000);
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}

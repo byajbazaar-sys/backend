@@ -10,6 +10,12 @@ export const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
 export const JWT_EXPIRES_IN = '7d';
+export const PAYMENT_JWT_EXPIRES_IN = '2h';
+export const AUTH_SCOPE_FULL = 'full';
+export const AUTH_SCOPE_PAYMENT = 'payment';
+export const SUBSCRIPTION_PROVIDER_RAZORPAY = 'razorpay';
+export const SUBSCRIPTION_PLAN_AMOUNT_INR = 599;
+export const SUBSCRIPTION_CURRENCY = 'INR';
 
 
 // Auth

@@ -84,6 +84,11 @@ export class LoansController {
       excludeExtraneousValues: true,
     });
 
+    // Issue / start date is stored as createdAt (existing system convention).
+    if (body.startDate) {
+      loanData.createdAt = new Date(body.startDate);
+    }
+
     const loanId = uuidv4();
     loanData.id = loanId;
     let loanAmount: number = 0;
@@ -339,6 +344,10 @@ export class LoansController {
     const loanData = plainToInstance(Loan, body, {
       excludeExtraneousValues: true,
     });
+    // Issue / start date is stored as createdAt (existing system convention).
+    if (body.startDate) {
+      loanData.createdAt = new Date(body.startDate);
+    }
     loanData.createdBy = identity.userId;
     const loan = await this.loanService.update(params.id, loanData);
     return plainToInstance(LoanResponseModel, loan, { excludeExtraneousValues: true });

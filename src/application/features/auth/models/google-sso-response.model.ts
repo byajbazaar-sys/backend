@@ -1,11 +1,37 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 import { EUserType } from '@shared-libs';
 
 export class GoogleSsoResponseModel {
   @Expose()
-  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6Ikp...' })
-  accessToken: string;
+  @ApiPropertyOptional({
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6Ikp...',
+    nullable: true,
+    description: 'Full access JWT when subscription is active',
+  })
+  accessToken?: string | null;
+
+  @Expose()
+  @ApiPropertyOptional({
+    description: 'Payment-scoped JWT when subscription checkout is required',
+    nullable: true,
+  })
+  paymentToken?: string | null;
+
+  @Expose()
+  @ApiProperty({ example: false })
+  requiresSubscription: boolean;
+
+  @Expose()
+  @ApiPropertyOptional({ nullable: true })
+  subscriptionStatus?: string | null;
+
+  @Expose()
+  @ApiPropertyOptional({
+    example: '/subscription',
+    description: 'Suggested client redirect after SSO',
+  })
+  redirectPath?: string;
 
   @Expose()
   @ApiProperty({ example: 'c05a6914-52fd-46be-b5d9-6ec6ae327e2c' })

@@ -18,8 +18,8 @@ custom:
   # serverless-dotenv-plugin loads this file before deploy; map production → .env.prod
   dotenvPathByStage:
     production: .env.prod
-    staging: .env
-    dev: .env
+    staging: .env.staging
+    dev: .env.dev
   dotenv:
     path: ${self:custom.dotenvPathByStage.${sls:stage}}
         # Keep RDS connection from CloudFormation (!GetAtt), not .env

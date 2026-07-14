@@ -29,6 +29,16 @@ import {
   METAL_RATES_REPOSITORY,
   API_CONFIGURATION_REPOSITORY,
   API_ACCESS_TOKEN_REPOSITORY,
+  SUBSCRIPTIONS_REPOSITORY,
+  PAYMENT_ORDERS_REPOSITORY,
+  PAYMENTS_REPOSITORY,
+  PAYMENT_EVENTS_REPOSITORY,
+  COUPONS_REPOSITORY,
+  COUPON_REDEMPTIONS_REPOSITORY,
+  REFUNDS_REPOSITORY,
+  PLANS_REPOSITORY,
+  JEWELLERY_EVENTS_REPOSITORY,
+  RazorpayOptions,
 } from '../application';
 import {
   CustomersRepository,
@@ -48,13 +58,31 @@ import {
   MetalRatesRepository,
   ApiConfigurationRepository,
   ApiAccessTokenRepository,
+  SubscriptionsRepository,
+  PaymentOrdersRepository,
+  PaymentsRepository,
+  PaymentEventsRepository,
+  CouponsRepository,
+  CouponRedemptionsRepository,
+  RefundsRepository,
+  PlansRepository,
+  JewelleryEventsRepository,
 } from './persistence';
 import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
 import { FileStorageMock, UsersFileStorage } from './s3';
 import { LambdaOptions, LambdaService } from './lambda';
-import { AIOptions, AIResumeService } from './ai';
+import {
+  AIOptions,
+  AIResumeService,
+  AivotTryOnOptions,
+  EVENTS_DISCOVERY_SERVICE,
+  TRY_ON_AI_SERVICE,
+} from './ai';
+import { AivotService } from './ai/services/aivot.service';
+import { BedrockService } from './ai/services/bedrock.service';
+import { GeminiService } from './ai/services/gemini.service';
 import { TwilioOptions, TwilioService } from './sms';
 import { SendGridOptions, SendGridService } from './send-grid';
 import { SesOptions, SesService } from './ses';
@@ -157,6 +185,42 @@ import { GoogleOAuthService } from './google-oauth';
       useClass: ApiAccessTokenRepository,
     },
     {
+      provide: SUBSCRIPTIONS_REPOSITORY,
+      useClass: SubscriptionsRepository,
+    },
+    {
+      provide: PAYMENT_ORDERS_REPOSITORY,
+      useClass: PaymentOrdersRepository,
+    },
+    {
+      provide: PAYMENTS_REPOSITORY,
+      useClass: PaymentsRepository,
+    },
+    {
+      provide: PAYMENT_EVENTS_REPOSITORY,
+      useClass: PaymentEventsRepository,
+    },
+    {
+      provide: COUPONS_REPOSITORY,
+      useClass: CouponsRepository,
+    },
+    {
+      provide: COUPON_REDEMPTIONS_REPOSITORY,
+      useClass: CouponRedemptionsRepository,
+    },
+    {
+      provide: REFUNDS_REPOSITORY,
+      useClass: RefundsRepository,
+    },
+    {
+      provide: PLANS_REPOSITORY,
+      useClass: PlansRepository,
+    },
+    {
+      provide: JEWELLERY_EVENTS_REPOSITORY,
+      useClass: JewelleryEventsRepository,
+    },
+    {
       provide: WEBSOCKET_MESSAGE_SERVICE,
       useClass: WebSocketMessageService,
     },
@@ -194,12 +258,12 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: AIOptions,
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) =>
-        new AIOptions(
-          configService.get('ai').openaiApiKey,
-          configService.get('ai').geminiApiKey,
-          configService.get('ai').claudeApiKey,
-        ),
+      useFactory: (configService: ConfigService) => configService.get('ai'),
+    },
+    {
+      provide: AivotTryOnOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('aivotTryOn'),
     },
     {
       provide: TwilioOptions,
@@ -222,6 +286,11 @@ import { GoogleOAuthService } from './google-oauth';
         ),
     },
     {
+      provide: RazorpayOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('razorpay'),
+    },
+    {
       provide: USERS_FILE_STORAGE,
       useClass: process.env.MOCK_STORAGE ? FileStorageMock : UsersFileStorage,
     },
@@ -232,6 +301,29 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: AI_RESUME_SERVICE,
       useClass: AIResumeService,
+    },
+    GeminiService,
+    BedrockService,
+    AivotService,
+    {
+      provide: TRY_ON_AI_SERVICE,
+      inject: [AIOptions, GeminiService, BedrockService, AivotService],
+      useFactory: (
+        options: AIOptions,
+        gemini: GeminiService,
+        bedrock: BedrockService,
+        aivot: AivotService,
+      ) => {
+        if (options.tryOnProvider === 'aivot') return aivot;
+        if (options.tryOnProvider === 'gemini' || options.provider === 'gemini') return gemini;
+        return bedrock;
+      },
+    },
+    {
+      provide: EVENTS_DISCOVERY_SERVICE,
+      inject: [AIOptions, GeminiService, BedrockService],
+      useFactory: (options: AIOptions, gemini: GeminiService, bedrock: BedrockService) =>
+        options.provider === 'gemini' ? gemini : bedrock,
     },
     {
       provide: TWILIO_SERVICE,
@@ -279,6 +371,8 @@ import { GoogleOAuthService } from './google-oauth';
     USERS_FILE_STORAGE,
     LAMBDA_SERVICE,
     AI_RESUME_SERVICE,
+    TRY_ON_AI_SERVICE,
+    EVENTS_DISCOVERY_SERVICE,
     TWILIO_SERVICE,
     TRANSACTIONS_REPOSITORY,
     DUES_REPOSITORY,
@@ -292,12 +386,22 @@ import { GoogleOAuthService } from './google-oauth';
     METAL_RATES_REPOSITORY,
     API_CONFIGURATION_REPOSITORY,
     API_ACCESS_TOKEN_REPOSITORY,
+    SUBSCRIPTIONS_REPOSITORY,
+    PAYMENT_ORDERS_REPOSITORY,
+    PAYMENTS_REPOSITORY,
+    PAYMENT_EVENTS_REPOSITORY,
+    COUPONS_REPOSITORY,
+    PLANS_REPOSITORY,
+    JEWELLERY_EVENTS_REPOSITORY,
+    COUPON_REDEMPTIONS_REPOSITORY,
+    REFUNDS_REPOSITORY,
     WEBSOCKET_MESSAGE_SERVICE,
     EMAIL_SERVICE,
     GOOGLE_OAUTH_SERVICE,
     FileStorageOptions,
     WebAppOptions,
     GoogleOAuthOptions,
+    RazorpayOptions,
     ...Seeds,
     ...CronServices,
   ],

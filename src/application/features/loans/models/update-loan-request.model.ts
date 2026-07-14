@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsEnum, Min, Max, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsEnum, Min, Max, IsUUID, IsDateString } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../enums';
 import { INTEREST_PERCENTAGE_MAX, TENURE_MAX } from '@shared-libs';
@@ -11,6 +11,15 @@ export class UpdateLoanRequestModel {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @Expose()
+  @ApiPropertyOptional({
+    description: 'Loan start / issue date (ISO date or datetime)',
+    example: '2026-01-15',
+  })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
 
   @Expose()
   @ApiPropertyOptional({ enum: ELoanTenureType, example: ELoanTenureType.MONTHS, description: 'Tenure type' })

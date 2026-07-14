@@ -17,6 +17,15 @@ import { SalesBillItemEntity } from './sales-bill-item.entity';
 import { MetalRateEntity } from './metal-rate.entity';
 import { ApiConfigurationEntity } from './api-configuration.entity';
 import { ApiAccessTokenEntity } from './api-access-token.entity';
+import { CouponEntity } from './coupon.entity';
+import { SubscriptionEntity } from './subscription.entity';
+import { PaymentOrderEntity } from './payment-order.entity';
+import { PaymentEntity } from './payment.entity';
+import { PaymentEventEntity } from './payment-event.entity';
+import { CouponRedemptionEntity } from './coupon-redemption.entity';
+import { RefundEntity } from './refund.entity';
+import { PlanEntity } from './plan.entity';
+import { JewelleryEventEntity } from './jewellery-event.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -37,6 +46,15 @@ export { SalesBillItemEntity } from './sales-bill-item.entity';
 export { MetalRateEntity } from './metal-rate.entity';
 export { ApiConfigurationEntity } from './api-configuration.entity';
 export { ApiAccessTokenEntity } from './api-access-token.entity';
+export { CouponEntity } from './coupon.entity';
+export { SubscriptionEntity } from './subscription.entity';
+export { PaymentOrderEntity } from './payment-order.entity';
+export { PaymentEntity } from './payment.entity';
+export { PaymentEventEntity } from './payment-event.entity';
+export { CouponRedemptionEntity } from './coupon-redemption.entity';
+export { RefundEntity } from './refund.entity';
+export { PlanEntity } from './plan.entity';
+export { JewelleryEventEntity } from './jewellery-event.entity';
 
 export default [
   UserEntity,
@@ -58,4 +76,13 @@ export default [
   MetalRateEntity,
   ApiConfigurationEntity,
   ApiAccessTokenEntity,
+  CouponEntity,
+  SubscriptionEntity,
+  PaymentOrderEntity,
+  PaymentEntity,
+  PaymentEventEntity,
+  CouponRedemptionEntity,
+  RefundEntity,
+  PlanEntity,
+  JewelleryEventEntity,
 ];

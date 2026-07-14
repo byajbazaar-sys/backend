@@ -5,10 +5,19 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { JwtService } from '@nestjs/jwt';
-import { IIdentity, UsersAuthOptions, JWT_EXPIRES_IN, BCRYPT_SALT_ROUNDS, EUserType, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import {
+  IIdentity,
+  UsersAuthOptions,
+  JWT_EXPIRES_IN,
+  AUTH_SCOPE_FULL,
+  BCRYPT_SALT_ROUNDS,
+  EUserType,
+  normalizeImageBufferForStorageOrThrow,
+} from '@shared-libs';
 import { randomBytes } from 'crypto';
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
 import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
@@ -31,6 +40,28 @@ import {
   EMAIL_TEMPLATE_SERVICE,
   IEmailTemplateService,
 } from '../notifications';
+import {
+  IPaymentsService,
+  PAYMENTS_SERVICE,
+} from '../payments/service/i-payments.service';
+
+type ResolvedUser = User & { id: string; email: string; userType: EUserType };
+
+interface HttpLikeError {
+  message?: string;
+  stack?: string;
+  response?: {
+    status?: number;
+    data?: { error?: string; error_description?: string };
+  };
+}
+
+function asHttpLikeError(error: unknown): HttpLikeError {
+  if (error && typeof error === 'object') {
+    return error as HttpLikeError;
+  }
+  return { message: String(error) };
+}
 
 @Injectable()
 export class AuthService implements IAuthService {
@@ -44,8 +75,63 @@ export class AuthService implements IAuthService {
     @Inject(USERS_FILE_STORAGE) private readonly usersFileStorage: IUsersFileStorage,
     @Inject(EMAIL_SERVICE) private readonly emailService: IEmailService,
     @Inject(EMAIL_TEMPLATE_SERVICE) private readonly emailTemplateService: IEmailTemplateService,
+    @Optional() @Inject(PAYMENTS_SERVICE) private readonly paymentsService: IPaymentsService | null,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) { }
+
+  private requireEmail(email: string | undefined, message = 'Email is required'): string {
+    const normalized = email?.toLowerCase().trim();
+    if (!normalized) {
+      throw new BadRequestException(message);
+    }
+    return normalized;
+  }
+
+  private requireResolvedUser(user: User, message = 'Invalid user record'): ResolvedUser {
+    if (!user.id || !user.email || user.userType === undefined) {
+      throw new UnauthorizedException(message);
+    }
+    return user as ResolvedUser;
+  }
+
+  private async buildAuthTokens(identity: IIdentity): Promise<{
+    accessToken: string;
+    paymentToken: string | null;
+    requiresSubscription: boolean;
+    subscriptionStatus: string | null;
+    redirectPath: string;
+  }> {
+    const isAdmin = identity.userType === EUserType.Admin;
+    let hasPremiumAccess = isAdmin;
+    let subscriptionStatus: string | null = null;
+
+    if (!isAdmin && this.paymentsService) {
+      hasPremiumAccess = await this.paymentsService.hasAppAccess(identity.userId);
+      const status = await this.paymentsService.getStatus(identity.userId);
+      if (status.hasActiveSubscription) {
+        subscriptionStatus = 'active';
+      } else if (status.isOnTrial) {
+        subscriptionStatus = 'trial';
+      } else {
+        subscriptionStatus = status.status ?? 'inactive';
+      }
+    } else if (isAdmin) {
+      subscriptionStatus = 'active';
+    }
+
+    const accessToken = await this.generateJwtToken({
+      ...identity,
+      scope: AUTH_SCOPE_FULL,
+    });
+
+    return {
+      accessToken,
+      paymentToken: null,
+      requiresSubscription: !hasPremiumAccess,
+      subscriptionStatus,
+      redirectPath: '/dashboard',
+    };
+  }
 
   async login(email: string, password: string): Promise<LoginResponseModel> {
     try {
@@ -67,26 +153,32 @@ export class AuthService implements IAuthService {
       if (!compareSync(password, user.password)) {
         throw new UnauthorizedException('Invalid credentials');
       }
+      const resolvedUser = this.requireResolvedUser(user);
       const now = new Date();
-      const wasFirstLogin = user.isFirstLogin === true;
-      await this.usersRepo.update(user.id, { lastLoginAt: now, isFirstLogin: false });
+      const wasFirstLogin = resolvedUser.isFirstLogin === true;
+      await this.usersRepo.update(resolvedUser.id, { lastLoginAt: now, isFirstLogin: false });
 
       const identity: IIdentity = {
-        userId: user.id,
-        userType: user.userType,
-        email: user.email,
-        emailVerified: user.isEmailVerified,
+        userId: resolvedUser.id,
+        userType: resolvedUser.userType,
+        email: resolvedUser.email,
+        emailVerified: resolvedUser.isEmailVerified,
       };
 
-      const token = await this.generateJwtToken(identity);
+      const tokens = await this.buildAuthTokens(identity);
       const response = plainToInstance(
         LoginResponseModel,
         {
-          ...user,
+          ...resolvedUser,
           lastLoginAt: now,
           isFirstLogin: wasFirstLogin,
-          accessToken: token,
-          profilePhotoUrl: user.profilePhotoRef ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef) : null,
+          accessToken: tokens.accessToken,
+          paymentToken: tokens.paymentToken,
+          requiresSubscription: tokens.requiresSubscription,
+          subscriptionStatus: tokens.subscriptionStatus,
+          profilePhotoUrl: resolvedUser.profilePhotoRef
+            ? await this.usersFileStorage.getUrlAsync(resolvedUser.profilePhotoRef)
+            : null,
         },
         {
           excludeExtraneousValues: true,
@@ -101,7 +193,8 @@ export class AuthService implements IAuthService {
 
   async signup(body: User): Promise<User> {
     const user = plainToInstance(User, body);
-    const existingUser = await this.usersRepo.findByEmail(user.email.toLowerCase().trim());
+    const email = this.requireEmail(user.email);
+    const existingUser = await this.usersRepo.findByEmail(email);
     if (existingUser) {
       // User exists - check if it's a Google user
       if (existingUser.isGoogleUser) {
@@ -116,6 +209,7 @@ export class AuthService implements IAuthService {
     try {
       const userId = uuidv4();
       user.id = userId;
+      user.email = email;
       this.logger.debug({ userId, email: user.email }, 'Creating new user');
       if (user.profilePhoto && user.profilePhotoContentType) {
         const normalized = await normalizeImageBufferForStorageOrThrow(
@@ -142,7 +236,7 @@ export class AuthService implements IAuthService {
         verificationUrl,
       });
       await this.emailService.sendEmail({
-        to: user.email,
+        to: email,
         subject: 'Verify your email address',
         body: html,
         isHtml: true,
@@ -150,7 +244,9 @@ export class AuthService implements IAuthService {
 
       return {
         ...createdUser,
-        profilePhotoRef: user.profilePhotoRef ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef) : null,
+        profilePhotoRef: user.profilePhotoRef
+          ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef)
+          : undefined,
       };
     } catch (err) {
       if (err instanceof BadRequestException) {
@@ -166,20 +262,23 @@ export class AuthService implements IAuthService {
       if (!user) {
         throw new NotFoundException('User not found');
       }
+      const resolvedUser = this.requireResolvedUser(user);
       const resetPasswordToken = randomBytes(32).toString('hex');
       const resetPasswordExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await this.usersRepo.update(user.id, {
+      await this.usersRepo.update(resolvedUser.id, {
         resetPasswordToken,
         resetPasswordExpires,
       });
 
       const resetUrl = this.webAppOptions.buildResetPasswordUrl(resetPasswordToken);
       const html = this.emailTemplateService.renderForgotPassword({
-        userName: user.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() || user.email : user.email ?? 'User',
+        userName: resolvedUser.firstName
+          ? `${resolvedUser.firstName} ${resolvedUser.lastName ?? ''}`.trim() || resolvedUser.email
+          : resolvedUser.email,
         resetUrl,
       });
       await this.emailService.sendEmail({
-        to: user.email,
+        to: resolvedUser.email,
         subject: 'Reset your password',
         body: html,
         isHtml: true,
@@ -200,12 +299,13 @@ export class AuthService implements IAuthService {
         throw new BadRequestException('Token expired');
       }
 
-      await this.usersRepo.update(user.id, {
+      const resolvedUser = this.requireResolvedUser(user);
+      await this.usersRepo.update(resolvedUser.id, {
         password: hashSync(newPassword, BCRYPT_SALT_ROUNDS),
         resetPasswordToken: null,
         resetPasswordExpires: null,
       });
-      return { ...user, password: undefined };
+      return { ...resolvedUser, password: undefined };
     } catch (err) {
       throw err;
     }
@@ -221,20 +321,23 @@ export class AuthService implements IAuthService {
         throw new BadRequestException('Email is already verified');
       }
 
+      const resolvedUser = this.requireResolvedUser(user);
       const emailVerificationToken = randomBytes(32).toString('hex');
       const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await this.usersRepo.update(user.id, {
+      await this.usersRepo.update(resolvedUser.id, {
         emailVerificationToken,
         emailVerificationExpires,
       });
 
       const verificationUrl = this.webAppOptions.buildVerifyEmailUrl(emailVerificationToken);
       const html = this.emailTemplateService.renderEmailVerification({
-        userName: user.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() || user.email : user.email ?? 'User',
+        userName: resolvedUser.firstName
+          ? `${resolvedUser.firstName} ${resolvedUser.lastName ?? ''}`.trim() || resolvedUser.email
+          : resolvedUser.email,
         verificationUrl,
       });
       await this.emailService.sendEmail({
-        to: user.email,
+        to: resolvedUser.email,
         subject: 'Verify your email address',
         body: html,
         isHtml: true,
@@ -257,7 +360,8 @@ export class AuthService implements IAuthService {
 
       const now = new Date();
       const wasFirstLogin = user.isFirstLogin === true;
-      await this.usersRepo.update(user.id, {
+      const resolvedUser = this.requireResolvedUser(user);
+      await this.usersRepo.update(resolvedUser.id, {
         isEmailVerified: true,
         emailVerifiedAt: now,
         lastLoginAt: now,
@@ -266,8 +370,8 @@ export class AuthService implements IAuthService {
         isFirstLogin: false,
       });
 
-      const updatedUser = {
-        ...user,
+      const updatedUser: ResolvedUser = {
+        ...resolvedUser,
         isEmailVerified: true,
         emailVerifiedAt: now,
         lastLoginAt: now,
@@ -279,7 +383,7 @@ export class AuthService implements IAuthService {
         email: updatedUser.email,
         emailVerified: true,
       };
-      const accessToken = await this.generateJwtToken(identity);
+      const tokens = await this.buildAuthTokens(identity);
       const profilePhotoUrl = updatedUser.profilePhotoRef
         ? await this.usersFileStorage.getUrlAsync(updatedUser.profilePhotoRef)
         : null;
@@ -288,7 +392,10 @@ export class AuthService implements IAuthService {
         LoginResponseModel,
         {
           ...updatedUser,
-          accessToken,
+          accessToken: tokens.accessToken,
+          paymentToken: tokens.paymentToken,
+          requiresSubscription: tokens.requiresSubscription,
+          subscriptionStatus: tokens.subscriptionStatus,
           profilePhotoUrl,
         },
         { excludeExtraneousValues: true },
@@ -334,17 +441,18 @@ export class AuthService implements IAuthService {
         const existingUser = await this.usersRepo.findByEmail(googleUser.email.toLowerCase().trim());
 
         if (existingUser) {
+          const linkedUser = this.requireResolvedUser(existingUser);
           // User exists with same email - link Google account to existing user
           // This allows users who registered with email/password to later use Google Sign-In
-          await this.usersRepo.update(existingUser.id, {
+          await this.usersRepo.update(linkedUser.id, {
             googleId: googleUser.sub,
             isGoogleUser: true,
             isEmailVerified: true, // Google emails are verified
-            emailVerifiedAt: existingUser.emailVerifiedAt || now,
+            emailVerifiedAt: linkedUser.emailVerifiedAt || now,
           });
 
           // Refresh user data
-          user = await this.usersRepo.findById(existingUser.id);
+          user = await this.usersRepo.findById(linkedUser.id);
           isNewUser = false;
         }
       }
@@ -372,54 +480,66 @@ export class AuthService implements IAuthService {
         isNewUser = true;
       }
 
-      const wasFirstLogin = user.isFirstLogin === true;
-      await this.usersRepo.update(user.id, {
-        lastLoginAt: now,
-        isFirstLogin: false,
-      });
-      user = await this.usersRepo.findById(user.id);
       if (!user) {
         throw new BadRequestException('Failed to load user after Google sign-in');
       }
 
+      const resolvedUser = this.requireResolvedUser(user);
+      const wasFirstLogin = resolvedUser.isFirstLogin === true;
+      await this.usersRepo.update(resolvedUser.id, {
+        lastLoginAt: now,
+        isFirstLogin: false,
+      });
+      user = await this.usersRepo.findById(resolvedUser.id);
+      if (!user) {
+        throw new BadRequestException('Failed to load user after Google sign-in');
+      }
+      const authenticatedUser = this.requireResolvedUser(user);
+
       const identity: IIdentity = {
-        userId: user.id,
-        userType: user.userType,
-        email: user.email,
-        emailVerified: user.isEmailVerified,
+        userId: authenticatedUser.id,
+        userType: authenticatedUser.userType,
+        email: authenticatedUser.email,
+        emailVerified: authenticatedUser.isEmailVerified,
       };
 
-      const token = await this.generateJwtToken(identity);
-      const profilePhotoUrl = user.profilePhotoRef
-        ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef)
+      const tokens = await this.buildAuthTokens(identity);
+      const profilePhotoUrl = authenticatedUser.profilePhotoRef
+        ? await this.usersFileStorage.getUrlAsync(authenticatedUser.profilePhotoRef)
         : googleUser.picture;
 
       return plainToInstance(
         GoogleSsoResponseModel,
         {
-          ...user,
-          accessToken: token,
+          ...authenticatedUser,
+          accessToken: tokens.accessToken,
+          paymentToken: tokens.paymentToken,
+          requiresSubscription: tokens.requiresSubscription,
+          subscriptionStatus: tokens.subscriptionStatus,
           profilePhotoUrl,
           isNewUser,
           isFirstLogin: wasFirstLogin,
+          redirectPath: tokens.redirectPath,
         },
         {
           excludeExtraneousValues: true,
         },
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = asHttpLikeError(error);
       this.logger.error({
-        error: error?.message,
-        stack: error?.stack,
-        response: error?.response?.data,
-        status: error?.response?.status
+        error: err.message,
+        stack: err.stack,
+        response: err.response?.data,
+        status: err.response?.status,
       }, 'Google SSO error');
 
-      if (error.response?.status === 401) {
+      if (err.response?.status === 401) {
         throw new UnauthorizedException('Invalid Google authorization code');
       }
-      if (error.response?.status === 400) {
-        const googleError = error.response?.data?.error_description || error.response?.data?.error || error.message;
+      if (err.response?.status === 400) {
+        const googleError =
+          err.response?.data?.error_description || err.response?.data?.error || err.message;
         throw new BadRequestException(
           `Invalid authorization code or client credentials: ${googleError || 'Please check your Google OAuth configuration'}`
         );
@@ -427,16 +547,16 @@ export class AuthService implements IAuthService {
       if (error instanceof BadRequestException || error instanceof UnauthorizedException || error instanceof ConflictException) {
         throw error;
       }
-      throw new BadRequestException(`Google SSO failed: ${error?.message || 'Unknown error'}`);
+      throw new BadRequestException(`Google SSO failed: ${err.message || 'Unknown error'}`);
     }
   }
 
-  generateJwtToken(payload: IIdentity): Promise<string> {
+  generateJwtToken(payload: IIdentity, expiresIn: string = JWT_EXPIRES_IN): Promise<string> {
     return this.jwtService.signAsync(payload, {
       secret: this.options.secret,
       audience: this.options.audience,
       issuer: this.options.issuer,
-      expiresIn: JWT_EXPIRES_IN,
+      expiresIn: expiresIn as any,
       algorithm: this.options.algorithm,
     });
   }

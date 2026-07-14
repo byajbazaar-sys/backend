@@ -8,6 +8,7 @@ import {
   JwtAuthenticationProvider,
   AUTHENTICATION_ORCHESTRATOR,
   UserAuthGuard,
+  SUBSCRIPTION_ACCESS_CHECKER,
 } from '@shared-libs';
 
 import { IMsConfig } from '../configurations';
@@ -46,6 +47,23 @@ import {
   ApiAuthService,
   ApiAccessAuthenticationProvider,
   AuthenticationOrchestrator,
+  PAYMENTS_SERVICE,
+  PaymentsService,
+  RAZORPAY_SERVICE,
+  RazorpayService,
+  COUPON_SERVICE,
+  CouponService,
+  WEBHOOK_SERVICE,
+  WebhookService,
+  SubscriptionAccessChecker,
+  PlanService,
+  PLAN_SERVICE,
+  SubscriptionAdminService,
+  SUBSCRIPTION_ADMIN_SERVICE,
+  JEWELLERY_EVENT_SERVICE,
+  JewelleryEventService,
+  TRY_ON_SERVICE,
+  TryOnService,
 } from './features';
 import {
   POS_SESSION_SERVICE,
@@ -149,7 +167,53 @@ import {
       provide: API_AUTH_SERVICE,
       useClass: ApiAuthService,
     },
+    {
+      provide: RAZORPAY_SERVICE,
+      useClass: RazorpayService,
+    },
+    {
+      provide: COUPON_SERVICE,
+      useClass: CouponService,
+    },
+    {
+      provide: WEBHOOK_SERVICE,
+      useClass: WebhookService,
+    },
+    {
+      provide: PAYMENTS_SERVICE,
+      useClass: PaymentsService,
+    },
+    {
+      provide: SUBSCRIPTION_ACCESS_CHECKER,
+      useClass: SubscriptionAccessChecker,
+    },
+    {
+      provide: PLAN_SERVICE,
+      useClass: PlanService,
+    },
+    {
+      provide: SUBSCRIPTION_ADMIN_SERVICE,
+      useClass: SubscriptionAdminService,
+    },
+    {
+      provide: JEWELLERY_EVENT_SERVICE,
+      useClass: JewelleryEventService,
+    },
+    {
+      provide: TRY_ON_SERVICE,
+      useClass: TryOnService,
+    },
   ],
-  exports: [PassportModule, UserJwtStrategy, UserAuthGuard, AUTHENTICATION_ORCHESTRATOR, TRANSACTION_SERVICE, LOAN_SERVICE],
+  exports: [
+    PassportModule,
+    UserJwtStrategy,
+    UserAuthGuard,
+    AUTHENTICATION_ORCHESTRATOR,
+    TRANSACTION_SERVICE,
+    LOAN_SERVICE,
+    PAYMENTS_SERVICE,
+    JEWELLERY_EVENT_SERVICE,
+    TRY_ON_SERVICE,
+  ],
 })
 export class ApplicationModule {}

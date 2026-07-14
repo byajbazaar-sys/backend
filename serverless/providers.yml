@@ -24,6 +24,17 @@ environment:
   DB_NAME: ${env:DB_NAME, 'byajbazaar_db'}
   DB_USER: ${env:DB_MASTER_USERNAME, 'postgres'}
   DB_PASS: ${env:DB_MASTER_PASSWORD}
+  AI_PROVIDER: ${env:AI_PROVIDER, 'bedrock'}
+  GEMINI_API_KEYS: ${env:GEMINI_API_KEYS, ''}
+  BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'global.amazon.nova-2-lite-v1:0'}
+  BEDROCK_AWS_REGION: ${env:BEDROCK_AWS_REGION, 'ap-south-1'}
+  EVENTS_SYNC_SECRET: ${env:EVENTS_SYNC_SECRET, ''}
+  TRY_ON_PROVIDER: ${env:TRY_ON_PROVIDER, ''}
+  TRYON_API_BASE_URL: ${env:TRYON_API_BASE_URL, ''}
+  TRYON_API_TIMEOUT_MS: ${env:TRYON_API_TIMEOUT_MS, '90000'}
+  TRYON_API_MAX_RETRIES: ${env:TRYON_API_MAX_RETRIES, '2'}
+  TRY_ON_LAMBDA_NAME:
+    Ref: JewelleryTryOnLambdaFunction
   # Use CloudFormation Refs only inside Fn::Join — ${aws:region}/${sls:stage} break Serverless variable resolution
   WEBSOCKET_API_ENDPOINT:
     Fn::Join:
@@ -85,6 +96,11 @@ iam:
           - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${sls:stage}/POST/@connections/*
       - Effect: Allow
         Action:
+          - bedrock:InvokeModel
+          - bedrock:InvokeModelWithResponseStream
+        Resource: '*'
+      - Effect: Allow
+        Action:
           - s3:GetObject
           - s3:PutObject
           - s3:DeleteObject
@@ -93,3 +109,9 @@ iam:
         Resource:
           - 'arn:aws:s3:::*'
           - 'arn:aws:s3:::*/*'
+      - Effect: Allow
+        Action:
+          - states:StartExecution
+          - states:DescribeExecution
+          - states:StopExecution
+        Resource: '*'
