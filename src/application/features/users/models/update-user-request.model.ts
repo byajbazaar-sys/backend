@@ -1,11 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { EUserType, NAME_REGEX, NAME_MIN_LENGTH, NAME_MAX_LENGTH, PHONE_E164_REGEX, parseMultipartBoolean } from '@shared-libs';
+import { EUserType, NAME_REGEX, NAME_MIN_LENGTH, NAME_MAX_LENGTH, PHONE_E164_REGEX, parseMultipartBoolean, emptyStringToUndefined } from '@shared-libs';
 import { Transform, Type } from 'class-transformer';
 import { IsOptional, IsString, IsBoolean, IsEnum, MinLength, MaxLength, Matches } from 'class-validator';
 
 export class UpdateUserRequestModel {
   @ApiProperty({ example: 'John', required: false, description: 'User first name' })
   @IsOptional()
+  @Transform(({ value }) => emptyStringToUndefined(value))
   @IsString({ message: 'First name must be a string' })
   @MinLength(NAME_MIN_LENGTH, { message: `First name must be at least ${NAME_MIN_LENGTH} characters long` })
   @MaxLength(NAME_MAX_LENGTH, { message: `First name cannot exceed ${NAME_MAX_LENGTH} characters` })
@@ -14,6 +15,7 @@ export class UpdateUserRequestModel {
 
   @ApiProperty({ example: 'Doe', required: false, description: 'User last name' })
   @IsOptional()
+  @Transform(({ value }) => emptyStringToUndefined(value))
   @IsString({ message: 'Last name must be a string' })
   @MinLength(NAME_MIN_LENGTH, { message: `Last name must be at least ${NAME_MIN_LENGTH} characters long` })
   @MaxLength(NAME_MAX_LENGTH, { message: `Last name cannot exceed ${NAME_MAX_LENGTH} characters` })

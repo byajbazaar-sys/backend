@@ -60,14 +60,15 @@ export class PosSessionService implements IPosSessionService {
       type: 'pos-session',
     });
 
-    const webAppDomain = process.env.WEB_APP_DOMAIN ?? 'http://localhost:3000';
-    const scannerUrl = `${webAppDomain}/scanner?sessionId=${session.id}&token=${encodeURIComponent(token)}&websocketUrl=${encodeURIComponent(this.getWebsocketUrl())}`;
+    const webAppDomain = (process.env.WEB_APP_DOMAIN ?? 'http://localhost:3000').replace(/\/$/, '');
+    // Keep QR short for reliable phone-camera scans; websocketUrl comes from validate API.
+    const scannerUrl = `${webAppDomain}/scanner?sessionId=${session.id}&token=${encodeURIComponent(token)}`;
     const qrPayload = scannerUrl;
 
     const qrCodeDataUrl = await QRCode.toDataURL(qrPayload, {
-      width: 320,
-      margin: 4,
-      errorCorrectionLevel: 'H',
+      width: 360,
+      margin: 2,
+      errorCorrectionLevel: 'M',
       color: { dark: '#000000', light: '#FFFFFF' },
     });
 
