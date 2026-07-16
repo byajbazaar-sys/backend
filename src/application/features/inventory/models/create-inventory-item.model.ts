@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
-import { EInventoryItemStatus, EMetalType } from '../enums';
+import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../enums';
 
 export class CreateInventoryItemRequestModel {
   @ApiPropertyOptional()
@@ -62,6 +62,15 @@ export class CreateInventoryItemRequestModel {
   @IsNumber()
   @Min(0)
   makingCharges?: number;
+
+  @ApiPropertyOptional({
+    enum: EMakingChargeMode,
+    description: 'FIXED = amount (₹), PERCENT = percentage of metal value, PER_PC = per piece (₹)',
+    default: EMakingChargeMode.Fixed,
+  })
+  @IsOptional()
+  @IsEnum(EMakingChargeMode)
+  makingChargeMode?: EMakingChargeMode;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -18,3 +18,4 @@ export * from './i-webhook.service';
 export * from './webhook.service';
 export * from './i-payments.service';
 export * from './payments.service';
+export * from './refund.service';

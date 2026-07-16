@@ -17,7 +17,7 @@ import { PosSessionsController, PosSessionPublicController } from './pos';
 import { SalesBillsController } from './sales-bills';
 import { MetalRatesController } from './metal-rates';
 import { SettingsApiController } from './api-access';
-import { PaymentsController, PlansController, AdminSubscriptionsController } from './payments';
+import { PaymentsController, AdminPaymentsController } from './payments';
 import { EventsController, AdminEventsController } from './events';
 import { TryOnController } from './try-on';
 
@@ -57,8 +57,7 @@ export const Controllers = [
   MetalRatesController,
   SettingsApiController,
   PaymentsController,
-  PlansController,
-  AdminSubscriptionsController,
+  AdminPaymentsController,
   AdminEventsController,
   EventsController,
   TryOnController,

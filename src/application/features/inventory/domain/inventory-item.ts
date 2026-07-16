@@ -1,5 +1,5 @@
 import { Expose } from 'class-transformer';
-import { EInventoryItemStatus, EMetalType } from '../enums';
+import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../enums';
 
 export class InventoryItem {
   @Expose()
@@ -58,6 +58,9 @@ export class InventoryItem {
 
   @Expose()
   makingCharges?: number;
+
+  @Expose()
+  makingChargeMode?: EMakingChargeMode;
 
   @Expose()
   wastagePercentage?: number;

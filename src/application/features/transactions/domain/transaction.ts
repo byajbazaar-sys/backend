@@ -1,6 +1,7 @@
 import { Expose, Type } from 'class-transformer';
 import { ETransactionType, ETransactionPaidIn } from '../enums';
 import { Customer } from '../../customers';
+import { Due } from '../../../shared';
 
 export class Transaction {
   @Expose()
@@ -37,4 +38,8 @@ export class Transaction {
 
   @Expose()
   public dueId?: string;
+
+  @Expose()
+  @Type(() => Due)
+  public due?: Due;
 }

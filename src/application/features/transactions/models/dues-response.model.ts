@@ -47,7 +47,7 @@ export class DueResponseModel {
   type: EDueType;
 
   @Expose()
-  @ApiProperty({ type: TransactionResponseModel, description: 'Transaction' })
+  @ApiProperty({ type: () => TransactionResponseModel, description: 'Transaction' })
   @Type(() => TransactionResponseModel)
   latestTransaction?: TransactionResponseModel;
 }

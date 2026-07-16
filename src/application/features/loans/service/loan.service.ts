@@ -124,7 +124,20 @@ export class LoanService implements ILoanService {
       }
 
       await this.createDuesForLoan(
-        loan,
+        {
+          ...data,
+          id: loan.id,
+          createdBy: loan.createdBy,
+          customerId: loan.customerId ?? data.customerId,
+          createdAt: loan.createdAt ?? startDateOverride,
+          amountRemaining: Number(data.amountRemaining),
+          interestRemaining: Number(data.interestRemaining),
+          tenureValue: Number(data.tenureValue),
+          tenureType: data.tenureType,
+          interestType: data.interestType,
+          interestCalculationMethod: data.interestCalculationMethod,
+          interestPercentage: Number(data.interestPercentage),
+        },
         startDateOverride ? { startDate: startDateOverride } : undefined,
       );
 
@@ -171,9 +184,18 @@ export class LoanService implements ILoanService {
     const startDate = this.startOfDay(
       options?.startDate ?? (createdAt ? new Date(createdAt) : new Date()),
     );
-    const remainingAmount = options?.remainingAmount ?? amountRemaining;
-    const remainingInterest = options?.remainingInterest ?? interestRemaining;
-    const remainingTenure = options?.remainingTenure ?? tenureValue;
+    const remainingAmount = Number(options?.remainingAmount ?? amountRemaining);
+    const remainingInterest = Number(options?.remainingInterest ?? interestRemaining);
+    const remainingTenure = Number(options?.remainingTenure ?? tenureValue);
+
+    if (
+      !Number.isFinite(remainingAmount) ||
+      !Number.isFinite(remainingInterest) ||
+      !Number.isFinite(remainingTenure) ||
+      remainingTenure <= 0
+    ) {
+      throw new BadRequestException('Invalid loan balances for due schedule calculation');
+    }
 
     const numberOfDues = this.calculateNumberOfDues(interestType, tenureType, remainingTenure);
     if (numberOfDues <= 0) {
@@ -878,34 +900,68 @@ export class LoanService implements ILoanService {
 
       this.logger.info({ loanId: id }, 'Recalculating dues for updated loan');
       const paidDuesCount = paidDues.length;
-      const remainingAmount = finalLoanData.amountRemaining;
-      const remainingInterest = finalLoanData.interestRemaining;
-      const totalTenure = finalLoanData.tenureValue;
+      const remainingAmount = Number(finalLoanData.amountRemaining ?? existingLoan.amountRemaining);
+      const remainingInterest = Number(finalLoanData.interestRemaining ?? existingLoan.interestRemaining);
+      const totalTenure = Number(finalLoanData.tenureValue ?? existingLoan.tenureValue);
       const remainingTenure = Math.max(0, totalTenure - paidDuesCount);
 
       let unpaidDues: Due[] = [];
       if (remainingTenure > 0 && (remainingAmount > 0 || remainingInterest > 0)) {
-        const dueStartDate = this.resolveUnpaidDueStartDate(
-          finalLoanData,
-          paidDues,
-          startDateChanged ? requestedStartDate : currentStartDate,
-          paidDues.length === 0 && startDateChanged,
-        );
-
-        const loanForDues: Loan = {
+        const loanForDuesBase: Loan = {
           ...finalLoanData,
-          tenureValue: remainingTenure,
-          amountRemaining: remainingAmount,
-          interestRemaining: remainingInterest,
-          createdAt: dueStartDate,
+          id: existingLoan.id,
+          interestType: finalLoanData.interestType ?? existingLoan.interestType,
+          tenureType: finalLoanData.tenureType ?? existingLoan.tenureType,
+          customerId: finalLoanData.customerId ?? existingLoan.customerId,
+          createdBy: existingLoan.createdBy,
         };
 
-        unpaidDues = this.buildDuesForLoan(loanForDues, {
-          startDate: dueStartDate,
-          remainingAmount,
-          remainingInterest,
-          remainingTenure,
-        });
+        if (startDateChanged) {
+          if (paidDuesCount > 0) {
+            // Rebuild full schedule from new start; keep paid periods, fill gaps (e.g. Aug unpaid when Sep is paid)
+            unpaidDues = this.buildUnpaidDuesForRescheduledLoan(
+              loanForDuesBase,
+              requestedStartDate,
+              totalTenure,
+              paidDues,
+              remainingAmount,
+              remainingInterest,
+            );
+          } else {
+            unpaidDues = this.buildDuesForLoan(
+              { ...loanForDuesBase, tenureValue: totalTenure },
+              {
+                startDate: this.startOfDay(requestedStartDate),
+                remainingAmount,
+                remainingInterest,
+                remainingTenure: totalTenure,
+              },
+            );
+          }
+        } else {
+          const dueStartDate = this.resolveUnpaidDueStartDate(
+            finalLoanData,
+            paidDues,
+            currentStartDate,
+            false,
+          );
+
+          unpaidDues = this.buildDuesForLoan(
+            {
+              ...loanForDuesBase,
+              tenureValue: remainingTenure,
+              amountRemaining: remainingAmount,
+              interestRemaining: remainingInterest,
+              createdAt: dueStartDate,
+            },
+            {
+              startDate: dueStartDate,
+              remainingAmount,
+              remainingInterest,
+              remainingTenure,
+            },
+          );
+        }
       }
 
       // Atomically update loan + replace unpaid dues (paid dues never touched)
@@ -1007,8 +1063,66 @@ export class LoanService implements ILoanService {
   }
 
   /**
-   * First period anchor for rebuilding unpaid dues.
-   * When the loan start date changed and no dues are paid yet, schedule from the new start date.
+   * Rebuild unpaid dues after a start-date change when some periods are already paid.
+   * Builds the full tenure schedule from the new start and skips paid due dates so
+   * gaps before the last paid due (e.g. Aug when Sep is paid) are preserved.
+   */
+  private buildUnpaidDuesForRescheduledLoan(
+    loan: Loan,
+    scheduleStartDate: Date,
+    totalTenure: number,
+    paidDues: Due[],
+    remainingAmount: number,
+    remainingInterest: number,
+  ): Due[] {
+    const loanId = loan.id;
+    if (!loanId || !loan.customerId || !loan.createdBy) {
+      throw new Error('Loan ID, customer ID, and created by are required');
+    }
+
+    const anchor = this.startOfDay(scheduleStartDate);
+    const paidDueTimes = new Set(
+      paidDues.map((d) => this.startOfDay(new Date(d.dueDate)).getTime()),
+    );
+
+    const unpaidDueDates: Date[] = [];
+    for (let period = 1; period <= totalTenure; period++) {
+      const dueDate = this.calculateDueDate(anchor, loan.interestType, period);
+      if (!paidDueTimes.has(this.startOfDay(dueDate).getTime())) {
+        unpaidDueDates.push(dueDate);
+      }
+    }
+
+    if (!unpaidDueDates.length) {
+      return [];
+    }
+
+    const principalPerDue = remainingAmount / unpaidDueDates.length;
+    const interestPerDue = remainingInterest / unpaidDueDates.length;
+    const dues: Due[] = unpaidDueDates.map((dueDate) => {
+      const principalAmount = Number(principalPerDue.toFixed(2));
+      const interestAmount = Number(interestPerDue.toFixed(2));
+      return {
+        loanId,
+        customerId: loan.customerId,
+        principalAmount,
+        interestAmount,
+        dueAmount: Number((principalAmount + interestAmount).toFixed(2)),
+        type: EDueType.UPCOMING_DUE,
+        dueDate,
+        createdBy: loan.createdBy,
+      };
+    });
+
+    this.fixRoundingDrift(dues, remainingAmount, remainingInterest);
+    return dues;
+  }
+
+  /**
+   * Schedule anchor for rebuilding unpaid dues after the last paid period.
+   * Returns the loan start when nothing is paid yet (or start date was reset).
+   * When dues are paid, returns the last paid due date so period 1 lands on the
+   * next unpaid due (buildDuesForLoan adds one period to the anchor).
    */
   private resolveUnpaidDueStartDate(
     loan: Loan,
@@ -1020,14 +1134,11 @@ export class LoanService implements ILoanService {
       return this.startOfDay(loanStartDate);
     }
 
-    const lastPaidDue = paidDues[paidDues.length - 1];
-    const dueStartDate = new Date(lastPaidDue.dueDate);
-    if (loan.interestType === EInterestType.MONTHLY) {
-      dueStartDate.setMonth(dueStartDate.getMonth() + 1);
-    } else if (loan.interestType === EInterestType.DAILY) {
-      dueStartDate.setDate(dueStartDate.getDate() + 1);
-    }
-    return this.startOfDay(dueStartDate);
+    const sortedPaid = [...paidDues].sort(
+      (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+    );
+    const lastPaidDue = sortedPaid[sortedPaid.length - 1];
+    return this.startOfDay(new Date(lastPaidDue.dueDate));
   }
 
   private calculateNumberOfDues(interestType: EInterestType, tenureType: ELoanTenureType, tenureValue: number): number {
@@ -1077,18 +1188,24 @@ export class LoanService implements ILoanService {
   }
 
   private fixRoundingDrift(dues: Due[], totalPrincipal: number, totalInterest: number) {
-    const principalSum = dues.reduce((sum, d) => sum + d.principalAmount, 0);
-    const interestSum = dues.reduce((sum, d) => sum + d.interestAmount, 0);
+    if (!dues.length) return;
 
-    const principalDiff = Number((totalPrincipal - principalSum).toFixed(2));
-    const interestDiff = Number((totalInterest - interestSum).toFixed(2));
+    const targetPrincipal = Number(totalPrincipal) || 0;
+    const targetInterest = Number(totalInterest) || 0;
+    const principalSum = dues.reduce((sum, d) => sum + Number(d.principalAmount), 0);
+    const interestSum = dues.reduce((sum, d) => sum + Number(d.interestAmount), 0);
+
+    const principalDiff = Number((targetPrincipal - principalSum).toFixed(2));
+    const interestDiff = Number((targetInterest - interestSum).toFixed(2));
 
     const lastDue = dues[dues.length - 1];
+    lastDue.principalAmount = Number((Number(lastDue.principalAmount) + principalDiff).toFixed(2));
+    lastDue.interestAmount = Number((Number(lastDue.interestAmount) + interestDiff).toFixed(2));
 
-    lastDue.principalAmount = Number((lastDue.principalAmount + principalDiff).toFixed(2));
-
-    lastDue.interestAmount = Number((lastDue.interestAmount + interestDiff).toFixed(2));
-
-    lastDue.dueAmount = Number((lastDue.principalAmount + lastDue.interestAmount).toFixed(2));
+    for (const due of dues) {
+      due.principalAmount = Number(Number(due.principalAmount).toFixed(2));
+      due.interestAmount = Number(Number(due.interestAmount).toFixed(2));
+      due.dueAmount = Number((due.principalAmount + due.interestAmount).toFixed(2));
+    }
   }
 }

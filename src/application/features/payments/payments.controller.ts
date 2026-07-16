@@ -28,7 +28,6 @@ import {
   CancelSubscriptionRequestModel,
   CreateSubscriptionRequestModel,
   CreateSubscriptionResponseModel,
-  InvoiceResponseModel,
   PaymentResponseModel,
   SubscriptionStatusResponseModel,
 } from './models';
@@ -142,25 +141,4 @@ export class PaymentsController {
     return this.paymentsService.listPayments(identity.userId, page, pageSize);
   }
 
-  @Get('history')
-  @ApiBearerAuth('user')
-  @UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
-  @ApiOperation({ summary: 'Payment history for current user' })
-  @ApiOkResponse({ type: [PaymentResponseModel] })
-  async history(
-    @Identity() identity: IIdentity,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ): Promise<PaymentResponseModel[]> {
-    return this.paymentsService.paymentHistory(identity.userId, page, pageSize);
-  }
-
-  @Get('invoices')
-  @ApiBearerAuth('user')
-  @UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
-  @ApiOperation({ summary: 'Invoices for current user' })
-  @ApiOkResponse({ type: [InvoiceResponseModel] })
-  async invoices(@Identity() identity: IIdentity): Promise<InvoiceResponseModel[]> {
-    return this.paymentsService.listInvoices(identity.userId);
-  }
 }

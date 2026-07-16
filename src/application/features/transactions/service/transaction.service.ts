@@ -33,7 +33,7 @@ export class TransactionService implements ITransactionService {
         console.log('Interest transaction');
         console.log(loan.interestRemaining, data.amount);
         if (loan.interestRemaining < data.amount) {
-          throw new BadRequestException('Interest remaining is less than transaction amount');
+          throw new BadRequestException('Transaction amount is greater than interest remaining(' + loan.interestRemaining + ')');
         }
         loan.interestRemaining -= data.amount;
         loan.interestPaid += data.amount;
@@ -265,7 +265,7 @@ export class TransactionService implements ITransactionService {
         }
         const totalRemaining = loan.amountRemaining + loan.interestRemaining;
         if (data.amount > totalRemaining && data.transactionType !== ETransactionType.TOP_UP) {
-          throw new BadRequestException('Amount should not be greater than loan remaining');
+          throw new BadRequestException('Amount should not be greater than loan remaining(' + totalRemaining + ')');
         }
       }
       if (data.dueId) {

@@ -10,7 +10,6 @@ import {
   Payment,
   PaymentEvent,
   PaymentOrder,
-  Refund,
 } from '../domain';
 import {
   IPaymentEventsRepository,
@@ -25,7 +24,7 @@ import {
   IPaymentOrdersRepository,
   PAYMENT_ORDERS_REPOSITORY,
 } from './i-payment-orders.repository';
-import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
+import { REFUND_SERVICE, RefundService } from './refund.service';
 import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
 import { IWebhookService } from './i-webhook.service';
 import { SUBSCRIPTION_PROVIDER_RAZORPAY } from '@shared-libs';
@@ -39,7 +38,7 @@ export class WebhookService implements IWebhookService {
     @Inject(SUBSCRIPTIONS_REPOSITORY) private readonly subscriptionsRepo: ISubscriptionsRepository,
     @Inject(PAYMENTS_REPOSITORY) private readonly paymentsRepo: IPaymentsRepository,
     @Inject(PAYMENT_ORDERS_REPOSITORY) private readonly ordersRepo: IPaymentOrdersRepository,
-    @Inject(REFUNDS_REPOSITORY) private readonly refundsRepo: IRefundsRepository,
+    @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @InjectPinoLogger(WebhookService.name) private readonly logger: PinoLogger,
   ) {}
@@ -85,10 +84,13 @@ export class WebhookService implements IWebhookService {
     }
 
     let eventRow: PaymentEvent;
+    let shouldProcess = false;
+
     if (existing) {
       eventRow = existing;
+      shouldProcess = true;
     } else {
-      eventRow = await this.eventsRepo.insert({
+      const inserted = await this.eventsRepo.insertOrGet({
         provider: SUBSCRIPTION_PROVIDER_RAZORPAY,
         eventId,
         eventName,
@@ -97,6 +99,16 @@ export class WebhookService implements IWebhookService {
         payload,
         userId: eventContext.userId,
       });
+      eventRow = inserted.event;
+      shouldProcess = inserted.created;
+    }
+
+    if (eventRow.processed) {
+      return { received: true, duplicate: true };
+    }
+
+    if (!shouldProcess) {
+      return { received: true, duplicate: true };
     }
 
     try {
@@ -174,13 +186,13 @@ export class WebhookService implements IWebhookService {
 
   private extractEventId(payload: Record<string, unknown>): string {
     if (payload.id) return String(payload.id);
-    // Fallback: deterministic hash-like id from event + created_at + entity id
+
     const createdAt = payload.created_at ?? '';
     const entity = (payload.payload ?? {}) as Record<string, unknown>;
     const firstKey = Object.keys(entity)[0];
     const entityId =
-      firstKey && (entity[firstKey] as any)?.entity?.id
-        ? String((entity[firstKey] as any).entity.id)
+      firstKey && (entity[firstKey] as { entity?: { id?: string } })?.entity?.id
+        ? String((entity[firstKey] as { entity?: { id?: string } }).entity!.id)
         : 'unknown';
     return `${payload.event}_${createdAt}_${entityId}`;
   }
@@ -570,6 +582,7 @@ export class WebhookService implements IWebhookService {
         break;
       case 'refund.created':
       case 'refund.processed':
+      case 'refund.failed':
         await this.handleRefundEvent(payload);
         break;
       case 'invoice.paid':
@@ -738,15 +751,15 @@ export class WebhookService implements IWebhookService {
       return;
     }
 
-    const refund: Refund = {
-      paymentId: payment.id!,
-      providerRefundId: String(entity.id),
-      amount: Number(entity.amount ?? 0) / 100,
-      status: String(entity.status ?? ''),
-      reason: entity.notes ? JSON.stringify(entity.notes) : null,
-      rawJson: entity,
-    };
-    await this.refundsRepo.upsertByProviderRefundId(refund);
+    const refund = this.refundService.buildRefundFromWebhook(payment, entity);
+    await this.refundService.recordRefund(payment, refund);
+
+    if (refund.status === 'failed') {
+      this.logger.warn(
+        { paymentId: payment.id, providerRefundId: refund.providerRefundId, reason: refund.reason },
+        'Razorpay refund failed — pending hold released',
+      );
+    }
   }
 
   private async handleInvoiceEvent(

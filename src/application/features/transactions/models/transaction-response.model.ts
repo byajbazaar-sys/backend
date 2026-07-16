@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 import { ETransactionType, ETransactionPaidIn } from '../enums';
 import { CustomerResponseModel } from '../../customers';
+import { DueResponseModel } from './dues-response.model';
 
 export class TransactionResponseModel {
   @Expose()
@@ -42,4 +43,16 @@ export class TransactionResponseModel {
   @Expose()
   @Type(() => CustomerResponseModel)
   customer: CustomerResponseModel;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Due ID when transaction type is due payment' })
+  dueId?: string;
+
+  @Expose()
+  @ApiPropertyOptional({
+    type: () => DueResponseModel,
+    description: 'Due payment details when transaction type is DuePayment',
+  })
+  @Type(() => DueResponseModel)
+  due?: DueResponseModel;
 }

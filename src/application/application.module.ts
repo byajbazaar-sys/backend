@@ -60,6 +60,8 @@ import {
   PLAN_SERVICE,
   SubscriptionAdminService,
   SUBSCRIPTION_ADMIN_SERVICE,
+  REFUND_SERVICE,
+  RefundService,
   JEWELLERY_EVENT_SERVICE,
   JewelleryEventService,
   TRY_ON_SERVICE,
@@ -194,6 +196,10 @@ import {
     {
       provide: SUBSCRIPTION_ADMIN_SERVICE,
       useClass: SubscriptionAdminService,
+    },
+    {
+      provide: REFUND_SERVICE,
+      useClass: RefundService,
     },
     {
       provide: JEWELLERY_EVENT_SERVICE,

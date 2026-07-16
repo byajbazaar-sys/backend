@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
-import { EInventoryItemStatus, EMetalType } from '../enums';
+import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../enums';
 
 export class InventoryItemResponseModel {
   @Expose()
@@ -74,6 +74,10 @@ export class InventoryItemResponseModel {
   @Expose()
   @ApiPropertyOptional()
   makingCharges?: number;
+
+  @Expose()
+  @ApiPropertyOptional({ enum: EMakingChargeMode })
+  makingChargeMode?: EMakingChargeMode;
 
   @Expose()
   @ApiPropertyOptional()

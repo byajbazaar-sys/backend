@@ -4,7 +4,6 @@ import {
   CancelSubscriptionRequestModel,
   CreateSubscriptionRequestModel,
   CreateSubscriptionResponseModel,
-  InvoiceResponseModel,
   PaymentResponseModel,
   SubscriptionStatusResponseModel,
 } from '../models';
@@ -24,6 +23,4 @@ export interface IPaymentsService {
   resume(userId: string): Promise<SubscriptionStatusResponseModel>;
   applyCoupon(userId: string, body: ApplyCouponRequestModel): Promise<ApplyCouponResponseModel>;
   listPayments(userId: string, page?: number, pageSize?: number): Promise<PaymentResponseModel[]>;
-  paymentHistory(userId: string, page?: number, pageSize?: number): Promise<PaymentResponseModel[]>;
-  listInvoices(userId: string): Promise<InvoiceResponseModel[]>;
 }

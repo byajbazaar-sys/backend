@@ -10,7 +10,11 @@ import {
 } from 'typeorm';
 import { UserEntity } from './user.entity';
 import { InventoryCategoryEntity } from './inventory-category.entity';
-import { EInventoryItemStatus, EMetalType } from '../../../application/features/inventory/enums';
+import {
+  EInventoryItemStatus,
+  EMakingChargeMode,
+  EMetalType,
+} from '../../../application/features/inventory/enums';
 
 @Entity('inventory_items')
 @Index('IDX_inventory_items_sku', ['sku'], { unique: true })
@@ -83,6 +87,15 @@ export class InventoryItemEntity {
 
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   makingCharges: number;
+
+  @Column({
+    type: 'enum',
+    enum: EMakingChargeMode,
+    enumName: 'e_making_charge_mode_enum',
+    default: EMakingChargeMode.Fixed,
+    name: 'making_charge_mode',
+  })
+  makingChargeMode: EMakingChargeMode;
 
   @Column({ type: 'numeric', precision: 5, scale: 2, default: 0 })
   wastagePercentage: number;

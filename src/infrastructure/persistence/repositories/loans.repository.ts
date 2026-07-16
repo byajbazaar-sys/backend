@@ -83,7 +83,13 @@ export class LoansRepository implements ILoansRepository {
       if (unpaidDues.length > 0) {
         const entities = dueRepo.create(
           unpaidDues.map((d) => ({
-            ...d,
+            loanId: d.loanId,
+            customerId: d.customerId,
+            dueAmount: Number(d.dueAmount),
+            principalAmount: Number(d.principalAmount),
+            interestAmount: Number(d.interestAmount),
+            type: d.type,
+            dueDate: d.dueDate,
             createdBy: d.createdBy,
             customer: d.customerId ? { id: d.customerId } : undefined,
             loan: d.loanId ? { id: d.loanId } : undefined,

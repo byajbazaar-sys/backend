@@ -33,12 +33,14 @@ import { ICouponsRepository, COUPONS_REPOSITORY } from './i-coupons.repository';
 import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
+import { REFUND_SERVICE, RefundService } from './refund.service';
 import { RazorpayOptions } from '../../../shared';
 import {
   isTrialActive,
   resolveTrialEndsAt,
   trialDaysRemaining,
 } from '../utils/trial.util';
+import { isPaymentRefundable, remainingRefundableAmount } from '../utils/refund.util';
 
 @Injectable()
 export class SubscriptionAdminService implements ISubscriptionAdminService {
@@ -51,6 +53,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     @Inject(RAZORPAY_SERVICE) private readonly razorpay: IRazorpayService,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(REFUNDS_REPOSITORY) private readonly refundsRepo: IRefundsRepository,
+    @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
     private readonly razorpayOptions: RazorpayOptions,
   ) {}
 
@@ -93,9 +96,9 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     if (!sub.providerSubscriptionId) {
       throw new BadRequestException('Subscription is not linked to Razorpay');
     }
-    await this.razorpay.cancelSubscription(sub.providerSubscriptionId, true);
+    await this.razorpay.cancelSubscription(sub.providerSubscriptionId, false);
     const updated = await this.subscriptionsRepo.update(sub.id!, {
-      cancelAtPeriodEnd: true,
+      cancelAtPeriodEnd: false,
     });
     const userRow = await this.loadUserRow(updated.userId);
     return this.toDetail(updated, null, userRow);
@@ -152,23 +155,25 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     if (!payment?.id) {
       throw new NotFoundException('Payment not found');
     }
-    if (payment.status !== 'captured') {
-      throw new BadRequestException('Only captured payments can be refunded');
+    if (payment.status === 'refunded') {
+      throw new BadRequestException('Payment has already been fully refunded');
+    }
+    if (!isPaymentRefundable(payment.status)) {
+      throw new BadRequestException('Only captured or partially refunded payments can be refunded');
     }
 
     const existingRefunds = await this.refundsRepo.findByPaymentId(payment.id);
-    const refundedAmount = existingRefunds
-      .filter((r) => r.status === 'processed' || r.status === 'pending')
-      .reduce((sum, r) => sum + Number(r.amount), 0);
-    const remaining = Number(payment.amount) - refundedAmount;
+    const remaining = remainingRefundableAmount(Number(payment.amount), existingRefunds);
 
     if (remaining <= 0) {
       throw new BadRequestException('Payment has already been fully refunded');
     }
 
     const refundAmountInr = body.amount ?? remaining;
-    if (refundAmountInr <= 0 || refundAmountInr > remaining) {
-      throw new BadRequestException(`Refund amount must be between 0.01 and ${remaining} INR`);
+    if (refundAmountInr <= 0 || refundAmountInr > remaining + 0.01) {
+      throw new BadRequestException(
+        `Refund amount must be between 0.01 and ${remaining} ${payment.currency ?? 'INR'}`,
+      );
     }
 
     const amountPaise = Math.round(refundAmountInr * 100);
@@ -178,7 +183,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
       notes: body.reason ? { reason: body.reason } : undefined,
     });
 
-    const saved = await this.refundsRepo.upsertByProviderRefundId({
+    const saved = await this.refundService.recordRefund(payment, {
       paymentId: payment.id,
       providerRefundId: rzpRefund.id,
       amount: refundAmountInr,
@@ -186,13 +191,6 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
       reason: body.reason ?? null,
       rawJson: rzpRefund.raw,
     });
-
-    if (refundedAmount + refundAmountInr >= Number(payment.amount)) {
-      await this.paymentsRepo.upsertByProviderPaymentId({
-        ...payment,
-        status: 'refunded',
-      });
-    }
 
     return plainToInstance(RefundResponseModel, saved, { excludeExtraneousValues: true });
   }

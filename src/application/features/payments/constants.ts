@@ -30,6 +30,7 @@ export const RAZORPAY_WEBHOOK_EVENTS = [
   'payment.failed',
   'refund.created',
   'refund.processed',
+  'refund.failed',
   'invoice.paid',
   'invoice.partially_paid',
   'invoice.expired',

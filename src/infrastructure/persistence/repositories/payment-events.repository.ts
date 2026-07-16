@@ -32,6 +32,38 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
     return this.mapEntity(created);
   }
 
+  async insertOrGet(data: PaymentEvent): Promise<{ event: PaymentEvent; created: boolean }> {
+    const insertResult = await this.paymentEventRepo
+      .createQueryBuilder()
+      .insert()
+      .into(PaymentEventEntity)
+      .values({
+        provider: data.provider,
+        eventId: data.eventId,
+        eventName: data.eventName,
+        processed: data.processed ?? false,
+        signature: data.signature ?? null,
+        payload: (data.payload ?? {}) as object,
+        userId: data.userId ?? null,
+        paymentId: data.paymentId ?? null,
+        paymentOrderId: data.paymentOrderId ?? null,
+      })
+      .orIgnore()
+      .returning('*')
+      .execute();
+
+    const inserted = insertResult.raw?.[0] as PaymentEventEntity | undefined;
+    if (inserted) {
+      return { event: this.mapEntity(inserted), created: true };
+    }
+
+    const existing = await this.findByProviderAndEventId(data.provider, data.eventId);
+    if (!existing) {
+      throw new Error(`Payment event ${data.provider}/${data.eventId} missing after conflict`);
+    }
+    return { event: existing, created: false };
+  }
+
   async findByProviderAndEventId(provider: string, eventId: string): Promise<PaymentEvent | null> {
     const entity = await this.paymentEventRepo.findOne({ where: { provider, eventId } });
     if (!entity) return null;

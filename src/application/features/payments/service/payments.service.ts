@@ -20,7 +20,6 @@ import {
   CancelSubscriptionRequestModel,
   CreateSubscriptionRequestModel,
   CreateSubscriptionResponseModel,
-  InvoiceResponseModel,
   PaymentResponseModel,
   SubscriptionStatusResponseModel,
 } from '../models';
@@ -339,33 +338,6 @@ export class PaymentsService implements IPaymentsService {
   ): Promise<PaymentResponseModel[]> {
     const { items } = await this.paymentsRepo.findByUserId(userId, page, pageSize);
     return plainToInstance(PaymentResponseModel, items, { excludeExtraneousValues: true });
-  }
-
-  async paymentHistory(
-    userId: string,
-    page = DEFAULT_PAGE_NUMBER,
-    pageSize = DEFAULT_PAGE_SIZE,
-  ): Promise<PaymentResponseModel[]> {
-    return this.listPayments(userId, page, pageSize);
-  }
-
-  async listInvoices(userId: string): Promise<InvoiceResponseModel[]> {
-    // Invoices are stored as payment_orders from invoice.* webhooks
-    // Fetch via payments linked to user as a practical invoice view
-    const { items } = await this.paymentsRepo.findByUserId(userId, 1, 100);
-    return plainToInstance(
-      InvoiceResponseModel,
-      items.map((p) => ({
-        id: p.id,
-        amount: p.amount,
-        currency: p.currency,
-        status: p.status,
-        providerOrderId: p.providerOrderId,
-        createdAt: p.createdAt,
-        subscriptionId: p.subscriptionId,
-      })),
-      { excludeExtraneousValues: true },
-    );
   }
 
   private async requireOwnedActiveOrPaused(userId: string): Promise<Subscription> {

@@ -49,7 +49,8 @@ export class TransactionsRepository implements ITransactionsRepository {
 
     const qb = this.transactionRepo
       .createQueryBuilder('t')
-      .leftJoinAndSelect('t.customer', 'customer')
+      .leftJoin('t.customer', 'customer')
+      .leftJoin('t.due', 'due')
       .select([
         't.id',
         't.loanId',
@@ -63,6 +64,16 @@ export class TransactionsRepository implements ITransactionsRepository {
         'customer.id',
         'customer.firstName',
         'customer.lastName',
+      ])
+      .addSelect([
+        'due.id',
+        'due.dueDate',
+        'due.loanId',
+        'due.dueAmount',
+        'due.principalAmount',
+        'due.interestAmount',
+        'due.type',
+        'due.customerId',
       ]);
 
     if (loanId) qb.andWhere('t.loan_id = :loanId', { loanId });
