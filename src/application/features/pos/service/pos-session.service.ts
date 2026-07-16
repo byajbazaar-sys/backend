@@ -61,7 +61,6 @@ export class PosSessionService implements IPosSessionService {
     });
 
     const webAppDomain = (process.env.WEB_APP_DOMAIN ?? 'http://localhost:3000').replace(/\/$/, '');
-    // Keep QR short for reliable phone-camera scans; websocketUrl comes from validate API.
     const scannerUrl = `${webAppDomain}/scanner?sessionId=${session.id}&token=${encodeURIComponent(token)}`;
     const qrPayload = scannerUrl;
 

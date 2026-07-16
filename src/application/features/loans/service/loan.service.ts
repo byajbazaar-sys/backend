@@ -162,6 +162,7 @@ export class LoanService implements ILoanService {
       remainingAmount?: number;
       remainingInterest?: number;
       remainingTenure?: number;
+      duePeriodCount?: number;
     },
   ): Due[] {
     const {
@@ -197,7 +198,9 @@ export class LoanService implements ILoanService {
       throw new BadRequestException('Invalid loan balances for due schedule calculation');
     }
 
-    const numberOfDues = this.calculateNumberOfDues(interestType, tenureType, remainingTenure);
+    const numberOfDues =
+      options?.duePeriodCount ??
+      this.calculateNumberOfDues(interestType, tenureType, remainingTenure);
     if (numberOfDues <= 0) {
       throw new Error('Invalid number of dues calculated');
     }
@@ -235,6 +238,7 @@ export class LoanService implements ILoanService {
       remainingAmount?: number;
       remainingInterest?: number;
       remainingTenure?: number;
+      duePeriodCount?: number;
     },
   ): Promise<void> {
     try {
@@ -903,15 +907,24 @@ export class LoanService implements ILoanService {
       const remainingAmount = Number(finalLoanData.amountRemaining ?? existingLoan.amountRemaining);
       const remainingInterest = Number(finalLoanData.interestRemaining ?? existingLoan.interestRemaining);
       const totalTenure = Number(finalLoanData.tenureValue ?? existingLoan.tenureValue);
-      const remainingTenure = Math.max(0, totalTenure - paidDuesCount);
+      const interestType = finalLoanData.interestType ?? existingLoan.interestType;
+      const tenureType = finalLoanData.tenureType ?? existingLoan.tenureType;
+      const totalDuePeriods = this.calculateNumberOfDues(interestType, tenureType, totalTenure);
+      const remainingDuePeriods = Math.max(0, totalDuePeriods - paidDuesCount);
+
+      if (totalDuePeriods < paidDuesCount) {
+        throw new BadRequestException(
+          'Loan tenure cannot be shorter than the number of dues already paid',
+        );
+      }
 
       let unpaidDues: Due[] = [];
-      if (remainingTenure > 0 && (remainingAmount > 0 || remainingInterest > 0)) {
+      if (remainingDuePeriods > 0 && (remainingAmount > 0 || remainingInterest > 0)) {
         const loanForDuesBase: Loan = {
           ...finalLoanData,
           id: existingLoan.id,
-          interestType: finalLoanData.interestType ?? existingLoan.interestType,
-          tenureType: finalLoanData.tenureType ?? existingLoan.tenureType,
+          interestType,
+          tenureType,
           customerId: finalLoanData.customerId ?? existingLoan.customerId,
           createdBy: existingLoan.createdBy,
         };
@@ -922,7 +935,7 @@ export class LoanService implements ILoanService {
             unpaidDues = this.buildUnpaidDuesForRescheduledLoan(
               loanForDuesBase,
               requestedStartDate,
-              totalTenure,
+              totalDuePeriods,
               paidDues,
               remainingAmount,
               remainingInterest,
@@ -935,6 +948,7 @@ export class LoanService implements ILoanService {
                 remainingAmount,
                 remainingInterest,
                 remainingTenure: totalTenure,
+                duePeriodCount: totalDuePeriods,
               },
             );
           }
@@ -949,7 +963,7 @@ export class LoanService implements ILoanService {
           unpaidDues = this.buildDuesForLoan(
             {
               ...loanForDuesBase,
-              tenureValue: remainingTenure,
+              tenureValue: totalTenure,
               amountRemaining: remainingAmount,
               interestRemaining: remainingInterest,
               createdAt: dueStartDate,
@@ -958,7 +972,8 @@ export class LoanService implements ILoanService {
               startDate: dueStartDate,
               remainingAmount,
               remainingInterest,
-              remainingTenure,
+              remainingTenure: totalTenure,
+              duePeriodCount: remainingDuePeriods,
             },
           );
         }
@@ -973,7 +988,7 @@ export class LoanService implements ILoanService {
       );
 
       this.logger.info(
-        { loanId: id, remainingTenure, paidDuesCount, unpaidDues: unpaidDues.length },
+        { loanId: id, totalDuePeriods, remainingDuePeriods, paidDuesCount, unpaidDues: unpaidDues.length },
         'Loan updated and unpaid dues regenerated successfully',
       );
       return updatedLoan;
@@ -1070,7 +1085,7 @@ export class LoanService implements ILoanService {
   private buildUnpaidDuesForRescheduledLoan(
     loan: Loan,
     scheduleStartDate: Date,
-    totalTenure: number,
+    totalDuePeriods: number,
     paidDues: Due[],
     remainingAmount: number,
     remainingInterest: number,
@@ -1086,7 +1101,7 @@ export class LoanService implements ILoanService {
     );
 
     const unpaidDueDates: Date[] = [];
-    for (let period = 1; period <= totalTenure; period++) {
+    for (let period = 1; period <= totalDuePeriods; period++) {
       const dueDate = this.calculateDueDate(anchor, loan.interestType, period);
       if (!paidDueTimes.has(this.startOfDay(dueDate).getTime())) {
         unpaidDueDates.push(dueDate);
