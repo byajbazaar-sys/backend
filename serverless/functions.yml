@@ -106,6 +106,14 @@ wsHeartbeat:
     - websocket:
         route: heartbeat
 
+wsLeaveSession:
+  handler: dist/src/lambda-handlers/websocket-message.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: leaveSession
+
 wsDefault:
   handler: dist/src/lambda-handlers/websocket-message.handler
   timeout: 29

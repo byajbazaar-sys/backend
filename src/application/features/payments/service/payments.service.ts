@@ -32,8 +32,6 @@ import {
   SUBSCRIPTIONS_REPOSITORY,
 } from './i-subscriptions.repository';
 import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
-import { COUPONS_REPOSITORY, ICouponsRepository } from './i-coupons.repository';
-import { COUPON_REDEMPTIONS_REPOSITORY, ICouponRedemptionsRepository } from './i-coupon-redemptions.repository';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import {
@@ -51,9 +49,6 @@ export class PaymentsService implements IPaymentsService {
     @Inject(COUPON_SERVICE) private readonly couponService: ICouponService,
     @Inject(SUBSCRIPTIONS_REPOSITORY) private readonly subscriptionsRepo: ISubscriptionsRepository,
     @Inject(PAYMENTS_REPOSITORY) private readonly paymentsRepo: IPaymentsRepository,
-    @Inject(COUPONS_REPOSITORY) private readonly couponsRepo: ICouponsRepository,
-    @Inject(COUPON_REDEMPTIONS_REPOSITORY)
-    private readonly redemptionsRepo: ICouponRedemptionsRepository,
     @Inject(PLANS_REPOSITORY) private readonly plansRepo: IPlansRepository,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @InjectPinoLogger(PaymentsService.name) private readonly logger: PinoLogger,
@@ -80,6 +75,21 @@ export class PaymentsService implements IPaymentsService {
     body: CreateSubscriptionRequestModel,
     userProfile: { email: string; name: string; phone?: string },
   ): Promise<CreateSubscriptionResponseModel> {
+    const activePlan = await requireCheckoutPlan(this.plansRepo);
+    const originalAmount = Number(activePlan.price);
+    const currency = activePlan.currency?.trim().toUpperCase() || this.razorpayOptions.planCurrency;
+    let discountAmount = 0;
+    let finalAmount = originalAmount;
+    let couponId: string | null = null;
+
+    if (body.couponCode?.trim()) {
+      const preview = await this.couponService.preview(body.couponCode, userId, originalAmount);
+      discountAmount = preview.discountAmount;
+      finalAmount = preview.finalAmount;
+      couponId = preview.coupon.id!;
+      this.assertCouponApplied(body.couponCode, discountAmount);
+    }
+
     let blocking = await this.subscriptionsRepo.findBlockingByUserId(userId);
     if (blocking) {
       if (blocking.status === ESubscriptionStatus.Active) {
@@ -90,14 +100,20 @@ export class PaymentsService implements IPaymentsService {
         blocking.status === ESubscriptionStatus.Authenticated
       ) {
         if (blocking.providerSubscriptionId) {
-          const reuse = await this.tryReuseCheckoutSubscription(blocking);
-          if (reuse === 'already_active') {
-            throw new ConflictException('You already have an active subscription');
+          if (!this.checkoutTermsMatch(blocking, couponId, discountAmount, finalAmount)) {
+            await this.invalidateCheckoutSubscription(blocking);
+            blocking = await this.subscriptionsRepo.findById(blocking.id!);
+          } else {
+            const reuse = await this.tryReuseCheckoutSubscription(blocking);
+            if (reuse === 'already_active') {
+              throw new ConflictException('You already have an active subscription');
+            }
+            if (reuse) {
+              this.assertCouponApplied(body.couponCode, Number(reuse.discountAmount));
+              return reuse;
+            }
+            blocking = await this.subscriptionsRepo.findById(blocking.id!);
           }
-          if (reuse) {
-            return reuse;
-          }
-          blocking = await this.subscriptionsRepo.findById(blocking.id!);
         }
       }
       if (
@@ -111,20 +127,6 @@ export class PaymentsService implements IPaymentsService {
       }
     }
 
-    const activePlan = await requireCheckoutPlan(this.plansRepo);
-    const originalAmount = Number(activePlan.price);
-    const currency = activePlan.currency?.trim().toUpperCase() || this.razorpayOptions.planCurrency;
-    let discountAmount = 0;
-    let finalAmount = originalAmount;
-    let couponId: string | null = null;
-
-    if (body.couponCode?.trim()) {
-      const preview = await this.couponService.preview(body.couponCode, userId, originalAmount);
-      discountAmount = preview.discountAmount;
-      finalAmount = preview.finalAmount;
-      couponId = preview.coupon.id!;
-    }
-
     if (finalAmount <= 0) {
       throw new BadRequestException('Invalid subscription amount');
     }
@@ -136,15 +138,7 @@ export class PaymentsService implements IPaymentsService {
         : (await this.razorpay.ensureMonthlyPlan(amountPaise, currency)).id;
 
     const previousSub = await this.subscriptionsRepo.findLatestByUserId(userId);
-    let providerCustomerId = previousSub?.providerCustomerId ?? null;
-    if (!providerCustomerId) {
-      const customer = await this.razorpay.createOrGetCustomer({
-        name: userProfile.name || userProfile.email,
-        email: userProfile.email,
-        contact: userProfile.phone,
-      });
-      providerCustomerId = customer.id;
-    }
+    const providerCustomerId = previousSub?.providerCustomerId ?? null;
 
     const subscriptionNotes = body.couponCode
       ? { couponCode: body.couponCode.trim().toUpperCase(), planId: activePlan.id }
@@ -202,20 +196,6 @@ export class PaymentsService implements IPaymentsService {
       currentEnd: rzpSub.current_end ? new Date(rzpSub.current_end * 1000) : null,
       nextBillingAt: rzpSub.charge_at ? new Date(rzpSub.charge_at * 1000) : null,
     });
-
-    if (couponId) {
-      try {
-        await this.redemptionsRepo.insert({
-          couponId,
-          userId,
-          subscriptionId: updated.id!,
-          discountAmount,
-        });
-        await this.couponsRepo.incrementUsedCount(couponId);
-      } catch (err) {
-        this.logger.warn({ err, couponId, userId }, 'Coupon redemption record failed');
-      }
-    }
 
     return plainToInstance(
       CreateSubscriptionResponseModel,
@@ -361,6 +341,47 @@ export class PaymentsService implements IPaymentsService {
   private mapRzpStatus(status: string): ESubscriptionStatus {
     const mapped = Object.values(ESubscriptionStatus).find((s) => s === status);
     return mapped ?? ESubscriptionStatus.Created;
+  }
+
+  private assertCouponApplied(couponCode: string | undefined, discountAmount: number): void {
+    if (!couponCode?.trim()) {
+      return;
+    }
+    if (discountAmount <= 0) {
+      throw new BadRequestException('You have already redeemed this coupon');
+    }
+  }
+
+  private checkoutTermsMatch(
+    subscription: Subscription,
+    couponId: string | null,
+    discountAmount: number,
+    finalAmount: number,
+  ): boolean {
+    return (
+      (subscription.couponId ?? null) === couponId &&
+      Number(subscription.discountAmount ?? 0) === discountAmount &&
+      Number(subscription.amount) === finalAmount
+    );
+  }
+
+  private async invalidateCheckoutSubscription(subscription: Subscription): Promise<void> {
+    if (!subscription.providerSubscriptionId) {
+      return;
+    }
+
+    try {
+      await this.razorpay.cancelSubscription(subscription.providerSubscriptionId, false);
+    } catch (err) {
+      this.logger.warn(
+        { err, providerSubscriptionId: subscription.providerSubscriptionId },
+        'Failed to cancel stale Razorpay checkout subscription',
+      );
+    }
+
+    await this.subscriptionsRepo.update(subscription.id!, {
+      providerSubscriptionId: null,
+    });
   }
 
   private toCreateSubscriptionResponse(

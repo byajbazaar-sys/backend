@@ -41,4 +41,16 @@ export class CouponRedemptionsRepository implements ICouponRedemptionsRepository
     if (!entity) return null;
     return this.mapEntity(entity);
   }
+
+  async findBySubscriptionId(subscriptionId: string): Promise<CouponRedemption | null> {
+    const entity = await this.couponRedemptionRepo.findOne({
+      where: { subscriptionId },
+    });
+    if (!entity) return null;
+    return this.mapEntity(entity);
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await this.couponRedemptionRepo.delete(id);
+  }
 }

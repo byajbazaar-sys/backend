@@ -4,3 +4,4 @@ export * from './models';
 export * from './service';
 export * from './pos-sessions.controller';
 export * from './pos-session-public.controller';
+export * from './pos-session-leave.controller';

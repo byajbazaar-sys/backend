@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNumber, IsEnum, Min, Max, IsUUID, IsDateString } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
-import { ELoanTenureType, EInterestCalculationMethod, EInterestType } from '../enums';
+import { ELoanTenureType, EInterestCalculationMethod, EInterestType, EInterestPrincipalBasis } from '../enums';
 import { INTEREST_PERCENTAGE_MAX, TENURE_MAX } from '@shared-libs';
 
 export class UpdateLoanRequestModel {
@@ -60,4 +60,15 @@ export class UpdateLoanRequestModel {
   @IsEnum(EInterestType)
   @IsOptional()
   interestType?: EInterestType;
+
+  @Expose()
+  @ApiPropertyOptional({
+    enum: EInterestPrincipalBasis,
+    example: EInterestPrincipalBasis.REMAINING,
+    description:
+      'When paid dues exist, whether to recalculate interest on remaining principal or total (original) principal',
+  })
+  @IsEnum(EInterestPrincipalBasis)
+  @IsOptional()
+  interestPrincipalBasis?: EInterestPrincipalBasis;
 }

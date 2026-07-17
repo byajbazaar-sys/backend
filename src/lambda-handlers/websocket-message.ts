@@ -165,6 +165,11 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
         logWs('info', 'cartCleared OK', { connectionId, sessionId: body.sessionId });
         break;
       }
+      case 'leaveSession': {
+        result = await wsHandler.handleLeaveSession(connectionId, body);
+        logWs('info', 'leaveSession OK', { connectionId, sessionId: body.sessionId });
+        break;
+      }
       case 'heartbeat':
         result = await wsHandler.handleHeartbeat(connectionId);
         break;

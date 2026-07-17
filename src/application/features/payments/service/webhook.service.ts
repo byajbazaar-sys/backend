@@ -26,6 +26,7 @@ import {
 } from './i-payment-orders.repository';
 import { REFUND_SERVICE, RefundService } from './refund.service';
 import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
+import { COUPON_SERVICE, ICouponService } from './i-coupon.service';
 import { IWebhookService } from './i-webhook.service';
 import { SUBSCRIPTION_PROVIDER_RAZORPAY } from '@shared-libs';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
@@ -39,6 +40,7 @@ export class WebhookService implements IWebhookService {
     @Inject(PAYMENTS_REPOSITORY) private readonly paymentsRepo: IPaymentsRepository,
     @Inject(PAYMENT_ORDERS_REPOSITORY) private readonly ordersRepo: IPaymentOrdersRepository,
     @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
+    @Inject(COUPON_SERVICE) private readonly couponService: ICouponService,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @InjectPinoLogger(WebhookService.name) private readonly logger: PinoLogger,
   ) {}
@@ -660,6 +662,20 @@ export class WebhookService implements IWebhookService {
 
     await this.subscriptionsRepo.update(local.id!, patch);
 
+    if (eventName === 'subscription.activated' || eventName === 'subscription.charged') {
+      const refreshed = await this.subscriptionsRepo.findById(local.id!);
+      if (refreshed) {
+        try {
+          await this.couponService.recordRedemptionForSubscription(refreshed);
+        } catch (err) {
+          this.logger.warn(
+            { err, subscriptionId: refreshed.id, couponId: refreshed.couponId },
+            'Coupon redemption record failed after successful subscription payment',
+          );
+        }
+      }
+    }
+
     // subscription.charged often includes payment — persist if present
     const paymentEntity = this.getEntity(payload, 'payment');
     if (paymentEntity?.id) {
@@ -826,6 +842,17 @@ export class WebhookService implements IWebhookService {
 
     if (eventName === 'invoice.paid' && subscriptionId) {
       await this.subscriptionsRepo.update(subscriptionId, { status: ESubscriptionStatus.Active });
+      const refreshed = await this.subscriptionsRepo.findById(subscriptionId);
+      if (refreshed) {
+        try {
+          await this.couponService.recordRedemptionForSubscription(refreshed);
+        } catch (err) {
+          this.logger.warn(
+            { err, subscriptionId, couponId: refreshed.couponId },
+            'Coupon redemption record failed after invoice paid',
+          );
+        }
+      }
     }
   }
 

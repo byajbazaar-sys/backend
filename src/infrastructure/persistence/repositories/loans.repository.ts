@@ -38,7 +38,7 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async update(id: string, updateDto: Loan): Promise<Loan| null> {
-    const { loanItems, ...data } = updateDto;
+    const { loanItems, interestPrincipalBasis: _basis, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
     const existing = await this.loanRepo.findOne({ where: { id, createdBy } });
     if (!existing) return null;
@@ -56,7 +56,7 @@ export class LoansRepository implements ILoansRepository {
     unpaidDues: Due[],
     unpaidTypes: EDueType[] = [EDueType.UPCOMING_DUE, EDueType.PAST_DUE, EDueType.OVERDUE],
   ): Promise<Loan| null> {
-    const { loanItems, ...data } = updateDto;
+    const { loanItems, interestPrincipalBasis: _basis, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
 
     return this.loanRepo.manager.transaction(async (manager) => {

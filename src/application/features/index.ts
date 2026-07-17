@@ -13,7 +13,7 @@ import {
   InventoryReportsController,
   BarcodeController,
 } from './inventory';
-import { PosSessionsController, PosSessionPublicController } from './pos';
+import { PosSessionsController, PosSessionPublicController, PosSessionLeaveController } from './pos';
 import { SalesBillsController } from './sales-bills';
 import { MetalRatesController } from './metal-rates';
 import { SettingsApiController } from './api-access';
@@ -52,6 +52,7 @@ export const Controllers = [
   InventoryReportsController,
   BarcodeController,
   PosSessionPublicController,
+  PosSessionLeaveController,
   PosSessionsController,
   SalesBillsController,
   MetalRatesController,

@@ -6,7 +6,7 @@ import { ILoanService } from './i-loan.service';
 import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
 import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE, IItemsRepository, ITEMS_REPOSITORY, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../../shared';
-import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus } from '../enums';
+import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus, EInterestPrincipalBasis } from '../enums';
 import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 
 /** Unpaid due types replaced when recalculating a loan schedule. */
@@ -823,19 +823,37 @@ export class LoanService implements ILoanService {
         startDateProvided &&
         this.startOfDay(requestedStartDate).getTime() !== this.startOfDay(currentStartDate).getTime();
 
+      const loanTermsChanged =
+        startDateChanged ||
+        (updateData.tenureType != null && updateData.tenureType !== existingLoan.tenureType) ||
+        (updateData.tenureValue != null &&
+          Number(updateData.tenureValue) !== Number(existingLoan.tenureValue)) ||
+        (updateData.interestType != null && updateData.interestType !== existingLoan.interestType) ||
+        (updateData.interestPercentage != null &&
+          Number(updateData.interestPercentage) !== Number(existingLoan.interestPercentage)) ||
+        (updateData.interestCalculationMethod != null &&
+          updateData.interestCalculationMethod !== existingLoan.interestCalculationMethod);
+
+      const hasPriorPayments =
+        paidDues.length > 0 ||
+        Number(existingLoan.amountPaid ?? 0) > 0 ||
+        Number(existingLoan.interestPaid ?? 0) > 0;
+
       // Check if fields that affect dues calculation have changed
       const duesNeedRecalculation =
-        startDateChanged ||
-        !!updateData.tenureType ||
-        !!updateData.tenureValue ||
-        !!updateData.interestType ||
-        !!updateData.interestPercentage ||
-        !!updateData.interestCalculationMethod ||
-        !!updateData.amountRemaining;
+        loanTermsChanged || !!updateData.amountRemaining;
 
       // Merge update data with existing loan data to get final values
       // Exclude status from updateData to prevent status changes through this endpoint
-      const { status, ...updateDataWithoutStatus } = updateData;
+      const { status, interestPrincipalBasis, ...updateDataWithoutStatus } = updateData;
+
+      if (hasPriorPayments && loanTermsChanged && !interestPrincipalBasis) {
+        throw new BadRequestException(
+          'Choose whether to recalculate interest on remaining principal or total principal.',
+        );
+      }
+
+      const principalBasis = interestPrincipalBasis ?? EInterestPrincipalBasis.REMAINING;
       const finalLoanData: Loan = {
         ...existingLoan,
         ...updateDataWithoutStatus,
@@ -854,39 +872,57 @@ export class LoanService implements ILoanService {
         updateData.amountRemaining ||
         updateData.interestType
       ) {
-        // Use update values if provided, otherwise use existing values
         const amountRemaining = Number(updateData.amountRemaining ?? existingLoan.amountRemaining);
+        const amountPaid = Number(existingLoan.amountPaid ?? 0);
+        const interestPaid = Number(existingLoan.interestPaid ?? 0);
         const interestPercentage = Number(updateData.interestPercentage ?? existingLoan.interestPercentage);
         const tenureValue = Number(updateData.tenureValue ?? existingLoan.tenureValue);
         const interestCalculationMethod = updateData.interestCalculationMethod ?? existingLoan.interestCalculationMethod;
 
+        const useTotalPrincipal =
+          hasPriorPayments && principalBasis === EInterestPrincipalBasis.TOTAL;
+        const principalForInterest = useTotalPrincipal ? amountRemaining + amountPaid : amountRemaining;
+
         // Validate that all required values are valid numbers
         if (
-          isNaN(amountRemaining) ||
+          isNaN(principalForInterest) ||
           isNaN(interestPercentage) ||
           isNaN(tenureValue) ||
-          amountRemaining < 0 ||
+          principalForInterest < 0 ||
           interestPercentage < 0 ||
           tenureValue < 0
         ) {
           this.logger.error(
-            { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod },
+            { principalForInterest, interestPercentage, tenureValue, interestCalculationMethod, principalBasis },
             'Invalid values for interest calculation',
           );
           throw new BadRequestException('Invalid loan parameters for interest calculation');
         }
 
-        if (interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
-          finalLoanData.interestRemaining =
-            (interestPercentage * amountRemaining * (1 + interestPercentage / 100) ** tenureValue) / 100;
-        } else {
-          finalLoanData.interestRemaining = (interestPercentage * amountRemaining * tenureValue) / 100;
-        }
+        const calculatedInterest = this.calculateInterestAmount(
+          principalForInterest,
+          interestPercentage,
+          tenureValue,
+          interestCalculationMethod,
+        );
+
+        finalLoanData.interestRemaining =
+          useTotalPrincipal
+            ? Math.max(0, Number((calculatedInterest - interestPaid).toFixed(2)))
+            : calculatedInterest;
 
         // Ensure interestRemaining is a valid number
         if (isNaN(finalLoanData.interestRemaining) || !isFinite(finalLoanData.interestRemaining)) {
           this.logger.error(
-            { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod, calculatedInterest: finalLoanData.interestRemaining },
+            {
+              principalForInterest,
+              interestPercentage,
+              tenureValue,
+              interestCalculationMethod,
+              principalBasis,
+              calculatedInterest,
+              interestPaid,
+            },
             'Calculated interest is NaN or infinite',
           );
           throw new BadRequestException('Invalid interest calculation result');
@@ -919,7 +955,9 @@ export class LoanService implements ILoanService {
       }
 
       let unpaidDues: Due[] = [];
-      if (remainingDuePeriods > 0 && (remainingAmount > 0 || remainingInterest > 0)) {
+      const hasRemainingBalance = remainingAmount > 0 || remainingInterest > 0;
+
+      if (hasRemainingBalance) {
         const loanForDuesBase: Loan = {
           ...finalLoanData,
           id: existingLoan.id,
@@ -929,30 +967,28 @@ export class LoanService implements ILoanService {
           createdBy: existingLoan.createdBy,
         };
 
-        if (startDateChanged) {
-          if (paidDuesCount > 0) {
-            // Rebuild full schedule from new start; keep paid periods, fill gaps (e.g. Aug unpaid when Sep is paid)
-            unpaidDues = this.buildUnpaidDuesForRescheduledLoan(
-              loanForDuesBase,
-              requestedStartDate,
-              totalDuePeriods,
-              paidDues,
+        if (startDateChanged && paidDuesCount > 0) {
+          // Match unpaid slots on the new schedule (paid due dates may not align with new start)
+          unpaidDues = this.buildUnpaidDuesForRescheduledLoan(
+            loanForDuesBase,
+            requestedStartDate,
+            totalDuePeriods,
+            paidDues,
+            remainingAmount,
+            remainingInterest,
+          );
+        } else if (startDateChanged) {
+          unpaidDues = this.buildDuesForLoan(
+            { ...loanForDuesBase, tenureValue: totalTenure },
+            {
+              startDate: this.startOfDay(requestedStartDate),
               remainingAmount,
               remainingInterest,
-            );
-          } else {
-            unpaidDues = this.buildDuesForLoan(
-              { ...loanForDuesBase, tenureValue: totalTenure },
-              {
-                startDate: this.startOfDay(requestedStartDate),
-                remainingAmount,
-                remainingInterest,
-                remainingTenure: totalTenure,
-                duePeriodCount: totalDuePeriods,
-              },
-            );
-          }
-        } else {
+              remainingTenure: totalTenure,
+              duePeriodCount: totalDuePeriods,
+            },
+          );
+        } else if (remainingDuePeriods > 0) {
           const dueStartDate = this.resolveUnpaidDueStartDate(
             finalLoanData,
             paidDues,
@@ -974,6 +1010,30 @@ export class LoanService implements ILoanService {
               remainingInterest,
               remainingTenure: totalTenure,
               duePeriodCount: remainingDuePeriods,
+            },
+          );
+        } else {
+          // All nominal periods paid but balance remains — single due for outstanding amount
+          const dueStartDate = this.resolveUnpaidDueStartDate(
+            finalLoanData,
+            paidDues,
+            currentStartDate,
+            false,
+          );
+          unpaidDues = this.buildDuesForLoan(
+            {
+              ...loanForDuesBase,
+              tenureValue: 1,
+              amountRemaining: remainingAmount,
+              interestRemaining: remainingInterest,
+              createdAt: dueStartDate,
+            },
+            {
+              startDate: dueStartDate,
+              remainingAmount,
+              remainingInterest,
+              remainingTenure: 1,
+              duePeriodCount: 1,
             },
           );
         }
@@ -1154,6 +1214,18 @@ export class LoanService implements ILoanService {
     );
     const lastPaidDue = sortedPaid[sortedPaid.length - 1];
     return this.startOfDay(new Date(lastPaidDue.dueDate));
+  }
+
+  private calculateInterestAmount(
+    principal: number,
+    interestPercentage: number,
+    tenureValue: number,
+    interestCalculationMethod: EInterestCalculationMethod,
+  ): number {
+    if (interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
+      return (interestPercentage * principal * (1 + interestPercentage / 100) ** tenureValue) / 100;
+    }
+    return (interestPercentage * principal * tenureValue) / 100;
   }
 
   private calculateNumberOfDues(interestType: EInterestType, tenureType: ELoanTenureType, tenureValue: number): number {

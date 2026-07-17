@@ -17,6 +17,8 @@ export interface IWebSocketHandlerService {
   handleCartItemRemoved(connectionId: string, userId: string, body: Record<string, unknown>): Promise<Record<string, unknown>>;
   handleSyncCartState(connectionId: string, userId: string, body: Record<string, unknown>): Promise<Record<string, unknown>>;
   handleCartCleared(connectionId: string, userId: string, body: Record<string, unknown>): Promise<Record<string, unknown>>;
+  handleLeaveSession(connectionId: string, body: Record<string, unknown>): Promise<Record<string, unknown>>;
+  handleLeaveSessionByToken(sessionId: string, token: string): Promise<void>;
   handleHeartbeat(connectionId: string): Promise<Record<string, unknown>>;
 }
 

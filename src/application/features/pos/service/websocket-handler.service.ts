@@ -109,6 +109,28 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     this.logger.info({ sessionId, previousConnectionId }, 'Released previous mobile scanner slot');
   }
 
+  private async notifyDesktopScannerDisconnected(
+    sessionId: string,
+    desktopConnectionId: string | undefined,
+  ): Promise<void> {
+    if (!desktopConnectionId) return;
+    await this.wsMessage.sendToConnection(desktopConnectionId, {
+      type: 'scannerDisconnected',
+      sessionId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  private async detachMobileScanner(sessionId: string, mobileConnectionId: string): Promise<void> {
+    const session = await this.sessionsRepo.findById(sessionId);
+    if (!session || session.mobileConnectionId !== mobileConnectionId) return;
+
+    const desktopId = session.desktopConnectionId;
+    await this.releaseMobileSlot(sessionId, mobileConnectionId);
+    await this.notifyDesktopScannerDisconnected(sessionId, desktopId);
+    this.logger.info({ sessionId, mobileConnectionId }, 'Mobile scanner detached from session');
+  }
+
   private async ensureMobileSlotAvailable(
     sessionId: string,
     connectionId: string,
@@ -149,11 +171,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
         }
 
         if (wasMobile && desktopId) {
-          await this.wsMessage.sendToConnection(desktopId, {
-            type: 'scannerDisconnected',
-            sessionId: session.id,
-            timestamp: new Date().toISOString(),
-          });
+          await this.notifyDesktopScannerDisconnected(session.id, desktopId);
         }
       }
     }
@@ -178,23 +196,39 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     if (deviceType === EDeviceType.Desktop) {
       session = await this.posSessionService.attachDesktopConnection(sessionId, connectionId, userId);
 
+      let mobileConnected = false;
       if (session.mobileConnectionId) {
-        await this.wsMessage.sendToConnection(session.mobileConnectionId, {
-          type: 'desktopConnected',
-          sessionId,
-          timestamp: new Date().toISOString(),
-        });
-        await this.wsMessage.sendToConnection(connectionId, {
-          type: 'scannerConnected',
-          sessionId,
-          timestamp: new Date().toISOString(),
-        });
-        await this.wsMessage.sendToConnection(connectionId, {
-          type: 'requestCartSync',
-          sessionId,
-          timestamp: new Date().toISOString(),
-        });
+        const mobileAlive = await this.wsMessage.probeConnection(session.mobileConnectionId);
+        if (mobileAlive) {
+          mobileConnected = true;
+          await this.wsMessage.sendToConnection(session.mobileConnectionId, {
+            type: 'desktopConnected',
+            sessionId,
+            timestamp: new Date().toISOString(),
+          });
+          await this.wsMessage.sendToConnection(connectionId, {
+            type: 'scannerConnected',
+            sessionId,
+            timestamp: new Date().toISOString(),
+          });
+          await this.wsMessage.sendToConnection(connectionId, {
+            type: 'requestCartSync',
+            sessionId,
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          await this.releaseMobileSlot(sessionId, session.mobileConnectionId);
+          session = (await this.sessionsRepo.findById(sessionId)) ?? session;
+        }
       }
+
+      return {
+        type: 'sessionRegistered',
+        sessionId,
+        status: session?.status,
+        deviceType,
+        mobileConnected,
+      };
     }
 
     return {
@@ -515,6 +549,28 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     );
 
     return { type: 'cartUpdatedAck', success: true };
+  }
+
+  async handleLeaveSession(
+    connectionId: string,
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const sessionId = body.sessionId as string | undefined;
+    if (!sessionId) throw new ForbiddenException('sessionId required');
+
+    const session = await this.sessionsRepo.findById(sessionId);
+    if (session?.mobileConnectionId === connectionId) {
+      await this.detachMobileScanner(sessionId, connectionId);
+    }
+
+    return { type: 'leaveSessionAck', sessionId, success: true };
+  }
+
+  async handleLeaveSessionByToken(sessionId: string, token: string): Promise<void> {
+    await this.posSessionService.validateSessionToken(sessionId, token);
+    const session = await this.sessionsRepo.findById(sessionId);
+    if (!session?.mobileConnectionId) return;
+    await this.detachMobileScanner(sessionId, session.mobileConnectionId);
   }
 
   async handleHeartbeat(connectionId: string): Promise<Record<string, unknown>> {

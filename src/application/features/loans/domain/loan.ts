@@ -1,5 +1,5 @@
 import { Expose, Type } from 'class-transformer';
-import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus } from '../enums';
+import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus, EInterestPrincipalBasis } from '../enums';
 import { LoanItem } from './loan-item';
 
 export class Loan {
@@ -70,4 +70,8 @@ export class Loan {
 
   @Expose()
   public fingerprintRef?: string;
+
+  /** Transient — used only during loan update when recalculating interest with paid dues. */
+  @Expose()
+  public interestPrincipalBasis?: EInterestPrincipalBasis;
 }
