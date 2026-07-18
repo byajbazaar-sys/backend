@@ -22,12 +22,12 @@ import type {
   ITryOnAiService,
 } from '../../../application';
 import {
-  buildJewelleryTryOnPrompt,
+  buildFullTryOnPrompt,
   buildOutfitRecolorPrompt,
-  buildOutfitTryOnPrompt,
 } from '../prompts/try-on.prompts';
 import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
 import { extractJsonObject } from '../utils/ai-response.util';
+import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 import { mimeToImageFormat, stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 
 @Injectable()
@@ -60,26 +60,17 @@ export class BedrockService implements ITryOnAiService, IEventsDiscoveryService 
   // --- Try-on ---
 
   async generateJewelleryTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
-    const prompt = buildJewelleryTryOnPrompt(request.jewelleryItems);
+    const prompt = buildFullTryOnPrompt('jewellery', request);
+    const images = buildTryOnImageSequence(request.personImage, request.jewelleryItems);
     this.logger.info({ jewelleryCount: request.jewelleryItems.length }, 'Bedrock jewellery try-on');
-    return this.generateTryOnImage(
-      [request.personImage, ...request.jewelleryItems],
-      `${prompt}\n\nGenerate a single photorealistic output image.`,
-    );
+    return this.generateTryOnImage(images, `${prompt}\n\nGenerate a single photorealistic output image.`);
   }
 
   async generateOutfitTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
-    const prompt = buildOutfitTryOnPrompt({
-      items: request.jewelleryItems,
-      outfit: request.outfit,
-      occasion: request.occasion,
-      color: request.color,
-    });
+    const prompt = buildFullTryOnPrompt('outfit', request);
+    const images = buildTryOnImageSequence(request.personImage, request.jewelleryItems);
     this.logger.info({ outfit: request.outfit }, 'Bedrock outfit try-on');
-    return this.generateTryOnImage(
-      [request.personImage, ...request.jewelleryItems],
-      `${prompt}\n\nGenerate a single photorealistic output image.`,
-    );
+    return this.generateTryOnImage(images, `${prompt}\n\nGenerate a single photorealistic output image.`);
   }
 
   async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {

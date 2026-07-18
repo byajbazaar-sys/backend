@@ -1,7 +1,7 @@
 export type AiProvider = 'bedrock' | 'gemini';
 
 /** Provider used specifically for virtual try-on image generation. */
-export type TryOnAiProvider = 'bedrock' | 'gemini' | 'aivot';
+export type TryOnAiProvider = 'bedrock' | 'gemini' | 'aivot' | 'replicate' | 'cloudflare';
 
 export class AIOptions {
   constructor(

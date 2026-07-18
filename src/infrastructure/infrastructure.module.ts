@@ -41,6 +41,7 @@ import {
   RazorpayOptions,
   EVENTS_DISCOVERY_SERVICE,
   TRY_ON_AI_SERVICE,
+  TRY_ON_ORCHESTRATOR,
 } from '../application';
 import {
   CustomersRepository,
@@ -79,11 +80,15 @@ import {
   AIOptions,
   AIResumeService,
   AivotTryOnOptions,
-
+  ReplicateTryOnOptions,
+  CloudflareTryOnOptions,
 } from './ai';
 import { AivotService } from './ai/services/aivot.service';
 import { BedrockService } from './ai/services/bedrock.service';
 import { GeminiService } from './ai/services/gemini.service';
+import { ReplicateTryOnService } from './ai/services/replicate.service';
+import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
+import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.service';
 import { TwilioOptions, TwilioService } from './sms';
 import { SendGridOptions, SendGridService } from './send-grid';
 import { SesOptions, SesService } from './ses';
@@ -244,6 +249,7 @@ import { GoogleOAuthService } from './google-oauth';
           configService.get('fileStorage').secretAccessKey,
           configService.get('fileStorage').bucket,
           configService.get('fileStorage').region,
+          configService.get('fileStorage').endpoint,
         ),
     },
     {
@@ -265,6 +271,16 @@ import { GoogleOAuthService } from './google-oauth';
       provide: AivotTryOnOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('aivotTryOn'),
+    },
+    {
+      provide: ReplicateTryOnOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('replicateTryOn'),
+    },
+    {
+      provide: CloudflareTryOnOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('cloudflareTryOn'),
     },
     {
       provide: TwilioOptions,
@@ -306,16 +322,34 @@ import { GoogleOAuthService } from './google-oauth';
     GeminiService,
     BedrockService,
     AivotService,
+    ReplicateTryOnService,
+    CloudflareTryOnService,
+    TryOnOrchestratorService,
+    {
+      provide: TRY_ON_ORCHESTRATOR,
+      useExisting: TryOnOrchestratorService,
+    },
     {
       provide: TRY_ON_AI_SERVICE,
-      inject: [AIOptions, GeminiService, BedrockService, AivotService],
+      inject: [
+        AIOptions,
+        GeminiService,
+        BedrockService,
+        AivotService,
+        ReplicateTryOnService,
+        CloudflareTryOnService,
+      ],
       useFactory: (
         options: AIOptions,
         gemini: GeminiService,
         bedrock: BedrockService,
         aivot: AivotService,
+        replicate: ReplicateTryOnService,
+        cloudflare: CloudflareTryOnService,
       ) => {
         if (options.tryOnProvider === 'aivot') return aivot;
+        if (options.tryOnProvider === 'replicate') return replicate;
+        if (options.tryOnProvider === 'cloudflare') return cloudflare;
         if (options.tryOnProvider === 'gemini' || options.provider === 'gemini') return gemini;
         return bedrock;
       },
@@ -373,6 +407,7 @@ import { GoogleOAuthService } from './google-oauth';
     LAMBDA_SERVICE,
     AI_RESUME_SERVICE,
     TRY_ON_AI_SERVICE,
+    TRY_ON_ORCHESTRATOR,
     EVENTS_DISCOVERY_SERVICE,
     TWILIO_SERVICE,
     TRANSACTIONS_REPOSITORY,

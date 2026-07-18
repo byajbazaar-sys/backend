@@ -113,6 +113,16 @@ export class CreateTryOnJobRequestModel {
   @Min(1, { message: 'invalid variation value' })
   @Max(2, { message: 'invalid variation value' })
   variations?: number;
+
+  @Expose()
+  @ApiPropertyOptional({
+    minimum: 1,
+    description: 'Client try-on attempt number (controls AI provider routing)',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  tryOnAttempt?: number;
 }
 
 export class RecolorTryOnRequestModel {

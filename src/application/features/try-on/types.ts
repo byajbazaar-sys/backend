@@ -34,6 +34,8 @@ export interface JewelleryTryOnRequest {
   color?: string;
   /** How many result variations to generate (1–2) */
   variations?: number;
+  /** Cloudflare Workers AI model key: klein-4b | klein-9b */
+  cloudflareModel?: string;
 }
 
 export interface OutfitRecolorRequest {

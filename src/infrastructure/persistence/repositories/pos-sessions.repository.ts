@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
 import { PosSessionEntity } from '../entities/pos-session.entity';
 import { IPosSessionsRepository, PosSession } from '../../../application';
-import { EPosSessionStatus } from '../../../application';
+import { EPosSessionStatus } from '../../../application/features/pos/enums/e-pos-session-status.enum';
 
 @Injectable()
 export class PosSessionsRepository implements IPosSessionsRepository {

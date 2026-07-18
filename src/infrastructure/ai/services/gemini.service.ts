@@ -24,11 +24,11 @@ import type {
 } from '../../../application';
 import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
 import {
-  buildJewelleryTryOnPrompt,
+  buildFullTryOnPrompt,
   buildOutfitRecolorPrompt,
-  buildOutfitTryOnPrompt,
 } from '../prompts/try-on.prompts';
 import { extractJsonObject } from '../utils/ai-response.util';
+import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 
 type GoogleGenAICtor = new (opts: { apiKey: string }) => {
@@ -122,20 +122,17 @@ export class GeminiService implements ITryOnAiService, IEventsDiscoveryService, 
   // --- Try-on ---
 
   async generateJewelleryTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
-    const prompt = buildJewelleryTryOnPrompt(request.jewelleryItems);
+    const prompt = buildFullTryOnPrompt('jewellery', request);
+    const images = buildTryOnImageSequence(request.personImage, request.jewelleryItems);
     this.logger.info({ jewelleryCount: request.jewelleryItems.length }, 'Gemini jewellery try-on');
-    return this.generateImage([request.personImage, ...request.jewelleryItems, prompt]);
+    return this.generateImage([...images, prompt]);
   }
 
   async generateOutfitTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
-    const prompt = buildOutfitTryOnPrompt({
-      items: request.jewelleryItems,
-      outfit: request.outfit,
-      occasion: request.occasion,
-      color: request.color,
-    });
+    const prompt = buildFullTryOnPrompt('outfit', request);
+    const images = buildTryOnImageSequence(request.personImage, request.jewelleryItems);
     this.logger.info({ outfit: request.outfit, occasion: request.occasion }, 'Gemini outfit try-on');
-    return this.generateImage([request.personImage, ...request.jewelleryItems, prompt]);
+    return this.generateImage([...images, prompt]);
   }
 
   async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {

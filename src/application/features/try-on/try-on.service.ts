@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
-import { IUsersFileStorage, ITryOnAiService, TRY_ON_AI_SERVICE, USERS_FILE_STORAGE } from '../../shared';
+import { IUsersFileStorage, ITryOnAiService, ITryOnOrchestrator, TRY_ON_AI_SERVICE, TRY_ON_ORCHESTRATOR, USERS_FILE_STORAGE, type TryOnProviderRoute } from '../../shared';
 import type {
   GeneratedImage,
   JewelleryTryOnRequest,
@@ -60,6 +60,7 @@ export interface TryOnLambdaPayload {
   mode: 'jewellery' | 'outfit' | 'recolor';
   request: JewelleryTryOnRequest | OutfitRecolorRequest;
   variations: number;
+  providerRoute?: TryOnProviderRoute;
 }
 
 function jobMetaKey(userId: string, jobId: string): string {
@@ -84,6 +85,7 @@ export class TryOnService implements ITryOnService {
 
   constructor(
     @Inject(TRY_ON_AI_SERVICE) private readonly tryOnAi: ITryOnAiService,
+    @Inject(TRY_ON_ORCHESTRATOR) private readonly tryOnOrchestrator: ITryOnOrchestrator,
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @InjectPinoLogger(TryOnService.name) private readonly logger: PinoLogger,
   ) {}
@@ -277,6 +279,8 @@ export class TryOnService implements ITryOnService {
     };
     await this.writeJob(record);
 
+    const providerRoute = this.tryOnOrchestrator.resolveRoute(body.tryOnAttempt ?? 1);
+
     const request: JewelleryTryOnRequest = {
       personImage: body.personImage,
       jewelleryItems: body.jewelleryItems,
@@ -292,6 +296,7 @@ export class TryOnService implements ITryOnService {
       mode,
       request,
       variations,
+      providerRoute,
     };
 
     await this.dispatchJob(payload);
@@ -374,7 +379,14 @@ export class TryOnService implements ITryOnService {
       } else {
         const req = payload.request as JewelleryTryOnRequest;
         const mode = payload.mode === 'outfit' ? 'outfit' : 'jewellery';
-        if (typeof this.tryOnAi.generateTryOnImages === 'function') {
+        if (payload.providerRoute) {
+          const generated = await this.tryOnOrchestrator.generateTryOnImages(
+            payload.providerRoute,
+            req,
+            mode,
+          );
+          images.push(...generated);
+        } else if (typeof this.tryOnAi.generateTryOnImages === 'function') {
           const generated = await this.tryOnAi.generateTryOnImages(req, mode);
           images.push(...generated);
         } else {

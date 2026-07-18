@@ -70,30 +70,17 @@ export class AivotService implements ITryOnAiService {
     return this.bedrock.recolorOutfit(request);
   }
 
+  private mapVariation(variations?: number): '1' | '2' | 'both' {
+    const count = Math.min(2, Math.max(1, variations ?? 2));
+    return count >= 2 ? 'both' : '1';
+  }
+
   private assertConfigured(): void {
     if (!this.options.isConfigured) {
       throw new BadRequestException(
         'Try-on AI provider is not configured (TRYON_API_BASE_URL is missing)',
       );
     }
-  }
-
-  private resolveJewellery(request: JewelleryTryOnRequest): {
-    field: JewelleryField;
-    item: AiImageInput;
-  } {
-    const items = request.jewelleryItems ?? [];
-    if (!items.length) {
-      throw new BadRequestException('At least one jewellery item is required');
-    }
-    const earring = items.find((i) => i.type === 'earring');
-    if (earring) return { field: 'earring', item: earring };
-    return { field: 'necklace', item: items.find((i) => i.type === 'necklace') ?? items[0] };
-  }
-
-  private mapVariation(variations?: number): '1' | '2' | 'both' {
-    const count = Math.min(2, Math.max(1, variations ?? 2));
-    return count >= 2 ? 'both' : '1';
   }
 
   private buildFormData(request: JewelleryTryOnRequest): FormData {
@@ -106,23 +93,42 @@ export class AivotService implements ITryOnAiService {
       throw new BadRequestException('outfit is required and must be a non-empty string');
     }
 
-    const { field, item } = this.resolveJewellery(request);
-    if (!item.base64) {
-      throw new BadRequestException('jewellery image is required');
+    const items = request.jewelleryItems ?? [];
+    if (!items.length) {
+      throw new BadRequestException('At least one jewellery item is required');
     }
+
+    const necklace = items.find((i) => i.type === 'necklace');
+    const earring = items.find((i) => i.type === 'earring');
+    const fallback = items[0];
 
     const form = new FormData();
     form.append('personImage', Buffer.from(stripDataUrl(request.personImage.base64), 'base64'), {
       filename: 'person.jpg',
       contentType: request.personImage.mimeType || AIVOT_TRYON_MIME,
     });
-    form.append(field, Buffer.from(stripDataUrl(item.base64), 'base64'), {
-      filename: `${field}.jpg`,
-      contentType: item.mimeType || AIVOT_TRYON_MIME,
-    });
 
-    if (field === 'earring' && item.heightInInches != null && item.heightInInches > 0) {
-      form.append('earringHeightInInches', String(item.heightInInches));
+    if (necklace?.base64) {
+      form.append('necklace', Buffer.from(stripDataUrl(necklace.base64), 'base64'), {
+        filename: 'necklace.jpg',
+        contentType: necklace.mimeType || AIVOT_TRYON_MIME,
+      });
+    } else if (!earring && fallback?.base64) {
+      const field: JewelleryField = fallback.type === 'earring' ? 'earring' : 'necklace';
+      form.append(field, Buffer.from(stripDataUrl(fallback.base64), 'base64'), {
+        filename: `${field}.jpg`,
+        contentType: fallback.mimeType || AIVOT_TRYON_MIME,
+      });
+    }
+
+    if (earring?.base64) {
+      form.append('earring', Buffer.from(stripDataUrl(earring.base64), 'base64'), {
+        filename: 'earring.jpg',
+        contentType: earring.mimeType || AIVOT_TRYON_MIME,
+      });
+      if (earring.heightInInches != null && earring.heightInInches > 0) {
+        form.append('earringHeightInInches', String(earring.heightInInches));
+      }
     }
 
     form.append('outfit', outfit);

@@ -7,3 +7,4 @@ export * from './i-google-oauth.service';
 export * from './i-websocket-message.service';
 export * from './i-events-discovery.service';
 export * from './i-try-on-ai.service';
+export * from './i-try-on-orchestrator.service';

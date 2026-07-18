@@ -7,6 +7,9 @@ import {
   LambdaOptions,
   AIOptions,
   AivotTryOnOptions,
+  ReplicateTryOnOptions,
+  CloudflareTryOnOptions,
+  parseCloudflareCredentials,
   TwilioOptions,
   SendGridOptions,
   SesOptions,
@@ -14,18 +17,55 @@ import {
   type TryOnAiProvider,
   AIVOT_TRYON_TIMEOUT_MS,
   AIVOT_TRYON_MAX_RETRIES,
+  REPLICATE_TRYON_MODEL,
+  REPLICATE_TRYON_TIMEOUT_MS,
+  REPLICATE_TRYON_MAX_RETRIES,
+  CLOUDFLARE_TRYON_MODEL,
+  CLOUDFLARE_TRYON_TIMEOUT_MS,
+  CLOUDFLARE_TRYON_MAX_RETRIES,
 } from '../infrastructure';
 
 function resolveTryOnProvider(): TryOnAiProvider {
   const explicit = (process.env.TRY_ON_PROVIDER || '').trim().toLowerCase();
-  if (explicit === 'aivot' || explicit === 'gemini' || explicit === 'bedrock') {
+  if (
+    explicit === 'aivot' ||
+    explicit === 'gemini' ||
+    explicit === 'bedrock' ||
+    explicit === 'replicate' ||
+    explicit === 'cloudflare'
+  ) {
     return explicit;
   }
-  // Prefer Aivot when base URL is configured and no explicit provider is set
   if (process.env.TRYON_API_BASE_URL?.trim()) {
     return 'aivot';
   }
+  if (
+    process.env.CLOUDFLARE_ACCOUNT_ID?.trim() &&
+    process.env.CLOUDFLARE_API_TOKEN?.trim()
+  ) {
+    return 'cloudflare';
+  }
+  if (process.env.REPLICATE_API_TOKEN?.trim()) {
+    return 'replicate';
+  }
   return process.env.AI_PROVIDER === 'gemini' ? 'gemini' : 'bedrock';
+}
+
+function resolveFileStorageOptions(): FileStorageOptions {
+  const r2Endpoint = process.env.CLOUDFLARE_R2_ENDPOINT?.trim();
+  return new FileStorageOptions(
+    r2Endpoint
+      ? process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || ''
+      : process.env?.S3_AWS_ACCESS_KEY_ID || '',
+    r2Endpoint
+      ? process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || ''
+      : process.env?.S3_AWS_SECRET_ACCESS_KEY || '',
+    r2Endpoint
+      ? process.env.CLOUDFLARE_R2_BUCKET || ''
+      : process.env?.S3_BUCKET_NAME ?? 'jobs-file-storage',
+    r2Endpoint ? 'auto' : process.env?.S3_BUCKET_REGION ?? 'ap-south-1',
+    r2Endpoint,
+  );
 }
 
 export const configFactory = (): IMsConfig => ({
@@ -50,12 +90,7 @@ export const configFactory = (): IMsConfig => ({
     password: process.env.DB_PASS ?? 'postgres',
     database: process.env.DB_NAME ?? 'user_db',
   },
-  fileStorage: new FileStorageOptions(
-    process.env?.S3_AWS_ACCESS_KEY_ID || '',
-    process.env?.S3_AWS_SECRET_ACCESS_KEY || '',
-    process.env?.S3_BUCKET_NAME ?? 'jobs-file-storage',
-    process.env?.S3_BUCKET_REGION ?? 'ap-south-1',
-  ),
+  fileStorage: resolveFileStorageOptions(),
   aes: new AESEncryptOptions(
     process.env.AES_KEY ?? '9/nQFoPsXm5iw8c1fOto/CgbZj6PmYevwdH0+Yc45Xw=',
     process.env.AES_ALGORITHM ?? 'aes-256-cbc',
@@ -82,6 +117,22 @@ export const configFactory = (): IMsConfig => ({
     process.env.TRYON_API_BASE_URL?.trim() || '',
     Number(process.env.TRYON_API_TIMEOUT_MS) || AIVOT_TRYON_TIMEOUT_MS,
     Number(process.env.TRYON_API_MAX_RETRIES) || AIVOT_TRYON_MAX_RETRIES,
+  ),
+  replicateTryOn: new ReplicateTryOnOptions(
+    process.env.REPLICATE_API_TOKEN?.trim() || '',
+    process.env.REPLICATE_TRYON_MODEL?.trim() || REPLICATE_TRYON_MODEL,
+    Number(process.env.REPLICATE_TRYON_TIMEOUT_MS) || REPLICATE_TRYON_TIMEOUT_MS,
+    Number(process.env.REPLICATE_TRYON_MAX_RETRIES) || REPLICATE_TRYON_MAX_RETRIES,
+  ),
+  cloudflareTryOn: new CloudflareTryOnOptions(
+    parseCloudflareCredentials(
+      process.env.CLOUDFLARE_ACCOUNT_ID || '',
+      process.env.CLOUDFLARE_API_TOKEN || '',
+    ),
+    process.env.CLOUDFLARE_TRYON_MODEL?.trim() || CLOUDFLARE_TRYON_MODEL,
+    Number(process.env.CLOUDFLARE_TRYON_TIMEOUT_MS) || CLOUDFLARE_TRYON_TIMEOUT_MS,
+    Number(process.env.CLOUDFLARE_TRYON_MAX_RETRIES) || CLOUDFLARE_TRYON_MAX_RETRIES,
+    Number(process.env.CLOUDFLARE_TRYON_GUIDANCE) || 7.5,
   ),
   twilio: new TwilioOptions(
     process.env.TWILIO_ACCOUNT_SID ?? '',
