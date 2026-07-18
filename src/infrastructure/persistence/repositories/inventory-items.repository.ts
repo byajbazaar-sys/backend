@@ -70,19 +70,25 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return this.mapEntity(entity);
   }
 
-  async findBySku(sku: string): Promise<InventoryItem | null> {
-    const entity = await this.repo.findOne({ where: { sku }, relations: ['category'] });
+  async findBySku(sku: string, createdBy: string): Promise<InventoryItem | null> {
+    const entity = await this.repo.findOne({
+      where: { sku, createdBy },
+      relations: ['category'],
+    });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
 
-  async findByBarcode(barcode: string): Promise<InventoryItem | null> {
-    const entity = await this.repo.findOne({ where: { barcode }, relations: ['category'] });
+  async findByBarcode(barcode: string, createdBy: string): Promise<InventoryItem | null> {
+    const entity = await this.repo.findOne({
+      where: { barcode, createdBy },
+      relations: ['category'],
+    });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
 
-  async findByScanCode(code: string): Promise<InventoryItem | null> {
+  async findByScanCode(code: string, createdBy: string): Promise<InventoryItem | null> {
     const trimmed = code.trim();
     if (!trimmed) return null;
 
@@ -90,7 +96,8 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     const qb = this.repo
       .createQueryBuilder('item')
       .leftJoinAndSelect('item.category', 'category')
-      .where(
+      .where('item.created_by = :createdBy', { createdBy })
+      .andWhere(
         'UPPER(item.barcode) = UPPER(:code) OR UPPER(item.sku) = UPPER(:code) OR UPPER(COALESCE(item.itemCode, \'\')) = UPPER(:code)',
         { code: trimmed },
       );

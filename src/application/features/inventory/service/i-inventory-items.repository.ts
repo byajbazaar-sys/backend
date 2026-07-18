@@ -7,9 +7,9 @@ export const INVENTORY_ITEMS_REPOSITORY = 'INVENTORY_ITEMS_REPOSITORY';
 export interface IInventoryItemsRepository {
   create(data: InventoryItem): Promise<InventoryItem>;
   findById(id: string): Promise<InventoryItem | null>;
-  findBySku(sku: string): Promise<InventoryItem | null>;
-  findByBarcode(barcode: string): Promise<InventoryItem | null>;
-  findByScanCode(code: string): Promise<InventoryItem | null>;
+  findBySku(sku: string, createdBy: string): Promise<InventoryItem | null>;
+  findByBarcode(barcode: string, createdBy: string): Promise<InventoryItem | null>;
+  findByScanCode(code: string, createdBy: string): Promise<InventoryItem | null>;
   findAll(params: InventoryItemsFilterOptions): Promise<Paged<InventoryItem>>;
   findAllForReport(params: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>): Promise<InventoryItem[]>;
   getNextSkuSequence(skuPrefix: string, createdBy: string): Promise<number>;

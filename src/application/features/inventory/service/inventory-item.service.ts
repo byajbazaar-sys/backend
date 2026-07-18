@@ -1,13 +1,11 @@
 import {
   BadRequestException,
-  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { QueryFailedError } from 'typeorm';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
 import {
@@ -71,54 +69,30 @@ export class InventoryItemService implements IInventoryItemService {
     return `${skuPrefix}${String(seq).padStart(4, '0')}`;
   }
 
-  private isSkuCollision(err: unknown): boolean {
-    if (!(err instanceof QueryFailedError)) return false;
-    const message = String(err.message);
-    return (
-      message.includes('UQ_inventory_items_sku') || message.includes('UQ_inventory_items_barcode')
-    );
-  }
-
   async create(data: CreateInventoryItemRequestModel, userId: string): Promise<InventoryItem> {
     const category = await this.categoriesRepo.findById(data.categoryId);
     if (!category) throw new NotFoundException('Category not found');
 
-    const maxAttempts = 5;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const sku = await this.generateSku(userId);
-      const item: InventoryItem = {
-        ...data,
-        sku,
-        barcode: sku,
-        status: data.status ?? EInventoryItemStatus.Available,
-        stockQuantity: data.stockQuantity ?? 1,
-        imageUrls: [],
-        createdBy: userId,
-      };
+    const sku = await this.generateSku(userId);
+    const item: InventoryItem = {
+      ...data,
+      sku,
+      barcode: sku,
+      status: data.status ?? EInventoryItemStatus.Available,
+      stockQuantity: data.stockQuantity ?? 1,
+      imageUrls: [],
+      createdBy: userId,
+    };
 
-      try {
-        const created = await this.itemsRepo.create(item);
-        if (created.id) {
-          const qrValue = this.barcodeService.buildInventoryQrPayload(created.id, created.sku!);
-          const withQr = await this.itemsRepo.update(created.id, { qrValue });
-          this.logger.info({ itemId: withQr.id, sku }, 'Inventory item created');
-          return this.enrichItem(withQr);
-        }
-        this.logger.info({ itemId: created.id, sku }, 'Inventory item created');
-        return this.enrichItem(created);
-      } catch (err) {
-        if (this.isSkuCollision(err) && attempt < maxAttempts - 1) {
-          this.logger.warn({ attempt, sku }, 'SKU collision, retrying with next sequence');
-          continue;
-        }
-        if (this.isSkuCollision(err)) {
-          throw new ConflictException('Unable to generate a unique SKU. Please try again.');
-        }
-        throw err;
-      }
+    const created = await this.itemsRepo.create(item);
+    if (created.id) {
+      const qrValue = this.barcodeService.buildInventoryQrPayload(created.id, created.sku!);
+      const withQr = await this.itemsRepo.update(created.id, { qrValue });
+      this.logger.info({ itemId: withQr.id, sku }, 'Inventory item created');
+      return this.enrichItem(withQr);
     }
-
-    throw new ConflictException('Unable to generate a unique SKU. Please try again.');
+    this.logger.info({ itemId: created.id, sku }, 'Inventory item created');
+    return this.enrichItem(created);
   }
 
   private mapListQuery(userId: string, query: ListInventoryItemsQueryModel): InventoryItemsFilterOptions {
@@ -165,7 +139,7 @@ export class InventoryItemService implements IInventoryItemService {
     }
 
     const lookupCode = qrPayload?.sku?.trim() || raw;
-    const item = await this.itemsRepo.findByScanCode(lookupCode);
+    const item = await this.itemsRepo.findByScanCode(lookupCode, userId);
     if (!item) throw new NotFoundException('Inventory item not found for barcode');
     if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
     return this.enrichItem(item);

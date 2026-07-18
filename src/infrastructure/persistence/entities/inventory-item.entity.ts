@@ -17,8 +17,8 @@ import {
 } from '../../../application/features/inventory/enums';
 
 @Entity('inventory_items')
-@Index('IDX_inventory_items_sku', ['sku'], { unique: true })
-@Index('IDX_inventory_items_barcode', ['barcode'], { unique: true })
+@Index('UQ_inventory_items_created_by_sku', ['createdBy', 'sku'], { unique: true })
+@Index('UQ_inventory_items_created_by_barcode', ['createdBy', 'barcode'], { unique: true })
 @Index('IDX_inventory_items_created_by', ['createdBy'])
 @Index('IDX_inventory_items_category_id', ['categoryId'])
 @Index('IDX_inventory_items_status', ['status'])
@@ -33,10 +33,10 @@ export class InventoryItemEntity {
   @JoinColumn({ name: 'created_by' })
   user: UserEntity;
 
-  @Column({ type: 'varchar', length: 20, unique: true })
+  @Column({ type: 'varchar', length: 20 })
   sku: string;
 
-  @Column({ type: 'varchar', length: 20, unique: true })
+  @Column({ type: 'varchar', length: 20 })
   barcode: string;
 
   @Column({ type: 'text', nullable: true })

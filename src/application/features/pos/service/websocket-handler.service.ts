@@ -319,7 +319,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     }
 
     const lookupCode = qrPayload?.sku?.trim() || raw;
-    const item = await this.itemsRepo.findByScanCode(lookupCode);
+    const item = await this.itemsRepo.findByScanCode(lookupCode, ownerUserId);
     if (!item) throw new NotFoundException('Inventory item not found for barcode');
     if (item.createdBy !== ownerUserId) throw new ForbiddenException('Item does not belong to session owner');
     return item;
