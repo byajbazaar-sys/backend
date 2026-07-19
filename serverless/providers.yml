@@ -42,27 +42,13 @@ environment:
   CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${env:CLOUDFLARE_R2_SECRET_ACCESS_KEY, ''}
   CLOUDFLARE_R2_ENDPOINT: ${env:CLOUDFLARE_R2_ENDPOINT, ''}
   CLOUDFLARE_R2_BUCKET: ${env:CLOUDFLARE_R2_BUCKET, ''}
-  TRY_ON_LAMBDA_NAME:
-    Ref: JewelleryTryOnLambdaFunction
-  # Use CloudFormation Refs only inside Fn::Join — ${aws:region}/${sls:stage} break Serverless variable resolution
-  WEBSOCKET_API_ENDPOINT:
-    Fn::Join:
-      - ''
-      - - 'https://'
-        - Ref: WebsocketsApi
-        - '.execute-api.'
-        - Ref: AWS::Region
-        - '.amazonaws.com/'
-        - ${self:provider.stage}
-  WEBSOCKET_API_URL:
-    Fn::Join:
-      - ''
-      - - 'wss://'
-        - Ref: WebsocketsApi
-        - '.execute-api.'
-        - Ref: AWS::Region
-        - '.amazonaws.com/'
-        - ${self:provider.stage}
+  FILE_STORAGE: ${env:FILE_STORAGE, 's3'}
+  TRY_ON_INLINE: ${env:TRY_ON_INLINE, 'false'}
+  # Literal / env only — Ref/GetAtt here creates a circular dependency with
+  # WebsocketsApi + JewelleryTryOnLambdaFunction (see serverless/resources.yml).
+  TRY_ON_LAMBDA_NAME: ${self:service}-${sls:stage}-jewelleryTryOn
+  WEBSOCKET_API_ENDPOINT: ${env:WEBSOCKET_API_ENDPOINT, ''}
+  WEBSOCKET_API_URL: ${env:WEBSOCKET_API_URL, ''}
 httpApi:
   cors: true
 websocket:

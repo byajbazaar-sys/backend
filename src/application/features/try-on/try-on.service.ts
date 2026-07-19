@@ -300,6 +300,19 @@ export class TryOnService implements ITryOnService {
     };
 
     await this.dispatchJob(payload);
+    this.logger.info(
+      {
+        jobId,
+        userId,
+        mode,
+        provider: providerRoute.provider,
+        attemptNumber: providerRoute.attemptNumber,
+        cloudflareModel: providerRoute.cloudflareModel,
+        inline: process.env.TRY_ON_INLINE === 'true',
+        lambdaName: process.env.TRY_ON_LAMBDA_NAME?.trim() || null,
+      },
+      'Try-on job queued',
+    );
     return record;
   }
 
@@ -374,12 +387,23 @@ export class TryOnService implements ITryOnService {
     try {
       const images: GeneratedImage[] = [];
       if (payload.mode === 'recolor') {
+        this.logger.info({ jobId: payload.jobId, provider: 'bedrock', mode: 'recolor' }, 'Try-on job processing started');
         const req = payload.request as OutfitRecolorRequest;
         images.push(await this.tryOnAi.recolorOutfit(req));
       } else {
         const req = payload.request as JewelleryTryOnRequest;
         const mode = payload.mode === 'outfit' ? 'outfit' : 'jewellery';
         if (payload.providerRoute) {
+          this.logger.info(
+            {
+              jobId: payload.jobId,
+              mode,
+              provider: payload.providerRoute.provider,
+              attemptNumber: payload.providerRoute.attemptNumber,
+              cloudflareModel: payload.providerRoute.cloudflareModel,
+            },
+            'Try-on job processing started',
+          );
           const generated = await this.tryOnOrchestrator.generateTryOnImages(
             payload.providerRoute,
             req,
@@ -387,9 +411,14 @@ export class TryOnService implements ITryOnService {
           );
           images.push(...generated);
         } else if (typeof this.tryOnAi.generateTryOnImages === 'function') {
+          this.logger.info(
+            { jobId: payload.jobId, mode, provider: process.env.TRY_ON_PROVIDER || 'default' },
+            'Try-on job processing started (legacy provider)',
+          );
           const generated = await this.tryOnAi.generateTryOnImages(req, mode);
           images.push(...generated);
         } else {
+          this.logger.info({ jobId: payload.jobId, mode, provider: 'legacy-single' }, 'Try-on job processing started');
           const count = Math.min(2, Math.max(1, payload.variations || 1));
           for (let i = 0; i < count; i++) {
             const image =
@@ -409,17 +438,42 @@ export class TryOnService implements ITryOnService {
         updatedAt: new Date().toISOString(),
       };
       await this.writeJob(completed);
-      this.logger.info({ jobId: payload.jobId, count: images.length }, 'Try-on job completed');
+      this.logger.info(
+        {
+          jobId: payload.jobId,
+          count: images.length,
+          provider: payload.providerRoute?.provider,
+          attemptNumber: payload.providerRoute?.attemptNumber,
+        },
+        'Try-on job completed',
+      );
       return completed;
     } catch (err) {
+      const failureReason = err instanceof Error ? err.message : String(err);
+      const nextRoute = payload.providerRoute
+        ? this.tryOnOrchestrator.resolveRoute(payload.providerRoute.attemptNumber + 1)
+        : null;
       const failed: TryOnJobRecord = {
         ...base,
         status: 'FAILED',
-        error: err instanceof Error ? err.message : String(err),
+        error: failureReason,
         updatedAt: new Date().toISOString(),
       };
       await this.writeJob(failed);
-      this.logger.error({ err, jobId: payload.jobId }, 'Try-on job failed');
+      this.logger.error(
+        {
+          err,
+          jobId: payload.jobId,
+          provider: payload.providerRoute?.provider,
+          attemptNumber: payload.providerRoute?.attemptNumber,
+          cloudflareModel: payload.providerRoute?.cloudflareModel,
+          failureReason,
+          nextUserAttempt: payload.providerRoute ? payload.providerRoute.attemptNumber + 1 : null,
+          nextProvider: nextRoute?.provider,
+          nextCloudflareModel: nextRoute?.cloudflareModel,
+        },
+        'Try-on job failed',
+      );
       return failed;
     }
   }

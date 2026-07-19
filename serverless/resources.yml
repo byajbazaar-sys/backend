@@ -182,25 +182,28 @@ Resources:
           - FetchArn: !GetAtt EventsFetchStateLambdaFunction.Arn
             MergeArn: !GetAtt EventsMergeLambdaFunction.Arn
 
-  JewelleryEventsSyncScheduleRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: StartJewelleryEventsStateMachine
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - states:StartExecution
-                Resource: !Ref JewelleryEventsStateMachine
+  # JewelleryEventsSyncScheduleRole + JewelleryEventsMonthlySchedule: add when enabling
+  # the monthly EventBridge trigger (keep out of the template until then to avoid
+  # extra StateMachine ↔ IAM dependencies during deploy).
+  # JewelleryEventsSyncScheduleRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: events.amazonaws.com
+  #           Action: sts:AssumeRole
+  #     Policies:
+  #       - PolicyName: StartJewelleryEventsStateMachine
+  #         PolicyDocument:
+  #           Version: '2012-10-17'
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - states:StartExecution
+  #               Resource: !Ref JewelleryEventsStateMachine
 
   # JewelleryEventsMonthlySchedule:
   #   Type: AWS::Events::Rule

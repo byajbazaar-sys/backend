@@ -59,6 +59,16 @@ export class AivotService implements ITryOnAiService {
     _mode: 'jewellery' | 'outfit',
   ): Promise<GeneratedAiImage[]> {
     this.assertConfigured();
+    this.logger.info(
+      {
+        provider: 'aivot',
+        baseUrl: this.options.baseUrl,
+        timeoutMs: this.options.timeoutMs,
+        maxRetries: this.options.maxRetries,
+        variations: request.variations ?? 1,
+      },
+      'Aivot try-on processing started',
+    );
     const images = await this.callGenerateStyledImage(request);
     if (!images.length) {
       throw new BadRequestException('Try-on AI provider returned no images');
@@ -190,6 +200,13 @@ export class AivotService implements ITryOnAiService {
         }
 
         if (isTransientTryOnStatus(status) && attempt < maxAttempts) {
+          this.logRetryScheduled({
+            correlationId,
+            attempt,
+            maxAttempts,
+            reason: `HTTP ${status}`,
+            nextAction: `retry same provider (attempt ${attempt + 1}/${maxAttempts}) after ${this.retryDelayMs(attempt)}ms`,
+          });
           await this.delay(this.retryDelayMs(attempt));
           continue;
         }
@@ -211,6 +228,13 @@ export class AivotService implements ITryOnAiService {
           (axiosErr.code === 'ECONNABORTED' || axiosErr.code === 'ETIMEDOUT') &&
           attempt < maxAttempts
         ) {
+          this.logRetryScheduled({
+            correlationId,
+            attempt,
+            maxAttempts,
+            reason: axiosErr.code,
+            nextAction: `retry same provider (attempt ${attempt + 1}/${maxAttempts}) after ${this.retryDelayMs(attempt)}ms`,
+          });
           await this.delay(this.retryDelayMs(attempt));
           continue;
         }
@@ -220,6 +244,13 @@ export class AivotService implements ITryOnAiService {
 
         if (status != null) {
           if (isTransientTryOnStatus(status) && attempt < maxAttempts) {
+            this.logRetryScheduled({
+              correlationId,
+              attempt,
+              maxAttempts,
+              reason: `HTTP ${status}`,
+              nextAction: `retry same provider (attempt ${attempt + 1}/${maxAttempts}) after ${this.retryDelayMs(attempt)}ms`,
+            });
             await this.delay(this.retryDelayMs(attempt));
             continue;
           }
@@ -227,12 +258,27 @@ export class AivotService implements ITryOnAiService {
         }
 
         if (attempt < maxAttempts) {
+          this.logRetryScheduled({
+            correlationId,
+            attempt,
+            maxAttempts,
+            reason: axiosErr.message || 'network error',
+            nextAction: `retry same provider (attempt ${attempt + 1}/${maxAttempts}) after ${this.retryDelayMs(attempt)}ms`,
+          });
           await this.delay(this.retryDelayMs(attempt));
           continue;
         }
 
         this.logger.error(
-          { endpoint, durationMs, correlationId, message: axiosErr.message || 'Unknown error' },
+          {
+            endpoint,
+            durationMs,
+            correlationId,
+            attempt,
+            maxAttempts,
+            failureReason: axiosErr.message || 'Unknown error',
+            nextAction: 'no more Aivot retries — job will fail',
+          },
           'Aivot try-on failed',
         );
         throw mapAivotHttpError(502, 'Try-on AI provider is unreachable');
@@ -246,6 +292,26 @@ export class AivotService implements ITryOnAiService {
 
   private retryDelayMs(attempt: number): number {
     return Math.min(2_000 * attempt, 6_000);
+  }
+
+  private logRetryScheduled(input: {
+    correlationId: string;
+    attempt: number;
+    maxAttempts: number;
+    reason: string;
+    nextAction: string;
+  }): void {
+    this.logger.warn(
+      {
+        provider: 'aivot',
+        correlationId: input.correlationId,
+        attempt: input.attempt,
+        maxAttempts: input.maxAttempts,
+        failureReason: input.reason,
+        nextAction: input.nextAction,
+      },
+      'Aivot try-on attempt failed — scheduling retry',
+    );
   }
 
   private delay(ms: number): Promise<void> {

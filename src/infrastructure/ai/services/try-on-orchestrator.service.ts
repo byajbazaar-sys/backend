@@ -34,10 +34,50 @@ export class TryOnOrchestratorService implements ITryOnOrchestrator {
       cloudflareModel: route.cloudflareModel ?? request.cloudflareModel,
     };
 
-    if (route.provider === 'aivot') {
-      return this.aivot.generateTryOnImages(routedRequest, mode);
-    }
+    this.logger.info(
+      {
+        provider: route.provider,
+        attemptNumber: route.attemptNumber,
+        cloudflareModel: route.cloudflareModel,
+        mode,
+        variations: request.variations ?? 1,
+        jewelleryCount: request.jewelleryItems?.length ?? 0,
+      },
+      'Try-on orchestrator dispatching to AI provider',
+    );
 
-    return this.cloudflare.generateTryOnImages(routedRequest, mode);
+    try {
+      const images =
+        route.provider === 'aivot'
+          ? await this.aivot.generateTryOnImages(routedRequest, mode)
+          : await this.cloudflare.generateTryOnImages(routedRequest, mode);
+
+      this.logger.info(
+        {
+          provider: route.provider,
+          attemptNumber: route.attemptNumber,
+          cloudflareModel: route.cloudflareModel,
+          imageCount: images.length,
+        },
+        'Try-on orchestrator provider succeeded',
+      );
+      return images;
+    } catch (err) {
+      const failureReason = err instanceof Error ? err.message : String(err);
+      const nextRoute = resolveTryOnProviderRoute(route.attemptNumber + 1);
+      this.logger.error(
+        {
+          provider: route.provider,
+          attemptNumber: route.attemptNumber,
+          cloudflareModel: route.cloudflareModel,
+          failureReason,
+          nextUserAttempt: route.attemptNumber + 1,
+          nextProvider: nextRoute.provider,
+          nextCloudflareModel: nextRoute.cloudflareModel,
+        },
+        'Try-on orchestrator provider failed — client retry will use next route',
+      );
+      throw err;
+    }
   }
 }

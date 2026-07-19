@@ -54,11 +54,24 @@ export class CloudflareTryOnService implements ITryOnAiService {
   ): Promise<GeneratedAiImage[]> {
     this.assertConfigured();
     const count = Math.min(2, Math.max(1, request.variations ?? 2));
+    const modelId = this.resolveModelId(request);
+    this.logger.info(
+      {
+        provider: 'cloudflare',
+        model: modelId,
+        mode,
+        variations: count,
+        credentialCount: this.options.credentials.length,
+        timeoutMs: this.options.timeoutMs,
+        maxRetries: this.options.maxRetries,
+      },
+      'Cloudflare try-on processing started',
+    );
     const images: GeneratedAiImage[] = [];
 
     for (let i = 0; i < count; i++) {
       const seed = i === 0 ? undefined : randomInt(1, 2_147_483_647);
-      images.push(await this.runOnce(request, mode, seed));
+      images.push(await this.runOnce(request, mode, seed, i + 1, count));
     }
 
     return images;
@@ -186,6 +199,8 @@ export class CloudflareTryOnService implements ITryOnAiService {
     request: JewelleryTryOnRequest,
     mode: 'jewellery' | 'outfit',
     seed?: number,
+    variationIndex = 1,
+    variationTotal = 1,
   ): Promise<GeneratedAiImage> {
     const prompt = this.buildPrompt(request, mode);
     const inputImages = await this.buildInputImages(request);
@@ -205,8 +220,11 @@ export class CloudflareTryOnService implements ITryOnAiService {
         );
         this.logger.info(
           {
+            provider: 'cloudflare',
             model: modelId,
             attempt,
+            variationIndex,
+            variationTotal,
             accountId: credential.accountId,
             durationMs: Date.now() - started,
             jewelleryCount: request.jewelleryItems.length,
@@ -220,17 +238,31 @@ export class CloudflareTryOnService implements ITryOnAiService {
           err instanceof AxiosError
             ? err.response?.status
             : (err as Error & { status?: number }).status;
+        const failureReason = this.errorMessage(err);
+        const willRotate = this.shouldRotateToken(err, status);
+        const nextAction =
+          attempt >= maxAttempts
+            ? 'no more Cloudflare retries — job will fail'
+            : willRotate
+              ? `rotate API credential and retry (attempt ${attempt + 1}/${maxAttempts})`
+              : `retry same credential (attempt ${attempt + 1}/${maxAttempts}) after ${1_500 * attempt}ms`;
+
         this.logger.warn(
           {
-            err,
+            provider: 'cloudflare',
+            model: modelId,
             attempt,
+            maxAttempts,
+            variationIndex,
+            variationTotal,
             status,
             accountId: credential.accountId,
-            model: modelId,
+            failureReason,
+            nextAction,
           },
           'Cloudflare try-on attempt failed',
         );
-        if (this.shouldRotateToken(err, status)) {
+        if (willRotate) {
           this.rotateApiToken();
         }
         if (attempt < maxAttempts) {
@@ -239,6 +271,18 @@ export class CloudflareTryOnService implements ITryOnAiService {
       }
     }
 
+    const failureReason = this.errorMessage(lastError);
+    this.logger.error(
+      {
+        provider: 'cloudflare',
+        model: modelId,
+        variationIndex,
+        variationTotal,
+        failureReason,
+        nextAction: 'no more Cloudflare retries — job will fail',
+      },
+      'Cloudflare try-on failed',
+    );
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
   }
 
