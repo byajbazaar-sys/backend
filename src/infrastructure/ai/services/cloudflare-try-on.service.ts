@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import {
   CLOUDFLARE_TRYON_MAX_IMAGE_PX,
   CLOUDFLARE_TRYON_MIME,
+  CLOUDFLARE_TRYON_MODEL_FAST,
   resolveCloudflareTryOnModelId,
 } from '../ai.constants';
 import { CloudflareTryOnOptions, type CloudflareCredential } from '../cloudflare-try-on.options';
@@ -15,11 +16,17 @@ import type {
   JewelleryTryOnRequest,
   OutfitRecolorRequest,
 } from '../interfaces/ai-media.types';
+import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.prompts';
 import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 import { BedrockService } from './bedrock.service';
-import { GeneratedAiImage, ITryOnAiService } from '../../../application';
+import {
+  GeneratedAiImage,
+  IProductImageAiService,
+  ITryOnAiService,
+  ProductImageInput,
+} from '../../../application';
 
 type CloudflareRunResponse = {
   success?: boolean;
@@ -31,7 +38,7 @@ type CloudflareRunResponse = {
 };
 
 @Injectable()
-export class CloudflareTryOnService implements ITryOnAiService {
+export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiService {
   private keyPointer = 0;
 
   constructor(
@@ -79,6 +86,93 @@ export class CloudflareTryOnService implements ITryOnAiService {
 
   async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {
     return this.bedrock.recolorOutfit(request);
+  }
+
+  async removeProductBackground(image: ProductImageInput): Promise<GeneratedAiImage> {
+    this.assertConfigured();
+    const modelId = CLOUDFLARE_TRYON_MODEL_FAST;
+    const prompt = buildProductBackgroundRemovalPrompt();
+    const inputImage = await this.resizeProductForCloudflare({
+      base64: image.base64,
+      mimeType: image.mimeType || 'image/jpeg',
+    });
+
+    this.logger.info(
+      {
+        provider: 'cloudflare',
+        model: modelId,
+        modelKey: 'klein-4b',
+        mimeType: image.mimeType,
+        credentialCount: this.options.credentials.length,
+      },
+      'Cloudflare product background removal started',
+    );
+
+    const credentialCount = this.options.credentials.length;
+    const maxAttempts = credentialCount * Math.max(1, this.options.maxRetries + 1);
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const credential = this.getCredential();
+      const started = Date.now();
+      try {
+        const generated = await withTimeout(
+          this.invokeWorkersAi(prompt, [inputImage], credential, modelId),
+          Math.min(this.options.timeoutMs, 90_000),
+          modelId,
+        );
+        this.logger.info(
+          {
+            provider: 'cloudflare',
+            model: modelId,
+            attempt,
+            accountId: credential.accountId,
+            durationMs: Date.now() - started,
+          },
+          'Cloudflare product background removal completed',
+        );
+        return generated;
+      } catch (err) {
+        lastError = err;
+        const status =
+          err instanceof AxiosError
+            ? err.response?.status
+            : (err as Error & { status?: number }).status;
+        const willRotate = this.shouldRotateToken(err, status);
+        this.logger.warn(
+          {
+            provider: 'cloudflare',
+            model: modelId,
+            attempt,
+            maxAttempts,
+            status,
+            accountId: credential.accountId,
+            failureReason: this.errorMessage(err),
+          },
+          'Cloudflare product background removal attempt failed',
+        );
+        if (willRotate) {
+          this.rotateApiToken();
+        }
+        if (attempt < maxAttempts) {
+          await this.delay(1_500 * attempt);
+        }
+      }
+    }
+
+    throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
+  }
+
+  private async resizeProductForCloudflare(image: AiImageInput): Promise<Buffer> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    return sharp(input)
+      .rotate()
+      .resize(CLOUDFLARE_TRYON_MAX_IMAGE_PX, CLOUDFLARE_TRYON_MAX_IMAGE_PX, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 90 })
+      .toBuffer();
   }
 
   private assertConfigured(): void {

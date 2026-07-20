@@ -6,6 +6,7 @@ export class FileStorageOptions implements IS3StorageOptions {
   public bucket: string;
   public region: string;
   public endpoint?: string;
+  public keyPrefix?: string;
 
   constructor(
     accessKeyId: string,
@@ -13,11 +14,13 @@ export class FileStorageOptions implements IS3StorageOptions {
     bucket: string,
     region: string,
     endpoint?: string,
+    keyPrefix?: string,
   ) {
     this.accessKeyId = accessKeyId;
     this.secretAccessKey = secretAccessKey;
     this.bucket = bucket;
     this.region = region;
     this.endpoint = endpoint;
+    this.keyPrefix = keyPrefix;
   }
 }

@@ -1,6 +1,5 @@
 export * from './i-users-file.storage';
 export * from './i-lambda.service';
-export * from './i-ai-resume.service';
 export * from './i-twilio.service';
 export * from './i-email.service';
 export * from './i-google-oauth.service';
@@ -8,3 +7,4 @@ export * from './i-websocket-message.service';
 export * from './i-events-discovery.service';
 export * from './i-try-on-ai.service';
 export * from './i-try-on-orchestrator.service';
+export * from './i-product-image-ai.service';

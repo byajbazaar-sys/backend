@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   GEMINI_EVENTS_MODEL,
@@ -7,9 +6,7 @@ import {
   GEMINI_TRYON_MODEL,
   GEMINI_TRYON_TIMEOUT_MS,
 } from '../ai.constants';
-import { AIBase } from '../ai-base.interface';
 import { AIOptions } from '../ai.options';
-import { ResumeAnalysisResult } from '../interfaces';
 import type {
   AiImageInput,
   JewelleryTryOnRequest,
@@ -44,8 +41,7 @@ type GeminiPart =
   | { inlineData: { data: string; mimeType: string } };
 
 @Injectable()
-export class GeminiService implements ITryOnAiService, IEventsDiscoveryService, AIBase {
-  private resumeClient: GoogleGenerativeAI | null = null;
+export class GeminiService implements ITryOnAiService, IEventsDiscoveryService {
   private genClients: GeminiGenClient[] = [];
   private keyPointer = 0;
   private keyInitPromise: Promise<void> | null = null;
@@ -53,20 +49,7 @@ export class GeminiService implements ITryOnAiService, IEventsDiscoveryService, 
   constructor(
     private readonly options: AIOptions,
     @InjectPinoLogger(GeminiService.name) private readonly logger: PinoLogger,
-  ) {
-    const resumeKey = options.geminiApiKey || options.geminiApiKeys[0];
-    if (resumeKey) {
-      this.resumeClient = new GoogleGenerativeAI(resumeKey);
-    }
-  }
-
-  getProvider(): string {
-    return 'gemini';
-  }
-
-  isAvailable(): boolean {
-    return !!this.resumeClient || this.options.geminiApiKeys.length > 0 || !!this.options.geminiApiKey;
-  }
+  ) {}
 
   // --- Key pool (@google/genai) ---
 
@@ -273,166 +256,5 @@ export class GeminiService implements ITryOnAiService, IEventsDiscoveryService, 
       }
     }
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
-  }
-
-  // --- Resume analysis (@google/generative-ai) ---
-
-  async analyzeResume(resumeData: any): Promise<ResumeAnalysisResult> {
-    if (!this.resumeClient) {
-      throw new Error('Gemini client not initialized');
-    }
-
-    const candidateProfile = await this.extractCandidateProfile(resumeData);
-    const interviewQuestions = await this.generateInterviewQuestions(candidateProfile);
-    candidateProfile.summary = null;
-
-    return {
-      candidateProfile,
-      photoAnalysis: null,
-      aiProvider: 'gemini',
-      generatedInsights: null,
-      interviewQuestions,
-    };
-  }
-
-  async calculateRankingScore(
-    questions: string[],
-    answers: string[],
-    jobDescription?: string,
-  ): Promise<{
-    score: number;
-    feedback: string;
-    strengths: string[];
-    areasForImprovement: string[];
-  }> {
-    if (!this.resumeClient) {
-      throw new Error('Gemini client not initialized');
-    }
-
-    const model = this.resumeClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const prompt = `You are an expert interviewer analyzing interview responses. 
-      Rate the candidate's answers on a scale of 0-100 based on the following criteria:
-      - Relevance and accuracy of the answers (40%)
-      - Depth of knowledge demonstrated (30%)
-      - Communication skills (20%)
-      - Problem-solving approach (10%)
-      
-      Questions and Answers:
-      ${questions.map((q, i) => `Q${i + 1}: ${q}\nA${i + 1}: ${answers[i] || 'No answer provided'}`).join('\n\n')}
-      
-      ${jobDescription ? `Job Description Context:\n${jobDescription}\n\n` : ''}
-      Provide your response in the following JSON format:
-      {
-        "score": 0-100,
-        "feedback": "Detailed feedback on the candidate's performance",
-        "strengths": ["strength1", "strength2", ...],
-        "areasForImprovement": ["area1", "area2", ...]
-      }`;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const jsonMatch = text.match(/\{.*\}/s);
-    if (!jsonMatch) throw new Error('Failed to parse AI response');
-
-    const resultData = JSON.parse(jsonMatch[0]);
-    return {
-      score: Math.min(100, Math.max(0, resultData.score || 0)),
-      feedback: resultData.feedback || 'No feedback provided',
-      strengths: Array.isArray(resultData.strengths) ? resultData.strengths : [],
-      areasForImprovement: Array.isArray(resultData.areasForImprovement) ? resultData.areasForImprovement : [],
-    };
-  }
-
-  async generateInterviewQuestions(profile: any): Promise<string[]> {
-    if (!this.resumeClient) {
-      throw new Error('Gemini client not initialized');
-    }
-
-    const model = this.resumeClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const prompt = `Based on the following candidate profile, generate 10 relevant interview questions that would help assess their skills and experience. 
-      Focus on their technical skills, experience, and projects. Make the questions specific and tailored to their background.
-      
-      Candidate Profile:
-      ${JSON.stringify(profile, null, 2)}
-      
-      Return the questions as a JSON array of strings.`;
-
-    const result = await model.generateContent(prompt);
-    let text = result.response.text();
-    if (text.includes('```json')) {
-      text = text.replace(/```json\s*/, '').replace(/```\s*$/, '');
-    } else if (text.includes('```')) {
-      text = text.replace(/```\s*/, '').replace(/```\s*$/, '');
-    }
-
-    try {
-      const parsedResponse = JSON.parse(text);
-      return Array.isArray(parsedResponse) ? parsedResponse : [text];
-    } catch {
-      return text
-        .split('\n')
-        .map((q) => q.trim())
-        .filter((q) => q.length > 0 && !q.match(/^\d+\.?/));
-    }
-  }
-
-  private async extractCandidateProfile(resumeData: any): Promise<any> {
-    const model = this.resumeClient!.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const prompt = `Extract structured candidate information from this resume text. 
-Focus on accuracy and use the provided raw text content.
-
-Resume Text:
-${resumeData?.raw_text || 'No raw text available'}
-
-Please extract and return ONLY a JSON object with this exact structure:
-{
-  "fullName": "candidate's full name",
-  "email": "candidate's email address",
-  "phone": "candidate's phone number",
-  "currentRole": "most recent or current job title",
-  "yearsOfExperience": number of years of experience (estimate if not explicit),
-  "topSkills": ["skill1", "skill2", "skill3", "skill4", "skill5"],
-}
-
-If any field is not found, use appropriate fallback values:
-- fullName: "Unknown" if not found
-- email: "N/A" if not found  
-- phone: "N/A" if not found
-- currentRole: "Not specified" if not found
-- yearsOfExperience: 0 if not determinable
-- topSkills: empty array if no skills found
-
-Return ONLY the JSON object, no additional text.`;
-
-    try {
-      const response = await model.generateContent(prompt);
-      let responseText = response.response.text();
-      if (responseText.includes('```json')) {
-        responseText = responseText.replace(/```json\s*/, '').replace(/```\s*$/, '');
-      } else if (responseText.includes('```')) {
-        responseText = responseText.replace(/```\s*/, '').replace(/```\s*$/, '');
-      }
-
-      const aiExtractedProfile = JSON.parse(responseText.trim());
-      return {
-        fullName: aiExtractedProfile.fullName || 'Unknown',
-        email: aiExtractedProfile.email || 'N/A',
-        phone: aiExtractedProfile.phone || 'N/A',
-        currentRole: aiExtractedProfile.currentRole || 'Not specified',
-        yearsOfExperience: aiExtractedProfile.yearsOfExperience || 0,
-        topSkills: Array.isArray(aiExtractedProfile.topSkills) ? aiExtractedProfile.topSkills.slice(0, 5) : [],
-      };
-    } catch {
-      const fullName = resumeData?.personal_info?.names?.[0] || 'Unknown';
-      const email = resumeData?.personal_info?.emails?.[0] || 'N/A';
-      const phone = resumeData?.personal_info?.phone_numbers?.[0] || 'N/A';
-      const currentRole = resumeData?.professional_info?.job_titles?.[0] || 'Not specified';
-      const skills = resumeData?.skills_and_expertise?.technical_skills || [];
-      let yearsOfExperience = 0;
-      if (resumeData?.experience && Array.isArray(resumeData.experience)) {
-        yearsOfExperience = resumeData.experience.length > 0 ? resumeData.experience.length : 0;
-      }
-      return { fullName, email, phone, currentRole, yearsOfExperience, topSkills: skills.slice(0, 5) };
-    }
   }
 }

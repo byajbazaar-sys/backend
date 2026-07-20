@@ -4,10 +4,16 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
-import { IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
+import {
+  IUsersFileStorage,
+  USERS_FILE_STORAGE,
+  IProductImageAiService,
+  PRODUCT_IMAGE_AI_SERVICE,
+} from '../../../shared';
 import {
   IInventoryCategoriesRepository,
   INVENTORY_CATEGORIES_REPOSITORY,
@@ -18,7 +24,12 @@ import {
 } from './i-inventory-items.repository';
 import { InventoryItemsFilterOptions } from '../options';
 import { InventoryItem, InventoryItemSale } from '../domain';
-import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel, UpdateInventoryItemRequestModel } from '../models';
+import {
+  CreateInventoryItemRequestModel,
+  InventoryImageAiPreviewResponseModel,
+  ListInventoryItemsQueryModel,
+  UpdateInventoryItemRequestModel,
+} from '../models';
 import { IInventoryItemService } from './i-inventory-item.service';
 import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
 import { EInventoryItemStatus } from '../enums';
@@ -35,6 +46,7 @@ export class InventoryItemService implements IInventoryItemService {
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(SALES_BILLS_REPOSITORY) private readonly salesBillsRepo: ISalesBillsRepository,
+    @Inject(PRODUCT_IMAGE_AI_SERVICE) private readonly productImageAi: IProductImageAiService,
     @InjectPinoLogger(InventoryItemService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -42,12 +54,24 @@ export class InventoryItemService implements IInventoryItemService {
     return !!value && !value.startsWith('http');
   }
 
+  /** S3 write may store `.jpg` while DB has `.jpeg` (or vice versa). */
+  private alternateJpegKey(key: string): string | null {
+    if (key.endsWith('.jpeg')) return `${key.slice(0, -5)}.jpg`;
+    if (key.endsWith('.jpg')) return `${key.slice(0, -4)}.jpeg`;
+    return null;
+  }
+
   private async resolveImageUrls(keys: string[] | undefined): Promise<string[]> {
     if (!keys?.length) return [];
     return Promise.all(
       keys.map(async (key) => {
         if (!key || !this.isStorageKey(key)) return key;
-        const url = await this.fileStorage.getUrlAsync(key);
+        let url = await this.fileStorage.getUrlAsync(key);
+        if (!url) {
+          const alt = this.alternateJpegKey(key);
+          if (alt) url = await this.fileStorage.getUrlAsync(alt);
+        }
+        // Prefer a real URL; fall back to stored key (previous behavior) if both miss.
         return url ?? key;
       }),
     );
@@ -202,7 +226,7 @@ export class InventoryItemService implements IInventoryItemService {
       file.mimetype,
       file.originalname,
     );
-    const storageKey = `inventory/${userId}/${id}/image.${normalized.fileExtension}`;
+    const proposedKey = `inventory/${userId}/${id}/image.${normalized.fileExtension}`;
 
     if (currentKey && this.isStorageKey(currentKey)) {
       try {
@@ -212,10 +236,88 @@ export class InventoryItemService implements IInventoryItemService {
       }
     }
 
-    await this.fileStorage.writeAsync(storageKey, normalized.buffer, normalized.mimetype);
+    // Persist the key S3 actually wrote (extension may differ from proposed).
+    const storageKey = await this.fileStorage.writeAsync(
+      proposedKey,
+      normalized.buffer,
+      normalized.mimetype,
+    );
     const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] });
     this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
     return this.enrichItem(updated);
+  }
+
+  async previewAiImage(file: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Image file is required');
+    }
+
+    const mimeType = file.mimetype || 'image/jpeg';
+    const originalBase64 = file.buffer.toString('base64');
+    return this.buildAiPreview(originalBase64, mimeType);
+  }
+
+  async previewAiImageForItem(
+    id: string,
+    userId: string,
+  ): Promise<InventoryImageAiPreviewResponseModel> {
+    const existing = await this.itemsRepo.findById(id);
+    if (!existing) throw new NotFoundException('Inventory item not found');
+    if (existing.createdBy !== userId) throw new ForbiddenException('Access denied');
+
+    const key = existing.imageUrls?.[0];
+    if (!key || !this.isStorageKey(key)) {
+      throw new BadRequestException('Inventory item has no stored image to regenerate');
+    }
+
+    let buffer = await this.fileStorage.readAsync(key);
+    let resolvedKey = key;
+    if (!buffer?.length) {
+      const alt = this.alternateJpegKey(key);
+      if (alt) {
+        buffer = await this.fileStorage.readAsync(alt);
+        if (buffer?.length) resolvedKey = alt;
+      }
+    }
+    if (!buffer?.length) {
+      throw new NotFoundException('Stored inventory image not found');
+    }
+
+    const mimeType = this.mimeFromKey(resolvedKey);
+    return this.buildAiPreview(buffer.toString('base64'), mimeType);
+  }
+
+  private mimeFromKey(key: string): string {
+    const lower = key.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'image/jpeg';
+  }
+
+  private async buildAiPreview(
+    originalBase64: string,
+    mimeType: string,
+  ): Promise<InventoryImageAiPreviewResponseModel> {
+    try {
+      const aiGenerated = await this.productImageAi.removeProductBackground({
+        base64: originalBase64,
+        mimeType,
+      });
+      this.logger.info({ mimeType, aiMimeType: aiGenerated.mimeType }, 'Inventory AI image preview generated');
+      return {
+        original: { base64: originalBase64, mimeType },
+        aiGenerated: {
+          base64: aiGenerated.base64.replace(/^data:[^;]+;base64,/, ''),
+          mimeType: aiGenerated.mimeType || 'image/png',
+        },
+      };
+    } catch (err) {
+      this.logger.error({ err }, 'Inventory AI image preview failed');
+      throw new ServiceUnavailableException(
+        err instanceof Error ? err.message : 'AI image generation is currently unavailable',
+      );
+    }
   }
 
   async delete(id: string, userId: string): Promise<void> {

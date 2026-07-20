@@ -45,12 +45,25 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
 
   public abstract get isPublic(): boolean;
 
+  /**
+   * Applies configured key prefix (e.g. `dev/`) without double-prefixing.
+   * Production leaves keys unchanged.
+   */
+  protected resolveKey(path: string): string {
+    const raw = (path || '').replace(/^\/+/, '');
+    const prefix = (this.storageOptions.keyPrefix || '').replace(/^\/+|\/+$/g, '');
+    if (!prefix || !raw) return raw;
+    if (raw === prefix || raw.startsWith(`${prefix}/`)) return raw;
+    return `${prefix}/${raw}`;
+  }
+
   public async existsAsync(path: string): Promise<boolean> {
+    const key = this.resolveKey(path);
     try {
       const res = await this.client.send(
         new HeadObjectCommand({
           Bucket: this.storageOptions.bucket,
-          Key: path,
+          Key: key,
         }),
       );
       return !!res;
@@ -64,13 +77,14 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
   }
 
   public async readAsync(path: string): Promise<Buffer> {
-    if (!(await this.existsAsync(path))) {
+    const key = this.resolveKey(path);
+    if (!(await this.existsAsync(key))) {
       return null;
     }
     try {
       const getCmd = new GetObjectCommand({
         Bucket: this.storageOptions.bucket,
-        Key: path,
+        Key: key,
       });
       const res = await this.client.send(getCmd);
       const stream = res.Body as Readable;
@@ -99,19 +113,19 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
       throw new Error('This file type is invalid');
     }
     try {
-      const fileName = this.helper.getFileName(path);
+      const fileName = this.helper.getFileName(this.resolveKey(path));
       fileName.ext = type.ext;
-      path = this.helper.joinPath(fileName);
+      const key = this.helper.joinPath(fileName);
       const startCmd = new CreateMultipartUploadCommand({
         Bucket: this.storageOptions.bucket,
-        Key: path,
+        Key: key,
         ...(contentType ? { ContentType: contentType } : {}),
       });
       const { UploadId: uploadId } = await this.client.send(startCmd);
 
       const uploadCmd = new UploadPartCommand({
         Bucket: this.storageOptions.bucket,
-        Key: path,
+        Key: key,
         Body: data,
         PartNumber: 1,
         UploadId: uploadId,
@@ -120,7 +134,7 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
 
       const finishCmd = new CompleteMultipartUploadCommand({
         Bucket: this.storageOptions.bucket,
-        Key: path,
+        Key: key,
         UploadId: uploadId,
         MultipartUpload: { Parts: [{ PartNumber: 1, ETag: partRes.ETag }] },
       });
@@ -137,27 +151,30 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
     if (!this.validateType(type?.mime)) {
       throw new Error('This file type is invalid');
     }
-    const fileName = this.helper.getFileName(path);
+    const resolvedPath = this.resolveKey(path);
+    const fileName = this.helper.getFileName(resolvedPath);
     fileName.ext = type.ext;
     const substitutedPath = this.helper.joinPath(fileName);
     const result = await this.writeAsync(substitutedPath, data);
     if (type.ext.toLowerCase() !== fileName.ext.toLowerCase()) {
-      await this.removeAsync(path);
+      await this.removeAsync(resolvedPath);
     }
     return result;
   }
 
   public async copyAsync(srcPath: string, destPath: string): Promise<string> {
-    if (this.helper.arePathesEqual(srcPath, destPath, { skipExt: true })) {
+    const resolvedSrc = this.resolveKey(srcPath);
+    const resolvedDest = this.resolveKey(destPath);
+    if (this.helper.arePathesEqual(resolvedSrc, resolvedDest, { skipExt: true })) {
       throw new Error(`You cant copy file to the same place`);
     }
-    if (!(await this.existsAsync(srcPath))) {
+    if (!(await this.existsAsync(resolvedSrc))) {
       throw new Error(`Source File "${srcPath}" not found`);
     }
     try {
-      const src = this.helper.getFileName(srcPath);
-      const dest = this.helper.getFileName(destPath);
-      destPath = this.helper.joinPath({
+      const src = this.helper.getFileName(resolvedSrc);
+      const dest = this.helper.getFileName(resolvedDest);
+      const key = this.helper.joinPath({
         location: dest.location,
         ext: src.ext,
         fileName: dest.fileName,
@@ -165,11 +182,11 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
 
       const copyCmd = new CopyObjectCommand({
         Bucket: this.storageOptions.bucket,
-        CopySource: srcPath,
-        Key: destPath,
+        CopySource: resolvedSrc,
+        Key: key,
       });
       await this.client.send(copyCmd);
-      return destPath;
+      return key;
     } catch (ex) {
       this.logger.error(ex);
       throw new Error(ex);
@@ -177,13 +194,14 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
   }
 
   public async removeAsync(path: string): Promise<boolean> {
-    if (!(await this.existsAsync(path))) {
+    const key = this.resolveKey(path);
+    if (!(await this.existsAsync(key))) {
       return false;
     }
     try {
       const removeCmd = new DeleteObjectCommand({
         Bucket: this.storageOptions.bucket,
-        Key: path,
+        Key: key,
       });
       await this.client.send(removeCmd);
       return true;
@@ -195,7 +213,8 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
 
   public async getUrlAsync(path: string): Promise<string> {
     try {
-      return this.isPublic ? await this.getSimpleUrlAsync(path) : await this.getSignedUrlAsync(path);
+      const key = this.resolveKey(path);
+      return this.isPublic ? await this.getSimpleUrlAsync(key) : await this.getSignedUrlAsync(key);
     } catch (ex) {
       this.logger.error(ex);
       return null;
@@ -203,7 +222,8 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
   }
 
   public async getSignedUrlAsync(path: string): Promise<string> {
-    if (!(await this.existsAsync(path))) {
+    const key = this.resolveKey(path);
+    if (!(await this.existsAsync(key))) {
       return null;
     }
     try {
@@ -211,7 +231,7 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
         this.client,
         new GetObjectCommand({
           Bucket: this.storageOptions.bucket,
-          Key: path,
+          Key: key,
         }),
         { expiresIn: EXPIRATION_MS },
       );
@@ -222,16 +242,18 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
   }
 
   public async getSimpleUrlAsync(path: string): Promise<string> {
-    if (!(await this.existsAsync(path))) {
+    const key = this.resolveKey(path);
+    if (!(await this.existsAsync(key))) {
       return null;
     }
-    const url = new URL(`https://${this.storageOptions.bucket}.s3.${this.storageOptions.region}.amazonaws.com/${path}`);
+    const url = new URL(`https://${this.storageOptions.bucket}.s3.${this.storageOptions.region}.amazonaws.com/${key}`);
     url.searchParams.append('x-id', 'GetObject');
     return url.toString();
   }
 
   public async generateUploadUrlAsync(path: string, mimeType: EAttachmentMimeType): Promise<string> {
-    const command = new PutObjectCommand({ Bucket: this.storageOptions.bucket, Key: path, ContentType: mimeType });
+    const key = this.resolveKey(path);
+    const command = new PutObjectCommand({ Bucket: this.storageOptions.bucket, Key: key, ContentType: mimeType });
     return getSignedUrl(this.client, command, { expiresIn: EXPIRATION_MS });
   }
 

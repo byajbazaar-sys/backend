@@ -27,6 +27,7 @@ import {
   InventoryItemResponseModel,
   InventoryItemSaleResponseModel,
   InventoryItemsPagedResponseModel,
+  InventoryImageAiPreviewResponseModel,
   ListInventoryItemsQueryModel,
   UpdateInventoryItemRequestModel,
   BulkDeleteInventoryItemsRequestModel,
@@ -91,6 +92,36 @@ export class InventoryItemsController {
   ): Promise<BulkDeleteInventoryItemsResponseModel> {
     const result = await this.itemService.bulkDelete(body.ids, identity.userId);
     return plainToInstance(BulkDeleteInventoryItemsResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Post('image/ai-preview')
+  @ApiOperation({
+    summary: 'Generate AI background-cleared preview without saving; returns original + AI images',
+  })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('image'))
+  async previewAiImage(
+    @UploadedFile() image: Express.Multer.File,
+  ): Promise<InventoryImageAiPreviewResponseModel> {
+    const result = await this.itemService.previewAiImage(image);
+    return plainToInstance(InventoryImageAiPreviewResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Post(':id/image/ai-preview')
+  @ApiOperation({
+    summary: 'Regenerate AI preview from the item’s stored image without saving',
+  })
+  @ApiParam({ name: 'id' })
+  async previewAiImageForItem(
+    @Param('id') id: string,
+    @Identity() identity: IIdentity,
+  ): Promise<InventoryImageAiPreviewResponseModel> {
+    const result = await this.itemService.previewAiImageForItem(id, identity.userId);
+    return plainToInstance(InventoryImageAiPreviewResponseModel, result, {
       excludeExtraneousValues: true,
     });
   }
