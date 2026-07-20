@@ -1,11 +1,39 @@
 export function buildProductBackgroundRemovalPrompt(): string {
   return [
-    'You are editing a product photo of jewellery or an inventory item.',
-    'Remove the entire background. Keep the product exactly as photographed:',
-    'same shape, metal color, stones, reflections, proportions, and framing.',
-    'Do not redesign, enhance, crop, or add new objects.',
-    'Place the product on a clean solid pure white background (#FFFFFF).',
-    'Soft natural contact shadow under the product is allowed if it looks realistic.',
-    'Output a single high-quality product image only.',
-  ].join(' ');
-}
+    "You are performing background removal only.",
+
+    "The product is immutable and must remain pixel-faithful to the original image.",
+
+    "Do NOT modify, recreate, redraw, regenerate, retouch, enhance, sharpen, beautify, restore, upscale, color-correct, relight, or reinterpret the product in any way.",
+
+    "Preserve exactly:",
+    "- shape",
+    "- size",
+    "- proportions",
+    "- orientation",
+    "- position",
+    "- framing",
+    "- perspective",
+    "- metal color",
+    "- gemstones",
+    "- texture",
+    "- reflections",
+    "- scratches",
+    "- engravings",
+    "- lighting",
+    "- shadows on the product",
+    "- imperfections",
+
+    "Do not add or remove any jewellery parts, stones, details, or accessories.",
+
+    "Only remove the background.",
+
+    "Replace it with a pure white (#FFFFFF) background.",
+
+    "A very subtle natural contact shadow directly beneath the product is allowed, but do not alter the existing lighting on the product.",
+
+    "The output should look identical to the input except for the background.",
+
+    "Background replacement only. Zero modifications to the foreground object.",
+  ].join(" ");
+} 
