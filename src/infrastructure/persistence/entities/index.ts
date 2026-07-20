@@ -26,6 +26,7 @@ import { CouponRedemptionEntity } from './coupon-redemption.entity';
 import { RefundEntity } from './refund.entity';
 import { PlanEntity } from './plan.entity';
 import { JewelleryEventEntity } from './jewellery-event.entity';
+import { TryOnAssetEntity } from './try-on-asset.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -55,6 +56,7 @@ export { CouponRedemptionEntity } from './coupon-redemption.entity';
 export { RefundEntity } from './refund.entity';
 export { PlanEntity } from './plan.entity';
 export { JewelleryEventEntity } from './jewellery-event.entity';
+export { TryOnAssetEntity } from './try-on-asset.entity';
 
 export default [
   UserEntity,
@@ -85,4 +87,5 @@ export default [
   RefundEntity,
   PlanEntity,
   JewelleryEventEntity,
+  TryOnAssetEntity,
 ];

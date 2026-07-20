@@ -38,6 +38,7 @@ import {
   REFUNDS_REPOSITORY,
   PLANS_REPOSITORY,
   JEWELLERY_EVENTS_REPOSITORY,
+  TRY_ON_ASSETS_REPOSITORY,
   RazorpayOptions,
   EVENTS_DISCOVERY_SERVICE,
   TRY_ON_AI_SERVICE,
@@ -70,6 +71,7 @@ import {
   RefundsRepository,
   PlansRepository,
   JewelleryEventsRepository,
+  TryOnAssetsRepository,
 } from './persistence';
 import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
@@ -225,6 +227,10 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: JEWELLERY_EVENTS_REPOSITORY,
       useClass: JewelleryEventsRepository,
+    },
+    {
+      provide: TRY_ON_ASSETS_REPOSITORY,
+      useClass: TryOnAssetsRepository,
     },
     {
       provide: WEBSOCKET_MESSAGE_SERVICE,
@@ -429,6 +435,7 @@ import { GoogleOAuthService } from './google-oauth';
     COUPONS_REPOSITORY,
     PLANS_REPOSITORY,
     JEWELLERY_EVENTS_REPOSITORY,
+    TRY_ON_ASSETS_REPOSITORY,
     COUPON_REDEMPTIONS_REPOSITORY,
     REFUNDS_REPOSITORY,
     WEBSOCKET_MESSAGE_SERVICE,

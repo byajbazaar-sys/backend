@@ -1,3 +1,5 @@
+export * from './domain';
+export * from './service';
 export * from './types';
 export * from './models';
 export * from './try-on.service';

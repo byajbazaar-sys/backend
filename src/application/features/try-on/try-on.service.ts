@@ -9,6 +9,11 @@ import {
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { IUsersFileStorage, ITryOnAiService, ITryOnOrchestrator, TRY_ON_AI_SERVICE, TRY_ON_ORCHESTRATOR, USERS_FILE_STORAGE, type TryOnProviderRoute } from '../../shared';
+import { TryOnAsset } from './domain';
+import {
+  ITryOnAssetsRepository,
+  TRY_ON_ASSETS_REPOSITORY,
+} from './service';
 import type {
   GeneratedImage,
   JewelleryTryOnRequest,
@@ -24,17 +29,6 @@ import type {
 import { TRY_ON_ASSET_TYPES } from './models';
 
 export const TRY_ON_SERVICE = 'TRY_ON_SERVICE';
-
-export interface TryOnAssetRecord {
-  id: string;
-  userId: string;
-  type: TryOnAssetType;
-  imageKey: string;
-  label?: string;
-  heightInInches?: number;
-  color?: string;
-  createdAt: string;
-}
 
 export interface UploadTryOnAssetInput {
   type: string;
@@ -67,14 +61,6 @@ function jobMetaKey(userId: string, jobId: string): string {
   return `try-on/${userId}/${jobId}/meta.json`;
 }
 
-function assetMetaKey(userId: string, assetId: string): string {
-  return `try-on/assets/${userId}/${assetId}/meta.json`;
-}
-
-function assetIndexKey(userId: string): string {
-  return `try-on/assets/${userId}/index.json`;
-}
-
 function assetImageKey(userId: string, assetId: string, ext: string): string {
   return `try-on/assets/${userId}/${assetId}/image.${ext}`;
 }
@@ -87,6 +73,7 @@ export class TryOnService implements ITryOnService {
     @Inject(TRY_ON_AI_SERVICE) private readonly tryOnAi: ITryOnAiService,
     @Inject(TRY_ON_ORCHESTRATOR) private readonly tryOnOrchestrator: ITryOnOrchestrator,
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
+    @Inject(TRY_ON_ASSETS_REPOSITORY) private readonly assetsRepo: ITryOnAssetsRepository,
     @InjectPinoLogger(TryOnService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -125,25 +112,16 @@ export class TryOnService implements ITryOnService {
     }
   }
 
-  private async readAssetIndex(userId: string): Promise<TryOnAssetRecord[]> {
+  private async deleteJobMeta(userId: string, jobId: string): Promise<void> {
     try {
-      const buf = await this.fileStorage.readAsync(assetIndexKey(userId));
-      const parsed = JSON.parse(buf.toString('utf8')) as { items?: TryOnAssetRecord[] };
-      return Array.isArray(parsed.items) ? parsed.items : [];
-    } catch {
-      return [];
+      await this.fileStorage.removeAsync(jobMetaKey(userId, jobId));
+      this.logger.info({ userId, jobId }, 'Try-on job meta removed from storage');
+    } catch (err) {
+      this.logger.warn({ err, userId, jobId }, 'Failed to remove try-on job meta');
     }
   }
 
-  private async writeAssetIndex(userId: string, items: TryOnAssetRecord[]): Promise<void> {
-    await this.fileStorage.writeAsync(
-      assetIndexKey(userId),
-      Buffer.from(JSON.stringify({ items }), 'utf8'),
-      'application/json',
-    );
-  }
-
-  private async toAssetResponse(record: TryOnAssetRecord): Promise<TryOnAssetResponseModel> {
+  private async toAssetResponse(record: TryOnAsset): Promise<TryOnAssetResponseModel> {
     const imageUrl = (await this.fileStorage.getUrlAsync(record.imageKey)) ?? record.imageKey;
     return {
       id: record.id,
@@ -153,7 +131,7 @@ export class TryOnService implements ITryOnService {
       label: record.label,
       heightInInches: record.heightInInches,
       color: record.color,
-      createdAt: record.createdAt,
+      createdAt: record.createdAt.toISOString(),
     };
   }
 
@@ -192,7 +170,7 @@ export class TryOnService implements ITryOnService {
       normalized.mimetype,
     );
 
-    const record: TryOnAssetRecord = {
+    const record = await this.assetsRepo.insert({
       id: assetId,
       userId,
       type,
@@ -200,35 +178,20 @@ export class TryOnService implements ITryOnService {
       label,
       heightInInches,
       color,
-      createdAt: new Date().toISOString(),
-    };
-
-    await this.fileStorage.writeAsync(
-      assetMetaKey(userId, assetId),
-      Buffer.from(JSON.stringify(record), 'utf8'),
-      'application/json',
-    );
-
-    const index = await this.readAssetIndex(userId);
-    index.unshift(record);
-    await this.writeAssetIndex(userId, index);
+    });
 
     this.logger.info({ userId, assetId, type }, 'Try-on asset uploaded');
     return this.toAssetResponse(record);
   }
 
   async listAssets(userId: string, type?: string): Promise<TryOnAssetResponseModel[]> {
-    const filter = type?.trim().toLowerCase();
-    let items = await this.readAssetIndex(userId);
-    if (filter) {
-      items = items.filter((item) => item.type === filter);
-    }
+    const filter = type?.trim().toLowerCase() as TryOnAssetType | undefined;
+    const items = await this.assetsRepo.findByUserId(userId, filter);
     return Promise.all(items.map((item) => this.toAssetResponse(item)));
   }
 
   async deleteAsset(userId: string, assetId: string): Promise<void> {
-    const index = await this.readAssetIndex(userId);
-    const existing = index.find((item) => item.id === assetId);
+    const existing = await this.assetsRepo.findByIdForUser(userId, assetId);
     if (!existing) {
       throw new NotFoundException('Try-on asset not found');
     }
@@ -238,16 +201,8 @@ export class TryOnService implements ITryOnService {
     } catch (err) {
       this.logger.warn({ err, imageKey: existing.imageKey }, 'Failed to remove asset image');
     }
-    try {
-      await this.fileStorage.removeAsync(assetMetaKey(userId, assetId));
-    } catch {
-      /* ignore */
-    }
 
-    await this.writeAssetIndex(
-      userId,
-      index.filter((item) => item.id !== assetId),
-    );
+    await this.assetsRepo.deleteByIdForUser(userId, assetId);
     this.logger.info({ userId, assetId }, 'Try-on asset deleted');
   }
 
@@ -370,6 +325,9 @@ export class TryOnService implements ITryOnService {
     if (!record || record.userId !== userId) {
       throw new NotFoundException('Try-on job not found');
     }
+    if (record.status === 'COMPLETED' || record.status === 'FAILED') {
+      void this.deleteJobMeta(userId, jobId);
+    }
     return record;
   }
 
@@ -387,7 +345,7 @@ export class TryOnService implements ITryOnService {
     try {
       const images: GeneratedImage[] = [];
       if (payload.mode === 'recolor') {
-        this.logger.info({ jobId: payload.jobId, provider: 'bedrock', mode: 'recolor' }, 'Try-on job processing started');
+        this.logger.info({ jobId: payload.jobId, provider: payload.providerRoute?.provider, mode: 'recolor' }, 'Try-on job processing started');
         const req = payload.request as OutfitRecolorRequest;
         images.push(await this.tryOnAi.recolorOutfit(req));
       } else {
