@@ -43,6 +43,7 @@ import {
   EVENTS_DISCOVERY_SERVICE,
   TRY_ON_AI_SERVICE,
   TRY_ON_ORCHESTRATOR,
+  PRODUCT_IMAGE_AI_SERVICE,
 } from '../application';
 import {
   CustomersRepository,
@@ -336,6 +337,10 @@ import { GoogleOAuthService } from './google-oauth';
       useExisting: TryOnOrchestratorService,
     },
     {
+      provide: PRODUCT_IMAGE_AI_SERVICE,
+      useExisting: CloudflareTryOnService,
+    },
+    {
       provide: TRY_ON_AI_SERVICE,
       inject: [
         AIOptions,
@@ -414,6 +419,7 @@ import { GoogleOAuthService } from './google-oauth';
     AI_RESUME_SERVICE,
     TRY_ON_AI_SERVICE,
     TRY_ON_ORCHESTRATOR,
+    PRODUCT_IMAGE_AI_SERVICE,
     EVENTS_DISCOVERY_SERVICE,
     TWILIO_SERVICE,
     TRANSACTIONS_REPOSITORY,

@@ -4,10 +4,16 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
-import { IUsersFileStorage, USERS_FILE_STORAGE } from '../../../shared';
+import {
+  IUsersFileStorage,
+  USERS_FILE_STORAGE,
+  IProductImageAiService,
+  PRODUCT_IMAGE_AI_SERVICE,
+} from '../../../shared';
 import {
   IInventoryCategoriesRepository,
   INVENTORY_CATEGORIES_REPOSITORY,
@@ -18,7 +24,12 @@ import {
 } from './i-inventory-items.repository';
 import { InventoryItemsFilterOptions } from '../options';
 import { InventoryItem, InventoryItemSale } from '../domain';
-import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel, UpdateInventoryItemRequestModel } from '../models';
+import {
+  CreateInventoryItemRequestModel,
+  InventoryImageAiPreviewResponseModel,
+  ListInventoryItemsQueryModel,
+  UpdateInventoryItemRequestModel,
+} from '../models';
 import { IInventoryItemService } from './i-inventory-item.service';
 import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
 import { EInventoryItemStatus } from '../enums';
@@ -35,6 +46,7 @@ export class InventoryItemService implements IInventoryItemService {
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(SALES_BILLS_REPOSITORY) private readonly salesBillsRepo: ISalesBillsRepository,
+    @Inject(PRODUCT_IMAGE_AI_SERVICE) private readonly productImageAi: IProductImageAiService,
     @InjectPinoLogger(InventoryItemService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -216,6 +228,35 @@ export class InventoryItemService implements IInventoryItemService {
     const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] });
     this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
     return this.enrichItem(updated);
+  }
+
+  async previewAiImage(file: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Image file is required');
+    }
+
+    const mimeType = file.mimetype || 'image/jpeg';
+    const originalBase64 = file.buffer.toString('base64');
+
+    try {
+      const aiGenerated = await this.productImageAi.removeProductBackground({
+        base64: originalBase64,
+        mimeType,
+      });
+      this.logger.info({ mimeType, aiMimeType: aiGenerated.mimeType }, 'Inventory AI image preview generated');
+      return {
+        original: { base64: originalBase64, mimeType },
+        aiGenerated: {
+          base64: aiGenerated.base64.replace(/^data:[^;]+;base64,/, ''),
+          mimeType: aiGenerated.mimeType || 'image/png',
+        },
+      };
+    } catch (err) {
+      this.logger.error({ err }, 'Inventory AI image preview failed');
+      throw new ServiceUnavailableException(
+        err instanceof Error ? err.message : 'AI image generation is currently unavailable',
+      );
+    }
   }
 
   async delete(id: string, userId: string): Promise<void> {

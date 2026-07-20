@@ -1,6 +1,11 @@
 import { Paged } from '@shared-libs';
 import { InventoryItem, InventoryItemSale } from '../domain';
-import { CreateInventoryItemRequestModel, ListInventoryItemsQueryModel, UpdateInventoryItemRequestModel } from '../models';
+import {
+  CreateInventoryItemRequestModel,
+  InventoryImageAiPreviewResponseModel,
+  ListInventoryItemsQueryModel,
+  UpdateInventoryItemRequestModel,
+} from '../models';
 
 export const INVENTORY_ITEM_SERVICE = 'INVENTORY_ITEM_SERVICE';
 
@@ -20,4 +25,5 @@ export interface IInventoryItemService {
     file?: Express.Multer.File,
     removeImage?: boolean,
   ): Promise<InventoryItem>;
+  previewAiImage(file: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel>;
 }

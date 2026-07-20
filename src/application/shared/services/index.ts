@@ -8,3 +8,4 @@ export * from './i-websocket-message.service';
 export * from './i-events-discovery.service';
 export * from './i-try-on-ai.service';
 export * from './i-try-on-orchestrator.service';
+export * from './i-product-image-ai.service';
