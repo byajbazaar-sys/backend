@@ -26,4 +26,5 @@ export interface IInventoryItemService {
     removeImage?: boolean,
   ): Promise<InventoryItem>;
   previewAiImage(file: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel>;
+  previewAiImageForItem(id: string, userId: string): Promise<InventoryImageAiPreviewResponseModel>;
 }

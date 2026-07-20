@@ -254,7 +254,51 @@ export class InventoryItemService implements IInventoryItemService {
 
     const mimeType = file.mimetype || 'image/jpeg';
     const originalBase64 = file.buffer.toString('base64');
+    return this.buildAiPreview(originalBase64, mimeType);
+  }
 
+  async previewAiImageForItem(
+    id: string,
+    userId: string,
+  ): Promise<InventoryImageAiPreviewResponseModel> {
+    const existing = await this.itemsRepo.findById(id);
+    if (!existing) throw new NotFoundException('Inventory item not found');
+    if (existing.createdBy !== userId) throw new ForbiddenException('Access denied');
+
+    const key = existing.imageUrls?.[0];
+    if (!key || !this.isStorageKey(key)) {
+      throw new BadRequestException('Inventory item has no stored image to regenerate');
+    }
+
+    let buffer = await this.fileStorage.readAsync(key);
+    let resolvedKey = key;
+    if (!buffer?.length) {
+      const alt = this.alternateJpegKey(key);
+      if (alt) {
+        buffer = await this.fileStorage.readAsync(alt);
+        if (buffer?.length) resolvedKey = alt;
+      }
+    }
+    if (!buffer?.length) {
+      throw new NotFoundException('Stored inventory image not found');
+    }
+
+    const mimeType = this.mimeFromKey(resolvedKey);
+    return this.buildAiPreview(buffer.toString('base64'), mimeType);
+  }
+
+  private mimeFromKey(key: string): string {
+    const lower = key.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'image/jpeg';
+  }
+
+  private async buildAiPreview(
+    originalBase64: string,
+    mimeType: string,
+  ): Promise<InventoryImageAiPreviewResponseModel> {
     try {
       const aiGenerated = await this.productImageAi.removeProductBackground({
         base64: originalBase64,

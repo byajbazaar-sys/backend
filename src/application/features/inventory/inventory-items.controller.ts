@@ -111,6 +111,21 @@ export class InventoryItemsController {
     });
   }
 
+  @Post(':id/image/ai-preview')
+  @ApiOperation({
+    summary: 'Regenerate AI preview from the item’s stored image without saving',
+  })
+  @ApiParam({ name: 'id' })
+  async previewAiImageForItem(
+    @Param('id') id: string,
+    @Identity() identity: IIdentity,
+  ): Promise<InventoryImageAiPreviewResponseModel> {
+    const result = await this.itemService.previewAiImageForItem(id, identity.userId);
+    return plainToInstance(InventoryImageAiPreviewResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
+  }
+
   @Get(':id/sales-history')
   @ApiOperation({ summary: 'List completed bill sales for an inventory item with profit/loss' })
   @ApiParam({ name: 'id' })
