@@ -51,6 +51,15 @@ function resolveTryOnProvider(): TryOnAiProvider {
   return process.env.AI_PROVIDER === 'gemini' ? 'gemini' : 'bedrock';
 }
 
+function resolveS3KeyPrefix(): string | undefined {
+  const env = (process.env.NODE_ENV || '').toLowerCase().trim();
+  // Local + deployed develop stages use a `dev/` folder; production has no prefix.
+  if (env === 'development' || env === 'dev') {
+    return 'dev';
+  }
+  return undefined;
+}
+
 function resolveFileStorageOptions(): FileStorageOptions {
   const r2Endpoint = process.env.CLOUDFLARE_R2_ENDPOINT?.trim();
   return new FileStorageOptions(
@@ -65,6 +74,7 @@ function resolveFileStorageOptions(): FileStorageOptions {
       : process.env?.S3_BUCKET_NAME ?? 'jobs-file-storage',
     r2Endpoint ? 'auto' : process.env?.S3_BUCKET_REGION ?? 'ap-south-1',
     r2Endpoint,
+    resolveS3KeyPrefix(),
   );
 }
 

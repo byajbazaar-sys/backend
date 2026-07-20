@@ -54,12 +54,24 @@ export class InventoryItemService implements IInventoryItemService {
     return !!value && !value.startsWith('http');
   }
 
+  /** S3 write may store `.jpg` while DB has `.jpeg` (or vice versa). */
+  private alternateJpegKey(key: string): string | null {
+    if (key.endsWith('.jpeg')) return `${key.slice(0, -5)}.jpg`;
+    if (key.endsWith('.jpg')) return `${key.slice(0, -4)}.jpeg`;
+    return null;
+  }
+
   private async resolveImageUrls(keys: string[] | undefined): Promise<string[]> {
     if (!keys?.length) return [];
     return Promise.all(
       keys.map(async (key) => {
         if (!key || !this.isStorageKey(key)) return key;
-        const url = await this.fileStorage.getUrlAsync(key);
+        let url = await this.fileStorage.getUrlAsync(key);
+        if (!url) {
+          const alt = this.alternateJpegKey(key);
+          if (alt) url = await this.fileStorage.getUrlAsync(alt);
+        }
+        // Prefer a real URL; fall back to stored key (previous behavior) if both miss.
         return url ?? key;
       }),
     );
@@ -214,7 +226,7 @@ export class InventoryItemService implements IInventoryItemService {
       file.mimetype,
       file.originalname,
     );
-    const storageKey = `inventory/${userId}/${id}/image.${normalized.fileExtension}`;
+    const proposedKey = `inventory/${userId}/${id}/image.${normalized.fileExtension}`;
 
     if (currentKey && this.isStorageKey(currentKey)) {
       try {
@@ -224,7 +236,12 @@ export class InventoryItemService implements IInventoryItemService {
       }
     }
 
-    await this.fileStorage.writeAsync(storageKey, normalized.buffer, normalized.mimetype);
+    // Persist the key S3 actually wrote (extension may differ from proposed).
+    const storageKey = await this.fileStorage.writeAsync(
+      proposedKey,
+      normalized.buffer,
+      normalized.mimetype,
+    );
     const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] });
     this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
     return this.enrichItem(updated);
