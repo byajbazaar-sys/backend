@@ -4,7 +4,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 import {
-  AI_RESUME_SERVICE,
   CUSTOMERS_REPOSITORY,
   DUES_REPOSITORY,
   EMAIL_SERVICE,
@@ -81,7 +80,6 @@ import { FileStorageMock, UsersFileStorage } from './s3';
 import { LambdaOptions, LambdaService } from './lambda';
 import {
   AIOptions,
-  AIResumeService,
   AivotTryOnOptions,
   ReplicateTryOnOptions,
   CloudflareTryOnOptions,
@@ -322,10 +320,6 @@ import { GoogleOAuthService } from './google-oauth';
       provide: LAMBDA_SERVICE,
       useClass: LambdaService,
     },
-    {
-      provide: AI_RESUME_SERVICE,
-      useClass: AIResumeService,
-    },
     GeminiService,
     BedrockService,
     AivotService,
@@ -416,7 +410,6 @@ import { GoogleOAuthService } from './google-oauth';
     AES_ENCRYPT_SERVICE,
     USERS_FILE_STORAGE,
     LAMBDA_SERVICE,
-    AI_RESUME_SERVICE,
     TRY_ON_AI_SERVICE,
     TRY_ON_ORCHESTRATOR,
     PRODUCT_IMAGE_AI_SERVICE,

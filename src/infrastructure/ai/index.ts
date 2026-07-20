@@ -3,8 +3,5 @@ export * from './ai.constants';
 export * from './aivot-try-on.options';
 export * from './replicate-try-on.options';
 export * from './cloudflare-try-on.options';
-export * from './interfaces';
-export * from './types';
-export * from './ai-base.interface';
 export * from './services';
 export * from './prompts';
