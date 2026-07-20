@@ -86,10 +86,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION || 'ap-south-1' }}
 
-      - name: Write .env.prod
+      # Must be .env.production — Serverless useDotenv loads .env.{stage}, not .env.prod
+      - name: Write .env.production
         env:
           ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
-        run: printf '%s' "$ENV_FILE" > .env.prod
+        run: printf '%s' "$ENV_FILE" > .env.production
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile

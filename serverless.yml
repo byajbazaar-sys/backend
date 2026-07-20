@@ -15,9 +15,9 @@ custom:
   ssmVpcParams:
     vpcId: /byajbazaar/${sls:stage}/vpc-id
     subnetIds: /byajbazaar/${sls:stage}/subnet-ids
-  # serverless-dotenv-plugin loads this file before deploy; map production → .env.prod
+  # useDotenv + serverless-dotenv-plugin: file must match stage (.env.{stage})
   dotenvPathByStage:
-    production: .env.prod
+    production: .env.production
     staging: .env.staging
     dev: .env.dev
   dotenv:
