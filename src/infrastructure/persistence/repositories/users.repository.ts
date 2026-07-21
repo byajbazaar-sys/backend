@@ -72,4 +72,8 @@ export class UsersRepository implements IUsersRepository {
     if (!user) return null;
     return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
+
+  async softDelete(id: string): Promise<void> {
+    await this.userRepo.softDelete(id);
+  }
 }

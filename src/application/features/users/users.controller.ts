@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpCode,
@@ -132,5 +133,18 @@ export class UsersController {
       },
       { excludeExtraneousValues: true },
     );
+  }
+
+  @Delete(':id')
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'User account deleted successfully' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param() params: GetUserParamsModel, @Identity() identity: IIdentity): Promise<void> {
+    this.logger.info({ params, identity }, 'remove called');
+    if (params.id !== identity.userId && identity.userType !== EUserType.Admin) {
+      throw new ForbiddenException('You are not authorized to delete this user');
+    }
+
+    await this.usersService.remove(params.id);
   }
 }

@@ -131,4 +131,8 @@ export class User {
   @Expose()
   @Type(() => Date)
   public trialEndsAt?: Date | null;
+
+  @Expose()
+  @Type(() => Date)
+  public deletedAt?: Date | null;
 }

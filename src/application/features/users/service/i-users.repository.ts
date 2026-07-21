@@ -10,4 +10,5 @@ export interface IUsersRepository {
   findByResetPasswordToken(token: string): Promise<User>;
   findById(id: string): Promise<User>;
   findByGoogleId(googleId: string): Promise<User>;
+  softDelete(id: string): Promise<void>;
 }

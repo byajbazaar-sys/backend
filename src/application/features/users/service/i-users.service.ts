@@ -7,4 +7,5 @@ export interface IUsersService {
   findOne(id: string): Promise<User>;
   findAll(query: any): Promise<Paged<User>>;
   update(id: string, updateData: Partial<User>): Promise<User>;
+  remove(id: string): Promise<void>;
 }

@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { EUserType } from '@shared-libs';
 import { User } from '../domain';
 import { IUsersRepository, USERS_REPOSITORY } from './i-users.repository';
 import { IUsersService } from './i-users.service';
@@ -145,5 +146,18 @@ export class UsersService implements IUsersService {
       this.logger.error({ err, userId: id }, 'Error updating user');
       throw err;
     }
+  }
+
+  async remove(id: string): Promise<void> {
+    const user = await this.usersRepo.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.userType === EUserType.Admin) {
+      throw new BadRequestException('Admin accounts cannot be deleted');
+    }
+
+    await this.usersRepo.softDelete(id);
+    this.logger.info({ userId: id }, 'User soft-deleted');
   }
 }
