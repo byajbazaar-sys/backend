@@ -66,6 +66,8 @@ import {
   JewelleryEventService,
   TRY_ON_SERVICE,
   TryOnService,
+  DEPOSIT_SERVICE,
+  DepositService,
 } from './features';
 import {
   POS_SESSION_SERVICE,
@@ -208,6 +210,10 @@ import {
     {
       provide: TRY_ON_SERVICE,
       useClass: TryOnService,
+    },
+    {
+      provide: DEPOSIT_SERVICE,
+      useClass: DepositService,
     },
   ],
   exports: [

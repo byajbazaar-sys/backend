@@ -1,9 +1,6 @@
-export type TryOnJewelleryType =
-  | 'necklace'
-  | 'earring'
-  | 'bracelet'
-  | 'ring'
-  | 'other';
+import type { TryOnJewelleryType } from '../../../application/features/try-on/jewellery-types';
+
+export type { TryOnJewelleryType } from '../../../application/features/try-on/jewellery-types';
 
 export type TryOnOccasion =
   | 'Birthday'

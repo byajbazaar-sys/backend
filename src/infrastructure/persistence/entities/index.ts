@@ -27,6 +27,9 @@ import { RefundEntity } from './refund.entity';
 import { PlanEntity } from './plan.entity';
 import { JewelleryEventEntity } from './jewellery-event.entity';
 import { TryOnAssetEntity } from './try-on-asset.entity';
+import { DepositAccountEntity } from './deposit-account.entity';
+import { DepositTransactionEntity } from './deposit-transaction.entity';
+import { DepositReceiptEntity } from './deposit-receipt.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -57,6 +60,9 @@ export { RefundEntity } from './refund.entity';
 export { PlanEntity } from './plan.entity';
 export { JewelleryEventEntity } from './jewellery-event.entity';
 export { TryOnAssetEntity } from './try-on-asset.entity';
+export { DepositAccountEntity } from './deposit-account.entity';
+export { DepositTransactionEntity } from './deposit-transaction.entity';
+export { DepositReceiptEntity } from './deposit-receipt.entity';
 
 export default [
   UserEntity,
@@ -88,4 +94,7 @@ export default [
   PlanEntity,
   JewelleryEventEntity,
   TryOnAssetEntity,
+  DepositAccountEntity,
+  DepositTransactionEntity,
+  DepositReceiptEntity,
 ];

@@ -3,6 +3,10 @@ import { orderJewelleryItems } from '../utils/try-on-images.util';
 
 const FACE_HEIGHT_INCHES = 8.5;
 const TORSO_HEIGHT_INCHES = 18;
+const HAND_WIDTH_INCHES = 3.5;
+const WRIST_CIRCUMFERENCE_INCHES = 6.5;
+const ANKLE_CIRCUMFERENCE_INCHES = 9;
+const NOSE_WIDTH_INCHES = 1.4;
 
 const DESIGN_FIDELITY =
   'DESIGN FIDELITY: Reproduce the jewellery EXACTLY as shown in its reference image — same shape, pattern, colour, finish, stone arrangement, metal work, and overall appearance. Do NOT simplify, stylise, add, or remove any detail from the jewellery design.';
@@ -19,32 +23,61 @@ function occasionStyling(occasion: string): string {
   return OCCASION_STYLING[occasion] ?? `stylish and appropriate for ${occasion}`;
 }
 
+function typeKey(type?: string): string {
+  return (type || 'other').toLowerCase();
+}
+
+function proportionDescription(item: AiImageInput, imageLabel: string): string {
+  const type = typeKey(item.type);
+  const height = item.heightInInches;
+  const typeLabel = item.type || 'jewellery';
+
+  if (!height) {
+    return `${imageLabel} shows the ${typeLabel}. Render it at a realistic, proportionate size — not oversized.`;
+  }
+
+  if (type.includes('earring')) {
+    const percent = Math.round((height / FACE_HEIGHT_INCHES) * 100);
+    return `${imageLabel} shows the ${typeLabel} (physical height: ${height} in). PROPORTION LOCK: This earring's height equals EXACTLY ${percent}% of the person's face height (chin-to-crown). Placement: earlobe, hanging straight down. Mirror to BOTH ears if only one reference is shown.`;
+  }
+
+  if (type.includes('necklace') || type === 'chain') {
+    const percent = Math.round((height / TORSO_HEIGHT_INCHES) * 100);
+    return `${imageLabel} shows the ${typeLabel} (physical length: ${height} in). PROPORTION LOCK: Length equals EXACTLY ${percent}% of torso height (chin-to-navel). Placement: centred on neck, draping naturally on the chest.`;
+  }
+
+  if (type === 'pendant') {
+    const percent = Math.round((height / TORSO_HEIGHT_INCHES) * 100);
+    return `${imageLabel} shows the ${typeLabel} (physical height: ${height} in). PROPORTION LOCK: Pendant height equals EXACTLY ${percent}% of torso height. Placement: hanging from a chain at the centre of the chest, resting on skin.`;
+  }
+
+  if (type.includes('ring')) {
+    const percent = Math.round((height / HAND_WIDTH_INCHES) * 100);
+    const hand = type.includes('gents') ? 'appropriate finger on a male hand' : 'ring finger on a female hand';
+    return `${imageLabel} shows the ${typeLabel} (band width: ${height} in). PROPORTION LOCK: Ring width equals EXACTLY ${percent}% of hand width. Placement: worn on ${hand}, sitting flush on the finger — not floating.`;
+  }
+
+  if (type === 'bracelet') {
+    const percent = Math.round((height / WRIST_CIRCUMFERENCE_INCHES) * 100);
+    return `${imageLabel} shows the ${typeLabel} (inner diameter: ${height} in). PROPORTION LOCK: Bracelet size equals EXACTLY ${percent}% of wrist circumference. Placement: worn on the wrist, resting naturally on the skin.`;
+  }
+
+  if (type === 'payal' || type === 'anklet') {
+    const percent = Math.round((height / ANKLE_CIRCUMFERENCE_INCHES) * 100);
+    return `${imageLabel} shows the ${typeLabel} (circumference: ${height} in). PROPORTION LOCK: Anklet/payal size equals EXACTLY ${percent}% of ankle circumference. Placement: wrapped around the ankle above the foot, visible if feet/lower legs are in frame.`;
+  }
+
+  if (type.includes('nose')) {
+    const percent = Math.round((height / NOSE_WIDTH_INCHES) * 100);
+    const placement = type.includes('ring') ? 'left nostril, sitting flush in the piercing' : 'left nostril, pinned to the side of the nose';
+    return `${imageLabel} shows the ${typeLabel} (size: ${height} in). PROPORTION LOCK: Nose jewellery equals EXACTLY ${percent}% of nose width. Placement: ${placement}.`;
+  }
+
+  return `${imageLabel} shows the ${typeLabel} (physical size: ${height} in). Render at correct proportionate size on the person's body.`;
+}
+
 function buildJewelleryImageDescriptions(items: AiImageInput[]): string {
-  return items
-    .map((item, index) => {
-      const imageLabel = `Image ${index + 2}`;
-      const type = item.type || 'jewellery';
-
-      if (!item.heightInInches) {
-        return `${imageLabel} shows the ${type}. Render it at a realistic, proportionate size — not oversized.`;
-      }
-
-      const height = item.heightInInches;
-      const typeLower = type.toLowerCase();
-
-      if (typeLower.includes('earring')) {
-        const percent = Math.round((height / FACE_HEIGHT_INCHES) * 100);
-        return `${imageLabel} shows the ${type} (physical height: ${height} in). PROPORTION LOCK: This earring's height equals EXACTLY ${percent}% of the person's face height (measured chin-to-crown). In the output image, find the person's face height in pixels, then make the earring EXACTLY ${percent}% of that pixel count — no more, no less. Placement: earlobe, hanging straight down. This ratio MUST be identical for every generated image of this person.`;
-      }
-
-      if (typeLower.includes('necklace')) {
-        const percent = Math.round((height / TORSO_HEIGHT_INCHES) * 100);
-        return `${imageLabel} shows the ${type} (physical height: ${height} in, measured from collarbone top down to the lowest pendant/tassel tip). PROPORTION LOCK: This necklace height equals EXACTLY ${percent}% of the person's torso height (measured chin-to-navel). In the output image, find the person's torso height in pixels, then make the necklace EXACTLY ${percent}% of that pixel count — no more, no less. Placement: centred on the neck, hanging straight down onto the chest. This ratio MUST be identical for every generated image of this person.`;
-      }
-
-      return `${imageLabel} shows the ${type} (physical height: ${height} in). Render it at the correct proportionate size on the person's body.`;
-    })
-    .join(' ');
+  return items.map((item, index) => proportionDescription(item, `Image ${index + 2}`)).join(' ');
 }
 
 function buildSizeRule(items: AiImageInput[]): string {
@@ -52,60 +85,53 @@ function buildSizeRule(items: AiImageInput[]): string {
   if (!hasHeight) {
     return 'Render each jewellery piece at a realistic, proportionate size. Do NOT make any piece oversized or smaller than it would look in real life.';
   }
-
-  const parts: string[] = [];
-  if (items.some((item) => item.type?.toLowerCase().includes('earring') && item.heightInInches)) {
-    parts.push('the exact earring-to-face-height % already specified above');
-  }
-  if (items.some((item) => item.type?.toLowerCase().includes('necklace') && item.heightInInches)) {
-    parts.push('the exact necklace-to-torso-height % already specified above');
-  }
-
-  return `CRITICAL SIZE RULE — PROPORTION LOCK: The exact anatomical ratios specified in each piece's description above are MANDATORY. Express sizing as: ${parts.join(' and ')}. These percentage ratios are the SAME across ALL variations of this image — do NOT resize any jewellery piece based on scene context, outfit, or framing. Small jewellery MUST look small; large pendants MUST look proportionally large.`;
+  return 'CRITICAL SIZE RULE — PROPORTION LOCK: The exact anatomical ratios specified in each piece\'s description above are MANDATORY and must remain identical across ALL variations. Small jewellery MUST look small; large pieces MUST look proportionally large.';
 }
 
 function buildCountRule(items: AiImageInput[]): string {
-  const hasEarring = items.some((item) => item.type?.toLowerCase().includes('earring'));
-  const hasNecklace = items.some((item) => item.type?.toLowerCase().includes('necklace'));
   const types = [...new Set(items.map((item) => (item.type || 'jewellery').toLowerCase()))];
-
   let rule =
-    `Place ONLY the following jewellery piece(s) provided in the reference image(s): ${types.join(' and ')}. ` +
-    'Do NOT add any other accessory — no garlands, maangtika, bangles, rings, ';
+    `Place ONLY the following jewellery piece(s) from the reference images: ${types.join(', ')}. ` +
+    'Do NOT add any jewellery not shown in the references. ';
 
-  if (hasEarring && !hasNecklace) {
-    rule += 'necklace, ';
-  }
-  if (hasNecklace && !hasEarring) {
-    rule += 'earrings, ';
-  }
-
-  rule += 'or any item not explicitly shown in the reference images.';
-
+  const hasEarring = types.some((t) => t.includes('earring'));
   if (hasEarring) {
-    rule += ' If only one earring is shown, mirror it exactly and place one on EACH earlobe.';
+    rule += ' If only one earring reference is shown, mirror it exactly on BOTH earlobes.';
   }
 
   return rule;
 }
 
 function buildPlacementRule(items: AiImageInput[]): string {
-  const hasEarring = items.some((item) => item.type?.toLowerCase().includes('earring'));
-  const hasNecklace = items.some((item) => item.type?.toLowerCase().includes('necklace'));
+  const types = items.map((item) => typeKey(item.type));
   const lines: string[] = [];
 
-  if (hasNecklace) {
-    lines.push(
-      ' • Necklace: centred on the neck, resting naturally on the upper chest with the chain lying against the skin.',
-    );
+  if (types.some((t) => t.includes('necklace') || t === 'chain')) {
+    lines.push(' • Necklace/chain: centred on the neck, resting naturally on the upper chest.');
   }
-  if (hasEarring) {
-    lines.push(' • Earrings: one on each earlobe, hanging straight down, symmetrically placed.');
+  if (types.some((t) => t === 'pendant')) {
+    lines.push(' • Pendant: hanging at the centre of the chest from a chain or cord.');
   }
-  lines.push(
-    ' • Each piece must look physically attached to the body — NOT floating, pasted-on, or misaligned.',
-  );
+  if (types.some((t) => t.includes('earring'))) {
+    lines.push(' • Earrings: one on each earlobe, symmetrically placed, hanging straight down.');
+  }
+  if (types.some((t) => t.includes('ring'))) {
+    lines.push(' • Ring: worn on the finger, flush against the skin with realistic contact shadows.');
+  }
+  if (types.some((t) => t === 'bracelet')) {
+    lines.push(' • Bracelet: worn on the wrist, following the curve of the arm.');
+  }
+  if (types.some((t) => t === 'payal' || t === 'anklet')) {
+    lines.push(' • Payal/anklet: wrapped around the ankle, visible above the foot.');
+  }
+  if (types.some((t) => t.includes('nose'))) {
+    lines.push(' • Nose pin/ring: on the left nostril, flush against the nose — not floating.');
+  }
+  if (types.some((t) => t === 'other')) {
+    lines.push(' • Other piece: placed where this type of jewellery is normally worn.');
+  }
 
+  lines.push(' • Each piece must look physically attached — NOT floating, pasted-on, or misaligned.');
   return lines.join(' ');
 }
 
@@ -156,9 +182,14 @@ export function buildOutfitTryOnPrompt(opts: {
 
   const outfit = opts.outfit || 'an elegant outfit';
   const occasion = opts.occasion || 'Portrait';
-  const styling = occasionStyling(occasion);
-  const colorSuffix = opts.color ? ` in ${opts.color} color` : '';
-  const colorHint = opts.color
+  const outfitColor = opts.color?.trim();
+  const styling = outfitColor
+    ? `appropriate for ${occasion}`
+    : occasionStyling(occasion);
+  const colorLock = outfitColor
+    ? `OUTFIT COLOUR LOCK: The garment fabric must be exactly ${outfitColor} — match this precise shade with zero deviation. Do NOT substitute a similar, lighter, darker, or complementary colour.`
+    : '';
+  const colorHint = outfitColor
     ? ''
     : 'Choose a colour that naturally complements the occasion and jewellery. ';
 
@@ -171,7 +202,7 @@ export function buildOutfitTryOnPrompt(opts: {
     `3. JEWELLERY — COUNT: ${countRule}`,
     `4. JEWELLERY — SIZE: ${sizeRule}`,
     `5. JEWELLERY — PLACEMENT: ${placementRule}`,
-    `6. OUTFIT — MANDATORY: The person MUST be dressed in a ${outfit}${colorSuffix}, styled for ${occasion} (${styling}). This is not optional — the outfit MUST change to match exactly this description. ${colorHint}Do NOT keep the original clothing from Image 1.`,
+    `6. OUTFIT — MANDATORY: The person MUST be dressed in a ${outfit}, ${styling}. ${colorLock}${colorHint}The outfit MUST change to match exactly — do NOT keep the original clothing from Image 1.`,
     '7. HAIR & MAKEUP: Keep hairstyle close to Image 1. Apply only very subtle, minimal makeup — no change to facial features.',
     'OUTPUT: Square 1:1 portrait, photorealistic, DSLR quality. All jewellery must be fully visible and clearly rendered. Premium jewellery catalogue aesthetic. Do NOT add any text, labels, annotations, measurement indicators, arrows, or overlays of any kind to the image.',
   ].join('\n');
@@ -208,15 +239,16 @@ export function buildFullTryOnPrompt(
 }
 
 export function buildOutfitRecolorPrompt(color: string): string {
+  const exactColor = color.trim();
   return [
-    `TASK: Recolor ONLY the fabric/textile of the outfit worn by the person in this image to ${color}.`,
+    `TASK: Recolor ONLY the fabric/textile of the outfit worn by the person in this image to exactly ${exactColor}.`,
     'STRICT PRESERVATION — do NOT change ANY of the following:',
     "(1) The person's identity — facial features, skin tone, hair colour, hair style, and hair texture must remain exactly as in the original.",
     '(2) The jewellery — every piece must remain identical in design, colour, finish, and placement.',
     '(3) The background — scenery, colours, objects, and lighting must stay exactly the same.',
     "(4) The outfit's style, cut, fabric texture, pattern/print layout, and fit — only the colour changes, not the garment design.",
     '(5) The image composition and framing — maintain the exact same crop and aspect ratio.',
-    `RECOLOR RULE: Apply ${color} uniformly across the entire outfit's fabric. Preserve realistic fabric shading, highlights, and shadows so the cloth looks naturally lit.`,
-    `OUTPUT: A single high-quality, photorealistic image that looks like the original photograph with only the outfit's colour changed to ${color}. Nothing else should look different. Do NOT add any text, labels, annotations, measurement indicators, arrows, or overlays of any kind to the image.`,
+    `RECOLOR RULE: Apply exactly ${exactColor} uniformly across the entire outfit's fabric. Do NOT use a substitute shade. Preserve realistic fabric shading, highlights, and shadows so the cloth looks naturally lit.`,
+    `OUTPUT: A single high-quality, photorealistic image that looks like the original photograph with only the outfit's colour changed to exactly ${exactColor}. Nothing else should look different. Do NOT add any text, labels, annotations, measurement indicators, arrows, or overlays of any kind to the image.`,
   ].join(' ');
 }

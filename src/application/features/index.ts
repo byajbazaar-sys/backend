@@ -20,6 +20,7 @@ import { SettingsApiController } from './api-access';
 import { PaymentsController, AdminPaymentsController } from './payments';
 import { EventsController, AdminEventsController } from './events';
 import { TryOnController } from './try-on';
+import { DepositsController } from './deposits';
 
 export * from './users';
 export * from './auth';
@@ -37,6 +38,7 @@ export * from './api-access';
 export * from './payments';
 export * from './events';
 export * from './try-on';
+export * from './deposits';
 
 export const Controllers = [
   UsersController,
@@ -62,6 +64,7 @@ export const Controllers = [
   AdminEventsController,
   EventsController,
   TryOnController,
+  DepositsController,
 ];
 
 export const Services = [JwtService];

@@ -101,6 +101,9 @@ export class UserEntity {
   @Column({ type: 'boolean', default: true, name: 'show_bank_details_on_bill' })
   showBankDetailsOnBill: boolean;
 
+  @Column({ type: 'varchar', length: 7, nullable: true, name: 'try_on_background_color', default: '#1a1520' })
+  tryOnBackgroundColor: string | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
   googleId: string;
 

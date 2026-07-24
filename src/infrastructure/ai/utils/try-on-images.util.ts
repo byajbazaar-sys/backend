@@ -1,8 +1,22 @@
 import type { AiImageInput } from '../interfaces/ai-media.types';
+import type { TryOnJewelleryType } from '../../../application/features/try-on/jewellery-types';
 
-const JEWELLERY_ORDER: AiImageInput['type'][] = ['necklace', 'earring', 'bracelet', 'ring', 'other'];
+const JEWELLERY_ORDER: TryOnJewelleryType[] = [
+  'necklace',
+  'chain',
+  'pendant',
+  'earring',
+  'nose-pin',
+  'nose-ring',
+  'ring-ladies',
+  'ring-gents',
+  'bracelet',
+  'payal',
+  'anklet',
+  'other',
+];
 
-/** Stable reference order: necklace → earring → other types (matches prompt image map). */
+/** Stable reference order for prompt image map. */
 export function orderJewelleryItems(items: AiImageInput[]): AiImageInput[] {
   const copy = [...items];
   return copy.sort((a, b) => {

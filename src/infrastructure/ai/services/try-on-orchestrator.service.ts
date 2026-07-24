@@ -18,8 +18,8 @@ export class TryOnOrchestratorService implements ITryOnOrchestrator {
     @InjectPinoLogger(TryOnOrchestratorService.name) private readonly logger: PinoLogger,
   ) {}
 
-  resolveRoute(attemptNumber: number): TryOnProviderRoute {
-    const route = resolveTryOnProviderRoute(attemptNumber);
+  resolveRoute(attemptNumber: number, jewelleryTypes?: string[]): TryOnProviderRoute {
+    const route = resolveTryOnProviderRoute(attemptNumber, jewelleryTypes);
     this.logger.info({ attemptNumber, route }, 'Resolved try-on provider route');
     return route;
   }

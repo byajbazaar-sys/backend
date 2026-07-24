@@ -116,6 +116,9 @@ export class User {
   public showBankDetailsOnBill?: boolean;
 
   @Expose()
+  public tryOnBackgroundColor?: string;
+
+  @Expose()
   public googleId?: string;
 
   @Expose()

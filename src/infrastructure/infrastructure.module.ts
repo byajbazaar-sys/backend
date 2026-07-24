@@ -1,4 +1,3 @@
-import { HttpModule } from '@nestjs/axios';
 import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -38,6 +37,7 @@ import {
   PLANS_REPOSITORY,
   JEWELLERY_EVENTS_REPOSITORY,
   TRY_ON_ASSETS_REPOSITORY,
+  DEPOSITS_REPOSITORY,
   RazorpayOptions,
   EVENTS_DISCOVERY_SERVICE,
   TRY_ON_AI_SERVICE,
@@ -72,6 +72,7 @@ import {
   PlansRepository,
   JewelleryEventsRepository,
   TryOnAssetsRepository,
+  DepositsRepository,
 } from './persistence';
 import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
@@ -89,6 +90,7 @@ import { BedrockService } from './ai/services/bedrock.service';
 import { GeminiService } from './ai/services/gemini.service';
 import { ReplicateTryOnService } from './ai/services/replicate.service';
 import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
+import { SharpProductImageService } from './ai/services/sharp-product-image.service';
 import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.service';
 import { TwilioOptions, TwilioService } from './sms';
 import { SendGridOptions, SendGridService } from './send-grid';
@@ -105,7 +107,6 @@ import { GoogleOAuthService } from './google-oauth';
 @Global()
 @Module({
   imports: [
-    HttpModule,
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
@@ -232,6 +233,10 @@ import { GoogleOAuthService } from './google-oauth';
       useClass: TryOnAssetsRepository,
     },
     {
+      provide: DEPOSITS_REPOSITORY,
+      useClass: DepositsRepository,
+    },
+    {
       provide: WEBSOCKET_MESSAGE_SERVICE,
       useClass: WebSocketMessageService,
     },
@@ -325,6 +330,7 @@ import { GoogleOAuthService } from './google-oauth';
     AivotService,
     ReplicateTryOnService,
     CloudflareTryOnService,
+    SharpProductImageService,
     TryOnOrchestratorService,
     {
       provide: TRY_ON_ORCHESTRATOR,
@@ -332,7 +338,7 @@ import { GoogleOAuthService } from './google-oauth';
     },
     {
       provide: PRODUCT_IMAGE_AI_SERVICE,
-      useExisting: CloudflareTryOnService,
+      useExisting: SharpProductImageService,
     },
     {
       provide: TRY_ON_AI_SERVICE,
@@ -401,7 +407,6 @@ import { GoogleOAuthService } from './google-oauth';
     }
   ],
   exports: [
-    HttpModule,
     USERS_REPOSITORY,
     CUSTOMERS_REPOSITORY,
     LOANS_REPOSITORY,
@@ -435,6 +440,7 @@ import { GoogleOAuthService } from './google-oauth';
     PLANS_REPOSITORY,
     JEWELLERY_EVENTS_REPOSITORY,
     TRY_ON_ASSETS_REPOSITORY,
+    DEPOSITS_REPOSITORY,
     COUPON_REDEMPTIONS_REPOSITORY,
     REFUNDS_REPOSITORY,
     WEBSOCKET_MESSAGE_SERVICE,

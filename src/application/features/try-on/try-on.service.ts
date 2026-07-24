@@ -234,7 +234,8 @@ export class TryOnService implements ITryOnService {
     };
     await this.writeJob(record);
 
-    const providerRoute = this.tryOnOrchestrator.resolveRoute(body.tryOnAttempt ?? 1);
+    const jewelleryTypes = body.jewelleryItems.map((item) => item.type).filter(Boolean) as string[];
+    const providerRoute = this.tryOnOrchestrator.resolveRoute(body.tryOnAttempt ?? 1, jewelleryTypes);
 
     const request: JewelleryTryOnRequest = {
       personImage: body.personImage,

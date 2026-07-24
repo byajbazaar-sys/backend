@@ -139,6 +139,16 @@ export class UpdateUserRequestModel {
   showBankDetailsOnBill?: boolean;
 
   @ApiProperty({
+    example: '#1a1520',
+    required: false,
+    description: 'Global Magic Try-On jewellery background colour (hex)',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^#[0-9A-Fa-f]{6}$/, { message: 'tryOnBackgroundColor must be a hex colour like #1a1520' })
+  tryOnBackgroundColor?: string;
+
+  @ApiProperty({
     type: 'string',
     format: 'binary',
     required: false,

@@ -16,10 +16,12 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+import { TRY_ON_JEWELLERY_TYPES, type TryOnJewelleryType } from '../jewellery-types';
 
-export const TRY_ON_ASSET_TYPES = ['necklace', 'earring', 'outfit', 'occasion'] as const;
+export const TRY_ON_ASSET_TYPES = [...TRY_ON_JEWELLERY_TYPES, 'outfit', 'occasion'] as const;
 export type TryOnAssetType = (typeof TRY_ON_ASSET_TYPES)[number];
+
+const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
 
 /** Hex (#RGB / #RRGGBB) or a short color name used by the frontend catalog. */
 const COLOR_PATTERN = /^(#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?|[A-Za-z][A-Za-z0-9 \-]{1,30})$/;
@@ -40,9 +42,9 @@ export class TryOnImageModel {
 
 export class TryOnJewelleryItemModel extends TryOnImageModel {
   @Expose()
-  @ApiProperty({ enum: ['necklace', 'earring', 'bracelet', 'ring', 'other'] })
-  @IsIn(['necklace', 'earring', 'bracelet', 'ring', 'other'])
-  type!: 'necklace' | 'earring' | 'bracelet' | 'ring' | 'other';
+  @ApiProperty({ enum: TRY_ON_JEWELLERY_TYPES })
+  @IsIn([...TRY_ON_JEWELLERY_TYPES])
+  type!: TryOnJewelleryType;
 
   @Expose()
   @ApiPropertyOptional({ description: 'Physical height in inches for proportion lock' })

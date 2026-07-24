@@ -12,7 +12,7 @@ export interface TryOnProviderRoute {
 }
 
 export interface ITryOnOrchestrator {
-  resolveRoute(attemptNumber: number): TryOnProviderRoute;
+  resolveRoute(attemptNumber: number, jewelleryTypes?: string[]): TryOnProviderRoute;
   generateTryOnImages(
     route: TryOnProviderRoute,
     request: JewelleryTryOnRequest,

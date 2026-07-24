@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import { ensureTransparentProductPng } from '../../../../infrastructure/ai/utils/product-image.util';
 import {
   IUsersFileStorage,
   USERS_FILE_STORAGE,
@@ -226,7 +227,29 @@ export class InventoryItemService implements IInventoryItemService {
       file.mimetype,
       file.originalname,
     );
-    const proposedKey = `inventory/${userId}/${id}/image.${normalized.fileExtension}`;
+
+    let bufferToStore = normalized.buffer;
+    let mimetype = normalized.mimetype;
+    let fileExtension = normalized.fileExtension;
+
+    try {
+      const aiGenerated = await this.productImageAi.removeProductBackground({
+        base64: normalized.buffer.toString('base64'),
+        mimeType: normalized.mimetype,
+      });
+      const aiRaw = Buffer.from(
+        aiGenerated.base64.replace(/^data:[^;]+;base64,/, ''),
+        'base64',
+      );
+      bufferToStore = await ensureTransparentProductPng(aiRaw);
+      mimetype = 'image/png';
+      fileExtension = 'png';
+      this.logger.info({ itemId: id }, 'Inventory image background removed for try-on');
+    } catch (err) {
+      this.logger.warn({ err, itemId: id }, 'Inventory AI background removal failed; storing original image');
+    }
+
+    const proposedKey = `inventory/${userId}/${id}/image.${fileExtension}`;
 
     if (currentKey && this.isStorageKey(currentKey)) {
       try {
@@ -239,8 +262,8 @@ export class InventoryItemService implements IInventoryItemService {
     // Persist the key S3 actually wrote (extension may differ from proposed).
     const storageKey = await this.fileStorage.writeAsync(
       proposedKey,
-      normalized.buffer,
-      normalized.mimetype,
+      bufferToStore,
+      mimetype,
     );
     const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] });
     this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
@@ -304,12 +327,17 @@ export class InventoryItemService implements IInventoryItemService {
         base64: originalBase64,
         mimeType,
       });
+      const aiRaw = Buffer.from(
+        aiGenerated.base64.replace(/^data:[^;]+;base64,/, ''),
+        'base64',
+      );
+      const transparentPng = await ensureTransparentProductPng(aiRaw);
       this.logger.info({ mimeType, aiMimeType: aiGenerated.mimeType }, 'Inventory AI image preview generated');
       return {
         original: { base64: originalBase64, mimeType },
         aiGenerated: {
-          base64: aiGenerated.base64.replace(/^data:[^;]+;base64,/, ''),
-          mimeType: aiGenerated.mimeType || 'image/png',
+          base64: transparentPng.toString('base64'),
+          mimeType: 'image/png',
         },
       };
     } catch (err) {

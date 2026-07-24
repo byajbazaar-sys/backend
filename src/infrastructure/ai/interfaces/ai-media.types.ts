@@ -1,7 +1,11 @@
+import type { TryOnJewelleryType } from '../../../application/features/try-on/jewellery-types';
+
+export type { TryOnJewelleryType };
+
 export interface AiImageInput {
   base64: string;
   mimeType: string;
-  type?: 'necklace' | 'earring' | 'bracelet' | 'ring' | 'other';
+  type?: TryOnJewelleryType;
   heightInInches?: number;
 }
 

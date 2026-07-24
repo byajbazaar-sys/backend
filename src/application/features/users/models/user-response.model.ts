@@ -100,6 +100,10 @@ export class UserResponseModel {
   showBankDetailsOnBill?: boolean;
 
   @Expose()
+  @ApiPropertyOptional({ example: '#1a1520', description: 'Global Magic Try-On jewellery background colour' })
+  tryOnBackgroundColor?: string;
+
+  @Expose()
   @ApiProperty({
     example: false,
     description: 'Whether the user has not yet completed a first login (password, Google, or verify-email session).',

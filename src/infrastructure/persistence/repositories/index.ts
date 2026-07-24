@@ -25,3 +25,4 @@ export * from './refunds.repository';
 export * from './plans.repository';
 export * from './jewellery-events.repository';
 export * from './try-on-assets.repository';
+export * from './deposits.repository';
