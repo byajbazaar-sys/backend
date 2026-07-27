@@ -9,6 +9,7 @@ import {
   Param,
   Post,
   Query,
+  Delete,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
@@ -179,5 +180,12 @@ export class DepositsController {
   ): Promise<DepositResponseModel> {
     const account = await this.depositService.refund(params.id, identity.userId, body);
     return plainToInstance(DepositResponseModel, account, { excludeExtraneousValues: true });
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a deposit account and its ledger' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param() params: GetDepositParamsModel, @Identity() identity: IIdentity): Promise<void> {
+    await this.depositService.delete(params.id, identity.userId);
   }
 }

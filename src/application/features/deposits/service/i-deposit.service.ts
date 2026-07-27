@@ -31,4 +31,5 @@ export interface IDepositService {
   }): Promise<DepositAccount>;
   getLedger(id: string, createdBy: string): Promise<DepositTransaction[]>;
   download(options: DepositsDownloadFilterOptions, format: 'csv' | 'pdf'): Promise<Buffer>;
+  delete(id: string, createdBy: string): Promise<void>;
 }

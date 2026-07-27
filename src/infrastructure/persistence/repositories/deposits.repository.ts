@@ -198,6 +198,11 @@ export class DepositsRepository implements IDepositsRepository {
     return rows.map((r) => this.mapAccount(r));
   }
 
+  async deleteAccount(id: string, createdBy: string): Promise<boolean> {
+    const result = await this.accountRepo.delete({ id, createdBy });
+    return (result.affected ?? 0) > 0;
+  }
+
   private mapAccount(entity: DepositAccountEntity): DepositAccount {
     const customer = (entity as DepositAccountEntity & { customer?: { firstName?: string; lastName?: string; phone?: string } }).customer;
     return plainToInstance(

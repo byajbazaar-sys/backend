@@ -218,6 +218,12 @@ export class DepositService implements IDepositService {
     return toPDF(rows, columns, 'Deposit Transactions Report');
   }
 
+  async delete(id: string, createdBy: string): Promise<void> {
+    const deleted = await this.depositsRepo.deleteAccount(id, createdBy);
+    if (!deleted) throw new NotFoundException('Deposit account not found');
+    this.logger.info({ depositId: id, createdBy }, 'Deposit account deleted');
+  }
+
   private async requireAccount(id: string, createdBy: string): Promise<DepositAccount> {
     const account = await this.depositsRepo.findById(id, createdBy);
     if (!account) throw new NotFoundException('Deposit account not found');

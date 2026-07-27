@@ -25,4 +25,5 @@ export interface IDepositsRepository {
   getLedger(depositAccountId: string, createdBy: string): Promise<DepositTransaction[]>;
   listForDownload(options: DepositsDownloadFilterOptions): Promise<DepositTransaction[]>;
   listAccountsForDownload(options: DepositsDownloadFilterOptions): Promise<DepositAccount[]>;
+  deleteAccount(id: string, createdBy: string): Promise<boolean>;
 }
