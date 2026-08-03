@@ -98,6 +98,14 @@ export class SalesBillResponseModel {
 
   @Expose()
   @ApiPropertyOptional()
+  amountReceived?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
+  depositApplied?: number;
+
+  @Expose()
+  @ApiPropertyOptional()
   totalPurchaseCost?: number;
 
   @Expose()

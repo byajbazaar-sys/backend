@@ -94,6 +94,12 @@ export class SalesBillEntity {
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   grandTotal: number;
 
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  amountReceived: number | null;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
+  depositApplied: number;
+
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   totalPurchaseCost: number;
 

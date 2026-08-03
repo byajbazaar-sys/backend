@@ -91,6 +91,18 @@ export class CreateSalesBillRequestModel {
   @Min(0)
   taxAmount?: number;
 
+  @ApiPropertyOptional({ description: 'Cash/UPI/card amount received at checkout (partial payment)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amountReceived?: number;
+
+  @ApiPropertyOptional({ description: 'Customer deposit balance applied to this bill' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  depositApplied?: number;
+
   @ApiPropertyOptional({ enum: EBillStatus })
   @IsOptional()
   @IsEnum(EBillStatus)

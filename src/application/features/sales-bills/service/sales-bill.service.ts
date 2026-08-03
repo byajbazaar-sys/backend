@@ -289,6 +289,14 @@ export class SalesBillService implements ISalesBillService {
       goldRate24k: data.goldRate24k,
       metalRates: data.metalRates,
       grandTotal: totals.grandTotal,
+      amountReceived:
+        data.amountReceived != null && Number(data.amountReceived) >= 0
+          ? Math.round(Number(data.amountReceived) * 100) / 100
+          : undefined,
+      depositApplied:
+        data.depositApplied != null && Number(data.depositApplied) > 0
+          ? Math.round(Number(data.depositApplied) * 100) / 100
+          : 0,
       totalPurchaseCost: Math.round(totalPurchaseCost * 100) / 100,
       totalProfit: Math.round(totalProfit * 100) / 100,
       paymentMode: data.paymentMode ?? EPaymentMode.Cash,

@@ -76,6 +76,12 @@ export class SalesBill {
   grandTotal: number;
 
   @Expose()
+  amountReceived?: number;
+
+  @Expose()
+  depositApplied?: number;
+
+  @Expose()
   totalPurchaseCost?: number;
 
   @Expose()
