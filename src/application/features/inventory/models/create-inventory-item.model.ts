@@ -65,7 +65,7 @@ export class CreateInventoryItemRequestModel {
 
   @ApiPropertyOptional({
     enum: EMakingChargeMode,
-    description: 'FIXED = amount (₹), PERCENT = percentage of metal value, PER_PC = per piece (₹)',
+    description: 'FIXED = amount (₹), PERCENT = % of metal value, PER_PC = per piece (₹), PER_GRAM = per gram (₹)',
     default: EMakingChargeMode.Fixed,
   })
   @IsOptional()
