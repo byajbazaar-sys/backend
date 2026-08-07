@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
-import { ensureTransparentProductPng } from '../../../../infrastructure/ai/utils/product-image.util';
+import { ensureTransparentProductPng, compressPngForApiPreview } from '../../../../infrastructure/ai/utils/product-image.util';
 import {
   IUsersFileStorage,
   USERS_FILE_STORAGE,
@@ -332,11 +332,18 @@ export class InventoryItemService implements IInventoryItemService {
         'base64',
       );
       const transparentPng = await ensureTransparentProductPng(aiRaw);
-      this.logger.info({ mimeType, aiMimeType: aiGenerated.mimeType }, 'Inventory AI image preview generated');
+      const previewPng = await compressPngForApiPreview(transparentPng);
+      this.logger.info(
+        {
+          mimeType,
+          aiMimeType: aiGenerated.mimeType,
+          previewBytes: previewPng.length,
+        },
+        'Inventory AI image preview generated',
+      );
       return {
-        original: { base64: originalBase64, mimeType },
         aiGenerated: {
-          base64: transparentPng.toString('base64'),
+          base64: previewPng.toString('base64'),
           mimeType: 'image/png',
         },
       };

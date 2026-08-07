@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
 export class InventoryImagePreviewPartModel {
@@ -12,10 +12,10 @@ export class InventoryImagePreviewPartModel {
 }
 
 export class InventoryImageAiPreviewResponseModel {
-  @ApiProperty({ type: InventoryImagePreviewPartModel })
+  @ApiPropertyOptional({ type: InventoryImagePreviewPartModel })
   @Expose()
   @Type(() => InventoryImagePreviewPartModel)
-  original!: InventoryImagePreviewPartModel;
+  original?: InventoryImagePreviewPartModel;
 
   @ApiProperty({ type: InventoryImagePreviewPartModel })
   @Expose()
