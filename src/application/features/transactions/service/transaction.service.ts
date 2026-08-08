@@ -155,10 +155,78 @@ export class TransactionService implements ITransactionService {
         throw new NotFoundException('Transaction not found');
       }
 
+      const loan = await this.loansRepo.findById(existingTransaction.loanId, createdBy);
+      if (!loan) {
+        throw new NotFoundException('Loan not found');
+      }
+      if (loan.status === ELoanStatus.CLOSED) {
+        throw new BadRequestException('Cannot delete transaction for a closed loan');
+      }
+
+      const { transactionType, amount, dueId } = existingTransaction;
+
+      if (transactionType === ETransactionType.INTEREST) {
+        loan.interestRemaining += amount;
+        loan.interestPaid -= amount;
+      }
+
+      if (transactionType === ETransactionType.PRINCIPAL) {
+        loan.amountRemaining += amount;
+        loan.amountPaid -= amount;
+      }
+
+      if (transactionType === ETransactionType.TOP_UP) {
+        if (loan.amountRemaining < amount) {
+          throw new BadRequestException('Cannot delete top-up: loan remaining amount is less than top-up amount');
+        }
+        loan.amountRemaining -= amount;
+        const unpaidDues = await this.duesRepo.findByLoanIdAndType(existingTransaction.loanId, [
+          EDueType.UPCOMING_DUE,
+          EDueType.PAST_DUE,
+        ]);
+        const remainingTenure = unpaidDues.length;
+        if (remainingTenure > 0) {
+          const rate = loan.interestPercentage / 100;
+          if (loan.interestCalculationMethod === EInterestCalculationMethod.COMPOUND) {
+            loan.interestRemaining -= amount * (Math.pow(1 + rate, remainingTenure) - 1);
+          } else {
+            loan.interestRemaining -= (loan.interestPercentage * amount * remainingTenure) / 100;
+          }
+        }
+      }
+
+      let paidDueId: string | undefined;
+      if (transactionType === ETransactionType.DUE_PAYMENT && dueId) {
+        const due = await this.duesRepo.findById(dueId, createdBy);
+        if (!due) {
+          throw new NotFoundException('Due not found for transaction');
+        }
+        if (due.type !== EDueType.PAID) {
+          throw new BadRequestException('Due is not paid; cannot delete this due payment transaction');
+        }
+        loan.amountRemaining += due.principalAmount;
+        loan.amountPaid -= due.principalAmount;
+        loan.interestRemaining += due.interestAmount;
+        loan.interestPaid -= due.interestAmount;
+        paidDueId = dueId;
+      }
+
+      await this.loansRepo.update(existingTransaction.loanId, loan);
       await this.transactionsRepo.delete(id);
+
+      if (paidDueId) {
+        await this.duesRepo.deleteById(paidDueId, createdBy);
+      }
+
+      await this.loanService.recalculateDuesForLoan(existingTransaction.loanId, createdBy);
+
       this.logger.info({ transactionId: id }, 'Transaction deleted successfully');
     } catch (err) {
-      if (err instanceof NotFoundException || err instanceof ForbiddenException) {
+      if (
+        err instanceof NotFoundException ||
+        err instanceof ForbiddenException ||
+        err instanceof BadRequestException
+      ) {
         throw err;
       }
       this.logger.error({ err, transactionId: id, createdBy }, 'Error deleting transaction');
