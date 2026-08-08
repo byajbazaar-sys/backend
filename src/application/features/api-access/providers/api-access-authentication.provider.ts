@@ -10,7 +10,7 @@ export class ApiAccessAuthenticationProvider implements IAuthenticationProvider 
     @Inject(API_AUTH_SERVICE) private readonly apiAuthService: IApiAuthService,
   ) {}
 
-  async authenticate(request: Request): Promise<IIdentity | null> {
+  async authenticate(request: Request): Promise<IIdentity> {
     const token = extractRequestToken(request, this.options.queryParamName);
     if (!token || token.startsWith('eyJ')) {
       return null;

@@ -17,69 +17,69 @@ export class JewelleryEventResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  description?: string | null;
+  description?: string;
 
   @Expose()
   @ApiPropertyOptional({ type: Date, nullable: true })
   @Type(() => Date)
-  startDate?: Date | null;
+  startDate?: Date;
 
   @Expose()
   @ApiPropertyOptional({ type: Date, nullable: true })
   @Type(() => Date)
-  endDate?: Date | null;
+  endDate?: Date;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  city?: string | null;
+  city?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  state?: string | null;
+  state?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  country?: string | null;
+  country?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  venue?: string | null;
+  venue?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  organizer?: string | null;
+  organizer?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  category?: string | null;
+  category?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  website?: string | null;
+  website?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  registrationUrl?: string | null;
+  registrationUrl?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  sourceUrl?: string | null;
+  sourceUrl?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  visitorEntryFee?: string | null;
+  visitorEntryFee?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  stallFee?: string | null;
+  stallFee?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  contactEmail?: string | null;
+  contactEmail?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  contactPhone?: string | null;
+  contactPhone?: string;
 
   @Expose()
   @ApiPropertyOptional({ type: [String] })
@@ -95,11 +95,11 @@ export class JewelleryEventResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  seoTitle?: string | null;
+  seoTitle?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  seoDescription?: string | null;
+  seoDescription?: string;
 
   @Expose()
   @ApiPropertyOptional({ type: Date })

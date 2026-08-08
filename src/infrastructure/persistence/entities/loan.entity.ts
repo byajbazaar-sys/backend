@@ -84,6 +84,33 @@ export class LoanEntity {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   currentRate: number;
 
+  /**
+   * Replay checkpoint. Transactions with loanSeq > baselineSeq can be replayed
+   * on top of these balances; anything at or below is frozen history. Re-set
+   * whenever loan terms change, since that recomputes balances from scratch.
+   */
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  baselineAmountRemaining: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  baselineAmountPaid: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  baselineInterestRemaining: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  baselineInterestPaid: number;
+
+  @Column({ type: 'int', default: 0 })
+  baselineSeq: number;
+
+  /** Allocator for transaction loanSeq; incremented atomically. */
+  @Column({ type: 'int', default: 0 })
+  txnSeqCounter: number;
+
+  @Column({ type: 'int', default: 0 })
+  version: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

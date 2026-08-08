@@ -9,6 +9,7 @@ import {
   AdminSubscriptionListRow,
   ISubscriptionsRepository,
   Subscription,
+  SubscriptionPatch,
 } from '../../../application';
 import { SubscriptionEntity } from '../entities/subscription.entity';
 import { ESubscriptionStatus } from '../../../application/features/payments/domain/enums';
@@ -55,7 +56,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     return this.mapEntity(created);
   }
 
-  async update(id: string, data: Partial<Subscription>): Promise<Subscription> {
+  async update(id: string, data: SubscriptionPatch): Promise<Subscription> {
     const updateData: QueryDeepPartialEntity<SubscriptionEntity> = {};
     if (data.planId !== undefined) updateData.planId = data.planId;
     if (data.provider !== undefined) updateData.provider = data.provider;
@@ -74,7 +75,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     if (data.couponId !== undefined) updateData.couponId = data.couponId;
     if (data.discountAmount !== undefined) updateData.discountAmount = data.discountAmount;
     if (data.notes !== undefined) {
-      updateData.notes = data.notes as object | null;
+      updateData.notes = data.notes as object;
     }
 
     await this.subscriptionRepo.update(id, updateData);
@@ -89,13 +90,13 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     await this.subscriptionRepo.delete(id);
   }
 
-  async findById(id: string): Promise<Subscription | null> {
+  async findById(id: string): Promise<Subscription> {
     const entity = await this.subscriptionRepo.findOne({ where: { id } });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
 
-  async findByProviderSubscriptionId(providerSubscriptionId: string): Promise<Subscription | null> {
+  async findByProviderSubscriptionId(providerSubscriptionId: string): Promise<Subscription> {
     const entity = await this.subscriptionRepo.findOne({
       where: { providerSubscriptionId },
     });
@@ -103,7 +104,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     return this.mapEntity(entity);
   }
 
-  async findLatestByProviderCustomerId(providerCustomerId: string): Promise<Subscription | null> {
+  async findLatestByProviderCustomerId(providerCustomerId: string): Promise<Subscription> {
     const entity = await this.subscriptionRepo.findOne({
       where: { providerCustomerId },
       order: { createdAt: 'DESC' },
@@ -112,7 +113,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     return this.mapEntity(entity);
   }
 
-  async findLatestByUserId(userId: string): Promise<Subscription | null> {
+  async findLatestByUserId(userId: string): Promise<Subscription> {
     const entity = await this.subscriptionRepo.findOne({
       where: { userId },
       order: { createdAt: 'DESC' },
@@ -121,7 +122,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     return this.mapEntity(entity);
   }
 
-  async findActiveByUserId(userId: string): Promise<Subscription | null> {
+  async findActiveByUserId(userId: string): Promise<Subscription> {
     const entity = await this.subscriptionRepo.findOne({
       where: { userId, status: In(ACTIVE_SUBSCRIPTION_STATUSES) },
       order: { createdAt: 'DESC' },
@@ -130,7 +131,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     return this.mapEntity(entity);
   }
 
-  async findBlockingByUserId(userId: string): Promise<Subscription | null> {
+  async findBlockingByUserId(userId: string): Promise<Subscription> {
     const entity = await this.subscriptionRepo.findOne({
       where: { userId, status: In(DUPLICATE_BLOCKING_STATUSES) },
       order: { createdAt: 'DESC' },

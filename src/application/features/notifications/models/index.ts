@@ -4,3 +4,4 @@ export * from './notification-response.model';
 export * from './list-notifications-query.model';
 export * from './get-notification-params.model';
 export * from './notifications-paged-response.model';
+export * from './notification-delivery-patch.model';

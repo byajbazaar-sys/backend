@@ -41,5 +41,5 @@ export class CreateSubscriptionResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ description: 'Razorpay short URL for payment', nullable: true })
-  shortUrl?: string | null;
+  shortUrl?: string;
 }

@@ -1,15 +1,8 @@
-import type { JewelleryTryOnRequest } from '../../features/try-on/types';
+import type { JewelleryTryOnRequest } from '../../features/try-on/interfaces';
 import type { GeneratedAiImage } from '../interfaces';
+import { TryOnProviderRoute } from './try-on-provider-route';
 
 export const TRY_ON_ORCHESTRATOR = 'TRY_ON_ORCHESTRATOR';
-
-export type TryOnRouteProvider = 'aivot' | 'cloudflare';
-
-export interface TryOnProviderRoute {
-  provider: TryOnRouteProvider;
-  cloudflareModel?: 'klein-4b' | 'klein-9b';
-  attemptNumber: number;
-}
 
 export interface ITryOnOrchestrator {
   resolveRoute(attemptNumber: number, jewelleryTypes?: string[]): TryOnProviderRoute;

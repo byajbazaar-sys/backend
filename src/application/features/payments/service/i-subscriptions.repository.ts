@@ -1,35 +1,21 @@
 import { Subscription } from '../domain';
+import { SubscriptionPatch } from '../models';
+import { AdminSubscriptionListRow } from './admin-subscription-list-row';
+import { AdminSubscriptionListQuery } from './admin-subscription-list-query';
 
 export const SUBSCRIPTIONS_REPOSITORY = 'SUBSCRIPTIONS_REPOSITORY';
 
-export type AdminSubscriptionStatusFilter = 'active' | 'cancelled' | 'pending' | 'halted';
-
-export interface AdminSubscriptionListRow {
-  subscription: Subscription;
-  userEmail: string;
-  userFirstName: string | null;
-  userLastName: string | null;
-  planName: string | null;
-}
-
-export interface AdminSubscriptionListQuery {
-  page: number;
-  pageSize: number;
-  status?: AdminSubscriptionStatusFilter;
-  search?: string;
-}
-
 export interface ISubscriptionsRepository {
   insert(data: Subscription): Promise<Subscription>;
-  update(id: string, data: Partial<Subscription>): Promise<Subscription>;
+  update(id: string, data: SubscriptionPatch): Promise<Subscription>;
   delete(id: string): Promise<void>;
-  findById(id: string): Promise<Subscription | null>;
-  findByProviderSubscriptionId(providerSubscriptionId: string): Promise<Subscription | null>;
-  findLatestByProviderCustomerId(providerCustomerId: string): Promise<Subscription | null>;
-  findLatestByUserId(userId: string): Promise<Subscription | null>;
-  findActiveByUserId(userId: string): Promise<Subscription | null>;
+  findById(id: string): Promise<Subscription>;
+  findByProviderSubscriptionId(providerSubscriptionId: string): Promise<Subscription>;
+  findLatestByProviderCustomerId(providerCustomerId: string): Promise<Subscription>;
+  findLatestByUserId(userId: string): Promise<Subscription>;
+  findActiveByUserId(userId: string): Promise<Subscription>;
   /** Statuses: created | authenticated | active | pending | paused */
-  findBlockingByUserId(userId: string): Promise<Subscription | null>;
+  findBlockingByUserId(userId: string): Promise<Subscription>;
   findAllAdmin(query: AdminSubscriptionListQuery): Promise<{
     items: AdminSubscriptionListRow[];
     totalCount: number;

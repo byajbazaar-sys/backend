@@ -1,7 +1,9 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { EUserType } from '@shared-libs';
 import { User } from '../domain';
+import { UserUpdatePatch } from '../models';
 import { IUsersRepository, USERS_REPOSITORY } from './i-users.repository';
 import { IUsersService } from './i-users.service';
 import { Paged, toPaged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
@@ -15,7 +17,7 @@ export class UsersService implements IUsersService {
     @InjectPinoLogger(UsersService.name) private readonly logger: PinoLogger,
   ) {}
 
-  private async resolvePhotoUrl(ref?: string | null): Promise<string | null> {
+  private async resolvePhotoUrl(ref?: string): Promise<string> {
     if (!ref) return null;
     return this.usersFileStorage.getUrlAsync(ref);
   }
@@ -70,7 +72,7 @@ export class UsersService implements IUsersService {
     buffer: Buffer,
     contentType: string,
     fileName: string,
-    existingRef: string | undefined,
+    existingRef: string,
     storagePath: string,
   ): Promise<string> {
     if (existingRef) {
@@ -128,11 +130,12 @@ export class UsersService implements IUsersService {
         ...dataToUpdate
       } = updateData;
 
-      const definedUpdates = Object.fromEntries(
-        Object.entries(dataToUpdate).filter(([, value]) => value !== undefined),
-      ) as Partial<User>;
+      const definedUpdates = instanceToPlain(
+        plainToInstance(UserUpdatePatch, dataToUpdate, { excludeExtraneousValues: true }),
+        { exposeUnsetFields: false },
+      ) as UserUpdatePatch;
 
-      const updatedUser = await this.usersRepo.update(id, definedUpdates as Partial<User> as User);
+      const updatedUser = await this.usersRepo.update(id, definedUpdates);
       if (!updatedUser) {
         throw new NotFoundException('User not found');
       }

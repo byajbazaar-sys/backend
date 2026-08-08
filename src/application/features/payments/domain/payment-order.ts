@@ -8,13 +8,13 @@ export class PaymentOrder {
   userId: string;
 
   @Expose()
-  subscriptionId?: string | null;
+  subscriptionId?: string;
 
   @Expose()
-  providerOrderId?: string | null;
+  providerOrderId?: string;
 
   @Expose()
-  receipt?: string | null;
+  receipt?: string;
 
   @Expose()
   amount: number;
@@ -26,7 +26,7 @@ export class PaymentOrder {
   status: string;
 
   @Expose()
-  notes?: Record<string, unknown> | null;
+  notes?: Record<string, unknown>;
 
   @Expose()
   rawJson: Record<string, unknown>;

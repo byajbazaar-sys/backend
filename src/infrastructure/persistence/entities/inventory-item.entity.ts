@@ -40,19 +40,19 @@ export class InventoryItemEntity {
   barcode: string;
 
   @Column({ type: 'text', nullable: true })
-  qrValue: string | null;
+  qrValue: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  barcodeImageUrl: string | null;
+  barcodeImageUrl: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  qrImageUrl: string | null;
+  qrImageUrl: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   itemCode: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  huid: string | null;
+  huid: string;
 
   @Column({ type: 'varchar', length: 255 })
   itemName: string;
@@ -130,7 +130,7 @@ export class InventoryItemEntity {
   stockQuantity: number;
 
   @Column({ type: 'varchar', length: 255, nullable: true, name: 'supplier_name' })
-  supplierName: string | null;
+  supplierName: string;
 
   @CreateDateColumn()
   createdAt: Date;

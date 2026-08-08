@@ -19,7 +19,7 @@ export class WebSocketConnectionsRepository implements IWebSocketConnectionsRepo
     return plainToInstance(WebSocketConnection, created, { excludeExtraneousValues: true });
   }
 
-  async findByConnectionId(connectionId: string): Promise<WebSocketConnection | null> {
+  async findByConnectionId(connectionId: string): Promise<WebSocketConnection> {
     const entity = await this.repo.findOne({ where: { connectionId } });
     if (!entity) return null;
     return plainToInstance(WebSocketConnection, entity, { excludeExtraneousValues: true });
@@ -28,7 +28,7 @@ export class WebSocketConnectionsRepository implements IWebSocketConnectionsRepo
   async findActiveBySessionAndDevice(
     sessionId: string,
     deviceType: EDeviceType,
-  ): Promise<WebSocketConnection | null> {
+  ): Promise<WebSocketConnection> {
     const entity = await this.repo.findOne({
       where: { sessionId, deviceType, disconnectedAt: IsNull() },
       order: { connectedAt: 'DESC' },

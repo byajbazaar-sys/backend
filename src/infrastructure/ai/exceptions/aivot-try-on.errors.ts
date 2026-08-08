@@ -39,7 +39,7 @@ export function isTransientTryOnStatus(status?: number): boolean {
  * Maps third-party HTTP status codes to Nest application exceptions.
  * Never includes raw Axios error objects or response bodies with image data.
  */
-export function mapAivotHttpError(status: number | undefined, message?: string): HttpException {
+export function mapAivotHttpError(status: number, message?: string): HttpException {
   const detail = message?.trim() || STATUS_MESSAGES[status ?? 0] || 'Try-on AI provider request failed';
 
   switch (status) {

@@ -27,7 +27,7 @@ export async function normalizeImageBufferForStorage(
   originalFilename?: string,
 ): Promise<NormalizedImageForStorage> {
   const mimeLower = (declaredMime || '').toLowerCase();
-  let fromBuffer: FileTypeResult | undefined;
+  let fromBuffer: FileTypeResult;
   try {
     fromBuffer = (await FileType.fromBuffer(buffer)) ?? undefined;
   } catch {

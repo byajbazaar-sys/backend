@@ -155,7 +155,7 @@ export class AivotService implements ITryOnAiService {
     return images;
   }
 
-  private extractProviderMessage(data: unknown): string | undefined {
+  private extractProviderMessage(data: unknown): string {
     if (!data || typeof data !== 'object') return undefined;
     const body = data as { message?: unknown; error?: unknown };
     if (typeof body.message === 'string') return body.message;

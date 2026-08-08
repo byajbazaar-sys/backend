@@ -44,7 +44,7 @@ type GeminiPart =
 export class GeminiService implements ITryOnAiService, IEventsDiscoveryService {
   private genClients: GeminiGenClient[] = [];
   private keyPointer = 0;
-  private keyInitPromise: Promise<void> | null = null;
+  private keyInitPromise: Promise<void> = null;
 
   constructor(
     private readonly options: AIOptions,
@@ -199,7 +199,7 @@ export class GeminiService implements ITryOnAiService, IEventsDiscoveryService {
     }
   }
 
-  private extractGeneratedImage(response: unknown): GeneratedAiImage | null {
+  private extractGeneratedImage(response: unknown): GeneratedAiImage {
     const res = response as {
       candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }>;
     };

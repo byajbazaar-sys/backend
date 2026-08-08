@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { DueEntity } from '../entities/due.entity';
+import { TransactionalContext } from '../transactional-context';
 import { TransactionEntity } from '../entities/transaction.entity';
 import { plainToInstance } from 'class-transformer';
 import { Due, DuesFilterOptions, IDuesRepository, EDueType } from '../../../application';
@@ -9,7 +10,11 @@ import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class DuesRepository implements IDuesRepository {
-  constructor(@InjectRepository(DueEntity) private dueRepo: Repository<DueEntity>) { }
+  constructor(@InjectRepository(DueEntity) private readonly defaultDueRepo: Repository<DueEntity>) { }
+
+  private get dueRepo(): Repository<DueEntity> {
+    return TransactionalContext.repositoryFor(DueEntity, this.defaultDueRepo);
+  }
 
   async listDues(params: DuesFilterOptions): Promise<Paged<Due>> {
     const { loanIds, createdBy, type, customerName } = params;

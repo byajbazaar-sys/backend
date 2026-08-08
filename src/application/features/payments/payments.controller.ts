@@ -21,6 +21,7 @@ import {
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { plainToInstance } from 'class-transformer';
 import { Request } from 'express';
 import {
   ApplyCouponRequestModel,
@@ -31,6 +32,7 @@ import {
   PaymentResponseModel,
   SubscriptionStatusResponseModel,
 } from './models';
+import { SubscriptionUserProfileData } from './domain';
 import { IPaymentsService, PAYMENTS_SERVICE } from './service/i-payments.service';
 import { IWebhookService, WEBHOOK_SERVICE } from './service/i-webhook.service';
 import { USERS_REPOSITORY, IUsersRepository } from '../users';
@@ -57,11 +59,15 @@ export class PaymentsController {
   ): Promise<CreateSubscriptionResponseModel> {
     const user = await this.usersRepo.findById(identity.userId);
     const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || '';
-    return this.paymentsService.createSubscription(identity.userId, body, {
-      email: user?.email || identity.email || '',
-      name,
-      phone: user?.phoneNumber,
-    });
+    return this.paymentsService.createSubscription(
+      identity.userId,
+      body,
+      plainToInstance(SubscriptionUserProfileData, {
+        email: user?.email || identity.email || '',
+        name,
+        phone: user?.phoneNumber,
+      }),
+    );
   }
 
   @Get('subscription/status')

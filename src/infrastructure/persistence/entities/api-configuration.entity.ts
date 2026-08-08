@@ -29,7 +29,7 @@ export class ApiConfigurationEntity {
   isActive: boolean;
 
   @Column({ type: 'timestamptz', name: 'last_used_at', nullable: true })
-  lastUsedAt: Date | null;
+  lastUsedAt: Date;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;

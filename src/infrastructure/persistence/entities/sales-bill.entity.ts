@@ -38,28 +38,28 @@ export class SalesBillEntity {
   customerName: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
-  customerMobile: string | null;
+  customerMobile: string;
 
   @Column({ type: 'uuid', nullable: true })
-  customerId: string | null;
+  customerId: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  customerAddress: string | null;
+  customerAddress: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  customerState: string | null;
+  customerState: string;
 
   @Column({ type: 'varchar', length: 2, nullable: true })
-  customerStateCode: string | null;
+  customerStateCode: string;
 
   @Column({ type: 'varchar', length: 15, nullable: true })
-  customerGstin: string | null;
+  customerGstin: string;
 
   @Column({ type: 'varchar', length: 10, nullable: true })
-  customerPan: string | null;
+  customerPan: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  customerPropName: string | null;
+  customerPropName: string;
 
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   subtotal: number;
@@ -86,16 +86,16 @@ export class SalesBillEntity {
   roundOff: number;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
-  goldRate24k: number | null;
+  goldRate24k: number;
 
   @Column({ type: 'jsonb', nullable: true })
-  metalRates: Record<string, number> | null;
+  metalRates: Record<string, number>;
 
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   grandTotal: number;
 
   @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
-  amountReceived: number | null;
+  amountReceived: number;
 
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   depositApplied: number;

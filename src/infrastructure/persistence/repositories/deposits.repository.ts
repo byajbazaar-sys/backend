@@ -5,10 +5,16 @@ import { plainToInstance } from 'class-transformer';
 import { DepositAccountEntity } from '../entities/deposit-account.entity';
 import { DepositTransactionEntity } from '../entities/deposit-transaction.entity';
 import { DepositReceiptEntity } from '../entities/deposit-receipt.entity';
-import { DepositAccount, DepositTransaction } from '../../../application/features/deposits/domain';
+import { DepositAccount, DepositTransaction, CreateDepositReceiptData, DepositReceiptResult } from '../../../application/features/deposits/domain';
+import {
+  CreateDepositAccountInput,
+  CreateDepositTransactionInput,
+  UpdateDepositAccountPatch,
+} from '../../../application/features/deposits/models';
 import { DepositsFilterOptions, DepositsDownloadFilterOptions } from '../../../application/features/deposits/options';
 import { EDepositStatus, EDepositTransactionType } from '../../../application/features/deposits/enums';
-import { IDepositsRepository, DepositStats } from '../../../application/features/deposits/service/i-deposits.repository';
+import { IDepositsRepository } from '../../../application/features/deposits/service/i-deposits.repository';
+import { DepositStats } from '../../../application/features/deposits/service/deposit-stats';
 import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 
 @Injectable()
@@ -19,13 +25,13 @@ export class DepositsRepository implements IDepositsRepository {
     @InjectRepository(DepositReceiptEntity) private readonly receiptRepo: Repository<DepositReceiptEntity>,
   ) {}
 
-  async createAccount(account: Partial<DepositAccount>): Promise<DepositAccount> {
+  async createAccount(account: CreateDepositAccountInput): Promise<DepositAccount> {
     const entity = this.accountRepo.create(account);
     const saved = await this.accountRepo.save(entity);
     return this.mapAccount(saved);
   }
 
-  async findById(id: string, createdBy: string): Promise<DepositAccount | null> {
+  async findById(id: string, createdBy: string): Promise<DepositAccount> {
     const row = await this.accountRepo
       .createQueryBuilder('a')
       .leftJoinAndSelect('a.customer', 'customer')
@@ -66,7 +72,7 @@ export class DepositsRepository implements IDepositsRepository {
     return toPaged(DepositAccount, { items, page: pageNumber, perPage: pageSize, totalCount });
   }
 
-  async updateAccount(id: string, createdBy: string, data: Partial<DepositAccount>): Promise<DepositAccount | null> {
+  async updateAccount(id: string, createdBy: string, data: UpdateDepositAccountPatch): Promise<DepositAccount> {
     const existing = await this.accountRepo.findOne({ where: { id, createdBy } });
     if (!existing) return null;
     Object.assign(existing, data);
@@ -124,13 +130,13 @@ export class DepositsRepository implements IDepositsRepository {
     return rows.map((r) => this.mapTransaction(r));
   }
 
-  async createTransaction(tx: Partial<DepositTransaction>): Promise<DepositTransaction> {
+  async createTransaction(tx: CreateDepositTransactionInput): Promise<DepositTransaction> {
     const entity = this.txRepo.create(tx);
     const saved = await this.txRepo.save(entity);
     return this.mapTransaction(saved);
   }
 
-  async createReceipt(data: { depositTransactionId: string; receiptNumber: string; createdBy: string }) {
+  async createReceipt(data: CreateDepositReceiptData): Promise<DepositReceiptResult> {
     await this.receiptRepo.save(this.receiptRepo.create(data));
     return { receiptNumber: data.receiptNumber };
   }

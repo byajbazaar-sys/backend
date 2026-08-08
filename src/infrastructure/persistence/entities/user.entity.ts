@@ -102,7 +102,7 @@ export class UserEntity {
   showBankDetailsOnBill: boolean;
 
   @Column({ type: 'varchar', length: 7, nullable: true, name: 'try_on_background_color', default: '#1a1520' })
-  tryOnBackgroundColor: string | null;
+  tryOnBackgroundColor: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
   googleId: string;
@@ -117,7 +117,7 @@ export class UserEntity {
   isFirstLogin: boolean;
 
   @Column({ type: 'timestamptz', nullable: true, name: 'trial_ends_at' })
-  trialEndsAt: Date | null;
+  trialEndsAt: Date;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -126,7 +126,7 @@ export class UserEntity {
   updatedAt: Date;
 
   @DeleteDateColumn({ type: 'timestamptz', nullable: true })
-  deletedAt: Date | null;
+  deletedAt: Date;
 
   @OneToMany(() => CustomerEntity, (c) => c.createdBy)
   customers: CustomerEntity[];

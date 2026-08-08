@@ -1,4 +1,4 @@
-import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query, BadRequestException, StreamableFile, Header } from '@nestjs/common';
+import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query, BadRequestException, StreamableFile, Header, Patch, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
@@ -13,6 +13,8 @@ import {
   DueResponseModel,
   GetDueParamsModel,
   ListDuesQueryRequestModel,
+  UpdateTransactionRequestModel,
+  DeleteTransactionQueryRequestModel,
 } from './models';
 import { ITransactionService, TRANSACTION_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
@@ -35,6 +37,7 @@ export class TransactionsController {
   @Post()
   @ApiOperation({ summary: 'Create a new transaction' })
   @ApiResponse({ status: HttpStatus.CREATED, type: TransactionResponseModel })
+  @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Loan changed since it was loaded' })
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() body: CreateTransactionRequestModel,
@@ -59,10 +62,52 @@ export class TransactionsController {
     }
 
     transactionData.createdBy = identity.userId;
-    const transaction = await this.transactionService.create(transactionData);
+    const transaction = await this.transactionService.create(transactionData, body.expectedLoanVersion);
     return plainToInstance(TransactionResponseModel, transaction, {
       excludeExtraneousValues: true,
     });
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Update payment method and/or amount on the latest transaction (amount rolls back and re-applies loan effects)',
+  })
+  @ApiParam({ name: 'id', description: 'Transaction ID' })
+  @ApiResponse({ status: HttpStatus.OK, type: TransactionResponseModel })
+  @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Loan changed since it was loaded' })
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @Param('id') id: string,
+    @Body() body: UpdateTransactionRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<TransactionResponseModel> {
+    if (body.paidIn === undefined && body.amount === undefined) {
+      throw new BadRequestException('At least one of paidIn or amount is required');
+    }
+    const transaction = await this.transactionService.update(
+      id,
+      { paidIn: body.paidIn, amount: body.amount, expectedLoanVersion: body.expectedLoanVersion },
+      identity.userId,
+    );
+    return plainToInstance(TransactionResponseModel, transaction, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete the latest transaction on a loan and roll back its loan/due effects',
+  })
+  @ApiParam({ name: 'id', description: 'Transaction ID' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT })
+  @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Loan changed since it was loaded' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(
+    @Param('id') id: string,
+    @Query() query: DeleteTransactionQueryRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<void> {
+    await this.transactionService.delete(id, identity.userId, query.expectedLoanVersion);
   }
 
   @Get()

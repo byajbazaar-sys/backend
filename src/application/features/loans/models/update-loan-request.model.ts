@@ -71,4 +71,16 @@ export class UpdateLoanRequestModel {
   @IsEnum(EInterestPrincipalBasis)
   @IsOptional()
   interestPrincipalBasis?: EInterestPrincipalBasis;
+
+  @Expose()
+  @Type(() => Number)
+  @ApiPropertyOptional({
+    description:
+      'Loan version this edit was based on. When sent, the update is rejected with 409 if the loan changed since it was read.',
+    example: 3,
+  })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  version?: number;
 }

@@ -17,19 +17,19 @@ export class PaymentEvent {
   processed: boolean;
 
   @Expose()
-  signature?: string | null;
+  signature?: string;
 
   @Expose()
   payload: Record<string, unknown>;
 
   @Expose()
-  userId?: string | null;
+  userId?: string;
 
   @Expose()
-  paymentId?: string | null;
+  paymentId?: string;
 
   @Expose()
-  paymentOrderId?: string | null;
+  paymentOrderId?: string;
 
   @Expose()
   @Type(() => Date)

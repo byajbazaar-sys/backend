@@ -3,8 +3,8 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { GeneratedAiImage } from '../../../application';
 import {
   ITryOnOrchestrator,
-  TryOnProviderRoute,
 } from '../../../application/shared/services/i-try-on-orchestrator.service';
+import { TryOnProviderRoute } from '../../../application/shared/services/try-on-provider-route';
 import type { JewelleryTryOnRequest } from '../interfaces/ai-media.types';
 import { resolveTryOnProviderRoute } from '../utils/try-on-routing.util';
 import { AivotService } from './aivot.service';

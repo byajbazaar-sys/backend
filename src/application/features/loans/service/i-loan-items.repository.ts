@@ -1,4 +1,5 @@
 import { LoanItem } from '../domain';
+import { UpdateLoanItemPatch } from '../models';
 
 export const LOAN_ITEMS_REPOSITORY = 'LOAN_ITEMS_REPOSITORY';
 
@@ -9,7 +10,7 @@ export interface ILoanItemsRepository {
   findByIdOnly(id: string): Promise<LoanItem>;
   findByLoanId(loanId: string): Promise<LoanItem[]>;
   findByLoanIds(loanIds: string[]): Promise<LoanItem[]>;
-  update(id: string, loanId: string, updateData: LoanItem): Promise<LoanItem>;
+  update(id: string, loanId: string, updateData: UpdateLoanItemPatch): Promise<LoanItem>;
   deleteByLoanId(loanId: string): Promise<void>;
   findByItemId(itemId: string): Promise<LoanItem>
 }

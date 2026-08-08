@@ -31,7 +31,7 @@ export class BarcodeService implements IBarcodeService {
     return JSON.stringify({ inventoryId, sku });
   }
 
-  parseInventoryQrPayload(raw: string): InventoryQrPayload | null {
+  parseInventoryQrPayload(raw: string): InventoryQrPayload {
     const trimmed = raw.trim();
     if (!trimmed.startsWith('{')) return null;
     try {
@@ -50,12 +50,12 @@ export class BarcodeService implements IBarcodeService {
     }
   }
 
-  resolveQrPayload(stored: string | null | undefined, inventoryId: string, sku: string): string {
+  resolveQrPayload(stored: string, inventoryId: string, sku: string): string {
     if (stored?.trim()) return stored.trim();
     return this.buildInventoryQrPayload(inventoryId, sku);
   }
 
-  resolveBarcodeText(barcode?: string | null, sku?: string | null): string {
+  resolveBarcodeText(barcode?: string, sku?: string): string {
     const value = (barcode ?? sku ?? '').trim();
     if (!value) throw new BadRequestException('Barcode value is required');
     return value;

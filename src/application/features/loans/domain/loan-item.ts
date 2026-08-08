@@ -33,7 +33,7 @@ export class LoanItem {
   public removeImage?: boolean;
 
   @Expose()
-  public imageRef?: string | null;
+  public imageRef?: string;
 
   @Expose()
   public createdAt?: Date;

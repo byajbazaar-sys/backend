@@ -34,9 +34,9 @@ export class CustomerService implements ICustomerService {
     customer: Customer,
   ): Promise<
     Customer & {
-      profilePhotoUrl: string | null;
-      aadhaarCardUrl: string | null;
-      panCardUrl: string | null;
+      profilePhotoUrl: string;
+      aadhaarCardUrl: string;
+      panCardUrl: string;
     }
   > {
     const [profilePhotoUrl, aadhaarCardUrl, panCardUrl] = await Promise.all([

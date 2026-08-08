@@ -1,4 +1,4 @@
-import type { TryOnProviderRoute } from '../../../application/shared/services/i-try-on-orchestrator.service';
+import type { TryOnProviderRoute } from '../../../application/shared/services/try-on-provider-route';
 import { requiresCloudflareOnly } from '../../../application/features/try-on/jewellery-types';
 
 /** Per-user try-on attempt → provider/model (1-based). */

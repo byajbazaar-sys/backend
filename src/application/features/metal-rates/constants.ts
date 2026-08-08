@@ -23,7 +23,7 @@ const PURITY_TO_KEY: Record<string, CurrentRateKey> = {
   '925': 'silver925',
 };
 
-export function purityToCurrentKey(metalType: EMetalType, purity: string): CurrentRateKey | null {
+export function purityToCurrentKey(metalType: EMetalType, purity: string): CurrentRateKey {
   const normalized = purity.trim().toUpperCase();
   const key = PURITY_TO_KEY[normalized];
   if (!key) return null;

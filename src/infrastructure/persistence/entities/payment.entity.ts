@@ -25,17 +25,17 @@ export class PaymentEntity {
   user?: UserEntity;
 
   @Column({ type: 'uuid', name: 'subscription_id', nullable: true })
-  subscriptionId: string | null;
+  subscriptionId: string;
 
   @ManyToOne(() => SubscriptionEntity, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'subscription_id' })
-  subscription?: SubscriptionEntity | null;
+  subscription?: SubscriptionEntity;
 
   @Column({ type: 'varchar', length: 128, name: 'provider_payment_id' })
   providerPaymentId: string;
 
   @Column({ type: 'varchar', length: 128, name: 'provider_order_id', nullable: true })
-  providerOrderId: string | null;
+  providerOrderId: string;
 
   @Column({ type: 'numeric', precision: 12, scale: 2 })
   amount: number;
@@ -47,28 +47,28 @@ export class PaymentEntity {
   status: string;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
-  method: string | null;
+  method: string;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
-  bank: string | null;
+  bank: string;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
-  wallet: string | null;
+  wallet: string;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
-  upi: string | null;
+  upi: string;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
-  fee: number | null;
+  fee: number;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
-  tax: number | null;
+  tax: number;
 
   @Column({ type: 'timestamptz', name: 'captured_at', nullable: true })
-  capturedAt: Date | null;
+  capturedAt: Date;
 
   @Column({ type: 'varchar', length: 128, name: 'invoice_id', nullable: true })
-  invoiceId: string | null;
+  invoiceId: string;
 
   @Column({ type: 'jsonb', name: 'raw_json', default: {} })
   rawJson: Record<string, unknown>;

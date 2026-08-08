@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
-import { ITryOnAssetsRepository, TryOnAsset, type TryOnAssetType } from '../../../application';
+import { ITryOnAssetsRepository, TryOnAsset, CreateTryOnAssetData, TryOnAssetType } from '../../../application';
 import { TryOnAssetEntity } from '../entities/try-on-asset.entity';
 
 @Injectable()
@@ -30,16 +30,7 @@ export class TryOnAssetsRepository implements ITryOnAssetsRepository {
     );
   }
 
-  async insert(data: {
-    id: string;
-    userId: string;
-    type: TryOnAssetType;
-    imageKey: string;
-    label?: string;
-    heightInInches?: number;
-    color?: string;
-    createdAt?: Date;
-  }): Promise<TryOnAsset> {
+  async insert(data: CreateTryOnAssetData): Promise<TryOnAsset> {
     const entity = this.repo.create({
       id: data.id,
       createdBy: data.userId,
@@ -62,7 +53,7 @@ export class TryOnAssetsRepository implements ITryOnAssetsRepository {
     return entities.map((entity) => this.mapEntity(entity));
   }
 
-  async findByIdForUser(userId: string, id: string): Promise<TryOnAsset | null> {
+  async findByIdForUser(userId: string, id: string): Promise<TryOnAsset> {
     const entity = await this.repo.findOne({ where: { id, createdBy: userId } });
     return entity ? this.mapEntity(entity) : null;
   }

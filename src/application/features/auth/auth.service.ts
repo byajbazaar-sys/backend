@@ -75,11 +75,11 @@ export class AuthService implements IAuthService {
     @Inject(USERS_FILE_STORAGE) private readonly usersFileStorage: IUsersFileStorage,
     @Inject(EMAIL_SERVICE) private readonly emailService: IEmailService,
     @Inject(EMAIL_TEMPLATE_SERVICE) private readonly emailTemplateService: IEmailTemplateService,
-    @Optional() @Inject(PAYMENTS_SERVICE) private readonly paymentsService: IPaymentsService | null,
+    @Optional() @Inject(PAYMENTS_SERVICE) private readonly paymentsService: IPaymentsService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) { }
 
-  private requireEmail(email: string | undefined, message = 'Email is required'): string {
+  private requireEmail(email: string, message = 'Email is required'): string {
     const normalized = email?.toLowerCase().trim();
     if (!normalized) {
       throw new BadRequestException(message);
@@ -96,14 +96,14 @@ export class AuthService implements IAuthService {
 
   private async buildAuthTokens(identity: IIdentity): Promise<{
     accessToken: string;
-    paymentToken: string | null;
+    paymentToken: string;
     requiresSubscription: boolean;
-    subscriptionStatus: string | null;
+    subscriptionStatus: string;
     redirectPath: string;
   }> {
     const isAdmin = identity.userType === EUserType.Admin;
     let hasPremiumAccess = isAdmin;
-    let subscriptionStatus: string | null = null;
+    let subscriptionStatus: string = null;
 
     if (!isAdmin && this.paymentsService) {
       hasPremiumAccess = await this.paymentsService.hasAppAccess(identity.userId);

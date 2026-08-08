@@ -2,7 +2,7 @@ import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenExce
 import { Item } from '../domain';
 import { IItemsRepository, ITEMS_REPOSITORY } from '../../../shared';
 import { IItemService } from './i-item.service';
-import { CreateItemRequestModel } from '../models';
+import { CreateItemRequestModel, UpdateItemRequestModel } from '../models';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { SYSTEM_USER_ID } from '@shared-libs';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans';
@@ -73,7 +73,7 @@ export class ItemService implements IItemService {
     }
   }
 
-  async update(id: string, data: Partial<Item>, userId: string): Promise<Item> {
+  async update(id: string, data: UpdateItemRequestModel, userId: string): Promise<Item> {
     try {
       this.logger.info({ itemId: id, userId }, 'Updating item');
 

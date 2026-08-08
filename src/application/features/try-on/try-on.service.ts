@@ -7,9 +7,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { plainToInstance } from 'class-transformer';
 import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { IUsersFileStorage, ITryOnAiService, ITryOnOrchestrator, TRY_ON_AI_SERVICE, TRY_ON_ORCHESTRATOR, USERS_FILE_STORAGE, type TryOnProviderRoute } from '../../shared';
-import { TryOnAsset } from './domain';
+import { TryOnAsset, CreateTryOnAssetData } from './domain';
 import {
   ITryOnAssetsRepository,
   TRY_ON_ASSETS_REPOSITORY,
@@ -19,7 +20,7 @@ import type {
   JewelleryTryOnRequest,
   OutfitRecolorRequest,
   TryOnJobRecord,
-} from './types';
+} from './interfaces';
 import type {
   CreateTryOnJobRequestModel,
   RecolorTryOnRequestModel,
@@ -27,35 +28,13 @@ import type {
   TryOnAssetType,
 } from './models';
 import { TRY_ON_ASSET_TYPES } from './models';
+import { ITryOnService } from './service/i-try-on.service';
+import { UploadTryOnAssetInput } from './service/upload-try-on-asset-input';
+import { TryOnLambdaPayload } from './service/try-on-lambda-payload';
 
 export const TRY_ON_SERVICE = 'TRY_ON_SERVICE';
 
-export interface UploadTryOnAssetInput {
-  type: string;
-  label?: string;
-  heightInInches?: number;
-  color?: string;
-  file: Express.Multer.File;
-}
-
-export interface ITryOnService {
-  startTryOnJob(userId: string, body: CreateTryOnJobRequestModel): Promise<TryOnJobRecord>;
-  startRecolorJob(userId: string, body: RecolorTryOnRequestModel): Promise<TryOnJobRecord>;
-  getJob(userId: string, jobId: string): Promise<TryOnJobRecord>;
-  processJob(payload: TryOnLambdaPayload): Promise<TryOnJobRecord>;
-  uploadAsset(userId: string, input: UploadTryOnAssetInput): Promise<TryOnAssetResponseModel>;
-  listAssets(userId: string, type?: string): Promise<TryOnAssetResponseModel[]>;
-  deleteAsset(userId: string, assetId: string): Promise<void>;
-}
-
-export interface TryOnLambdaPayload {
-  jobId: string;
-  userId: string;
-  mode: 'jewellery' | 'outfit' | 'recolor';
-  request: JewelleryTryOnRequest | OutfitRecolorRequest;
-  variations: number;
-  providerRoute?: TryOnProviderRoute;
-}
+export type { ITryOnService, UploadTryOnAssetInput, TryOnLambdaPayload };
 
 function jobMetaKey(userId: string, jobId: string): string {
   return `try-on/${userId}/${jobId}/meta.json`;
@@ -67,7 +46,7 @@ function assetImageKey(userId: string, assetId: string, ext: string): string {
 
 @Injectable()
 export class TryOnService implements ITryOnService {
-  private lambdaClient: LambdaClient | null = null;
+  private lambdaClient: LambdaClient = null;
 
   constructor(
     @Inject(TRY_ON_AI_SERVICE) private readonly tryOnAi: ITryOnAiService,
@@ -103,7 +82,7 @@ export class TryOnService implements ITryOnService {
     );
   }
 
-  private async readJob(userId: string, jobId: string): Promise<TryOnJobRecord | null> {
+  private async readJob(userId: string, jobId: string): Promise<TryOnJobRecord> {
     try {
       const buf = await this.fileStorage.readAsync(jobMetaKey(userId, jobId));
       return JSON.parse(buf.toString('utf8')) as TryOnJobRecord;
@@ -170,22 +149,24 @@ export class TryOnService implements ITryOnService {
       normalized.mimetype,
     );
 
-    const record = await this.assetsRepo.insert({
-      id: assetId,
-      userId,
-      type,
-      imageKey,
-      label,
-      heightInInches,
-      color,
-    });
+    const record = await this.assetsRepo.insert(
+      plainToInstance(CreateTryOnAssetData, {
+        id: assetId,
+        userId,
+        type,
+        imageKey,
+        label,
+        heightInInches,
+        color,
+      }),
+    );
 
     this.logger.info({ userId, assetId, type }, 'Try-on asset uploaded');
     return this.toAssetResponse(record);
   }
 
   async listAssets(userId: string, type?: string): Promise<TryOnAssetResponseModel[]> {
-    const filter = type?.trim().toLowerCase() as TryOnAssetType | undefined;
+    const filter = type?.trim().toLowerCase() as TryOnAssetType;
     const items = await this.assetsRepo.findByUserId(userId, filter);
     return Promise.all(items.map((item) => this.toAssetResponse(item)));
   }

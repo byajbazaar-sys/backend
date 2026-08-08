@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
 import { PosSessionEntity } from '../entities/pos-session.entity';
-import { IPosSessionsRepository, PosSession } from '../../../application';
+import { IPosSessionsRepository, PosSession, PosSessionPatch } from '../../../application';
 import { EPosSessionStatus } from '../../../application/features/pos/enums/e-pos-session-status.enum';
 
 @Injectable()
@@ -19,19 +19,19 @@ export class PosSessionsRepository implements IPosSessionsRepository {
     return plainToInstance(PosSession, created, { excludeExtraneousValues: true });
   }
 
-  async findById(id: string): Promise<PosSession | null> {
+  async findById(id: string): Promise<PosSession> {
     const entity = await this.repo.findOne({ where: { id } });
     if (!entity) return null;
     return plainToInstance(PosSession, entity, { excludeExtraneousValues: true });
   }
 
-  async findBySessionCode(sessionCode: string): Promise<PosSession | null> {
+  async findBySessionCode(sessionCode: string): Promise<PosSession> {
     const entity = await this.repo.findOne({ where: { sessionCode } });
     if (!entity) return null;
     return plainToInstance(PosSession, entity, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, data: Partial<PosSession>): Promise<PosSession> {
+  async update(id: string, data: PosSessionPatch): Promise<PosSession> {
     await this.repo.update(id, data as Partial<PosSessionEntity>);
     const updated = await this.repo.findOne({ where: { id } });
     return plainToInstance(PosSession, updated, { excludeExtraneousValues: true });

@@ -6,7 +6,7 @@ export const WEBSOCKET_HANDLER_SERVICE = 'WEBSOCKET_HANDLER_SERVICE';
 export interface IWebSocketHandlerService {
   handleConnect(
     connectionId: string,
-    token: string | undefined,
+    token: string,
     deviceType?: EDeviceType,
   ): Promise<{ statusCode: number }>;
   handleDisconnect(connectionId: string): Promise<void>;

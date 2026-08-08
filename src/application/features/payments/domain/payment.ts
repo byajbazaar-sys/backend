@@ -8,13 +8,13 @@ export class Payment {
   userId: string;
 
   @Expose()
-  subscriptionId?: string | null;
+  subscriptionId?: string;
 
   @Expose()
   providerPaymentId: string;
 
   @Expose()
-  providerOrderId?: string | null;
+  providerOrderId?: string;
 
   @Expose()
   amount: number;
@@ -26,29 +26,29 @@ export class Payment {
   status: string;
 
   @Expose()
-  method?: string | null;
+  method?: string;
 
   @Expose()
-  bank?: string | null;
+  bank?: string;
 
   @Expose()
-  wallet?: string | null;
+  wallet?: string;
 
   @Expose()
-  upi?: string | null;
+  upi?: string;
 
   @Expose()
-  fee?: number | null;
+  fee?: number;
 
   @Expose()
-  tax?: number | null;
+  tax?: number;
 
   @Expose()
   @Type(() => Date)
-  capturedAt?: Date | null;
+  capturedAt?: Date;
 
   @Expose()
-  invoiceId?: string | null;
+  invoiceId?: string;
 
   @Expose()
   rawJson: Record<string, unknown>;

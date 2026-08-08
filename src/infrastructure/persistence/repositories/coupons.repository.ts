@@ -26,7 +26,7 @@ export class CouponsRepository implements ICouponsRepository {
     );
   }
 
-  async findByCode(code: string): Promise<Coupon | null> {
+  async findByCode(code: string): Promise<Coupon> {
     const entity = await this.couponRepo.findOne({
       where: { code: code.trim().toUpperCase() },
     });
@@ -34,7 +34,7 @@ export class CouponsRepository implements ICouponsRepository {
     return this.mapEntity(entity);
   }
 
-  async findById(id: string): Promise<Coupon | null> {
+  async findById(id: string): Promise<Coupon> {
     const entity = await this.couponRepo.findOne({ where: { id } });
     if (!entity) return null;
     return this.mapEntity(entity);

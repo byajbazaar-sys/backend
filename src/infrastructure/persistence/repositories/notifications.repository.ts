@@ -2,11 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotificationEntity } from '../entities/notification.entity';
-import { plainToInstance } from 'class-transformer';
+import { plainToInstance, instanceToPlain } from 'class-transformer';
 import {
   INotificationsRepository,
   Notification,
   NotificationsFilterOptions,
+  NotificationDeliveryPatch,
 } from '../../../application/features/notifications';
 import { ENotificationChannel, ENotificationStatus, ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
@@ -32,11 +33,11 @@ export class NotificationsRepository implements INotificationsRepository {
     return plainToInstance(Notification, created, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, notification: Partial<Notification>): Promise<Notification> {
-    const updateData: Partial<NotificationEntity> = {};
-    if (notification.status !== undefined) updateData.status = notification.status as ENotificationStatus;
-    if (notification.externalId !== undefined) updateData.externalId = notification.externalId;
-    if (notification.errorMessage !== undefined) updateData.errorMessage = notification.errorMessage;
+  async update(id: string, notification: NotificationDeliveryPatch): Promise<Notification> {
+    const updateData = instanceToPlain(
+      plainToInstance(NotificationDeliveryPatch, notification, { excludeExtraneousValues: true }),
+      { exposeUnsetFields: false },
+    ) as Partial<NotificationEntity>;
 
     await this.notificationRepo.update(id, updateData);
     const updated = await this.notificationRepo.findOne({ where: { id } });

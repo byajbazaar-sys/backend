@@ -18,44 +18,44 @@ export class SubscriptionStatusResponseModel {
   @Expose()
   @ApiPropertyOptional({ type: Date, nullable: true })
   @Type(() => Date)
-  trialEndsAt?: Date | null;
+  trialEndsAt?: Date;
 
   @Expose()
   @ApiPropertyOptional({ description: 'Days remaining in trial', nullable: true })
-  trialDaysRemaining?: number | null;
+  trialDaysRemaining?: number;
 
   @Expose()
   @ApiPropertyOptional({ enum: ESubscriptionStatus, nullable: true })
-  status?: ESubscriptionStatus | null;
+  status?: ESubscriptionStatus;
 
   @Expose()
   @ApiPropertyOptional({ description: 'Internal subscription ID', nullable: true })
-  subscriptionId?: string | null;
+  subscriptionId?: string;
 
   @Expose()
   @ApiPropertyOptional({ type: Date, nullable: true })
   @Type(() => Date)
-  currentStart?: Date | null;
+  currentStart?: Date;
 
   @Expose()
   @ApiPropertyOptional({ type: Date, nullable: true })
   @Type(() => Date)
-  currentEnd?: Date | null;
+  currentEnd?: Date;
 
   @Expose()
   @ApiPropertyOptional({ type: Date, nullable: true })
   @Type(() => Date)
-  nextBillingAt?: Date | null;
+  nextBillingAt?: Date;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  cancelAtPeriodEnd?: boolean | null;
+  cancelAtPeriodEnd?: boolean;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  amount?: number | null;
+  amount?: number;
 
   @Expose()
   @ApiPropertyOptional({ example: 'INR', nullable: true })
-  currency?: string | null;
+  currency?: string;
 }

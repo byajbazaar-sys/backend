@@ -13,7 +13,7 @@ export class JwtAuthenticationProvider implements IAuthenticationProvider {
     private readonly options: UsersAuthOptions,
   ) {}
 
-  async authenticate(request: Request): Promise<IIdentity | null> {
+  async authenticate(request: Request): Promise<IIdentity> {
     const token = extractRequestToken(request, this.options.queryParamName);
     if (!token) return null;
 

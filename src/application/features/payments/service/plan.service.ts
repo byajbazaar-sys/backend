@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Plan } from '../domain';
+import { plainToInstance } from 'class-transformer';
+import { Plan, RazorpayCreateMonthlyPlanData } from '../domain';
 import { CreatePlanRequestModel, UpdatePlanRequestModel } from '../models';
 import { IPlanService } from './i-plan.service';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
@@ -43,12 +44,14 @@ export class PlanService implements IPlanService {
     }
 
     const amountPaise = Math.round(body.price * 100);
-    const rzpPlan = await this.razorpay.createMonthlyPlan({
-      name: body.name.trim(),
-      amountPaise,
-      currency,
-      existingPlanId: body.providerPlanId?.trim(),
-    });
+    const rzpPlan = await this.razorpay.createMonthlyPlan(
+      plainToInstance(RazorpayCreateMonthlyPlanData, {
+        name: body.name.trim(),
+        amountPaise,
+        currency,
+        existingPlanId: body.providerPlanId?.trim(),
+      }),
+    );
 
     const duplicate = await this.plansRepo.findByProviderPlanId(rzpPlan.id);
     if (duplicate) {

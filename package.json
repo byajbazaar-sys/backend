@@ -28,7 +28,8 @@
     "migration:generate": "npm run typeorm -- -d ./src/infrastructure/persistence/type-orm.config.ts migration:generate ./src/infrastructure/persistence/migrations/migration",
     "migration:create": "npm run typeorm -- migration:create ./src/infrastructure/persistence/migrations/migration",
     "migration:down": "npm run typeorm -- -d ./src/infrastructure/persistence/type-orm.config.ts migration:revert",
-    "schema:drop": "npm run typeorm -- -d ./src/infrastructure/persistence/type-orm.config.ts schema:drop"
+    "schema:drop": "npm run typeorm -- -d ./src/infrastructure/persistence/type-orm.config.ts schema:drop",
+    "backfill:replay-foundation": "ts-node -r tsconfig-paths/register -P ./tsconfig.json ./backfill/backfill-transaction-replay-foundation.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.69.0",

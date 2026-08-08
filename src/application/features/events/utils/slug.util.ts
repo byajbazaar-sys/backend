@@ -1,8 +1,8 @@
 /** Build a URL-safe unique-ish slug from event identity fields. */
 export function buildEventSlug(parts: {
-  name?: string | null;
-  city?: string | null;
-  startDate?: string | Date | null;
+  name?: string;
+  city?: string;
+  startDate?: string | Date;
 }): string {
   const year =
     parts.startDate != null
@@ -21,9 +21,9 @@ export function buildEventSlug(parts: {
 }
 
 export function eventDedupeKey(event: {
-  name?: string | null;
-  city?: string | null;
-  startDate?: string | Date | null;
+  name?: string;
+  city?: string;
+  startDate?: string | Date;
 }): string {
   const name = (event.name ?? '').trim().toLowerCase();
   const city = (event.city ?? '').trim().toLowerCase();

@@ -1,15 +1,8 @@
 import { ApplyCouponResponseModel } from '../models';
 import { Coupon, Subscription } from '../domain';
+import { CouponPreview } from './coupon-preview';
 
 export const COUPON_SERVICE = 'COUPON_SERVICE';
-
-export interface CouponPreview {
-  coupon: Coupon;
-  discountAmount: number;
-  originalAmount: number;
-  finalAmount: number;
-  currency: string;
-}
 
 export interface ICouponService {
   preview(code: string, userId: string, originalAmount?: number): Promise<CouponPreview>;

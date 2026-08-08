@@ -16,7 +16,7 @@ import {
 } from '../../inventory/service/i-inventory-categories.repository';
 import { SalesBill, SalesBillLineItem, SalesAnalytics } from '../domain';
 import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder, EDocumentType, BILL_NUMBER_PREFIX } from '../enums';
-import { CreateSalesBillRequestModel, ListSalesBillsQueryModel, UpdateSalesBillRequestModel } from '../models';
+import { CreateSalesBillRequestModel, ListSalesBillsQueryModel, UpdateSalesBillRequestModel, UpdateSalesBillPatch } from '../models';
 import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options';
 import { toGstExportCsv } from '../utils/gst-export.util';
 import { ISalesBillService } from './i-sales-bill.service';
@@ -25,12 +25,9 @@ import {
   computeLineProfit,
   recalcLineProfitFromExisting,
 } from '../utils/purchase-profit.util';
-import {
-  ISalesBillsRepository,
-  InventoryStockDeduction,
-  BillLineUpdate,
-  SALES_BILLS_REPOSITORY,
-} from './i-sales-bills.repository';
+import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
+import { InventoryStockDeduction } from './inventory-stock-deduction';
+import { BillLineUpdate } from './bill-line-update';
 
 const DEFAULT_CGST_RATE = 1.5;
 const DEFAULT_SGST_RATE = 1.5;
@@ -76,7 +73,7 @@ export class SalesBillService implements ISalesBillService {
       dateTo: query.dateTo ? new Date(query.dateTo) : undefined,
       paymentMode: query.paymentMode,
       status: query.status,
-      documentType: query.documentType as EDocumentType | undefined,
+      documentType: query.documentType as EDocumentType,
       customerId: query.customerId,
       sortField: (query.sortField as ESalesBillSortField) ?? ESalesBillSortField.CreatedAt,
       sortOrder: (query.sortOrder as ESalesBillSortOrder) ?? ESalesBillSortOrder.Desc,
@@ -153,7 +150,7 @@ export class SalesBillService implements ISalesBillService {
     item: CreateSalesBillRequestModel['items'][number],
   ): Promise<Pick<SalesBillLineItem, 'hsnCode' | 'huid'>> {
     let hsnCode = item.hsnCode?.trim() || undefined;
-    let huid: string | undefined;
+    let huid: string;
 
     if (item.inventoryItemId) {
       const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId);
@@ -189,10 +186,10 @@ export class SalesBillService implements ISalesBillService {
     item: CreateSalesBillRequestModel['items'][number],
     lineTotal: number,
   ): Promise<Pick<SalesBillLineItem, 'purchaseRatePerGram' | 'purchaseCost' | 'profitAmount'>> {
-    let purchaseRatePerGram: number | undefined;
+    let purchaseRatePerGram: number;
     const netWeight = item.netWeight != null ? Number(item.netWeight) : undefined;
     const makingCharges = item.makingCharges != null ? Number(item.makingCharges) : 0;
-    let purchasePrice: number | undefined;
+    let purchasePrice: number;
 
     if (item.inventoryItemId) {
       const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId);
@@ -468,7 +465,7 @@ export class SalesBillService implements ISalesBillService {
         ? this.computeInformalTotals(subtotal, discount)
         : this.computeGstTotals(subtotal, discount);
 
-    const patch: Partial<SalesBill> = {
+    const patch: UpdateSalesBillPatch = {
       subtotal,
       discount,
       taxAmount: totals.taxAmount,

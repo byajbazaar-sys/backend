@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { CronService } from '../infrastructure/cron';
 
-let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
+let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
 async function bootstrap() {
   if (cachedApp) {
@@ -18,7 +18,7 @@ async function bootstrap() {
   return app;
 }
 
-function getJobFromEvent(event: unknown): string | undefined {
+function getJobFromEvent(event: unknown): string {
   if (event === null || typeof event !== 'object') {
     return undefined;
   }

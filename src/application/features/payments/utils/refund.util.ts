@@ -22,7 +22,7 @@ export function isFullyRefunded(paymentAmount: number, refunds: Refund[]): boole
   return sumRefundedAmount(refunds, ['processed']) >= Number(paymentAmount) - 0.01;
 }
 
-export function parseRefundReason(notes: unknown): string | null {
+export function parseRefundReason(notes: unknown): string {
   if (!notes) return null;
   if (typeof notes === 'string') return notes;
   if (typeof notes === 'object' && !Array.isArray(notes)) {

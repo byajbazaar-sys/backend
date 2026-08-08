@@ -14,17 +14,17 @@ export class ApiAccessToken {
   expiresAt: Date;
 
   @Expose()
-  lastUsedAt?: Date | null;
+  lastUsedAt?: Date;
 
   @Expose()
   createdAt?: Date;
 
   @Expose()
-  revokedAt?: Date | null;
+  revokedAt?: Date;
 
   @Expose()
-  deviceName?: string | null;
+  deviceName?: string;
 
   @Expose()
-  clientName?: string | null;
+  clientName?: string;
 }

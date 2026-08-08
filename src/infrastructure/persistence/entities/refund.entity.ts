@@ -32,7 +32,7 @@ export class RefundEntity {
   status: string;
 
   @Column({ type: 'text', nullable: true })
-  reason: string | null;
+  reason: string;
 
   @Column({ type: 'jsonb', name: 'raw_json', default: {} })
   rawJson: Record<string, unknown>;

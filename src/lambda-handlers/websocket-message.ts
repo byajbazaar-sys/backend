@@ -49,7 +49,7 @@ async function getUserIdFromToken(token: string): Promise<string> {
   }
 }
 
-async function resolveUserId(connectionId: string, token: string | undefined): Promise<string> {
+async function resolveUserId(connectionId: string, token: string): Promise<string> {
   const tokenSource = token ? 'message' : 'none';
 
   if (token) {
@@ -98,14 +98,14 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
   let routeKey = event.requestContext.routeKey;
   const body = parseBody(event);
   const evt = event as APIGatewayProxyWebsocketEventV2 & {
-    queryStringParameters?: Record<string, string | undefined> | null;
-    headers?: Record<string, string | undefined> | null;
+    queryStringParameters?: Record<string, string>;
+    headers?: Record<string, string>;
   };
   const queryToken = getTokenFromEvent({
     queryStringParameters: evt.queryStringParameters,
     headers: evt.headers,
   });
-  const bodyToken = body.token as string | undefined;
+  const bodyToken = body.token as string;
   const token = queryToken ?? bodyToken;
 
   if (routeKey === '$default' && typeof body.action === 'string') {

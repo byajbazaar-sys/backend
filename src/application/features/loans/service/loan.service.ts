@@ -1,11 +1,13 @@
 import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { Loan, LoanExtended, LoanItem, LoanStats } from '../domain';
+import { plainToInstance } from 'class-transformer';
+import { assertLoanVersion, Loan, LoanExtended, LoanItem, LoanStats, LoanBaselineData } from '../domain';
+import { UpdateLoanItemPatch } from '../models';
 import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
 import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
-import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE, IItemsRepository, ITEMS_REPOSITORY, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY } from '../../../shared';
+import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE, IItemsRepository, ITEMS_REPOSITORY, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY, IUnitOfWork, UNIT_OF_WORK } from '../../../shared';
 import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus, EInterestPrincipalBasis } from '../enums';
 import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 
@@ -21,6 +23,7 @@ export class LoanService implements ILoanService {
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
     @Inject(ITEMS_REPOSITORY) private readonly itemsRepo: IItemsRepository,
+    @Inject(UNIT_OF_WORK) private readonly unitOfWork: IUnitOfWork,
     @InjectPinoLogger(LoanService.name) private readonly logger: PinoLogger,
   ) { }
 
@@ -91,6 +94,13 @@ export class LoanService implements ILoanService {
         );
         throw new BadRequestException('Invalid interest calculation result');
       }
+      // Origination is the first replay checkpoint; no transactions exist yet.
+      data.baselineAmountRemaining = amountRemaining;
+      data.baselineAmountPaid = Number(data.amountPaid ?? 0);
+      data.baselineInterestRemaining = Number(data.interestRemaining);
+      data.baselineInterestPaid = Number(data.interestPaid ?? 0);
+      data.baselineSeq = 0;
+
       const loan = await this.loansRepo.create(data);
       this.logger.debug({ loanId: loan.id }, 'Loan created, processing loan items');
 
@@ -524,7 +534,10 @@ export class LoanService implements ILoanService {
       }
 
       // Update the loan item
-      const updatedLoanItem = await this.loanItemsRepo.update(itemId, loanId, updateData);
+      const itemPatch = plainToInstance(UpdateLoanItemPatch, updateData, {
+        excludeExtraneousValues: true,
+      });
+      const updatedLoanItem = await this.loanItemsRepo.update(itemId, loanId, itemPatch);
       if (!updatedLoanItem) {
         throw new NotFoundException('Loan item not found');
       }
@@ -661,7 +674,7 @@ export class LoanService implements ILoanService {
     createdBy: string,
     signerName: string,
     signatureFile: Express.Multer.File,
-    fingerprintFile?: Express.Multer.File | null,
+    fingerprintFile?: Express.Multer.File,
     removeFingerprint?: boolean,
   ): Promise<Loan> {
     try {
@@ -702,7 +715,7 @@ export class LoanService implements ILoanService {
         signatureNormalized.mimetype,
       );
 
-      let storedFingerprintKey: string | null = existingLoan.fingerprintRef!;
+      let storedFingerprintKey: string = existingLoan.fingerprintRef!;
 
       if (removeFingerprint) {
         if (existingLoan.fingerprintRef && this.isStorageKey(existingLoan.fingerprintRef)) {
@@ -777,8 +790,16 @@ export class LoanService implements ILoanService {
   }
 
   async update(id: string, updateData: Loan): Promise<Loan> {
+    return this.unitOfWork.runInTransaction(() => this.updateWithinTransaction(id, updateData));
+  }
+
+  private async updateWithinTransaction(id: string, updateData: Loan): Promise<Loan> {
     try {
       this.logger.info({ loanId: id, createdBy: updateData.createdBy }, 'Updating loan');
+      // Editing terms recomputes balances, so no transaction may land on this
+      // loan between reading them here and writing the new schedule.
+      const lockedLoan = await this.loansRepo.lockLoan(id, updateData.createdBy);
+      assertLoanVersion(lockedLoan, updateData.version);
       const existingLoan = await this.loansRepo.findById(id, updateData.createdBy);
       if (!existingLoan) {
         this.logger.warn({ loanId: id, createdBy: updateData.createdBy }, 'Loan not found for update');
@@ -934,6 +955,7 @@ export class LoanService implements ILoanService {
 
       if (!duesNeedRecalculation) {
         const updatedLoan = await this.loansRepo.update(id, finalLoanData);
+        await this.rebaselineLoan(updatedLoan);
         this.logger.info({ loanId: id }, 'Loan updated successfully');
         return updatedLoan;
       }
@@ -1047,18 +1069,47 @@ export class LoanService implements ILoanService {
         UNPAID_DUE_TYPES,
       );
 
+      await this.rebaselineLoan(updatedLoan);
+
       this.logger.info(
         { loanId: id, totalDuePeriods, remainingDuePeriods, paidDuesCount, unpaidDues: unpaidDues.length },
         'Loan updated and unpaid dues regenerated successfully',
       );
       return updatedLoan;
     } catch (err) {
-      if (err instanceof NotFoundException || err instanceof ForbiddenException || err instanceof BadRequestException) {
+      if (
+        err instanceof NotFoundException ||
+        err instanceof ForbiddenException ||
+        err instanceof BadRequestException ||
+        err instanceof ConflictException
+      ) {
         throw err;
       }
       this.logger.error({ err, loanId: id }, 'Error updating loan');
       throw err;
     }
+  }
+
+  /**
+   * Editing loan terms recomputes balances from scratch, so earlier transactions
+   * can no longer be replayed onto them. Move the checkpoint to the new state and
+   * mark everything recorded so far as frozen history.
+   */
+  private async rebaselineLoan(loan: Loan): Promise<void> {
+    if (!loan?.id) return;
+    const seq = await this.loansRepo.getMaxTransactionSeq(loan.id);
+    await this.loansRepo.setBaseline(
+      loan.id,
+      loan.createdBy,
+      plainToInstance(LoanBaselineData, {
+        amountRemaining: Number(loan.amountRemaining ?? 0),
+        amountPaid: Number(loan.amountPaid ?? 0),
+        interestRemaining: Number(loan.interestRemaining ?? 0),
+        interestPaid: Number(loan.interestPaid ?? 0),
+        seq,
+      }),
+    );
+    this.logger.debug({ loanId: loan.id, baselineSeq: seq }, 'Loan replay baseline moved');
   }
 
   async recalculateDuesForLoan(loanId: string, createdBy: string): Promise<void> {
@@ -1115,6 +1166,10 @@ export class LoanService implements ILoanService {
   }
 
   async delete(id: string, createdBy: string): Promise<void> {
+    return this.unitOfWork.runInTransaction(() => this.deleteWithinTransaction(id, createdBy));
+  }
+
+  private async deleteWithinTransaction(id: string, createdBy: string): Promise<void> {
     try {
       this.logger.info({ loanId: id, createdBy }, 'Deleting loan');
       const existingLoan = await this.loansRepo.findById(id, createdBy);

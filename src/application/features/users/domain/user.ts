@@ -33,16 +33,16 @@ export class User {
   public passwordChangedAt?: Date;
 
   @Expose()
-  public resetPasswordToken?: string | null;
+  public resetPasswordToken?: string;
 
   @Expose()
-  public resetPasswordExpires?: Date | null;
+  public resetPasswordExpires?: Date;
 
   @Expose()
-  public emailVerificationToken?: string | null;
+  public emailVerificationToken?: string;
 
   @Expose()
-  public emailVerificationExpires?: Date | null;
+  public emailVerificationExpires?: Date;
 
   @Expose()
   public createdAt?: Date;
@@ -133,9 +133,9 @@ export class User {
 
   @Expose()
   @Type(() => Date)
-  public trialEndsAt?: Date | null;
+  public trialEndsAt?: Date;
 
   @Expose()
   @Type(() => Date)
-  public deletedAt?: Date | null;
+  public deletedAt?: Date;
 }

@@ -8,6 +8,8 @@ export * from './payment-response.model';
 export * from './invoice-response.model';
 export * from './create-plan-request.model';
 export * from './update-plan-request.model';
+export * from './update-plan-patch.model';
+export * from './subscription-patch.model';
 export * from './plan-response.model';
 export * from './list-admin-subscriptions-query.model';
 export * from './admin-subscription-response.model';

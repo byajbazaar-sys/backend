@@ -5,7 +5,7 @@ import {
   IWebSocketHandlerService,
 } from '../application/features/pos/service';
 
-let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
+let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
 export async function getWebSocketApp() {
   if (cachedApp) return cachedApp;
@@ -21,15 +21,15 @@ export async function getWebSocketHandler(): Promise<IWebSocketHandlerService> {
 }
 
 export function getTokenFromEvent(event: {
-  queryStringParameters?: Record<string, string | undefined> | null;
-  headers?: Record<string, string | undefined> | null;
-}): string | undefined {
+  queryStringParameters?: Record<string, string>;
+  headers?: Record<string, string>;
+}): string {
   const qs = event.queryStringParameters ?? {};
   const headers = event.headers ?? {};
   return qs.token ?? qs.users_token ?? headers.Authorization?.replace('Bearer ', '');
 }
 
-export function parseBody(event: { body?: string | null }): Record<string, unknown> {
+export function parseBody(event: { body?: string }): Record<string, unknown> {
   if (!event.body) return {};
   try {
     return JSON.parse(event.body) as Record<string, unknown>;

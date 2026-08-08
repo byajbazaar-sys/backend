@@ -12,54 +12,54 @@ export class JewelleryEvent {
   slug!: string;
 
   @Expose()
-  description?: string | null;
+  description?: string;
 
   @Expose()
   @Type(() => Date)
-  startDate?: Date | null;
+  startDate?: Date;
 
   @Expose()
   @Type(() => Date)
-  endDate?: Date | null;
+  endDate?: Date;
 
   @Expose()
-  city?: string | null;
+  city?: string;
 
   @Expose()
-  state?: string | null;
+  state?: string;
 
   @Expose()
-  country?: string | null;
+  country?: string;
 
   @Expose()
-  venue?: string | null;
+  venue?: string;
 
   @Expose()
-  organizer?: string | null;
+  organizer?: string;
 
   @Expose()
-  category?: string | null;
+  category?: string;
 
   @Expose()
-  website?: string | null;
+  website?: string;
 
   @Expose()
-  registrationUrl?: string | null;
+  registrationUrl?: string;
 
   @Expose()
-  sourceUrl?: string | null;
+  sourceUrl?: string;
 
   @Expose()
-  visitorEntryFee?: string | null;
+  visitorEntryFee?: string;
 
   @Expose()
-  stallFee?: string | null;
+  stallFee?: string;
 
   @Expose()
-  contactEmail?: string | null;
+  contactEmail?: string;
 
   @Expose()
-  contactPhone?: string | null;
+  contactPhone?: string;
 
   @Expose()
   tags?: string[];
@@ -71,10 +71,10 @@ export class JewelleryEvent {
   isFeatured!: boolean;
 
   @Expose()
-  seoTitle?: string | null;
+  seoTitle?: string;
 
   @Expose()
-  seoDescription?: string | null;
+  seoDescription?: string;
 
   @Expose()
   @Type(() => Date)

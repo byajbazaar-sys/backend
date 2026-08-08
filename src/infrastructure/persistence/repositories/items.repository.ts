@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ItemEntity } from '../entities/item.entity';
 import { plainToInstance } from 'class-transformer';
-import { IItemsRepository, Item } from '../../../application';
+import { IItemsRepository, Item, UpdateItemRequestModel } from '../../../application';
 import { SYSTEM_USER_ID } from 'libs/constants/constants';
 
 @Injectable()
@@ -44,10 +44,8 @@ export class ItemsRepository implements IItemsRepository {
     return plainToInstance(Item, items, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, updateItem: Partial<Item>): Promise<Item> {
-    const { createdBy, ...rest } = updateItem;
-    const entityUpdate = createdBy ? { ...rest, createdBy: createdBy } : rest;
-    await this.itemRepo.update(id, entityUpdate as Partial<ItemEntity>);
+  async update(id: string, updateItem: UpdateItemRequestModel): Promise<Item> {
+    await this.itemRepo.update(id, updateItem as Partial<ItemEntity>);
     const updated = await this.itemRepo.findOne({ where: { id } });
     if (!updated) {
       throw new NotFoundException('Item not found');

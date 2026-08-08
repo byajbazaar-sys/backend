@@ -6,8 +6,8 @@ export interface IWebSocketMessageService {
   /** Returns true when the target connection is still open in API Gateway. */
   probeConnection(connectionId: string): Promise<boolean>;
   broadcastToSession(
-    desktopConnectionId: string | undefined,
-    mobileConnectionId: string | undefined,
+    desktopConnectionId: string,
+    mobileConnectionId: string,
     payload: Record<string, unknown>,
     excludeConnectionId?: string,
   ): Promise<void>;

@@ -32,17 +32,17 @@ export class ApiAccessTokenEntity {
   expiresAt: Date;
 
   @Column({ type: 'timestamptz', name: 'last_used_at', nullable: true })
-  lastUsedAt: Date | null;
+  lastUsedAt: Date;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 
   @Column({ type: 'timestamptz', name: 'revoked_at', nullable: true })
-  revokedAt: Date | null;
+  revokedAt: Date;
 
   @Column({ type: 'varchar', length: 120, name: 'device_name', nullable: true })
-  deviceName: string | null;
+  deviceName: string;
 
   @Column({ type: 'varchar', length: 120, name: 'client_name', nullable: true })
-  clientName: string | null;
+  clientName: string;
 }

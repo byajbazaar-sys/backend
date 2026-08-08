@@ -21,55 +21,55 @@ export class JewelleryEventEntity {
   slug!: string;
 
   @Column({ type: 'text', nullable: true })
-  description!: string | null;
+  description!: string;
 
   @Index('IDX_jewellery_events_start_date')
   @Column({ type: 'date', name: 'start_date', nullable: true })
-  startDate!: Date | null;
+  startDate!: Date;
 
   @Column({ type: 'date', name: 'end_date', nullable: true })
-  endDate!: Date | null;
+  endDate!: Date;
 
   @Index('IDX_jewellery_events_city')
   @Column({ type: 'varchar', length: 128, nullable: true })
-  city!: string | null;
+  city!: string;
 
   @Index('IDX_jewellery_events_state')
   @Column({ type: 'varchar', length: 128, nullable: true })
-  state!: string | null;
+  state!: string;
 
   @Column({ type: 'varchar', length: 128, nullable: true, default: 'India' })
-  country!: string | null;
+  country!: string;
 
   @Column({ type: 'varchar', length: 512, nullable: true })
-  venue!: string | null;
+  venue!: string;
 
   @Column({ type: 'varchar', length: 512, nullable: true })
-  organizer!: string | null;
+  organizer!: string;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
-  category!: string | null;
+  category!: string;
 
   @Column({ type: 'varchar', length: 1024, nullable: true })
-  website!: string | null;
+  website!: string;
 
   @Column({ type: 'varchar', length: 1024, name: 'registration_url', nullable: true })
-  registrationUrl!: string | null;
+  registrationUrl!: string;
 
   @Column({ type: 'varchar', length: 1024, name: 'source_url', nullable: true })
-  sourceUrl!: string | null;
+  sourceUrl!: string;
 
   @Column({ type: 'varchar', length: 256, name: 'visitor_entry_fee', nullable: true })
-  visitorEntryFee!: string | null;
+  visitorEntryFee!: string;
 
   @Column({ type: 'varchar', length: 256, name: 'stall_fee', nullable: true })
-  stallFee!: string | null;
+  stallFee!: string;
 
   @Column({ type: 'varchar', length: 256, name: 'contact_email', nullable: true })
-  contactEmail!: string | null;
+  contactEmail!: string;
 
   @Column({ type: 'varchar', length: 64, name: 'contact_phone', nullable: true })
-  contactPhone!: string | null;
+  contactPhone!: string;
 
   @Column({ type: 'jsonb', default: [] })
   tags!: string[];
@@ -87,10 +87,10 @@ export class JewelleryEventEntity {
   isFeatured!: boolean;
 
   @Column({ type: 'varchar', length: 512, name: 'seo_title', nullable: true })
-  seoTitle!: string | null;
+  seoTitle!: string;
 
   @Column({ type: 'text', name: 'seo_description', nullable: true })
-  seoDescription!: string | null;
+  seoDescription!: string;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;

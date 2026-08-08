@@ -9,7 +9,7 @@ import { IWebSocketMessageService } from '../../application';
 
 @Injectable()
 export class WebSocketMessageService implements IWebSocketMessageService {
-  private client: ApiGatewayManagementApiClient | null = null;
+  private client: ApiGatewayManagementApiClient = null;
 
   constructor(@InjectPinoLogger(WebSocketMessageService.name) private readonly logger: PinoLogger) {}
 
@@ -67,8 +67,8 @@ export class WebSocketMessageService implements IWebSocketMessageService {
   }
 
   async broadcastToSession(
-    desktopConnectionId: string | undefined,
-    mobileConnectionId: string | undefined,
+    desktopConnectionId: string,
+    mobileConnectionId: string,
     payload: Record<string, unknown>,
     excludeConnectionId?: string,
   ): Promise<void> {

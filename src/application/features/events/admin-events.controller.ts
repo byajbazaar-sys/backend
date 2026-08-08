@@ -108,7 +108,7 @@ export class AdminEventsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Internal: sync jewellery events via Gemini (protected by secret)' })
   async sync(
-    @Headers('x-events-sync-secret') secret: string | undefined,
+    @Headers('x-events-sync-secret') secret: string,
     @Body() body?: { states?: string[] },
   ): Promise<{ states: string[]; upserted: number }> {
     const expected = process.env.EVENTS_SYNC_SECRET;

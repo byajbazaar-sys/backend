@@ -20,7 +20,7 @@ export class InvoiceResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  providerOrderId?: string | null;
+  providerOrderId?: string;
 
   @Expose()
   @ApiProperty({ type: Date })
@@ -29,5 +29,5 @@ export class InvoiceResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  subscriptionId?: string | null;
+  subscriptionId?: string;
 }

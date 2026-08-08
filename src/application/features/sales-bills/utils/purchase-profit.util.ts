@@ -1,8 +1,8 @@
 export function computeUnitPurchaseCost(params: {
-  purchaseRatePerGram?: number | null;
-  netWeight?: number | null;
-  makingCharges?: number | null;
-  purchasePrice?: number | null;
+  purchaseRatePerGram?: number;
+  netWeight?: number;
+  makingCharges?: number;
+  purchasePrice?: number;
 }): number {
   const net = Number(params.netWeight) || 0;
   const rate = Number(params.purchaseRatePerGram) || 0;

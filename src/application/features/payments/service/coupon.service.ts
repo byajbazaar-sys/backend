@@ -13,7 +13,8 @@ import {
   COUPON_REDEMPTIONS_REPOSITORY,
   ICouponRedemptionsRepository,
 } from './i-coupon-redemptions.repository';
-import { CouponPreview, ICouponService } from './i-coupon.service';
+import { CouponPreview } from './coupon-preview';
+import { ICouponService } from './i-coupon.service';
 import { RazorpayOptions } from '../../../shared';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
 import {

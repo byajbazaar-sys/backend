@@ -23,15 +23,15 @@ export class WebhookEventSummaryModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  userId?: string | null;
+  userId?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  paymentId?: string | null;
+  paymentId?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  paymentOrderId?: string | null;
+  paymentOrderId?: string;
 }
 
 export class AdminSubscriptionDetailResponseModel extends AdminSubscriptionListItemModel {
@@ -49,7 +49,7 @@ export class AdminSubscriptionDetailResponseModel extends AdminSubscriptionListI
 
   @Expose()
   @ApiPropertyOptional()
-  couponCode?: string | null;
+  couponCode?: string;
 
   @Expose()
   @ApiPropertyOptional()
@@ -57,7 +57,7 @@ export class AdminSubscriptionDetailResponseModel extends AdminSubscriptionListI
 
   @Expose()
   @ApiPropertyOptional()
-  cancelledAt?: Date | null;
+  cancelledAt?: Date;
 
   @Expose()
   @ApiPropertyOptional()
@@ -73,7 +73,7 @@ export class AdminSubscriptionDetailResponseModel extends AdminSubscriptionListI
 
   @Expose()
   @ApiPropertyOptional()
-  trialEndsAt?: Date | null;
+  trialEndsAt?: Date;
 
   @Expose()
   @ApiPropertyOptional()
@@ -93,5 +93,5 @@ export class AdminSubscriptionDetailResponseModel extends AdminSubscriptionListI
 
   @Expose()
   @ApiPropertyOptional()
-  rawRazorpayJson?: Record<string, unknown> | null;
+  rawRazorpayJson?: Record<string, unknown>;
 }

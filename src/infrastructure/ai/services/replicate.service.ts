@@ -26,7 +26,7 @@ type ReplicateFileOutput = {
 
 @Injectable()
 export class ReplicateTryOnService implements ITryOnAiService {
-  private readonly client: Replicate | null;
+  private readonly client: Replicate;
 
   constructor(
     private readonly options: ReplicateTryOnOptions,
@@ -171,7 +171,7 @@ export class ReplicateTryOnService implements ITryOnAiService {
     return { base64, mimeType };
   }
 
-  private resolveOutputUrl(output: unknown): string | null {
+  private resolveOutputUrl(output: unknown): string {
     if (!output) return null;
 
     if (Array.isArray(output)) {

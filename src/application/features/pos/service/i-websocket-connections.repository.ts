@@ -5,8 +5,8 @@ export const WEBSOCKET_CONNECTIONS_REPOSITORY = 'WEBSOCKET_CONNECTIONS_REPOSITOR
 
 export interface IWebSocketConnectionsRepository {
   create(data: WebSocketConnection): Promise<WebSocketConnection>;
-  findByConnectionId(connectionId: string): Promise<WebSocketConnection | null>;
-  findActiveBySessionAndDevice(sessionId: string, deviceType: EDeviceType): Promise<WebSocketConnection | null>;
+  findByConnectionId(connectionId: string): Promise<WebSocketConnection>;
+  findActiveBySessionAndDevice(sessionId: string, deviceType: EDeviceType): Promise<WebSocketConnection>;
   markDisconnected(connectionId: string): Promise<void>;
   updateSessionId(connectionId: string, sessionId: string): Promise<void>;
   updateDeviceType(connectionId: string, deviceType: EDeviceType): Promise<void>;

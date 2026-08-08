@@ -4,6 +4,6 @@ export const PAYMENT_ORDERS_REPOSITORY = 'PAYMENT_ORDERS_REPOSITORY';
 
 export interface IPaymentOrdersRepository {
   insert(data: PaymentOrder): Promise<PaymentOrder>;
-  findByProviderOrderId(providerOrderId: string): Promise<PaymentOrder | null>;
+  findByProviderOrderId(providerOrderId: string): Promise<PaymentOrder>;
   findBySubscriptionId(subscriptionId: string): Promise<PaymentOrder[]>;
 }

@@ -29,13 +29,13 @@ export class TryOnAssetEntity {
   imageKey: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  label?: string | null;
+  label?: string;
 
   @Column({ type: 'numeric', precision: 6, scale: 2, nullable: true })
-  heightInInches?: number | null;
+  heightInInches?: number;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
-  color?: string | null;
+  color?: string;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -16,17 +16,17 @@ export class ApiConfigurationRepository implements IApiConfigurationRepository {
     return plainToInstance(ApiConfiguration, entity, { excludeExtraneousValues: true });
   }
 
-  async findById(id: string): Promise<ApiConfiguration | null> {
+  async findById(id: string): Promise<ApiConfiguration> {
     const entity = await this.repo.findOne({ where: { id } });
     return entity ? this.map(entity) : null;
   }
 
-  async findByUserId(userId: string): Promise<ApiConfiguration | null> {
+  async findByUserId(userId: string): Promise<ApiConfiguration> {
     const entity = await this.repo.findOne({ where: { userId } });
     return entity ? this.map(entity) : null;
   }
 
-  async findByApiKey(apiKey: string): Promise<ApiConfiguration | null> {
+  async findByApiKey(apiKey: string): Promise<ApiConfiguration> {
     const entity = await this.repo.findOne({ where: { apiKey } });
     return entity ? this.map(entity) : null;
   }

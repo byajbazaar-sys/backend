@@ -7,7 +7,7 @@ import {
   JEWELLERY_EVENT_SERVICE,
 } from '../application';
 
-let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
+let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
 async function bootstrap() {
   if (cachedApp) return cachedApp;

@@ -42,4 +42,28 @@ export class Transaction {
   @Expose()
   @Type(() => Due)
   public due?: Due;
+
+  @Expose()
+  @Type(() => Number)
+  public amountRemainingDelta?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public amountPaidDelta?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public interestRemainingDelta?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public interestPaidDelta?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public periodsAtCreation?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public loanSeq?: number;
 }

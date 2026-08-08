@@ -39,4 +39,16 @@ export class CreateTransactionRequestModel {
   @IsOptional()
   @IsUUID()
   dueId?: string;
+
+  @Expose()
+  @Type(() => Number)
+  @ApiPropertyOptional({
+    description:
+      'Loan version the form was filled against. When sent, the request is rejected with 409 if the loan changed since it was read.',
+    example: 3,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  expectedLoanVersion?: number;
 }

@@ -9,6 +9,7 @@ import { stripDataUrl } from '../utils/image.util';
 import {
   ensureTransparentProductPng,
   removeSolidColorBackground,
+  compressPngForApiPreview,
 } from '../utils/product-image.util';
 
 @Injectable()
@@ -38,5 +39,17 @@ export class SharpProductImageService implements IProductImageAiService {
       base64: polished.toString('base64'),
       mimeType: 'image/png',
     };
+  }
+
+  async polishTransparentPng(image: ProductImageInput): Promise<GeneratedAiImage> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    const polished = await ensureTransparentProductPng(input);
+    return { base64: polished.toString('base64'), mimeType: 'image/png' };
+  }
+
+  async compressPngForPreview(image: ProductImageInput): Promise<GeneratedAiImage> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    const compressed = await compressPngForApiPreview(input);
+    return { base64: compressed.toString('base64'), mimeType: 'image/png' };
   }
 }

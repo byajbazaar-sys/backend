@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { IJewelleryEventService, JEWELLERY_EVENT_SERVICE } from '../application';
 
-let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
+let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
 async function bootstrap() {
   if (cachedApp) return cachedApp;

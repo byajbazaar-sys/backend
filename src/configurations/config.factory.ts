@@ -51,7 +51,7 @@ function resolveTryOnProvider(): TryOnAiProvider {
   return process.env.AI_PROVIDER === 'gemini' ? 'gemini' : 'bedrock';
 }
 
-function resolveS3KeyPrefix(): string | undefined {
+function resolveS3KeyPrefix(): string {
   const env = (process.env.NODE_ENV || '').toLowerCase().trim();
   // Local + deployed develop stages use a `dev/` folder; production has no prefix.
   if (env === 'development' || env === 'dev') {

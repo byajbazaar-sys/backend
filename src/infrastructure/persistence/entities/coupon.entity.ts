@@ -27,13 +27,13 @@ export class CouponEntity {
   minimumAmount: number;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, name: 'maximum_discount', nullable: true })
-  maximumDiscount: number | null;
+  maximumDiscount: number;
 
   @Column({ type: 'timestamptz', nullable: true })
-  expiry: Date | null;
+  expiry: Date;
 
   @Column({ type: 'integer', name: 'maximum_redemption', nullable: true })
-  maximumRedemption: number | null;
+  maximumRedemption: number;
 
   @Column({ type: 'integer', name: 'used_count', default: 0 })
   usedCount: number;

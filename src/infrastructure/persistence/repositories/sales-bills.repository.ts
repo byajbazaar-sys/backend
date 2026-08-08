@@ -17,6 +17,7 @@ import {
   InventoryStockDeduction,
   BillLineUpdate,
   InventoryItemSale,
+  UpdateSalesBillPatch,
 } from '../../../application';
 
 @Injectable()
@@ -109,7 +110,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     });
   }
 
-  async findById(id: string): Promise<SalesBill | null> {
+  async findById(id: string): Promise<SalesBill> {
     const entity = await this.billsRepo.findOne({
       where: { id },
       relations: ['items'],
@@ -165,7 +166,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
 
   async updateBill(
     id: string,
-    patch: Partial<SalesBill>,
+    patch: UpdateSalesBillPatch,
     lineUpdates: BillLineUpdate[] = [],
   ): Promise<SalesBill> {
     return this.billsRepo.manager.transaction(async (manager) => {

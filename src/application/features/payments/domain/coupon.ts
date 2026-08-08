@@ -18,14 +18,14 @@ export class Coupon {
   minimumAmount: number;
 
   @Expose()
-  maximumDiscount?: number | null;
+  maximumDiscount?: number;
 
   @Expose()
   @Type(() => Date)
-  expiry?: Date | null;
+  expiry?: Date;
 
   @Expose()
-  maximumRedemption?: number | null;
+  maximumRedemption?: number;
 
   @Expose()
   usedCount: number;

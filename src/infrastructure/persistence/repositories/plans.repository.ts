@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryDeepPartialEntity, Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
-import { IPlansRepository, Plan } from '../../../application';
+import { IPlansRepository, Plan, UpdatePlanPatch } from '../../../application';
 import { PlanEntity } from '../entities/plan.entity';
 
 @Injectable()
@@ -28,19 +28,19 @@ export class PlansRepository implements IPlansRepository {
     return entities.map((entity) => this.mapEntity(entity));
   }
 
-  async findById(id: string): Promise<Plan | null> {
+  async findById(id: string): Promise<Plan> {
     const entity = await this.planRepo.findOne({ where: { id } });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
 
-  async findByProviderPlanId(providerPlanId: string): Promise<Plan | null> {
+  async findByProviderPlanId(providerPlanId: string): Promise<Plan> {
     const entity = await this.planRepo.findOne({ where: { providerPlanId } });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
 
-  async findByNameAndPrice(name: string, price: number): Promise<Plan | null> {
+  async findByNameAndPrice(name: string, price: number): Promise<Plan> {
     const entity = await this.planRepo.findOne({
       where: { name: name.trim(), price },
     });
@@ -48,7 +48,7 @@ export class PlansRepository implements IPlansRepository {
     return this.mapEntity(entity);
   }
 
-  async findActiveDefault(): Promise<Plan | null> {
+  async findActiveDefault(): Promise<Plan> {
     const entity = await this.planRepo.findOne({
       where: { active: true, interval: 'monthly', intervalCount: 1 },
       order: { createdAt: 'DESC' },
@@ -71,7 +71,7 @@ export class PlansRepository implements IPlansRepository {
     return this.mapEntity(created);
   }
 
-  async update(id: string, data: Partial<Plan>): Promise<Plan> {
+  async update(id: string, data: UpdatePlanPatch): Promise<Plan> {
     const updateData: QueryDeepPartialEntity<PlanEntity> = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.price !== undefined) updateData.price = data.price;

@@ -15,32 +15,32 @@ export class Subscription {
   provider: string;
 
   @Expose()
-  providerSubscriptionId?: string | null;
+  providerSubscriptionId?: string;
 
   @Expose()
-  providerCustomerId?: string | null;
+  providerCustomerId?: string;
 
   @Expose()
   status: ESubscriptionStatus;
 
   @Expose()
   @Type(() => Date)
-  currentStart?: Date | null;
+  currentStart?: Date;
 
   @Expose()
   @Type(() => Date)
-  currentEnd?: Date | null;
+  currentEnd?: Date;
 
   @Expose()
   @Type(() => Date)
-  nextBillingAt?: Date | null;
+  nextBillingAt?: Date;
 
   @Expose()
   cancelAtPeriodEnd?: boolean;
 
   @Expose()
   @Type(() => Date)
-  cancelledAt?: Date | null;
+  cancelledAt?: Date;
 
   @Expose()
   amount: number;
@@ -49,13 +49,13 @@ export class Subscription {
   currency: string;
 
   @Expose()
-  couponId?: string | null;
+  couponId?: string;
 
   @Expose()
   discountAmount?: number;
 
   @Expose()
-  notes?: Record<string, unknown> | null;
+  notes?: Record<string, unknown>;
 
   @Expose()
   @Type(() => Date)

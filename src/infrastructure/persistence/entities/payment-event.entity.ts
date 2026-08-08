@@ -25,19 +25,19 @@ export class PaymentEventEntity {
   processed: boolean;
 
   @Column({ type: 'text', nullable: true })
-  signature: string | null;
+  signature: string;
 
   @Column({ type: 'jsonb' })
   payload: Record<string, unknown>;
 
   @Column({ type: 'uuid', name: 'user_id', nullable: true })
-  userId: string | null;
+  userId: string;
 
   @Column({ type: 'uuid', name: 'payment_id', nullable: true })
-  paymentId: string | null;
+  paymentId: string;
 
   @Column({ type: 'uuid', name: 'payment_order_id', nullable: true })
-  paymentOrderId: string | null;
+  paymentOrderId: string;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;

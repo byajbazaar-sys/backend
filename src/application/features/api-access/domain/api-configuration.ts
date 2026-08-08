@@ -17,7 +17,7 @@ export class ApiConfiguration {
   isActive: boolean;
 
   @Expose()
-  lastUsedAt?: Date | null;
+  lastUsedAt?: Date;
 
   @Expose()
   createdAt?: Date;

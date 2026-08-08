@@ -43,8 +43,10 @@ import {
   TRY_ON_AI_SERVICE,
   TRY_ON_ORCHESTRATOR,
   PRODUCT_IMAGE_AI_SERVICE,
+  UNIT_OF_WORK,
 } from '../application';
 import {
+  UnitOfWork,
   CustomersRepository,
   DuesRepository,
   ItemsRepository,
@@ -124,6 +126,10 @@ import { GoogleOAuthService } from './google-oauth';
   providers: [
     ...Seeds,
     ...CronServices,
+    {
+      provide: UNIT_OF_WORK,
+      useClass: UnitOfWork,
+    },
     {
       provide: USERS_REPOSITORY,
       useClass: UsersRepository,
@@ -407,6 +413,7 @@ import { GoogleOAuthService } from './google-oauth';
     }
   ],
   exports: [
+    UNIT_OF_WORK,
     USERS_REPOSITORY,
     CUSTOMERS_REPOSITORY,
     LOANS_REPOSITORY,

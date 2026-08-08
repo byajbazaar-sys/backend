@@ -17,7 +17,7 @@ export class AdminSubscriptionListItemModel {
 
   @Expose()
   @ApiPropertyOptional()
-  planName?: string | null;
+  planName?: string;
 
   @Expose()
   @ApiProperty({ enum: ESubscriptionStatus })
@@ -25,19 +25,19 @@ export class AdminSubscriptionListItemModel {
 
   @Expose()
   @ApiPropertyOptional()
-  currentStart?: Date | null;
+  currentStart?: Date;
 
   @Expose()
   @ApiPropertyOptional()
-  currentEnd?: Date | null;
+  currentEnd?: Date;
 
   @Expose()
   @ApiPropertyOptional()
-  nextBillingAt?: Date | null;
+  nextBillingAt?: Date;
 
   @Expose()
   @ApiPropertyOptional()
-  providerSubscriptionId?: string | null;
+  providerSubscriptionId?: string;
 
   @Expose()
   @ApiProperty()

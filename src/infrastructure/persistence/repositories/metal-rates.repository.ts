@@ -59,7 +59,7 @@ export class MetalRatesRepository implements IMetalRatesRepository {
     };
   }
 
-  async findById(id: string): Promise<MetalRate | null> {
+  async findById(id: string): Promise<MetalRate> {
     const entity = await this.repo.findOne({ where: { id } });
     if (!entity) return null;
     return this.mapEntity(entity);

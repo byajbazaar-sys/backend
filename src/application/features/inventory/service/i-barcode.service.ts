@@ -5,10 +5,10 @@ export const BARCODE_SERVICE = 'BARCODE_SERVICE';
 
 export interface IBarcodeService {
   buildInventoryQrPayload(inventoryId: string, sku: string): string;
-  parseInventoryQrPayload(raw: string): InventoryQrPayload | null;
-  resolveQrPayload(stored: string | null | undefined, inventoryId: string, sku: string): string;
+  parseInventoryQrPayload(raw: string): InventoryQrPayload;
+  resolveQrPayload(stored: string, inventoryId: string, sku: string): string;
   /** Prefer stored barcode; fall back to SKU (both are scannable). */
-  resolveBarcodeText(barcode?: string | null, sku?: string | null): string;
+  resolveBarcodeText(barcode?: string, sku?: string): string;
   /** `text` is the value encoded in the symbol (barcode or SKU). */
   generateBarcodePng(text: string, format?: EBarcodeFormat, size?: EBarcodeSize): Promise<Buffer>;
   generateBarcodeDataUrl(text: string, format?: EBarcodeFormat, size?: EBarcodeSize): Promise<string>;

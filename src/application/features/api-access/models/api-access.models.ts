@@ -17,7 +17,7 @@ export class ApiConfigurationResponseModel {
 
   @ApiPropertyOptional()
   @Expose()
-  lastUsedAt?: Date | null;
+  lastUsedAt?: Date;
 }
 
 export class GenerateApiCredentialsRequestModel {

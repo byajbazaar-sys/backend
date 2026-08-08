@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryDeepPartialEntity, Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
-import { IPaymentEventsRepository, PaymentEvent } from '../../../application';
+import { IPaymentEventsRepository, PaymentEvent, PaymentEventLinksData } from '../../../application';
 import { PaymentEventEntity } from '../entities/payment-event.entity';
 
 @Injectable()
@@ -52,7 +52,7 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
       .returning('*')
       .execute();
 
-    const inserted = insertResult.raw?.[0] as PaymentEventEntity | undefined;
+    const inserted = insertResult.raw?.[0] as PaymentEventEntity;
     if (inserted) {
       return { event: this.mapEntity(inserted), created: true };
     }
@@ -64,7 +64,7 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
     return { event: existing, created: false };
   }
 
-  async findByProviderAndEventId(provider: string, eventId: string): Promise<PaymentEvent | null> {
+  async findByProviderAndEventId(provider: string, eventId: string): Promise<PaymentEvent> {
     const entity = await this.paymentEventRepo.findOne({ where: { provider, eventId } });
     if (!entity) return null;
     return this.mapEntity(entity);
@@ -79,14 +79,7 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
     return this.mapEntity(updated);
   }
 
-  async updateLinks(
-    id: string,
-    data: {
-      userId?: string | null;
-      paymentId?: string | null;
-      paymentOrderId?: string | null;
-    },
-  ): Promise<PaymentEvent> {
+  async updateLinks(id: string, data: PaymentEventLinksData): Promise<PaymentEvent> {
     const patch: QueryDeepPartialEntity<PaymentEventEntity> = {};
     if (data.userId !== undefined) patch.userId = data.userId;
     if (data.paymentId !== undefined) patch.paymentId = data.paymentId;

@@ -4,7 +4,7 @@ import { In, Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
 import { SYSTEM_USER_ID } from '@shared-libs';
 import { InventoryCategoryEntity } from '../entities/inventory-category.entity';
-import { IInventoryCategoriesRepository, InventoryCategory } from '../../../application';
+import { IInventoryCategoriesRepository, InventoryCategory, UpdateInventoryCategoryRequestModel } from '../../../application';
 
 @Injectable()
 export class InventoryCategoriesRepository implements IInventoryCategoriesRepository {
@@ -19,13 +19,13 @@ export class InventoryCategoriesRepository implements IInventoryCategoriesReposi
     return plainToInstance(InventoryCategory, created, { excludeExtraneousValues: true });
   }
 
-  async findById(id: string): Promise<InventoryCategory | null> {
+  async findById(id: string): Promise<InventoryCategory> {
     const entity = await this.repo.findOne({ where: { id } });
     if (!entity) return null;
     return plainToInstance(InventoryCategory, entity, { excludeExtraneousValues: true });
   }
 
-  async findByName(name: string, createdBy: string): Promise<InventoryCategory | null> {
+  async findByName(name: string, createdBy: string): Promise<InventoryCategory> {
     const entity = await this.repo.findOne({ where: { name, createdBy } });
     if (!entity) return null;
     return plainToInstance(InventoryCategory, entity, { excludeExtraneousValues: true });
@@ -39,7 +39,7 @@ export class InventoryCategoriesRepository implements IInventoryCategoriesReposi
     return plainToInstance(InventoryCategory, entities, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, data: Partial<InventoryCategory>): Promise<InventoryCategory> {
+  async update(id: string, data: UpdateInventoryCategoryRequestModel): Promise<InventoryCategory> {
     await this.repo.update(id, data as Partial<InventoryCategoryEntity>);
     const updated = await this.repo.findOne({ where: { id } });
     return plainToInstance(InventoryCategory, updated, { excludeExtraneousValues: true });

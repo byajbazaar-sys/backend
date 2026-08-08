@@ -32,10 +32,10 @@ export class SubscriptionEntity {
   provider: string;
 
   @Column({ type: 'varchar', length: 128, name: 'provider_subscription_id', nullable: true })
-  providerSubscriptionId: string | null;
+  providerSubscriptionId: string;
 
   @Column({ type: 'varchar', length: 128, name: 'provider_customer_id', nullable: true })
-  providerCustomerId: string | null;
+  providerCustomerId: string;
 
   @Column({
     type: 'enum',
@@ -46,19 +46,19 @@ export class SubscriptionEntity {
   status: ESubscriptionStatus;
 
   @Column({ type: 'timestamptz', name: 'current_start', nullable: true })
-  currentStart: Date | null;
+  currentStart: Date;
 
   @Column({ type: 'timestamptz', name: 'current_end', nullable: true })
-  currentEnd: Date | null;
+  currentEnd: Date;
 
   @Column({ type: 'timestamptz', name: 'next_billing_at', nullable: true })
-  nextBillingAt: Date | null;
+  nextBillingAt: Date;
 
   @Column({ type: 'boolean', name: 'cancel_at_period_end', default: false })
   cancelAtPeriodEnd: boolean;
 
   @Column({ type: 'timestamptz', name: 'cancelled_at', nullable: true })
-  cancelledAt: Date | null;
+  cancelledAt: Date;
 
   @Column({ type: 'numeric', precision: 12, scale: 2 })
   amount: number;
@@ -67,17 +67,17 @@ export class SubscriptionEntity {
   currency: string;
 
   @Column({ type: 'uuid', name: 'coupon_id', nullable: true })
-  couponId: string | null;
+  couponId: string;
 
   @ManyToOne(() => CouponEntity, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'coupon_id' })
-  coupon?: CouponEntity | null;
+  coupon?: CouponEntity;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, name: 'discount_amount', default: 0 })
   discountAmount: number;
 
   @Column({ type: 'jsonb', nullable: true })
-  notes: Record<string, unknown> | null;
+  notes: Record<string, unknown>;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;

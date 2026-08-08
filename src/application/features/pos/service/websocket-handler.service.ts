@@ -34,7 +34,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     @InjectPinoLogger(WebSocketHandlerService.name) private readonly logger: PinoLogger,
   ) {}
 
-  private verifyUserToken(token: string | undefined): IIdentity {
+  private verifyUserToken(token: string): IIdentity {
     if (!token) throw new UnauthorizedException('Token required');
     try {
       return this.jwtService.verify(token, {
@@ -48,7 +48,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     }
   }
 
-  private verifyPosSessionConnectToken(token: string | undefined): { userId: string } {
+  private verifyPosSessionConnectToken(token: string): { userId: string } {
     if (!token) throw new UnauthorizedException('Token required');
     try {
       const payload = this.jwtService.verify(token, {
@@ -69,7 +69,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
 
   async handleConnect(
     connectionId: string,
-    token: string | undefined,
+    token: string,
     deviceType: EDeviceType = EDeviceType.Desktop,
   ): Promise<{ statusCode: number }> {
     try {
@@ -101,7 +101,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     }
   }
 
-  private async releaseMobileSlot(sessionId: string, previousConnectionId: string | undefined): Promise<void> {
+  private async releaseMobileSlot(sessionId: string, previousConnectionId: string): Promise<void> {
     if (!previousConnectionId) return;
 
     await this.connectionsRepo.markDisconnected(previousConnectionId);
@@ -111,7 +111,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
 
   private async notifyDesktopScannerDisconnected(
     sessionId: string,
-    desktopConnectionId: string | undefined,
+    desktopConnectionId: string,
   ): Promise<void> {
     if (!desktopConnectionId) return;
     await this.wsMessage.sendToConnection(desktopConnectionId, {
@@ -134,7 +134,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
   private async ensureMobileSlotAvailable(
     sessionId: string,
     connectionId: string,
-    previousMobileId: string | undefined,
+    previousMobileId: string,
   ): Promise<void> {
     if (!previousMobileId || previousMobileId === connectionId) return;
 
@@ -163,7 +163,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
       if (session) {
         const wasMobile = session.mobileConnectionId === connectionId;
         const desktopId = session.desktopConnectionId;
-        const updates: Record<string, string | undefined> = {};
+        const updates: Record<string, string> = {};
         if (session.desktopConnectionId === connectionId) updates.desktopConnectionId = undefined;
         if (wasMobile) updates.mobileConnectionId = undefined;
         if (Object.keys(updates).length) {
@@ -184,7 +184,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     const deviceType = (body.deviceType as EDeviceType) ?? EDeviceType.Desktop;
-    const sessionId = body.sessionId as string | undefined;
+    const sessionId = body.sessionId as string;
 
     if (!sessionId) throw new ForbiddenException('sessionId required');
 
@@ -476,7 +476,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     const sessionId = body.sessionId as string;
-    const barcodes = body.barcodes as string[] | undefined;
+    const barcodes = body.barcodes as string[];
     const entries = body.entries;
 
     if (!sessionId || !Array.isArray(barcodes)) {
@@ -555,7 +555,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     connectionId: string,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const sessionId = body.sessionId as string | undefined;
+    const sessionId = body.sessionId as string;
     if (!sessionId) throw new ForbiddenException('sessionId required');
 
     const session = await this.sessionsRepo.findById(sessionId);

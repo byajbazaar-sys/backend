@@ -1,6 +1,6 @@
 import { Request } from 'express';
 
-export function readRequestHeader(request: Request, headerName: string): string | undefined {
+export function readRequestHeader(request: Request, headerName: string): string {
   const value = request.headers[headerName.toLowerCase()];
   if (value == null) return undefined;
   const raw = Array.isArray(value) ? value[0] : String(value).split(',')[0];
@@ -8,7 +8,7 @@ export function readRequestHeader(request: Request, headerName: string): string 
   return trimmed || undefined;
 }
 
-export function extractRequestToken(request: Request, queryParamName: string): string | undefined {
+export function extractRequestToken(request: Request, queryParamName: string): string {
   const authorization = request.headers.authorization;
   if (typeof authorization === 'string') {
     if (authorization.startsWith('Bearer ')) {

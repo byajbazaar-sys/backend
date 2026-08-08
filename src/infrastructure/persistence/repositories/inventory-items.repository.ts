@@ -8,6 +8,7 @@ import {
   IInventoryItemsRepository,
   InventoryItem,
   InventoryItemsFilterOptions,
+  InventoryItemUpdatePatch,
 } from '../../../application';
 
 @Injectable()
@@ -64,13 +65,13 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return this.mapEntity(withCategory);
   }
 
-  async findById(id: string): Promise<InventoryItem | null> {
+  async findById(id: string): Promise<InventoryItem> {
     const entity = await this.repo.findOne({ where: { id }, relations: ['category'] });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
 
-  async findBySku(sku: string, createdBy: string): Promise<InventoryItem | null> {
+  async findBySku(sku: string, createdBy: string): Promise<InventoryItem> {
     const entity = await this.repo.findOne({
       where: { sku, createdBy },
       relations: ['category'],
@@ -79,7 +80,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return this.mapEntity(entity);
   }
 
-  async findByBarcode(barcode: string, createdBy: string): Promise<InventoryItem | null> {
+  async findByBarcode(barcode: string, createdBy: string): Promise<InventoryItem> {
     const entity = await this.repo.findOne({
       where: { barcode, createdBy },
       relations: ['category'],
@@ -88,7 +89,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return this.mapEntity(entity);
   }
 
-  async findByScanCode(code: string, createdBy: string): Promise<InventoryItem | null> {
+  async findByScanCode(code: string, createdBy: string): Promise<InventoryItem> {
     const trimmed = code.trim();
     if (!trimmed) return null;
 
@@ -156,8 +157,10 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return isNaN(seq) ? 1 : seq + 1;
   }
 
-  async update(id: string, data: Partial<InventoryItem>): Promise<InventoryItem> {
-    const { categoryName, ...rest } = data;
+  async update(id: string, data: InventoryItemUpdatePatch): Promise<InventoryItem> {
+    const { categoryName: _categoryName, ...rest } = data as InventoryItemUpdatePatch & {
+      categoryName?: string;
+    };
     await this.repo.update(id, rest as Partial<InventoryItemEntity>);
     return this.findById(id);
   }

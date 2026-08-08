@@ -20,6 +20,7 @@ import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.pr
 import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
+import { compressPngForApiPreview, ensureTransparentProductPng } from '../utils/product-image.util';
 import { BedrockService } from './bedrock.service';
 import {
   GeneratedAiImage,
@@ -161,6 +162,18 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     }
 
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
+  }
+
+  async polishTransparentPng(image: ProductImageInput): Promise<GeneratedAiImage> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    const polished = await ensureTransparentProductPng(input);
+    return { base64: polished.toString('base64'), mimeType: 'image/png' };
+  }
+
+  async compressPngForPreview(image: ProductImageInput): Promise<GeneratedAiImage> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    const compressed = await compressPngForApiPreview(input);
+    return { base64: compressed.toString('base64'), mimeType: 'image/png' };
   }
 
   private async resizeProductForCloudflare(image: AiImageInput): Promise<Buffer> {

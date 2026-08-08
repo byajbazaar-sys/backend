@@ -24,7 +24,7 @@ export class RefundResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  reason?: string | null;
+  reason?: string;
 
   @Expose()
   @ApiPropertyOptional({ type: Date })

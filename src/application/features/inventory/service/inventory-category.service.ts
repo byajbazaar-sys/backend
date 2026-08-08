@@ -17,7 +17,7 @@ import {
   INVENTORY_ITEMS_REPOSITORY,
 } from './i-inventory-items.repository';
 import { InventoryCategory } from '../domain';
-import { CreateInventoryCategoryRequestModel } from '../models';
+import { CreateInventoryCategoryRequestModel, UpdateInventoryCategoryRequestModel } from '../models';
 import { IInventoryCategoryService } from './i-inventory-category.service';
 
 @Injectable()
@@ -53,7 +53,7 @@ export class InventoryCategoryService implements IInventoryCategoryService {
 
   async update(
     id: string,
-    data: Partial<CreateInventoryCategoryRequestModel>,
+    data: UpdateInventoryCategoryRequestModel,
     userId: string,
   ): Promise<InventoryCategory> {
     const category = await this.getById(id, userId);

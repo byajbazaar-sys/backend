@@ -21,10 +21,10 @@ import {
 } from './i-api-configuration.repository';
 import {
   API_ACCESS_TOKEN_TTL_SECONDS,
-  ApiCredentialsGenerateResult,
-  ApiTokenExchangeResult,
   IApiAuthService,
 } from './i-api-auth.service';
+import { ApiCredentialsGenerateResult } from './api-credentials-generate-result';
+import { ApiTokenExchangeResult } from './api-token-exchange-result';
 
 function generateApiKey(): string {
   return `pk_live_${randomBytes(24).toString('hex')}`;
@@ -117,7 +117,7 @@ export class ApiAuthService implements IApiAuthService {
     };
   }
 
-  async getConfiguration(userId: string): Promise<ApiConfiguration | null> {
+  async getConfiguration(userId: string): Promise<ApiConfiguration> {
     return this.configRepo.findByUserId(userId);
   }
 

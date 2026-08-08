@@ -334,6 +334,7 @@ export class LoansController {
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Loan not found' })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Cannot update a closed loan' })
   @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Not authorized to update this loan' })
+  @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Loan changed since it was loaded' })
   @HttpCode(HttpStatus.OK)
   async update(
     @Param() params: GetLoanParamsModel,

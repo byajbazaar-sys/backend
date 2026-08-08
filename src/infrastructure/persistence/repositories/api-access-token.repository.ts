@@ -22,7 +22,7 @@ export class ApiAccessTokenRepository implements IApiAccessTokenRepository {
     return this.map(saved);
   }
 
-  async findValidByHash(accessTokenHash: string): Promise<ApiAccessToken | null> {
+  async findValidByHash(accessTokenHash: string): Promise<ApiAccessToken> {
     const entity = await this.repo.findOne({
       where: {
         accessTokenHash,

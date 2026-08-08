@@ -7,8 +7,8 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
 
   const connectionId = event.requestContext.connectionId;
   const evt = event as APIGatewayProxyWebsocketEventV2 & {
-    queryStringParameters?: Record<string, string | undefined> | null;
-    headers?: Record<string, string | undefined> | null;
+    queryStringParameters?: Record<string, string>;
+    headers?: Record<string, string>;
   };
   const token = getTokenFromEvent({
     queryStringParameters: evt.queryStringParameters,

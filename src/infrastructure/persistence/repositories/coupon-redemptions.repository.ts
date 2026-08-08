@@ -34,7 +34,7 @@ export class CouponRedemptionsRepository implements ICouponRedemptionsRepository
     return this.mapEntity(created);
   }
 
-  async findByCouponAndUser(couponId: string, userId: string): Promise<CouponRedemption | null> {
+  async findByCouponAndUser(couponId: string, userId: string): Promise<CouponRedemption> {
     const entity = await this.couponRedemptionRepo.findOne({
       where: { couponId, userId },
     });
@@ -42,7 +42,7 @@ export class CouponRedemptionsRepository implements ICouponRedemptionsRepository
     return this.mapEntity(entity);
   }
 
-  async findBySubscriptionId(subscriptionId: string): Promise<CouponRedemption | null> {
+  async findBySubscriptionId(subscriptionId: string): Promise<CouponRedemption> {
     const entity = await this.couponRedemptionRepo.findOne({
       where: { subscriptionId },
     });

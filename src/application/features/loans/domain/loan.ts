@@ -71,6 +71,31 @@ export class Loan {
   @Expose()
   public fingerprintRef?: string;
 
+  @Expose()
+  @Type(() => Number)
+  public baselineAmountRemaining?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public baselineAmountPaid?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public baselineInterestRemaining?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public baselineInterestPaid?: number;
+
+  @Expose()
+  @Type(() => Number)
+  public baselineSeq?: number;
+
+  /** Bumped on every loan write; clients echo it back to detect stale edits. */
+  @Expose()
+  @Type(() => Number)
+  public version?: number;
+
   /** Transient — used only during loan update when recalculating interest with paid dues. */
   @Expose()
   public interestPrincipalBasis?: EInterestPrincipalBasis;

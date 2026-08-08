@@ -15,7 +15,7 @@ export class SalesBillItemEntity {
   bill: SalesBillEntity;
 
   @Column({ type: 'uuid', nullable: true })
-  inventoryItemId: string | null;
+  inventoryItemId: string;
 
   @Column({ type: 'varchar', length: 255 })
   itemName: string;
@@ -24,28 +24,28 @@ export class SalesBillItemEntity {
   sku: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
-  barcode: string | null;
+  barcode: string;
 
   @Column({ type: 'varchar', length: 32, nullable: true })
-  metalType: string | null;
+  metalType: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  purity: string | null;
+  purity: string;
 
   @Column({ type: 'numeric', precision: 10, scale: 3, nullable: true })
-  grossWeight: number | null;
+  grossWeight: number;
 
   @Column({ type: 'numeric', precision: 10, scale: 3, nullable: true })
-  netWeight: number | null;
+  netWeight: number;
 
   @Column({ type: 'numeric', precision: 10, scale: 3, nullable: true })
-  lessWeight: number | null;
+  lessWeight: number;
 
   @Column({ type: 'varchar', length: 8, nullable: true })
-  hsnCode: string | null;
+  hsnCode: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  huid: string | null;
+  huid: string;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, default: 0 })
   makingCharges: number;
@@ -54,7 +54,7 @@ export class SalesBillItemEntity {
   sellingPrice: number;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
-  purchaseRatePerGram: number | null;
+  purchaseRatePerGram: number;
 
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   purchaseCost: number;

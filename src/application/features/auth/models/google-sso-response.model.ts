@@ -9,14 +9,14 @@ export class GoogleSsoResponseModel {
     nullable: true,
     description: 'Full access JWT when subscription is active',
   })
-  accessToken?: string | null;
+  accessToken?: string;
 
   @Expose()
   @ApiPropertyOptional({
     description: 'Payment-scoped JWT when subscription checkout is required',
     nullable: true,
   })
-  paymentToken?: string | null;
+  paymentToken?: string;
 
   @Expose()
   @ApiProperty({ example: false })
@@ -24,7 +24,7 @@ export class GoogleSsoResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  subscriptionStatus?: string | null;
+  subscriptionStatus?: string;
 
   @Expose()
   @ApiPropertyOptional({

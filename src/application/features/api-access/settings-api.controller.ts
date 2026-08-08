@@ -41,7 +41,7 @@ export class SettingsApiController {
   @Get()
   @ApiOperation({ summary: 'Get API access configuration (never returns secret)' })
   @ApiOkResponse({ type: ApiConfigurationResponseModel })
-  async getConfiguration(@Identity() identity: IIdentity): Promise<ApiConfigurationResponseModel | null> {
+  async getConfiguration(@Identity() identity: IIdentity): Promise<ApiConfigurationResponseModel> {
     const configuration = await this.apiAuthService.getConfiguration(identity.userId);
     if (!configuration) return null;
     return plainToInstance(

@@ -11,7 +11,7 @@ export class CouponRedemption {
   userId: string;
 
   @Expose()
-  subscriptionId?: string | null;
+  subscriptionId?: string;
 
   @Expose()
   discountAmount: number;

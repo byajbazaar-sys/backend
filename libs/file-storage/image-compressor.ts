@@ -6,7 +6,7 @@ const MAX_WIDTH = 1920;
 /** Target quality within 70–80 range */
 const JPEG_WEBP_QUALITY = 75;
 
-function normalizeMime(mimetype?: string | null): string {
+function normalizeMime(mimetype?: string): string {
   if (!mimetype) return '';
   return mimetype.toLowerCase().split(';')[0].trim();
 }
@@ -15,7 +15,7 @@ function normalizeMime(mimetype?: string | null): string {
  * Lossy-ish resize + re-encode for photos. GIF (animation) and SVG are left unchanged.
  * Buffers under 200KB are not processed. On any failure, returns the original buffer.
  */
-export async function compressImage(buffer: Buffer, mimetype?: string | null): Promise<Buffer> {
+export async function compressImage(buffer: Buffer, mimetype?: string): Promise<Buffer> {
   let mime = normalizeMime(mimetype);
   if (!mime) {
     try {

@@ -12,7 +12,7 @@ export class PaymentResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  subscriptionId?: string | null;
+  subscriptionId?: string;
 
   @Expose()
   @ApiProperty()
@@ -20,7 +20,7 @@ export class PaymentResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  providerOrderId?: string | null;
+  providerOrderId?: string;
 
   @Expose()
   @ApiProperty()
@@ -36,36 +36,36 @@ export class PaymentResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  method?: string | null;
+  method?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  bank?: string | null;
+  bank?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  wallet?: string | null;
+  wallet?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  upi?: string | null;
+  upi?: string;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  fee?: number | null;
+  fee?: number;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  tax?: number | null;
+  tax?: number;
 
   @Expose()
   @ApiPropertyOptional({ type: Date, nullable: true })
   @Type(() => Date)
-  capturedAt?: Date | null;
+  capturedAt?: Date;
 
   @Expose()
   @ApiPropertyOptional({ nullable: true })
-  invoiceId?: string | null;
+  invoiceId?: string;
 
   @Expose()
   @ApiPropertyOptional({ type: Date })

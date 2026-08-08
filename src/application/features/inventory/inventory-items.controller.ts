@@ -162,7 +162,7 @@ export class InventoryItemsController {
   async uploadImage(
     @Param('id') id: string,
     @UploadedFile() image: Express.Multer.File,
-    @Body('removeImage') removeImage: string | undefined,
+    @Body('removeImage') removeImage: string,
     @Identity() identity: IIdentity,
   ): Promise<InventoryItemResponseModel> {
     const item = await this.itemService.uploadImage(

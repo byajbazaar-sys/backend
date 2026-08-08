@@ -6,12 +6,21 @@ import {
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged, toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
-import { DepositAccount, DepositTransaction } from '../domain';
+import {
+  CreateDepositAccountData,
+  AddDepositData,
+  AdjustDepositData,
+  RefundDepositData,
+  CreateDepositReceiptData,
+  DepositAccount,
+  DepositTransaction,
+} from '../domain';
 import { DepositsDownloadFilterOptions, DepositsFilterOptions } from '../options';
 import { EDepositStatus, EDepositTransactionType } from '../enums';
 import { CUSTOMERS_REPOSITORY, ICustomersRepository } from '../../customers/service';
 import { IDepositService } from './i-deposit.service';
-import { DEPOSITS_REPOSITORY, DepositStats, IDepositsRepository } from './i-deposits.repository';
+import { DEPOSITS_REPOSITORY, IDepositsRepository } from './i-deposits.repository';
+import { DepositStats } from './deposit-stats';
 
 @Injectable()
 export class DepositService implements IDepositService {
@@ -21,7 +30,7 @@ export class DepositService implements IDepositService {
     @InjectPinoLogger(DepositService.name) private readonly logger: PinoLogger,
   ) {}
 
-  async create(customerId: string, createdBy: string, data: { name?: string; notes?: string }): Promise<DepositAccount> {
+  async create(customerId: string, createdBy: string, data: CreateDepositAccountData): Promise<DepositAccount> {
     const customer = await this.customersRepo.findById(customerId, createdBy);
     if (!customer) throw new NotFoundException('Customer not found');
 
@@ -60,7 +69,7 @@ export class DepositService implements IDepositService {
   async addDeposit(
     id: string,
     createdBy: string,
-    data: { amount: number; paymentMode: string; transactionReference?: string; depositDate?: string; remarks?: string },
+    data: AddDepositData,
   ): Promise<DepositAccount> {
     const account = await this.requireActiveAccount(id, createdBy);
     const amount = this.normalizeAmount(data.amount);
@@ -81,7 +90,12 @@ export class DepositService implements IDepositService {
     });
 
     const receiptNumber = await this.generateReceiptNumber(createdBy, tx.id!);
-    await this.depositsRepo.createReceipt({ depositTransactionId: tx.id!, receiptNumber, createdBy });
+    const receiptData: CreateDepositReceiptData = {
+      depositTransactionId: tx.id!,
+      receiptNumber,
+      createdBy,
+    };
+    await this.depositsRepo.createReceipt(receiptData);
 
     const updated = await this.depositsRepo.updateAccount(id, createdBy, {
       currentBalance: newBalance,
@@ -96,7 +110,7 @@ export class DepositService implements IDepositService {
   async adjust(
     id: string,
     createdBy: string,
-    data: { amount: number; salesBillId?: string; remarks?: string },
+    data: AdjustDepositData,
   ): Promise<DepositAccount> {
     const account = await this.requireActiveAccount(id, createdBy);
     const amount = this.normalizeAmount(data.amount);
@@ -130,7 +144,7 @@ export class DepositService implements IDepositService {
   async refund(
     id: string,
     createdBy: string,
-    data: { amount: number; paymentMode: string; transactionReference?: string; remarks?: string },
+    data: RefundDepositData,
   ): Promise<DepositAccount> {
     const account = await this.requireActiveAccount(id, createdBy);
     const amount = this.normalizeAmount(data.amount);
@@ -154,7 +168,12 @@ export class DepositService implements IDepositService {
     });
 
     const receiptNumber = await this.generateReceiptNumber(createdBy, tx.id!);
-    await this.depositsRepo.createReceipt({ depositTransactionId: tx.id!, receiptNumber, createdBy });
+    const receiptData: CreateDepositReceiptData = {
+      depositTransactionId: tx.id!,
+      receiptNumber,
+      createdBy,
+    };
+    await this.depositsRepo.createReceipt(receiptData);
 
     await this.depositsRepo.updateAccount(id, createdBy, {
       currentBalance: newBalance,

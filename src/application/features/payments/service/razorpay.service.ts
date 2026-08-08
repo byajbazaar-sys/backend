@@ -10,17 +10,23 @@ import Razorpay from 'razorpay';
 import { RazorpayOptions } from '../../../shared';
 import {
   IRazorpayService,
-  RazorpayCustomerResult,
-  RazorpayInvoiceResult,
-  RazorpayOrderResult,
-  RazorpayPlanResult,
-  RazorpayRefundResult,
-  RazorpaySubscriptionResult,
 } from './i-razorpay.service';
+import { RazorpayCustomerResult } from './razorpay-customer-result';
+import { RazorpayInvoiceResult } from './razorpay-invoice-result';
+import { RazorpayOrderResult } from './razorpay-order-result';
+import { RazorpayPlanResult } from './razorpay-plan-result';
+import { RazorpayRefundResult } from './razorpay-refund-result';
+import { RazorpaySubscriptionResult } from './razorpay-subscription-result';
+import {
+  RazorpayCreateMonthlyPlanData,
+  RazorpayCreateCustomerData,
+  RazorpayCreateSubscriptionData,
+  RazorpayCreateRefundData,
+} from '../domain';
 
 @Injectable()
 export class RazorpayService implements IRazorpayService, OnModuleInit {
-  private client: Razorpay | null = null;
+  private client: Razorpay = null;
 
   constructor(
     private readonly options: RazorpayOptions,
@@ -123,12 +129,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
     };
   }
 
-  async createMonthlyPlan(params: {
-    name: string;
-    amountPaise: number;
-    currency?: string;
-    existingPlanId?: string;
-  }): Promise<RazorpayPlanResult> {
+  async createMonthlyPlan(params: RazorpayCreateMonthlyPlanData): Promise<RazorpayPlanResult> {
     const currency = params.currency ?? 'INR';
     const client = this.getClient();
 
@@ -203,12 +204,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
     };
   }
 
-  async createOrGetCustomer(params: {
-    name: string;
-    email: string;
-    contact?: string;
-    failExisting?: boolean;
-  }): Promise<RazorpayCustomerResult> {
+  async createOrGetCustomer(params: RazorpayCreateCustomerData): Promise<RazorpayCustomerResult> {
     const client = this.getClient();
     const payload: Record<string, unknown> = {
       name: params.name,
@@ -241,7 +237,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
     }
   }
 
-  private async findCustomerByEmail(email: string): Promise<RazorpayCustomerResult | null> {
+  private async findCustomerByEmail(email: string): Promise<RazorpayCustomerResult> {
     const client = this.getClient();
     const normalized = email.trim().toLowerCase();
     if (!normalized) {
@@ -268,12 +264,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
     }
   }
 
-  async createSubscription(params: {
-    planId: string;
-    totalCount?: number;
-    notes?: Record<string, string>;
-    notifyInfo?: { email?: string; phone?: string };
-  }): Promise<RazorpaySubscriptionResult> {
+  async createSubscription(params: RazorpayCreateSubscriptionData): Promise<RazorpaySubscriptionResult> {
     const client = this.getClient();
     try {
       const payload: Record<string, unknown> = {
@@ -360,11 +351,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
     };
   }
 
-  async createRefund(params: {
-    providerPaymentId: string;
-    amountPaise?: number;
-    notes?: Record<string, string>;
-  }): Promise<RazorpayRefundResult> {
+  async createRefund(params: RazorpayCreateRefundData): Promise<RazorpayRefundResult> {
     const client = this.getClient();
     try {
       const payload: Record<string, unknown> = {

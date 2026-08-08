@@ -1,35 +1,8 @@
-export interface SalesDailyPoint {
-  date: string;
-  revenue: number;
-  billCount: number;
-}
-
-export interface SalesTopItem {
-  sku: string;
-  itemName: string;
-  quantity: number;
-  revenue: number;
-  metalType?: string;
-}
-
-export interface SalesMetalBreakdown {
-  metalType: string;
-  revenue: number;
-  quantity: number;
-  netWeight: number;
-}
-
-export interface SalesPaymentBreakdown {
-  paymentMode: string;
-  count: number;
-  revenue: number;
-}
-
-export interface SalesDocumentTypeBreakdown {
-  documentType: string;
-  count: number;
-  revenue: number;
-}
+import { SalesDailyPoint } from './sales-daily-point';
+import { SalesTopItem } from './sales-top-item';
+import { SalesMetalBreakdown } from './sales-metal-breakdown';
+import { SalesPaymentBreakdown } from './sales-payment-breakdown';
+import { SalesDocumentTypeBreakdown } from './sales-document-type-breakdown';
 
 export interface SalesAnalytics {
   billCount: number;

@@ -1,7 +1,7 @@
 const STOP_WORDS = new Set(['the', 'and', 'of', 'a', 'an', '&']);
 
 /** Derive SKU prefix from business name, e.g. "Shree R K Jewellers" → "SRKJ". */
-export function deriveBusinessSkuPrefix(businessName: string | undefined | null): string {
+export function deriveBusinessSkuPrefix(businessName: string): string {
   const trimmed = businessName?.trim() ?? '';
   if (!trimmed) return 'RK';
 

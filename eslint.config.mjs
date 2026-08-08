@@ -120,4 +120,23 @@ export default [
   {
     ignores: ['dist/**', 'node_modules/**', '*.js', '*.d.ts', '*.map', '.turbo/**', '.next/**', '*.env', './src/infrastructure/persistence/migrations/*'],
   },
+
+  // Application layer must depend on interfaces only — never import infrastructure.
+  {
+    files: ['src/application/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/infrastructure/**', '../infrastructure/**', '../../infrastructure/**', '../../../infrastructure/**', '../../../../infrastructure/**'],
+              message:
+                'Application layer must not import from infrastructure. Define an interface in application and implement it in infrastructure.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];

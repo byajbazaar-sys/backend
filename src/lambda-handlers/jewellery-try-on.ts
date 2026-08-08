@@ -7,7 +7,7 @@ import {
   TryOnLambdaPayload,
 } from '../application/features/try-on/try-on.service';
 
-let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
+let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
 async function bootstrap() {
   if (cachedApp) return cachedApp;

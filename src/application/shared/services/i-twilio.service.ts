@@ -1,43 +1,8 @@
-export interface TwilioMessage {
-  sid: string;
-  body: string;
-  from: string;
-  to: string;
-  status: string;
-  dateCreated: Date;
-  dateUpdated: Date;
-  dateSent?: Date;
-  accountSid: string;
-  numMedia: string;
-  numSegments: string;
-  price?: string;
-  priceUnit?: string;
-  apiVersion: string;
-  uri: string;
-}
-
-export interface SendSMSDto {
-  to: string;
-  message: string;
-  from?: string;
-}
-
-export interface TwilioWebhookPayload {
-  MessageSid: string;
-  SmsSid: string;
-  AccountSid: string;
-  MessagingServiceSid?: string;
-  From: string;
-  To: string;
-  Body: string;
-  NumMedia: string;
-  NumSegments: string;
-  SmsStatus: string;
-  ApiVersion: string;
-  [key: string]: any;
-}
+import { TwilioMessage } from './twilio-message';
+import { SendSMSDto } from './send-sms-dto';
 
 export const TWILIO_SERVICE = 'ITwilioService';
+
 export interface ITwilioService {
   sendSMS(dto: SendSMSDto): Promise<TwilioMessage>;
 

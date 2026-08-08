@@ -13,7 +13,7 @@ import {
   DEFAULT_PAGE_NUMBER,
   DEFAULT_PAGE_SIZE,
 } from '@shared-libs';
-import { ESubscriptionStatus, Subscription } from '../domain';
+import { ESubscriptionStatus, Subscription, RazorpayCreateSubscriptionData, SubscriptionUserProfileData } from '../domain';
 import {
   ApplyCouponRequestModel,
   ApplyCouponResponseModel,
@@ -73,14 +73,14 @@ export class PaymentsService implements IPaymentsService {
   async createSubscription(
     userId: string,
     body: CreateSubscriptionRequestModel,
-    userProfile: { email: string; name: string; phone?: string },
+    userProfile: SubscriptionUserProfileData,
   ): Promise<CreateSubscriptionResponseModel> {
     const activePlan = await requireCheckoutPlan(this.plansRepo);
     const originalAmount = Number(activePlan.price);
     const currency = activePlan.currency?.trim().toUpperCase() || this.razorpayOptions.planCurrency;
     let discountAmount = 0;
     let finalAmount = originalAmount;
-    let couponId: string | null = null;
+    let couponId: string = null;
 
     if (body.couponCode?.trim()) {
       const preview = await this.couponService.preview(body.couponCode, userId, originalAmount);
@@ -176,18 +176,20 @@ export class PaymentsService implements IPaymentsService {
           notes: subscriptionNotes,
         });
 
-    const rzpSub = await this.razorpay.createSubscription({
-      planId: razorpayPlanId,
-      notes: {
-        userId,
-        subscriptionId: local.id!,
-        couponCode: body.couponCode?.trim().toUpperCase() ?? '',
-      },
-      notifyInfo: {
-        email: userProfile.email,
-        phone: userProfile.phone,
-      },
-    });
+    const rzpSub = await this.razorpay.createSubscription(
+      plainToInstance(RazorpayCreateSubscriptionData, {
+        planId: razorpayPlanId,
+        notes: {
+          userId,
+          subscriptionId: local.id!,
+          couponCode: body.couponCode?.trim().toUpperCase() ?? '',
+        },
+        notifyInfo: {
+          email: userProfile.email,
+          phone: userProfile.phone,
+        },
+      }),
+    );
 
     const updated = await this.subscriptionsRepo.update(local.id!, {
       providerSubscriptionId: rzpSub.id,
@@ -343,7 +345,7 @@ export class PaymentsService implements IPaymentsService {
     return mapped ?? ESubscriptionStatus.Created;
   }
 
-  private assertCouponApplied(couponCode: string | undefined, discountAmount: number): void {
+  private assertCouponApplied(couponCode: string, discountAmount: number): void {
     if (!couponCode?.trim()) {
       return;
     }
@@ -354,7 +356,7 @@ export class PaymentsService implements IPaymentsService {
 
   private checkoutTermsMatch(
     subscription: Subscription,
-    couponId: string | null,
+    couponId: string,
     discountAmount: number,
     finalAmount: number,
   ): boolean {
@@ -386,7 +388,7 @@ export class PaymentsService implements IPaymentsService {
 
   private toCreateSubscriptionResponse(
     subscription: Subscription,
-    shortUrl?: string | null,
+    shortUrl?: string,
   ): CreateSubscriptionResponseModel {
     return plainToInstance(
       CreateSubscriptionResponseModel,
@@ -430,7 +432,7 @@ export class PaymentsService implements IPaymentsService {
 
   private async tryReuseCheckoutSubscription(
     subscription: Subscription,
-  ): Promise<CreateSubscriptionResponseModel | 'already_active' | null> {
+  ): Promise<CreateSubscriptionResponseModel | 'already_active'> {
     if (!subscription.providerSubscriptionId) {
       return null;
     }

@@ -32,11 +32,11 @@ export class CouponRedemptionEntity {
   user?: UserEntity;
 
   @Column({ type: 'uuid', name: 'subscription_id', nullable: true })
-  subscriptionId: string | null;
+  subscriptionId: string;
 
   @ManyToOne(() => SubscriptionEntity, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'subscription_id' })
-  subscription?: SubscriptionEntity | null;
+  subscription?: SubscriptionEntity;
 
   @Column({ type: 'numeric', precision: 12, scale: 2, name: 'discount_amount' })
   discountAmount: number;

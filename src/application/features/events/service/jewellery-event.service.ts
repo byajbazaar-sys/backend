@@ -8,13 +8,14 @@ import {
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
 import { Paged } from '@shared-libs';
-import { EJewelleryEventStatus, JewelleryEvent } from '../domain';
+import { EJewelleryEventStatus, JewelleryEvent, JewelleryEventDuplicateQuery, JewelleryEventRelatedQuery } from '../domain';
 import { JEWELLERY_EVENT_SYNC_STATES } from '../constants';
 import { buildEventSlug, eventDedupeKey } from '../utils/slug.util';
 import {
   CreateJewelleryEventRequestModel,
   ListJewelleryEventsQueryModel,
   UpdateJewelleryEventRequestModel,
+  JewelleryEventUpdatePatch,
 } from '../models';
 import {
   DiscoveredEvent,
@@ -36,18 +37,18 @@ export class JewelleryEventService implements IJewelleryEventService {
     @InjectPinoLogger(JewelleryEventService.name) private readonly logger: PinoLogger,
   ) {}
 
-  private toDate(value?: string | Date | null): Date | null {
+  private toDate(value?: string | Date): Date {
     if (!value) return null;
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  private normalizeTags(tags?: string[] | null): string[] {
+  private normalizeTags(tags?: string[]): string[] {
     if (!Array.isArray(tags)) return [];
     return tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 6);
   }
 
-  private assertValidDates(startDate?: Date | null, endDate?: Date | null): void {
+  private assertValidDates(startDate?: Date, endDate?: Date): void {
     if (startDate && endDate && endDate.getTime() < startDate.getTime()) {
       throw new BadRequestException('endDate cannot be earlier than startDate');
     }
@@ -72,7 +73,7 @@ export class JewelleryEventService implements IJewelleryEventService {
 
   private fromRequest(
     body: CreateJewelleryEventRequestModel | UpdateJewelleryEventRequestModel,
-  ): Partial<JewelleryEvent> {
+  ): JewelleryEventUpdatePatch {
     return {
       name: body.name?.trim(),
       slug: body.slug?.trim(),
@@ -154,12 +155,14 @@ export class JewelleryEventService implements IJewelleryEventService {
     if (!event || event.status !== EJewelleryEventStatus.ACTIVE) {
       throw new NotFoundException('Event not found');
     }
-    const related = await this.eventsRepo.findRelated({
-      excludeId: event.id!,
-      city: event.city,
-      state: event.state,
-      limit: 6,
-    });
+    const related = await this.eventsRepo.findRelated(
+      plainToInstance(JewelleryEventRelatedQuery, {
+        excludeId: event.id!,
+        city: event.city,
+        state: event.state,
+        limit: 6,
+      }),
+    );
     return { event, related };
   }
 
@@ -183,11 +186,13 @@ export class JewelleryEventService implements IJewelleryEventService {
     }
     this.assertValidDates(data.startDate ?? null, data.endDate ?? null);
 
-    const duplicate = await this.eventsRepo.findDuplicate({
-      name: data.name,
-      city: data.city,
-      startDate: data.startDate,
-    });
+    const duplicate = await this.eventsRepo.findDuplicate(
+      plainToInstance(JewelleryEventDuplicateQuery, {
+        name: data.name,
+        city: data.city,
+        startDate: data.startDate,
+      }),
+    );
     if (duplicate) {
       throw new ConflictException('An event with the same name, city and start date already exists');
     }
@@ -219,7 +224,9 @@ export class JewelleryEventService implements IJewelleryEventService {
     const endDate = data.endDate !== undefined ? data.endDate : existing.endDate;
     this.assertValidDates(startDate ?? null, endDate ?? null);
 
-    const duplicate = await this.eventsRepo.findDuplicate({ name, city, startDate });
+    const duplicate = await this.eventsRepo.findDuplicate(
+      plainToInstance(JewelleryEventDuplicateQuery, { name, city, startDate }),
+    );
     if (duplicate && duplicate.id !== id) {
       throw new ConflictException('An event with the same name, city and start date already exists');
     }
@@ -285,11 +292,13 @@ export class JewelleryEventService implements IJewelleryEventService {
       const entity = this.fromGemini(event);
       if (!entity.name) continue;
 
-      const existing = await this.eventsRepo.findDuplicate({
-        name: entity.name,
-        city: entity.city,
-        startDate: entity.startDate,
-      });
+      const existing = await this.eventsRepo.findDuplicate(
+        plainToInstance(JewelleryEventDuplicateQuery, {
+          name: entity.name,
+          city: entity.city,
+          startDate: entity.startDate,
+        }),
+      );
       if (existing?.slug) {
         entity.slug = existing.slug;
       } else {

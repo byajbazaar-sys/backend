@@ -60,7 +60,7 @@ export class RefundsRepository implements IRefundsRepository {
     return this.insert(data);
   }
 
-  async findByProviderRefundId(providerRefundId: string): Promise<Refund | null> {
+  async findByProviderRefundId(providerRefundId: string): Promise<Refund> {
     const entity = await this.refundRepo.findOne({ where: { providerRefundId } });
     if (!entity) return null;
     return this.mapEntity(entity);

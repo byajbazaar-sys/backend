@@ -17,7 +17,7 @@ export class Refund {
   status: string;
 
   @Expose()
-  reason?: string | null;
+  reason?: string;
 
   @Expose()
   rawJson: Record<string, unknown>;

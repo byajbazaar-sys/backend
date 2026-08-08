@@ -37,6 +37,7 @@ import {
   ListDepositsQueryModel,
   RefundDepositRequestModel,
 } from './models';
+import { CreateDepositAccountData, AddDepositData, AdjustDepositData, RefundDepositData } from './domain';
 import { DEPOSIT_SERVICE, IDepositService } from './service';
 import { DepositsFilterOptions, DepositsDownloadFilterOptions } from './options';
 
@@ -55,10 +56,8 @@ export class DepositsController {
   @ApiResponse({ status: HttpStatus.CREATED, type: DepositResponseModel })
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() body: CreateDepositRequestModel, @Identity() identity: IIdentity): Promise<DepositResponseModel> {
-    const account = await this.depositService.create(body.customerId, identity.userId, {
-      name: body.name,
-      notes: body.notes,
-    });
+    const data = plainToInstance(CreateDepositAccountData, body, { excludeExtraneousValues: true });
+    const account = await this.depositService.create(body.customerId, identity.userId, data);
     return plainToInstance(DepositResponseModel, account, { excludeExtraneousValues: true });
   }
 
@@ -154,7 +153,8 @@ export class DepositsController {
     @Body() body: AddDepositAmountRequestModel,
     @Identity() identity: IIdentity,
   ): Promise<DepositResponseModel> {
-    const account = await this.depositService.addDeposit(params.id, identity.userId, body);
+    const data = plainToInstance(AddDepositData, body, { excludeExtraneousValues: true });
+    const account = await this.depositService.addDeposit(params.id, identity.userId, data);
     return plainToInstance(DepositResponseModel, account, { excludeExtraneousValues: true });
   }
 
@@ -166,7 +166,8 @@ export class DepositsController {
     @Body() body: AdjustDepositRequestModel,
     @Identity() identity: IIdentity,
   ): Promise<DepositResponseModel> {
-    const account = await this.depositService.adjust(params.id, identity.userId, body);
+    const data = plainToInstance(AdjustDepositData, body, { excludeExtraneousValues: true });
+    const account = await this.depositService.adjust(params.id, identity.userId, data);
     return plainToInstance(DepositResponseModel, account, { excludeExtraneousValues: true });
   }
 
@@ -178,7 +179,8 @@ export class DepositsController {
     @Body() body: RefundDepositRequestModel,
     @Identity() identity: IIdentity,
   ): Promise<DepositResponseModel> {
-    const account = await this.depositService.refund(params.id, identity.userId, body);
+    const data = plainToInstance(RefundDepositData, body, { excludeExtraneousValues: true });
+    const account = await this.depositService.refund(params.id, identity.userId, data);
     return plainToInstance(DepositResponseModel, account, { excludeExtraneousValues: true });
   }
 

@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { LoanItemEntity } from '../entities/loan-item.entity';
 import { plainToInstance } from 'class-transformer';
-import { ILoanItemsRepository, LoanItem } from '../../../application';
+import { ILoanItemsRepository, LoanItem, UpdateLoanItemPatch } from '../../../application';
 
 @Injectable()
 export class LoanItemsRepository implements ILoanItemsRepository {
@@ -56,15 +56,9 @@ export class LoanItemsRepository implements ILoanItemsRepository {
     return plainToInstance(LoanItem, loanItems, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, loanId: string, updateData: Partial<LoanItem>): Promise<LoanItem> {
-    const { id: _omitId, loanId: _omitLoanId, createdBy, image, currentRate, removeImage, ...rest } = updateData as LoanItem & {
-      id?: string;
-      loanId?: string;
-      image?: unknown;
-      currentRate?: unknown;
-      removeImage?: unknown;
-    };
-    const entityUpdate = createdBy ? { ...rest, createdBy: createdBy } : rest;
+  async update(id: string, loanId: string, updateData: UpdateLoanItemPatch): Promise<LoanItem> {
+    const { createdBy, ...rest } = updateData;
+    const entityUpdate = createdBy ? { ...rest, createdBy } : rest;
     await this.loanItemRepo.update({ id, loanId }, entityUpdate as Partial<LoanItemEntity>);
     const updated = await this.loanItemRepo.findOne({ where: { id, loanId } });
     if (!updated) return null;

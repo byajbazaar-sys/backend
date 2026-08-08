@@ -33,7 +33,7 @@ export class MetalRateService implements IMetalRateService {
 
   async getCurrent(userId: string): Promise<CurrentMetalRatesResponseModel> {
     const latest = await this.ratesRepo.findCurrentRates(userId);
-    const response: Record<string, number | string | null> = {
+    const response: Record<string, number | string> = {
       gold24: null,
       gold22: null,
       gold20: null,
@@ -144,7 +144,7 @@ export class MetalRateService implements IMetalRateService {
     }
 
     const days = [...byDay.keys()].sort();
-    const running: Partial<Record<CurrentRateKey, number | null>> = {};
+    const running: Partial<Record<CurrentRateKey, number>> = {};
     for (const key of CURRENT_RATE_KEYS) running[key] = null;
 
     const result: MetalRateChartPointModel[] = [];

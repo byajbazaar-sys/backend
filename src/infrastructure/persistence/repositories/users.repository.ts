@@ -5,7 +5,7 @@ import { hashSync } from 'bcrypt';
 import { BCRYPT_SALT_ROUNDS, EUserType } from '@shared-libs';
 import { UserEntity } from '../entities/user.entity';
 import { plainToInstance } from 'class-transformer';
-import { IUsersRepository, User } from '../../../application';
+import { IUsersRepository, User, CreateUserInput, UserUpdatePatch } from '../../../application';
 import { defaultTrialEndsAt } from '../../../application/features/payments/utils/trial.util';
 
 const DEFAULT_TRIAL_DAYS = Number(process.env.DEFAULT_TRIAL_DAYS ?? 7);
@@ -14,7 +14,7 @@ const DEFAULT_TRIAL_DAYS = Number(process.env.DEFAULT_TRIAL_DAYS ?? 7);
 export class UsersRepository implements IUsersRepository {
   constructor(@InjectRepository(UserEntity) private userRepo: Repository<UserEntity>) { }
 
-  async create(createUserDto: Partial<User>): Promise<User> {
+  async create(createUserDto: CreateUserInput): Promise<User> {
     const dto = { ...createUserDto };
     if (dto.password) {
       dto.password = hashSync(dto.password, BCRYPT_SALT_ROUNDS);
@@ -48,7 +48,7 @@ export class UsersRepository implements IUsersRepository {
     return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, updateDto: Partial<User>): Promise<User> {
+  async update(id: string, updateDto: UserUpdatePatch): Promise<User> {
     await this.userRepo.update(id, updateDto as Partial<UserEntity>);
     const updated = await this.userRepo.findOne({ where: { id } });
     if (!updated) return null;

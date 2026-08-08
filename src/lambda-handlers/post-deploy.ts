@@ -7,7 +7,7 @@ import { SeedingService } from '../infrastructure/persistence/seeds/seeding.serv
 export const handler: Handler = async (_event: unknown, context: Context) => {
   context.callbackWaitsForEmptyEventLoop = false;
 
-  let app: Awaited<ReturnType<typeof NestFactory.createApplicationContext>> | undefined;
+  let app: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
   try {
     app = await NestFactory.createApplicationContext(AppModule, {

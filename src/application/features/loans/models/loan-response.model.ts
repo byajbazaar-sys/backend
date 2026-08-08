@@ -96,5 +96,14 @@ export class LoanResponseModel {
   @Expose()
   @ApiPropertyOptional({ description: 'Signed URL for borrower fingerprint image' })
   fingerprintRef?: string;
+
+  @Expose()
+  @Type(() => Number)
+  @ApiPropertyOptional({
+    description:
+      'Increments on every change to this loan. Send it back on writes to be rejected with 409 instead of overwriting a change made since you read it.',
+    example: 3,
+  })
+  version?: number;
 }
 

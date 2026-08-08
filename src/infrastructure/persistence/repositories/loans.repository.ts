@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { LoanEntity } from '../entities/loan.entity';
 import { DueEntity } from '../entities/due.entity';
+import { TransactionalContext } from '../transactional-context';
 import { plainToInstance } from 'class-transformer';
 import {
   ELoanStatus,
@@ -10,6 +11,7 @@ import {
   ILoansRepository,
   Loan,
   LoanExtended,
+  LoanBaselineData,
   LoansFilterOptions,
   LoansDownloadFilterOptions,
   LoanStats,
@@ -20,7 +22,29 @@ import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 
 @Injectable()
 export class LoansRepository implements ILoansRepository {
-  constructor(@InjectRepository(LoanEntity) private loanRepo: Repository<LoanEntity>) { }
+  constructor(@InjectRepository(LoanEntity) private readonly defaultLoanRepo: Repository<LoanEntity>) { }
+
+  private get loanRepo(): Repository<LoanEntity> {
+    return TransactionalContext.repositoryFor(LoanEntity, this.defaultLoanRepo);
+  }
+
+  /**
+   * Serialises every writer on this loan for the rest of the surrounding
+   * transaction, so balance reads taken after it cannot go stale before commit.
+   * Outside a transaction there is nothing to hold a lock for, so it degrades
+   * to a plain read.
+   */
+  async lockLoan(id: string, createdBy: string): Promise<Loan> {
+    if (!TransactionalContext.getManager()) {
+      return this.findById(id, createdBy);
+    }
+    const loan = await this.loanRepo.findOne({
+      where: { id, createdBy },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!loan) return null;
+    return plainToInstance(Loan, loan, { excludeExtraneousValues: true });
+  }
 
   async create(createLoan: Loan): Promise<Loan> {
     const { loanItems, ...loanData } = createLoan as Loan & { loanItems?: unknown[] };
@@ -32,13 +56,63 @@ export class LoansRepository implements ILoansRepository {
     return plainToInstance(Loan, created, { excludeExtraneousValues: true });
   }
 
+  /**
+   * Single statement so the row lock Postgres takes on UPDATE serialises
+   * concurrent allocations; two requests can never receive the same number.
+   */
+  async allocateTransactionSeq(loanId: string, createdBy: string): Promise<number> {
+    const rows: Array<{ txn_seq_counter: number }> = await this.loanRepo.query(
+      `UPDATE "loans"
+          SET "txn_seq_counter" = "txn_seq_counter" + 1,
+              "version" = "version" + 1
+        WHERE "id" = $1 AND "created_by" = $2
+        RETURNING "txn_seq_counter"`,
+      [loanId, createdBy],
+    );
+    if (!rows?.length) {
+      throw new Error(`Loan ${loanId} not found while allocating transaction sequence`);
+    }
+    return Number(rows[0].txn_seq_counter);
+  }
+
+  async setBaseline(loanId: string, createdBy: string, baseline: LoanBaselineData): Promise<void> {
+    await this.loanRepo.query(
+      `UPDATE "loans"
+          SET "baseline_amount_remaining" = $3,
+              "baseline_amount_paid" = $4,
+              "baseline_interest_remaining" = $5,
+              "baseline_interest_paid" = $6,
+              "baseline_seq" = $7,
+              "version" = "version" + 1
+        WHERE "id" = $1 AND "created_by" = $2`,
+      [
+        loanId,
+        createdBy,
+        baseline.amountRemaining,
+        baseline.amountPaid,
+        baseline.interestRemaining,
+        baseline.interestPaid,
+        baseline.seq,
+      ],
+    );
+  }
+
+  async getMaxTransactionSeq(loanId: string): Promise<number> {
+    const rows: Array<{ max_seq: number }> = await this.loanRepo.query(
+      `SELECT MAX("loan_seq") AS max_seq FROM "transactions" WHERE "loan_id" = $1`,
+      [loanId],
+    );
+    return Number(rows?.[0]?.max_seq ?? 0);
+  }
+
   async findByCustomerId(customerId: string): Promise<Loan[]> {
     const loans = await this.loanRepo.find({ where: { customerId } });
     return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
   async update(id: string, updateDto: Loan): Promise<Loan| null> {
-    const { loanItems, interestPrincipalBasis: _basis, ...data } = updateDto;
+    // version is server-owned: callers may carry a stale one they read earlier.
+    const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
     const existing = await this.loanRepo.findOne({ where: { id, createdBy } });
     if (!existing) return null;
@@ -46,6 +120,7 @@ export class LoansRepository implements ILoansRepository {
     // save() so loan start date (createdAt) can be updated — update() skips @CreateDateColumn
     Object.assign(existing, data);
     delete (existing as { loanItems?: unknown }).loanItems;
+    existing.version = Number(existing.version ?? 0) + 1;
     const saved = await this.loanRepo.save(existing);
     return plainToInstance(Loan, saved, { excludeExtraneousValues: true });
   }
@@ -56,10 +131,10 @@ export class LoansRepository implements ILoansRepository {
     unpaidDues: Due[],
     unpaidTypes: EDueType[] = [EDueType.UPCOMING_DUE, EDueType.PAST_DUE, EDueType.OVERDUE],
   ): Promise<Loan| null> {
-    const { loanItems, interestPrincipalBasis: _basis, ...data } = updateDto;
+    const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
 
-    return this.loanRepo.manager.transaction(async (manager) => {
+    const run = async (manager: EntityManager): Promise<Loan> => {
       const loanRepo = manager.getRepository(LoanEntity);
       const dueRepo = manager.getRepository(DueEntity);
 
@@ -68,6 +143,7 @@ export class LoansRepository implements ILoansRepository {
 
       Object.assign(existing, data);
       delete (existing as { loanItems?: unknown }).loanItems;
+      existing.version = Number(existing.version ?? 0) + 1;
       await loanRepo.save(existing);
 
       const deleteQb = dueRepo
@@ -101,7 +177,12 @@ export class LoansRepository implements ILoansRepository {
       const updated = await loanRepo.findOne({ where: { id, createdBy } });
       if (!updated) return null;
       return plainToInstance(Loan, updated, { excludeExtraneousValues: true });
-    });
+    };
+
+    // Opening a second transaction while an outer one holds this loan's row
+    // lock would deadlock, so join the caller's transaction when there is one.
+    const active = TransactionalContext.getManager();
+    return active ? run(active) : this.defaultLoanRepo.manager.transaction(run);
   }
 
   async findById(id: string, createdBy: string): Promise<Loan| null> {

@@ -7,8 +7,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
-import { ensureTransparentProductPng, compressPngForApiPreview } from '../../../../infrastructure/ai/utils/product-image.util';
 import {
   IUsersFileStorage,
   USERS_FILE_STORAGE,
@@ -30,6 +30,7 @@ import {
   InventoryImageAiPreviewResponseModel,
   ListInventoryItemsQueryModel,
   UpdateInventoryItemRequestModel,
+  InventoryItemUpdatePatch,
 } from '../models';
 import { IInventoryItemService } from './i-inventory-item.service';
 import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
@@ -56,13 +57,13 @@ export class InventoryItemService implements IInventoryItemService {
   }
 
   /** S3 write may store `.jpg` while DB has `.jpeg` (or vice versa). */
-  private alternateJpegKey(key: string): string | null {
+  private alternateJpegKey(key: string): string {
     if (key.endsWith('.jpeg')) return `${key.slice(0, -5)}.jpg`;
     if (key.endsWith('.jpg')) return `${key.slice(0, -4)}.jpeg`;
     return null;
   }
 
-  private async resolveImageUrls(keys: string[] | undefined): Promise<string[]> {
+  private async resolveImageUrls(keys: string[]): Promise<string[]> {
     if (!keys?.length) return [];
     return Promise.all(
       keys.map(async (key) => {
@@ -181,9 +182,9 @@ export class InventoryItemService implements IInventoryItemService {
       if (!category) throw new NotFoundException('Category not found');
     }
     const { imageUrls: _ignored, ...rest } = data;
-    const patch = Object.fromEntries(
-      Object.entries(rest).filter(([, value]) => value !== undefined),
-    ) as Partial<InventoryItem>;
+    const patch = instanceToPlain(plainToInstance(InventoryItemUpdatePatch, rest), {
+      exposeUnsetFields: false,
+    }) as InventoryItemUpdatePatch;
     if (patch.stockQuantity != null && patch.stockQuantity > 0) {
       patch.status = EInventoryItemStatus.Available;
     }
@@ -237,11 +238,14 @@ export class InventoryItemService implements IInventoryItemService {
         base64: normalized.buffer.toString('base64'),
         mimeType: normalized.mimetype,
       });
-      const aiRaw = Buffer.from(
-        aiGenerated.base64.replace(/^data:[^;]+;base64,/, ''),
+      const polished = await this.productImageAi.polishTransparentPng({
+        base64: aiGenerated.base64,
+        mimeType: aiGenerated.mimeType,
+      });
+      bufferToStore = Buffer.from(
+        polished.base64.replace(/^data:[^;]+;base64,/, ''),
         'base64',
       );
-      bufferToStore = await ensureTransparentProductPng(aiRaw);
       mimetype = 'image/png';
       fileExtension = 'png';
       this.logger.info({ itemId: id }, 'Inventory image background removed for try-on');
@@ -327,24 +331,29 @@ export class InventoryItemService implements IInventoryItemService {
         base64: originalBase64,
         mimeType,
       });
-      const aiRaw = Buffer.from(
-        aiGenerated.base64.replace(/^data:[^;]+;base64,/, ''),
-        'base64',
-      );
-      const transparentPng = await ensureTransparentProductPng(aiRaw);
-      const previewPng = await compressPngForApiPreview(transparentPng);
+      const polished = await this.productImageAi.polishTransparentPng({
+        base64: aiGenerated.base64,
+        mimeType: aiGenerated.mimeType,
+      });
+      const compressed = await this.productImageAi.compressPngForPreview({
+        base64: polished.base64,
+        mimeType: polished.mimeType,
+      });
       this.logger.info(
         {
           mimeType,
           aiMimeType: aiGenerated.mimeType,
-          previewBytes: previewPng.length,
+          previewBytes: Buffer.from(
+            compressed.base64.replace(/^data:[^;]+;base64,/, ''),
+            'base64',
+          ).length,
         },
         'Inventory AI image preview generated',
       );
       return {
         aiGenerated: {
-          base64: previewPng.toString('base64'),
-          mimeType: 'image/png',
+          base64: compressed.base64.replace(/^data:[^;]+;base64,/, ''),
+          mimeType: compressed.mimeType,
         },
       };
     } catch (err) {

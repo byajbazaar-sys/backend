@@ -7,11 +7,14 @@ import { JewelleryEventEntity } from '../entities/jewellery-event.entity';
 import {
   EJewelleryEventStatus,
   JewelleryEvent,
+  JewelleryEventDuplicateQuery,
+  JewelleryEventRelatedQuery,
 } from '../../../application/features/events/domain';
 import {
   IJewelleryEventsRepository,
-  JewelleryEventsFilter,
 } from '../../../application/features/events/service/i-jewellery-events.repository';
+import { JewelleryEventsFilter } from '../../../application/features/events/service/jewellery-events-filter';
+import { JewelleryEventUpdatePatch } from '../../../application/features/events/models';
 
 @Injectable()
 export class JewelleryEventsRepository implements IJewelleryEventsRepository {
@@ -36,7 +39,7 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
     return this.map(saved);
   }
 
-  async update(id: string, data: Partial<JewelleryEvent>): Promise<JewelleryEvent> {
+  async update(id: string, data: JewelleryEventUpdatePatch): Promise<JewelleryEvent> {
     const { id: _omit, createdAt: _c, updatedAt: _u, ...rest } = data as JewelleryEvent & {
       id?: string;
     };
@@ -52,21 +55,17 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
     await this.eventRepo.delete(id);
   }
 
-  async findById(id: string): Promise<JewelleryEvent | null> {
+  async findById(id: string): Promise<JewelleryEvent> {
     const entity = await this.eventRepo.findOne({ where: { id } });
     return entity ? this.map(entity) : null;
   }
 
-  async findBySlug(slug: string): Promise<JewelleryEvent | null> {
+  async findBySlug(slug: string): Promise<JewelleryEvent> {
     const entity = await this.eventRepo.findOne({ where: { slug } });
     return entity ? this.map(entity) : null;
   }
 
-  async findDuplicate(params: {
-    name: string;
-    city?: string | null;
-    startDate?: Date | string | null;
-  }): Promise<JewelleryEvent | null> {
+  async findDuplicate(params: JewelleryEventDuplicateQuery): Promise<JewelleryEvent> {
     const qb = this.eventRepo
       .createQueryBuilder('e')
       .where('LOWER(e.name) = LOWER(:name)', { name: params.name.trim() });
@@ -128,12 +127,7 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
     });
   }
 
-  async findRelated(params: {
-    excludeId: string;
-    city?: string | null;
-    state?: string | null;
-    limit?: number;
-  }): Promise<JewelleryEvent[]> {
+  async findRelated(params: JewelleryEventRelatedQuery): Promise<JewelleryEvent[]> {
     const qb = this.eventRepo
       .createQueryBuilder('e')
       .where('e.id != :id', { id: params.excludeId })

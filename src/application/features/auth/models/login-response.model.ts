@@ -9,14 +9,14 @@ export class LoginResponseModel {
     description: 'Full access JWT — only present when subscription is active (or admin)',
     nullable: true,
   })
-  accessToken?: string | null;
+  accessToken?: string;
 
   @Expose()
   @ApiPropertyOptional({
     description: 'Short-lived JWT scoped to payment endpoints when subscription is required',
     nullable: true,
   })
-  paymentToken?: string | null;
+  paymentToken?: string;
 
   @Expose()
   @ApiProperty({
@@ -27,7 +27,7 @@ export class LoginResponseModel {
 
   @Expose()
   @ApiPropertyOptional({ example: null, nullable: true })
-  subscriptionStatus?: string | null;
+  subscriptionStatus?: string;
 
   @Expose()
   @ApiProperty({ example: 'c05a6914-52fd-46be-b5d9-6ec6ae327e2c' })

@@ -80,19 +80,19 @@ export class PaymentsRepository implements IPaymentsRepository {
     return this.insert(data);
   }
 
-  async findById(id: string): Promise<Payment | null> {
+  async findById(id: string): Promise<Payment> {
     const entity = await this.paymentRepo.findOne({ where: { id } });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
 
-  async findByProviderPaymentId(providerPaymentId: string): Promise<Payment | null> {
+  async findByProviderPaymentId(providerPaymentId: string): Promise<Payment> {
     const entity = await this.paymentRepo.findOne({ where: { providerPaymentId } });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
 
-  async findByInvoiceId(invoiceId: string): Promise<Payment | null> {
+  async findByInvoiceId(invoiceId: string): Promise<Payment> {
     const entity = await this.paymentRepo.findOne({
       where: { invoiceId },
       order: { createdAt: 'DESC' },
@@ -101,7 +101,7 @@ export class PaymentsRepository implements IPaymentsRepository {
     return this.mapEntity(entity);
   }
 
-  async findByProviderOrderId(providerOrderId: string): Promise<Payment | null> {
+  async findByProviderOrderId(providerOrderId: string): Promise<Payment> {
     const entity = await this.paymentRepo.findOne({
       where: { providerOrderId },
       order: { createdAt: 'DESC' },

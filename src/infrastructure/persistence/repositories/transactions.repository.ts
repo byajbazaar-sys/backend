@@ -2,23 +2,32 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TransactionEntity } from '../entities/transaction.entity';
+import { TransactionalContext } from '../transactional-context';
 import { plainToInstance } from 'class-transformer';
 import {
   ETransactionType,
+  ETransactionPaidIn,
   ITransactionsRepository,
+  LoanEffect,
   Transaction,
   TransactionsFilterOptions,
   TransactionsDownloadFilterOptions,
 } from '../../../application';
+import { CreateTransactionInput } from '../../../application/features/transactions/models';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 
 @Injectable()
 export class TransactionsRepository implements ITransactionsRepository {
   constructor(
-    @InjectRepository(TransactionEntity) private transactionRepo: Repository<TransactionEntity>,
+    @InjectRepository(TransactionEntity)
+    private readonly defaultTransactionRepo: Repository<TransactionEntity>,
   ) { }
 
-  async create(createTransaction: Partial<Transaction>): Promise<Transaction> {
+  private get transactionRepo(): Repository<TransactionEntity> {
+    return TransactionalContext.repositoryFor(TransactionEntity, this.defaultTransactionRepo);
+  }
+
+  async create(createTransaction: CreateTransactionInput): Promise<Transaction> {
     const entity = this.transactionRepo.create({
       loanId: createTransaction.loanId,
       customerId: createTransaction.customerId,
@@ -27,6 +36,12 @@ export class TransactionsRepository implements ITransactionsRepository {
       paidIn: createTransaction.paidIn,
       createdBy: createTransaction.createdBy,
       dueId: createTransaction.dueId ?? null,
+      amountRemainingDelta: createTransaction.amountRemainingDelta ?? 0,
+      amountPaidDelta: createTransaction.amountPaidDelta ?? 0,
+      interestRemainingDelta: createTransaction.interestRemainingDelta ?? 0,
+      interestPaidDelta: createTransaction.interestPaidDelta ?? 0,
+      periodsAtCreation: createTransaction.periodsAtCreation ?? null,
+      loanSeq: createTransaction.loanSeq ?? null,
     } as unknown as Partial<TransactionEntity>);
     const created = await this.transactionRepo.save(entity);
     return plainToInstance(Transaction, created, { excludeExtraneousValues: true });
@@ -139,6 +154,67 @@ export class TransactionsRepository implements ITransactionsRepository {
       order: { createdAt: 'DESC' },
     });
     return plainToInstance(Transaction, transactions, { excludeExtraneousValues: true });
+  }
+
+  async updatePaidIn(
+    id: string,
+    createdBy: string,
+    paidIn: ETransactionPaidIn,
+  ): Promise<Transaction> {
+    const existing = await this.transactionRepo.findOne({
+      where: { id, createdBy },
+      relations: ['customer', 'due'],
+    });
+    if (!existing) return null;
+    existing.paidIn = paidIn;
+    const saved = await this.transactionRepo.save(existing);
+    return plainToInstance(Transaction, saved, { excludeExtraneousValues: true });
+  }
+
+  async updateAmount(
+    id: string,
+    createdBy: string,
+    amount: number,
+    effect?: LoanEffect,
+    periodsAtCreation?: number,
+  ): Promise<Transaction> {
+    const existing = await this.transactionRepo.findOne({
+      where: { id, createdBy },
+      relations: ['customer', 'due'],
+    });
+    if (!existing) return null;
+    existing.amount = amount;
+    if (effect) {
+      existing.amountRemainingDelta = effect.amountRemainingDelta;
+      existing.amountPaidDelta = effect.amountPaidDelta;
+      existing.interestRemainingDelta = effect.interestRemainingDelta;
+      existing.interestPaidDelta = effect.interestPaidDelta;
+    }
+    if (periodsAtCreation !== undefined) {
+      existing.periodsAtCreation = periodsAtCreation;
+    }
+    const saved = await this.transactionRepo.save(existing);
+    return plainToInstance(Transaction, saved, { excludeExtraneousValues: true });
+  }
+
+  /**
+   * loan_seq decides the order, not created_at: it is allocated atomically,
+   * whereas created_at is the transaction's start time and can tie between two
+   * writers that began before either took the loan lock. Rows predating the seq
+   * backfill sort last so any sequenced row still wins over them.
+   */
+  async findLatestByLoanId(loanId: string, createdBy: string): Promise<Transaction> {
+    const entity = await this.transactionRepo
+      .createQueryBuilder('t')
+      .leftJoinAndSelect('t.due', 'due')
+      .where('t.loanId = :loanId', { loanId })
+      .andWhere('t.createdBy = :createdBy', { createdBy })
+      .orderBy('t.loanSeq', 'DESC', 'NULLS LAST')
+      .addOrderBy('t.createdAt', 'DESC')
+      .addOrderBy('t.id', 'DESC')
+      .getOne();
+    if (!entity) return null;
+    return plainToInstance(Transaction, entity, { excludeExtraneousValues: true });
   }
 
   async delete(id: string): Promise<void> {

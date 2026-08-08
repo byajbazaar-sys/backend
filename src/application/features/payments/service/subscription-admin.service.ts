@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { DEFAULT_PAGE_NUMBER, DEFAULT_PAGE_SIZE } from '@shared-libs';
-import { ESubscriptionStatus } from '../domain';
+import { ESubscriptionStatus, RazorpayCreateRefundData } from '../domain';
 import {
   AdminSubscriptionDetailResponseModel,
   AdminSubscriptionListItemModel,
@@ -177,11 +177,13 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     }
 
     const amountPaise = Math.round(refundAmountInr * 100);
-    const rzpRefund = await this.razorpay.createRefund({
-      providerPaymentId: payment.providerPaymentId,
-      amountPaise,
-      notes: body.reason ? { reason: body.reason } : undefined,
-    });
+    const rzpRefund = await this.razorpay.createRefund(
+      plainToInstance(RazorpayCreateRefundData, {
+        providerPaymentId: payment.providerPaymentId,
+        amountPaise,
+        notes: body.reason ? { reason: body.reason } : undefined,
+      }),
+    );
 
     const saved = await this.refundService.recordRefund(payment, {
       paymentId: payment.id,
@@ -252,9 +254,9 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
   private async toListItem(row: {
     subscription: import('../domain').Subscription;
     userEmail: string;
-    userFirstName: string | null;
-    userLastName: string | null;
-    planName: string | null;
+    userFirstName: string;
+    userLastName: string;
+    planName: string;
   }): Promise<AdminSubscriptionListItemModel> {
     const plan = await this.plansRepo.findByProviderPlanId(row.subscription.planId);
     const userName = [row.userFirstName, row.userLastName].filter(Boolean).join(' ') || row.userEmail;
@@ -278,18 +280,18 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
 
   private async toDetail(
     sub: import('../domain').Subscription,
-    rawRazorpayJson: Record<string, unknown> | null,
+    rawRazorpayJson: Record<string, unknown>,
     userRow: {
       userId: string;
       email: string;
-      firstName: string | null;
-      lastName: string | null;
-      trialEndsAt: Date | null;
-      createdAt: Date | null;
-    } | null,
+      firstName: string;
+      lastName: string;
+      trialEndsAt: Date;
+      createdAt: Date;
+    },
   ): Promise<AdminSubscriptionDetailResponseModel> {
     const plan = await this.plansRepo.findByProviderPlanId(sub.planId);
-    let couponCode: string | null = null;
+    let couponCode: string = null;
     if (sub.couponId) {
       const coupon = await this.couponsRepo.findById(sub.couponId);
       couponCode = coupon?.code ?? null;

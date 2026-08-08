@@ -1,14 +1,11 @@
-export interface TrialUserFields {
-  trialEndsAt?: Date | null;
-  createdAt?: Date | null;
-}
+import { TrialUserFields } from './trial-user-fields';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function resolveTrialEndsAt(
   user: TrialUserFields,
   defaultTrialDays: number,
-): Date | null {
+): Date {
   if (user.trialEndsAt) {
     return user.trialEndsAt instanceof Date ? user.trialEndsAt : new Date(user.trialEndsAt);
   }

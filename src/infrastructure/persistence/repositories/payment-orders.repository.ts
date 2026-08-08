@@ -39,7 +39,7 @@ export class PaymentOrdersRepository implements IPaymentOrdersRepository {
     return this.mapEntity(created);
   }
 
-  async findByProviderOrderId(providerOrderId: string): Promise<PaymentOrder | null> {
+  async findByProviderOrderId(providerOrderId: string): Promise<PaymentOrder> {
     const entity = await this.paymentOrderRepo.findOne({ where: { providerOrderId } });
     if (!entity) return null;
     return this.mapEntity(entity);

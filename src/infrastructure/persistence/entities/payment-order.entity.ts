@@ -24,17 +24,17 @@ export class PaymentOrderEntity {
   user?: UserEntity;
 
   @Column({ type: 'uuid', name: 'subscription_id', nullable: true })
-  subscriptionId: string | null;
+  subscriptionId: string;
 
   @ManyToOne(() => SubscriptionEntity, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'subscription_id' })
-  subscription?: SubscriptionEntity | null;
+  subscription?: SubscriptionEntity;
 
   @Column({ type: 'varchar', length: 128, name: 'provider_order_id', nullable: true })
-  providerOrderId: string | null;
+  providerOrderId: string;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
-  receipt: string | null;
+  receipt: string;
 
   @Column({ type: 'numeric', precision: 12, scale: 2 })
   amount: number;
@@ -46,7 +46,7 @@ export class PaymentOrderEntity {
   status: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  notes: Record<string, unknown> | null;
+  notes: Record<string, unknown>;
 
   @Column({ type: 'jsonb', name: 'raw_json', default: {} })
   rawJson: Record<string, unknown>;

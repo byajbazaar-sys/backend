@@ -75,7 +75,7 @@ export class GlobalResponseInterceptor<T> implements NestInterceptor<T, ApiRespo
     let message = 'Internal server error';
     let errorName = 'Internal Server Error';
     let errors: unknown = undefined;
-    let details: string | undefined;
+    let details: string;
 
     if (error instanceof HttpException) {
       statusCode = error.getStatus();
