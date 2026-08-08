@@ -14,5 +14,6 @@ export interface IDuesRepository {
   findByIdWithDetails(id: string, createdBy: string): Promise<Due>;
   update(id: string, due: Due): Promise<Due>;
   deleteByLoanId(loanId: string, types?: EDueType[]): Promise<void>;
+  deleteById(id: string, createdBy: string): Promise<boolean>;
   findByLoanIdAndType(loanId: string, types: EDueType[]): Promise<Due[]>;
 }

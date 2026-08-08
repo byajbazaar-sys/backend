@@ -148,6 +148,11 @@ export class DuesRepository implements IDuesRepository {
     await qb.execute();
   }
 
+  async deleteById(id: string, createdBy: string): Promise<boolean> {
+    const result = await this.dueRepo.delete({ id, createdBy });
+    return (result.affected ?? 0) > 0;
+  }
+
   async findByLoanIdAndType(loanId: string, types: EDueType[]): Promise<Due[]> {
     const dues = await this.dueRepo.find({
       where: { loanId, type: In(types) },

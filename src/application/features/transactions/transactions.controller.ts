@@ -1,4 +1,4 @@
-import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query, BadRequestException, StreamableFile, Header } from '@nestjs/common';
+import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query, BadRequestException, StreamableFile, Header, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
@@ -13,6 +13,7 @@ import {
   DueResponseModel,
   GetDueParamsModel,
   ListDuesQueryRequestModel,
+  GetTransactionParamsModel,
 } from './models';
 import { ITransactionService, TRANSACTION_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
@@ -181,5 +182,19 @@ export class TransactionsController {
     return plainToInstance(DueResponseModel, due, {
       excludeExtraneousValues: true,
     });
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete transaction by ID' })
+  @ApiParam({ name: 'id', description: 'Transaction ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Transaction deleted successfully' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Transaction not found' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(
+    @Param() params: GetTransactionParamsModel,
+    @Identity() identity: IIdentity,
+  ): Promise<void> {
+    this.logger.info({ params, identity }, 'delete called');
+    await this.transactionService.delete(params.id, identity.userId);
   }
 }
