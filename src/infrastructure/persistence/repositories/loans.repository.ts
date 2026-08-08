@@ -20,6 +20,14 @@ import {
 import { Due, EDueType } from '../../../application/shared';
 import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 
+/** TypeORM/pg may return UPDATE ... RETURNING as [rows, affectedCount]. */
+const unwrapQueryRows = <T>(result: unknown): T[] => {
+  if (Array.isArray(result?.[0])) {
+    return result[0] as T[];
+  }
+  return (Array.isArray(result) ? result : []) as T[];
+};
+
 @Injectable()
 export class LoansRepository implements ILoansRepository {
   constructor(@InjectRepository(LoanEntity) private readonly defaultLoanRepo: Repository<LoanEntity>) { }
@@ -61,7 +69,7 @@ export class LoansRepository implements ILoansRepository {
    * concurrent allocations; two requests can never receive the same number.
    */
   async allocateTransactionSeq(loanId: string, createdBy: string): Promise<number> {
-    const rows: Array<{ txn_seq_counter: number }> = await this.loanRepo.query(
+    const result = await this.loanRepo.query(
       `UPDATE "loans"
           SET "txn_seq_counter" = "txn_seq_counter" + 1,
               "version" = "version" + 1
@@ -69,10 +77,15 @@ export class LoansRepository implements ILoansRepository {
         RETURNING "txn_seq_counter"`,
       [loanId, createdBy],
     );
-    if (!rows?.length) {
+    const rows = unwrapQueryRows<{ txn_seq_counter: number }>(result);
+    if (!rows.length) {
       throw new Error(`Loan ${loanId} not found while allocating transaction sequence`);
     }
-    return Number(rows[0].txn_seq_counter);
+    const seq = Number(rows[0].txn_seq_counter);
+    if (!Number.isFinite(seq)) {
+      throw new Error(`Invalid transaction sequence allocated for loan ${loanId}`);
+    }
+    return seq;
   }
 
   async setBaseline(loanId: string, createdBy: string, baseline: LoanBaselineData): Promise<void> {
@@ -98,11 +111,12 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async getMaxTransactionSeq(loanId: string): Promise<number> {
-    const rows: Array<{ max_seq: number }> = await this.loanRepo.query(
+    const result = await this.loanRepo.query(
       `SELECT MAX("loan_seq") AS max_seq FROM "transactions" WHERE "loan_id" = $1`,
       [loanId],
     );
-    return Number(rows?.[0]?.max_seq ?? 0);
+    const rows = unwrapQueryRows<{ max_seq: number | null }>(result);
+    return Number(rows[0]?.max_seq ?? 0);
   }
 
   async findByCustomerId(customerId: string): Promise<Loan[]> {
@@ -111,8 +125,18 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async update(id: string, updateDto: Loan): Promise<Loan| null> {
-    // version is server-owned: callers may carry a stale one they read earlier.
-    const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
+    // Server-owned fields must not be overwritten from caller snapshots.
+    const {
+      loanItems,
+      interestPrincipalBasis: _basis,
+      version: _version,
+      baselineAmountRemaining: _baselineAmountRemaining,
+      baselineAmountPaid: _baselineAmountPaid,
+      baselineInterestRemaining: _baselineInterestRemaining,
+      baselineInterestPaid: _baselineInterestPaid,
+      baselineSeq: _baselineSeq,
+      ...data
+    } = updateDto;
     const createdBy = updateDto.createdBy;
     const existing = await this.loanRepo.findOne({ where: { id, createdBy } });
     if (!existing) return null;
@@ -120,7 +144,8 @@ export class LoansRepository implements ILoansRepository {
     // save() so loan start date (createdAt) can be updated — update() skips @CreateDateColumn
     Object.assign(existing, data);
     delete (existing as { loanItems?: unknown }).loanItems;
-    existing.version = Number(existing.version ?? 0) + 1;
+    const currentVersion = Number(existing.version);
+    existing.version = (Number.isFinite(currentVersion) ? currentVersion : 0) + 1;
     const saved = await this.loanRepo.save(existing);
     return plainToInstance(Loan, saved, { excludeExtraneousValues: true });
   }
