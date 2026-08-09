@@ -55,4 +55,19 @@ export class TransactionResponseModel {
   })
   @Type(() => DueResponseModel)
   due?: DueResponseModel;
+
+  @Expose()
+  @ApiPropertyOptional({
+    description: 'Whether this transaction is the most recent one on its loan',
+    example: true,
+  })
+  isLatest?: boolean;
+
+  @Expose()
+  @ApiPropertyOptional({
+    description:
+      'Whether the client may delete this transaction (loan is open; includes DuePayment and older rows)',
+    example: true,
+  })
+  canDelete?: boolean;
 }

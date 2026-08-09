@@ -141,6 +141,42 @@ export class TransactionsRepository implements ITransactionsRepository {
     return plainToInstance(Transaction, transactions, { excludeExtraneousValues: true });
   }
 
+  async findLatestByLoanId(loanId: string, createdBy: string): Promise<Transaction | null> {
+    const entity = await this.transactionRepo
+      .createQueryBuilder('t')
+      .leftJoinAndSelect('t.due', 'due')
+      .where('t.loanId = :loanId', { loanId })
+      .andWhere('t.createdBy = :createdBy', { createdBy })
+      .orderBy('t.createdAt', 'DESC')
+      .addOrderBy('t.id', 'DESC')
+      .getOne();
+    if (!entity) return null;
+    return plainToInstance(Transaction, entity, { excludeExtraneousValues: true });
+  }
+
+  async findLatestIdsByLoanIds(loanIds: string[], createdBy: string): Promise<Map<string, string>> {
+    const latestByLoan = new Map<string, string>();
+    if (loanIds.length === 0) {
+      return latestByLoan;
+    }
+
+    const rows: Array<{ loanId: string; id: string }> = await this.transactionRepo.query(
+      `
+        SELECT DISTINCT ON (t.loan_id) t.loan_id AS "loanId", t.id AS id
+          FROM transactions t
+         WHERE t.created_by = $1
+           AND t.loan_id = ANY($2::uuid[])
+         ORDER BY t.loan_id, t.created_at DESC, t.id DESC
+      `,
+      [createdBy, loanIds],
+    );
+
+    for (const row of rows) {
+      latestByLoan.set(row.loanId, row.id);
+    }
+    return latestByLoan;
+  }
+
   async delete(id: string): Promise<void> {
     await this.transactionRepo.delete(id);
   }

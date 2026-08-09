@@ -129,6 +129,7 @@ export class TransactionService implements ITransactionService {
     try {
       this.logger.debug({ createdBy: params.createdBy }, 'Getting transactions');
       const result = await this.transactionsRepo.listTransactions(params);
+      await this.applyDeleteCapabilities(result.items, params.createdBy);
       return result;
     } catch (err) {
       this.logger.error({ err, params }, 'Error getting transactions');
@@ -305,6 +306,27 @@ export class TransactionService implements ITransactionService {
     } catch (err) {
       this.logger.error({ err }, 'Error updating past dues');
       throw err;
+    }
+  }
+
+  private async applyDeleteCapabilities(transactions: Transaction[], createdBy: string): Promise<void> {
+    if (transactions.length === 0) {
+      return;
+    }
+
+    const loanIds = [...new Set(transactions.map((transaction) => transaction.loanId))];
+    const [loans, latestIdsByLoan] = await Promise.all([
+      this.loansRepo.findByIds(loanIds),
+      this.transactionsRepo.findLatestIdsByLoanIds(loanIds, createdBy),
+    ]);
+
+    const loanStatusById = new Map(loans.map((loan) => [loan.id, loan.status]));
+
+    for (const transaction of transactions) {
+      const loanStatus = loanStatusById.get(transaction.loanId);
+      const latestTransactionId = latestIdsByLoan.get(transaction.loanId);
+      transaction.isLatest = latestTransactionId === transaction.id;
+      transaction.canDelete = loanStatus === ELoanStatus.OPEN;
     }
   }
 

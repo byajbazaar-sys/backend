@@ -42,4 +42,10 @@ export class Transaction {
   @Expose()
   @Type(() => Due)
   public due?: Due;
+
+  @Expose()
+  public isLatest?: boolean;
+
+  @Expose()
+  public canDelete?: boolean;
 }
