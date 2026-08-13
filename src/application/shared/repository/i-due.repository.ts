@@ -14,5 +14,11 @@ export interface IDuesRepository {
   findByIdWithDetails(id: string, createdBy: string): Promise<Due>;
   update(id: string, due: Due): Promise<Due>;
   deleteByLoanId(loanId: string, types?: EDueType[]): Promise<void>;
+  /**
+   * Clears a loan's schedule except for the rows named. Used to rewind to a
+   * replay checkpoint, where dues paid by frozen history must survive.
+   */
+  deleteByLoanIdExcept(loanId: string, keepDueIds: string[]): Promise<void>;
+  findByLoanId(loanId: string): Promise<Due[]>;
   findByLoanIdAndType(loanId: string, types: EDueType[]): Promise<Due[]>;
 }

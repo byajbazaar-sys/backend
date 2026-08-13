@@ -105,5 +105,14 @@ export class LoanResponseModel {
     example: 3,
   })
   version?: number;
+
+  @Expose()
+  @Type(() => Number)
+  @ApiPropertyOptional({
+    description:
+      'Replay checkpoint. Transactions positioned above this can be corrected; those at or below it are frozen history that predates replay.',
+    example: 0,
+  })
+  baselineSeq?: number;
 }
 

@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException, ForbiddenException, BadRequestEx
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { emptyLoanEffect, LoanEffect, Transaction, UpdateTransactionData } from '../domain';
 import { ITransactionService } from './i-transaction.service';
+import { LoanReplayService } from './loan-replay.service';
 import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, DuesFilterOptions } from '../options';
 import { Paged, toPaged } from '@shared-libs';
 import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus, Loan, ILoanService, LOAN_SERVICE, EInterestCalculationMethod, assertLoanVersion } from '../../loans';
@@ -16,6 +17,7 @@ export class TransactionService implements ITransactionService {
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
     @Inject(LOAN_SERVICE) private readonly loanService: ILoanService,
     @Inject(UNIT_OF_WORK) private readonly unitOfWork: IUnitOfWork,
+    private readonly replayService: LoanReplayService,
     @InjectPinoLogger(TransactionService.name) private readonly logger: PinoLogger,
   ) { }
 
@@ -185,7 +187,7 @@ export class TransactionService implements ITransactionService {
       const newAmount = this.roundMoney(Number(updates.amount));
       const oldAmount = this.roundMoney(Number(existing.amount));
       if (newAmount !== oldAmount) {
-        current = await this.reviseLatestAmount(existing, newAmount, createdBy);
+        current = await this.reviseAmount(existing, newAmount, createdBy);
       }
     }
 
@@ -201,7 +203,7 @@ export class TransactionService implements ITransactionService {
     return current;
   }
 
-  private async reviseLatestAmount(
+  private async reviseAmount(
     existing: Transaction,
     newAmount: number,
     createdBy: string,
@@ -210,10 +212,15 @@ export class TransactionService implements ITransactionService {
       throw new BadRequestException('Invalid transaction amount');
     }
 
-    // Ahead of the latest-transaction rule, so the caller hears the reason that
-    // will not change: no due payment amount is editable, whatever its position.
+    // Ahead of the position rules, so the caller hears the reason that will not
+    // change: a due payment's amount is fixed by the due it settles, wherever it
+    // sits in the history.
     if (existing.transactionType === ETransactionType.DUE_PAYMENT) {
       throw new BadRequestException('Due payment amount cannot be edited; delete and re-record the payment instead');
+    }
+
+    if (!(await this.isLatestOnLoan(existing, createdBy))) {
+      return this.reviseEarlierAmount(existing, newAmount, createdBy);
     }
 
     const loan = await this.assertLatestOnOpenLoan(existing, createdBy);
@@ -248,6 +255,51 @@ export class TransactionService implements ITransactionService {
       'Latest transaction amount revised',
     );
     return updated;
+  }
+
+  /**
+   * Correcting a transaction with history after it cannot be done by undoing its
+   * effect: everything recorded later was applied on top of what it produced.
+   * The loan is rebuilt from its checkpoint instead, so one history explains the
+   * balances, the schedule, and the transactions alike.
+   */
+  private async reviseEarlierAmount(
+    existing: Transaction,
+    newAmount: number,
+    createdBy: string,
+  ): Promise<Transaction> {
+    await this.assertOpenLoan(existing.loanId, createdBy);
+    await this.replayService.replay(existing.loanId, createdBy, {
+      kind: 'editAmount',
+      transactionId: existing.id,
+      newAmount,
+    });
+
+    const updated = await this.transactionsRepo.findById(existing.id, createdBy);
+    if (!updated) {
+      throw new NotFoundException('Transaction not found');
+    }
+    this.logger.info(
+      { transactionId: existing.id, oldAmount: existing.amount, newAmount },
+      'Earlier transaction amount revised by replaying loan history',
+    );
+    return updated;
+  }
+
+  private async isLatestOnLoan(transaction: Transaction, createdBy: string): Promise<boolean> {
+    const latest = await this.transactionsRepo.findLatestByLoanId(transaction.loanId, createdBy);
+    return !!latest && latest.id === transaction.id;
+  }
+
+  private async assertOpenLoan(loanId: string, createdBy: string): Promise<Loan> {
+    const loan = await this.loansRepo.findById(loanId, createdBy);
+    if (!loan) {
+      throw new NotFoundException('Loan not found');
+    }
+    if (loan.status === ELoanStatus.CLOSED) {
+      throw new BadRequestException('Cannot modify transactions on a closed loan');
+    }
+    return loan;
   }
 
   /**
@@ -351,16 +403,30 @@ export class TransactionService implements ITransactionService {
       this.logger.info({ transactionId: id, createdBy }, 'Deleting transaction');
       const existing = await this.loadForWrite(id, createdBy, expectedLoanVersion);
 
-      const loan = await this.assertLatestOnOpenLoan(existing, createdBy);
-
       const amount = Number(existing.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
         throw new BadRequestException('Invalid transaction amount');
       }
 
-      await this.rollbackTransactionEffects(existing, loan, createdBy);
-      await this.transactionsRepo.delete(id);
-      this.logger.info({ transactionId: id, loanId: existing.loanId }, 'Transaction deleted with rollback');
+      if (await this.isLatestOnLoan(existing, createdBy)) {
+        const loan = await this.assertLatestOnOpenLoan(existing, createdBy);
+        await this.rollbackTransactionEffects(existing, loan, createdBy);
+        await this.transactionsRepo.delete(id);
+        this.logger.info({ transactionId: id, loanId: existing.loanId }, 'Transaction deleted with rollback');
+        return;
+      }
+
+      // Later transactions were applied on top of this one, so undoing it alone
+      // would leave them describing a loan that no longer exists.
+      await this.assertOpenLoan(existing.loanId, createdBy);
+      await this.replayService.replay(existing.loanId, createdBy, {
+        kind: 'delete',
+        transactionId: id,
+      });
+      this.logger.info(
+        { transactionId: id, loanId: existing.loanId },
+        'Earlier transaction deleted by replaying loan history',
+      );
     } catch (err) {
       if (
         err instanceof NotFoundException ||

@@ -10,6 +10,7 @@ import {
   ITransactionsRepository,
   LoanEffect,
   Transaction,
+  TransactionReplayPatch,
   TransactionsFilterOptions,
   TransactionsDownloadFilterOptions,
 } from '../../../application';
@@ -220,6 +221,56 @@ export class TransactionsRepository implements ITransactionsRepository {
       .getOne();
     if (!entity) return null;
     return plainToInstance(Transaction, entity, { excludeExtraneousValues: true });
+  }
+
+  /**
+   * Ascending counterpart of findLatestByLoanId: same ordering rules, so a
+   * replay applies transactions in exactly the order they were recorded.
+   */
+  async findAllByLoanIdOrdered(loanId: string, createdBy: string): Promise<Transaction[]> {
+    if (!loanId) return [];
+    const entities = await this.transactionRepo
+      .createQueryBuilder('t')
+      .leftJoinAndSelect('t.due', 'due')
+      .where('t.loanId = :loanId', { loanId })
+      .andWhere('t.createdBy = :createdBy', { createdBy })
+      .orderBy('t.loanSeq', 'ASC', 'NULLS FIRST')
+      .addOrderBy('t.createdAt', 'ASC')
+      .addOrderBy('t.id', 'ASC')
+      .getMany();
+    return plainToInstance(Transaction, entities, { excludeExtraneousValues: true });
+  }
+
+  async applyReplayResult(
+    id: string,
+    createdBy: string,
+    patch: TransactionReplayPatch,
+  ): Promise<Transaction> {
+    if (!id) return null;
+    const existing = await this.transactionRepo.findOne({
+      where: { id, createdBy },
+      relations: ['customer', 'due'],
+    });
+    if (!existing) return null;
+
+    if (patch.amount !== undefined) {
+      existing.amount = patch.amount;
+    }
+    if (patch.dueId !== undefined) {
+      existing.dueId = patch.dueId;
+    }
+    existing.amountRemainingDelta = patch.effect.amountRemainingDelta;
+    existing.amountPaidDelta = patch.effect.amountPaidDelta;
+    existing.interestRemainingDelta = patch.effect.interestRemainingDelta;
+    existing.interestPaidDelta = patch.effect.interestPaidDelta;
+    // Left untouched when the replay did not compute one, so a top-up keeps the
+    // tenure it was originally priced against.
+    if (patch.periodsAtCreation !== undefined) {
+      existing.periodsAtCreation = patch.periodsAtCreation;
+    }
+
+    const saved = await this.transactionRepo.save(existing);
+    return plainToInstance(Transaction, saved, { excludeExtraneousValues: true });
   }
 
   async delete(id: string): Promise<void> {

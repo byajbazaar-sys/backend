@@ -29,6 +29,7 @@ import {
   SupportService,
   TRANSACTION_SERVICE,
   TransactionService,
+  LoanReplayService,
   USERS_SERVICE,
   UsersService,
   INVENTORY_CATEGORY_SERVICE,
@@ -119,6 +120,7 @@ import {
       provide: ITEM_SERVICE,
       useClass: ItemService,
     },
+    LoanReplayService,
     {
       provide: TRANSACTION_SERVICE,
       useClass: TransactionService,

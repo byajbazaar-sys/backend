@@ -55,4 +55,13 @@ export class TransactionResponseModel {
   })
   @Type(() => DueResponseModel)
   due?: DueResponseModel;
+
+  @Expose()
+  @Type(() => Number)
+  @ApiPropertyOptional({
+    description:
+      "Position of this transaction within its loan. Compare against the loan's baselineSeq: rows above it can be corrected, rows at or below are frozen history.",
+    example: 4,
+  })
+  loanSeq?: number;
 }

@@ -1,5 +1,5 @@
 import { Paged } from '@shared-libs';
-import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, ETransactionType, ETransactionPaidIn, LoanEffect, Transaction } from '../../features';
+import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, ETransactionType, ETransactionPaidIn, LoanEffect, Transaction, TransactionReplayPatch } from '../../features';
 import { CreateTransactionInput } from '../../features/transactions/models';
 
 export const TRANSACTIONS_REPOSITORY = 'ITransactionsRepository';
@@ -19,6 +19,10 @@ export interface ITransactionsRepository {
     periodsAtCreation?: number,
   ): Promise<Transaction>;
   findLatestByLoanId(loanId: string, createdBy: string): Promise<Transaction>;
+  /** Full history for a loan in apply order; the input to a replay. */
+  findAllByLoanIdOrdered(loanId: string, createdBy: string): Promise<Transaction[]>;
+  /** Rewrites the stored effect of a transaction that a replay re-applied. */
+  applyReplayResult(id: string, createdBy: string, patch: TransactionReplayPatch): Promise<Transaction>;
   delete(id: string): Promise<void>;
   deleteByLoanId(loanId: string): Promise<void>;
 }

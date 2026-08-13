@@ -157,6 +157,28 @@ export class DuesRepository implements IDuesRepository {
     await qb.execute();
   }
 
+  async deleteByLoanIdExcept(loanId: string, keepDueIds: string[]): Promise<void> {
+    if (!loanId) return;
+    const qb = this.dueRepo
+      .createQueryBuilder()
+      .delete()
+      .from(DueEntity)
+      .where('loanId = :loanId', { loanId });
+    if (keepDueIds?.length) {
+      qb.andWhere('id NOT IN (:...keepDueIds)', { keepDueIds });
+    }
+    await qb.execute();
+  }
+
+  async findByLoanId(loanId: string): Promise<Due[]> {
+    if (!loanId) return [];
+    const dues = await this.dueRepo.find({
+      where: { loanId },
+      order: { dueDate: 'ASC' },
+    });
+    return plainToInstance(Due, dues, { excludeExtraneousValues: true });
+  }
+
   async findByLoanIdAndType(loanId: string, types: EDueType[]): Promise<Due[]> {
     const dues = await this.dueRepo.find({
       where: { loanId, type: In(types) },
