@@ -35,6 +35,9 @@ export class LoansRepository implements ILoansRepository {
    * to a plain read.
    */
   async lockLoan(id: string, createdBy: string): Promise<Loan> {
+    // TypeORM drops undefined conditions instead of matching nothing, so an
+    // absent id would lock and return an arbitrary loan of this user's.
+    if (!id) return null;
     if (!TransactionalContext.getManager()) {
       return this.findById(id, createdBy);
     }
@@ -61,7 +64,10 @@ export class LoansRepository implements ILoansRepository {
    * concurrent allocations; two requests can never receive the same number.
    */
   async allocateTransactionSeq(loanId: string, createdBy: string): Promise<number> {
-    const rows: Array<{ txn_seq_counter: number }> = await this.loanRepo.query(
+    if (!loanId) {
+      throw new Error('Cannot allocate a transaction sequence without a loan id');
+    }
+    const result = await this.loanRepo.query(
       `UPDATE "loans"
           SET "txn_seq_counter" = "txn_seq_counter" + 1,
               "version" = "version" + 1
@@ -69,10 +75,19 @@ export class LoansRepository implements ILoansRepository {
         RETURNING "txn_seq_counter"`,
       [loanId, createdBy],
     );
+    // An UPDATE ... RETURNING comes back as [rows, affectedCount], unlike a
+    // SELECT which returns the rows directly.
+    const rows: Array<{ txn_seq_counter: number }> = Array.isArray(result?.[0]) ? result[0] : result;
     if (!rows?.length) {
       throw new Error(`Loan ${loanId} not found while allocating transaction sequence`);
     }
-    return Number(rows[0].txn_seq_counter);
+    const allocated = Number(rows[0]?.txn_seq_counter);
+    if (!Number.isFinite(allocated)) {
+      // Guards the shape above: a non-numeric sequence would otherwise reach the
+      // insert as NaN and fail there, well away from the real cause.
+      throw new Error(`Loan ${loanId} returned a non-numeric transaction sequence (${JSON.stringify(rows[0])})`);
+    }
+    return allocated;
   }
 
   async setBaseline(loanId: string, createdBy: string, baseline: LoanBaselineData): Promise<void> {
@@ -111,6 +126,7 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async update(id: string, updateDto: Loan): Promise<Loan| null> {
+    if (!id) return null;
     // version is server-owned: callers may carry a stale one they read earlier.
     const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
@@ -131,6 +147,7 @@ export class LoansRepository implements ILoansRepository {
     unpaidDues: Due[],
     unpaidTypes: EDueType[] = [EDueType.UPCOMING_DUE, EDueType.PAST_DUE, EDueType.OVERDUE],
   ): Promise<Loan| null> {
+    if (!id) return null;
     const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
 
@@ -186,6 +203,7 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async findById(id: string, createdBy: string): Promise<Loan| null> {
+    if (!id) return null;
     const loan = await this.loanRepo.findOne({
       where: { id, createdBy: createdBy },
       relations: ['loanItems'],

@@ -48,6 +48,9 @@ export class TransactionsRepository implements ITransactionsRepository {
   }
 
   async findById(id: string, createdBy: string): Promise<Transaction> {
+    // TypeORM drops undefined conditions instead of matching nothing, so an
+    // absent id would return an arbitrary transaction of this user's.
+    if (!id) return null;
     const transaction = await this.transactionRepo.findOne({
       where: { id, createdBy: createdBy },
       relations: ['customer'],
@@ -161,6 +164,7 @@ export class TransactionsRepository implements ITransactionsRepository {
     createdBy: string,
     paidIn: ETransactionPaidIn,
   ): Promise<Transaction> {
+    if (!id) return null;
     const existing = await this.transactionRepo.findOne({
       where: { id, createdBy },
       relations: ['customer', 'due'],
@@ -178,6 +182,7 @@ export class TransactionsRepository implements ITransactionsRepository {
     effect?: LoanEffect,
     periodsAtCreation?: number,
   ): Promise<Transaction> {
+    if (!id) return null;
     const existing = await this.transactionRepo.findOne({
       where: { id, createdBy },
       relations: ['customer', 'due'],

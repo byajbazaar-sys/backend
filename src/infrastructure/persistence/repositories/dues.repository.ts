@@ -111,6 +111,9 @@ export class DuesRepository implements IDuesRepository {
   }
 
   async findById(id: string, createdBy: string): Promise<Due> {
+    // TypeORM drops undefined conditions instead of matching nothing, so an
+    // absent id would return an arbitrary due of this user's.
+    if (!id) return null;
     const due = await this.dueRepo.findOne({
       where: { id, createdBy: createdBy },
     });
@@ -119,6 +122,7 @@ export class DuesRepository implements IDuesRepository {
   }
 
   async findByIdWithDetails(id: string, createdBy: string): Promise<Due> {
+    if (!id) return null;
     const due = await this.dueRepo.findOne({
       where: { id, createdBy: createdBy },
       relations: ['customer'],

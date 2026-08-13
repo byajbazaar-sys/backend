@@ -31,11 +31,19 @@ export class TransactionService implements ITransactionService {
   ): Promise<Transaction> {
     try {
       this.logger.info({ loanId: data.loanId, dueId: data.dueId, transactionType: data.transactionType, amount: data.amount }, 'Creating transaction');
-      await this.lockLoanForWrite(data.loanId, data.dueId, data.createdBy, expectedLoanVersion);
-      let { loan, due } = await this.validateTransaction(data);
-      if (!loan && due) {
-        loan = await this.loansRepo.findById(due.loanId, data.createdBy);
-        data.loanId = loan.id;
+      // Resolve the loan before validating, not after. A due-only request has no
+      // loanId of its own, and every write below — balances, the sequence, the
+      // transaction row — has to land on the loan whose lock is being held.
+      // Validating with it already set also subjects due-only payments to the
+      // same closed-loan and amount checks as any other transaction.
+      const lockedLoanId = await this.lockLoanForWrite(data.loanId, data.dueId, data.createdBy, expectedLoanVersion);
+      if (lockedLoanId) {
+        data.loanId = lockedLoanId;
+      }
+
+      const { loan, due } = await this.validateTransaction(data);
+      if (!loan) {
+        throw new NotFoundException('Loan not found');
       }
       data.customerId = loan.customerId;
 
@@ -101,7 +109,7 @@ export class TransactionService implements ITransactionService {
         effect.interestRemainingDelta = -Number(due.interestAmount);
         effect.interestPaidDelta = Number(due.interestAmount);
       }
-      await this.loansRepo.update(data.loanId, loan);
+      await this.saveLoanBalances(data.loanId, loan);
 
       if (
         data.transactionType === ETransactionType.INTEREST ||
@@ -198,15 +206,17 @@ export class TransactionService implements ITransactionService {
     newAmount: number,
     createdBy: string,
   ): Promise<Transaction> {
-    const loan = await this.assertLatestOnOpenLoan(existing, createdBy);
-
     if (!Number.isFinite(newAmount) || newAmount <= 0) {
       throw new BadRequestException('Invalid transaction amount');
     }
 
+    // Ahead of the latest-transaction rule, so the caller hears the reason that
+    // will not change: no due payment amount is editable, whatever its position.
     if (existing.transactionType === ETransactionType.DUE_PAYMENT) {
       throw new BadRequestException('Due payment amount cannot be edited; delete and re-record the payment instead');
     }
+
+    const loan = await this.assertLatestOnOpenLoan(existing, createdBy);
 
     await this.rollbackTransactionEffects(existing, loan, createdBy);
 
@@ -250,16 +260,21 @@ export class TransactionService implements ITransactionService {
     dueId: string,
     createdBy: string,
     expectedLoanVersion?: number,
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     let targetLoanId = loanId;
     if (!targetLoanId && dueId) {
       const due = await this.duesRepo.findById(dueId, createdBy);
       targetLoanId = due?.loanId;
     }
-    if (targetLoanId) {
-      const loan = await this.loansRepo.lockLoan(targetLoanId, createdBy);
-      assertLoanVersion(loan, expectedLoanVersion);
+    if (!targetLoanId) {
+      return undefined;
     }
+    const loan = await this.loansRepo.lockLoan(targetLoanId, createdBy);
+    assertLoanVersion(loan, expectedLoanVersion);
+    // Returned so callers write to the loan that was actually locked. A loan
+    // that turned out not to exist still reports its id, leaving the caller's
+    // own not-found handling to produce the error.
+    return targetLoanId;
   }
 
   /**
@@ -384,7 +399,7 @@ export class TransactionService implements ITransactionService {
       await this.restoreDueAfterRollback(transaction, createdBy);
     }
 
-    await this.loansRepo.update(loanId, loan);
+    await this.saveLoanBalances(loanId, loan);
 
     if (
       transaction.transactionType === ETransactionType.INTEREST ||
@@ -544,7 +559,7 @@ export class TransactionService implements ITransactionService {
       throw new BadRequestException('Update would result in negative remaining balances');
     }
 
-    await this.loansRepo.update(loanId, loan);
+    await this.saveLoanBalances(loanId, loan);
 
     if (
       transaction.transactionType === ETransactionType.INTEREST ||
@@ -555,6 +570,18 @@ export class TransactionService implements ITransactionService {
     }
 
     return { effect: this.roundEffect(effect), periodsAtCreation };
+  }
+
+  /**
+   * A balance write that matched no row means the loan went missing from under
+   * its own lock. Aborting beats letting a no-op pass for a successful save and
+   * leaving the transaction row describing a change that was never applied.
+   */
+  private async saveLoanBalances(loanId: string, loan: Loan): Promise<void> {
+    const updated = await this.loansRepo.update(loanId, loan);
+    if (!updated) {
+      throw new NotFoundException('Loan not found');
+    }
   }
 
   private calculateTopUpInterest(loan: Loan, amount: number, periods: number): number {
