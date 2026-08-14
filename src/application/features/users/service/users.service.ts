@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EUserType } from '@shared-libs';
 import { Paged, toPaged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
@@ -9,6 +9,7 @@ import { UserUpdatePatch } from '../models';
 import { IUsersRepository, USERS_REPOSITORY } from './i-users.repository';
 import { IUsersService } from './i-users.service';
 import { USERS_FILE_STORAGE, IUsersFileStorage } from '../../../shared';
+import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../utils/catalog-slug.helper';
 
 @Injectable()
 export class UsersService implements IUsersService {
@@ -136,7 +137,35 @@ export class UsersService implements IUsersService {
         { exposeUnsetFields: false },
       ) as UserUpdatePatch;
 
-      const updatedUser = await this.usersRepo.update(id, definedUpdates);
+      if (definedUpdates.businessName !== undefined) {
+        const trimmed = definedUpdates.businessName?.trim() ?? '';
+        if (!trimmed) {
+          definedUpdates.businessName = null;
+          definedUpdates.catalogSlug = null;
+        } else {
+          definedUpdates.businessName = trimmed;
+          const previous = (existingUser.businessName ?? '').trim();
+          if (trimmed !== previous) {
+            definedUpdates.catalogSlug = await resolveCatalogSlugForBusinessName(
+              this.usersRepo,
+              trimmed,
+              id,
+            );
+          }
+        }
+      }
+
+      let updatedUser: User;
+      try {
+        updatedUser = await this.usersRepo.update(id, definedUpdates);
+      } catch (err) {
+        if (isCatalogSlugUniqueViolation(err)) {
+          throw new ConflictException(
+            'This business name is already being used for a catalog URL. Please choose a unique business name.',
+          );
+        }
+        throw err;
+      }
       if (!updatedUser) {
         throw new NotFoundException('User not found');
       }
@@ -144,7 +173,7 @@ export class UsersService implements IUsersService {
       this.logger.info({ userId: id }, 'User updated successfully');
       return this.withAssetUrls(updatedUser);
     } catch (err) {
-      if (err instanceof NotFoundException || err instanceof BadRequestException) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException || err instanceof ConflictException) {
         throw err;
       }
       this.logger.error({ err, userId: id }, 'Error updating user');

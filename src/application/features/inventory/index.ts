@@ -6,4 +6,5 @@ export * from './service';
 export * from './inventory-categories.controller';
 export * from './inventory-items.controller';
 export * from './inventory-reports.controller';
+export * from './inventory-catalog.controller';
 export * from './barcode.controller';

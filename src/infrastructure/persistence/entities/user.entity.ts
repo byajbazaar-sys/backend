@@ -63,6 +63,12 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   businessName: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'catalog_slug' })
+  catalogSlug: string;
+
+  @Column({ type: 'boolean', default: true, name: 'catalog_enabled' })
+  catalogEnabled: boolean;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   address: string;
 

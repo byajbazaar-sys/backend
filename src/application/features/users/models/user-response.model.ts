@@ -53,6 +53,14 @@ export class UserResponseModel {
   businessName?: string;
 
   @Expose()
+  @ApiPropertyOptional({ example: 'xyz jewellers', description: 'Public catalog subdomain slug' })
+  catalogSlug?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ example: true, description: 'Whether the public catalog is enabled' })
+  catalogEnabled?: boolean;
+
+  @Expose()
   @ApiProperty({
     example: '123 Main Street, City, State, ZIP Code',
     nullable: true,

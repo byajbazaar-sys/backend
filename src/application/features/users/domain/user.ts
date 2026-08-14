@@ -67,6 +67,12 @@ export class User {
   public businessName?: string;
 
   @Expose()
+  public catalogSlug?: string;
+
+  @Expose()
+  public catalogEnabled?: boolean;
+
+  @Expose()
   public address?: string;
 
   @Expose()

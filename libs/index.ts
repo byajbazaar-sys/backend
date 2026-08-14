@@ -10,3 +10,4 @@ export * from './pagination';
 export * from './file-storage';
 export * from './cron';
 export * from './export';
+export * from './catalog';

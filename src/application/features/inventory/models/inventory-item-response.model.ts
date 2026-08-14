@@ -121,6 +121,10 @@ export class InventoryItemResponseModel {
   supplierName?: string;
 
   @Expose()
+  @ApiPropertyOptional({ example: false, description: 'Visible on public catalog' })
+  isCatalogVisible?: boolean;
+
+  @Expose()
   @ApiPropertyOptional()
   huid?: string;
 

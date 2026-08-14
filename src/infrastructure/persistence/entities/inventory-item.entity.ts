@@ -19,6 +19,7 @@ import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../../../ap
 @Index('IDX_inventory_items_created_by', ['createdBy'])
 @Index('IDX_inventory_items_category_id', ['categoryId'])
 @Index('IDX_inventory_items_status', ['status'])
+@Index('IDX_inventory_items_catalog_visible', ['createdBy', 'isCatalogVisible'])
 export class InventoryItemEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -128,6 +129,9 @@ export class InventoryItemEntity {
 
   @Column({ type: 'varchar', length: 255, nullable: true, name: 'supplier_name' })
   supplierName: string;
+
+  @Column({ type: 'boolean', default: false, name: 'is_catalog_visible' })
+  isCatalogVisible: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

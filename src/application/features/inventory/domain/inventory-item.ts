@@ -94,6 +94,9 @@ export class InventoryItem {
   supplierName?: string;
 
   @Expose()
+  isCatalogVisible?: boolean;
+
+  @Expose()
   createdBy?: string;
 
   @Expose()

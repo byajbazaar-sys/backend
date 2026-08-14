@@ -69,6 +69,10 @@ import {
   TryOnService,
   DEPOSIT_SERVICE,
   DepositService,
+  PUBLIC_CATALOG_SERVICE,
+  PublicCatalogService,
+  INVENTORY_CATALOG_SERVICE,
+  InventoryCatalogService,
 } from './features';
 import { EMAIL_TEMPLATE_SERVICE, EmailTemplateService } from './features/notifications';
 import {
@@ -213,6 +217,14 @@ import {
     {
       provide: DEPOSIT_SERVICE,
       useClass: DepositService,
+    },
+    {
+      provide: PUBLIC_CATALOG_SERVICE,
+      useClass: PublicCatalogService,
+    },
+    {
+      provide: INVENTORY_CATALOG_SERVICE,
+      useClass: InventoryCatalogService,
     },
   ],
   exports: [

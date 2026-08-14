@@ -9,6 +9,7 @@ import {
   InventoryCategoriesController,
   InventoryItemsController,
   InventoryReportsController,
+  InventoryCatalogController,
   BarcodeController,
 } from './inventory';
 import { ItemsController } from './items';
@@ -21,6 +22,7 @@ import { SupportController } from './support';
 import { SalesBillsController } from './sales-bills';
 import { TransactionsController } from './transactions';
 import { TryOnController } from './try-on';
+import { PublicCatalogController } from './public-catalog';
 import { UsersController } from './users';
 
 export * from './users';
@@ -40,6 +42,7 @@ export * from './payments';
 export * from './events';
 export * from './try-on';
 export * from './deposits';
+export * from './public-catalog';
 
 export const Controllers = [
   UsersController,
@@ -53,6 +56,7 @@ export const Controllers = [
   InventoryCategoriesController,
   InventoryItemsController,
   InventoryReportsController,
+  InventoryCatalogController,
   BarcodeController,
   PosSessionPublicController,
   PosSessionLeaveController,
@@ -66,6 +70,8 @@ export const Controllers = [
   EventsController,
   TryOnController,
   DepositsController,
+  PublicCatalogController,
+  InventoryCatalogController,
 ];
 
 export const Services = [JwtService];

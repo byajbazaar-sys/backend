@@ -1,0 +1,62 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Expose, Type } from 'class-transformer';
+
+import { PublicCatalogItemModel } from './public-catalog-item.model';
+
+export class PublicCatalogPagedItemsModel {
+  @Expose()
+  @Type(() => PublicCatalogItemModel)
+  @ApiProperty({ type: [PublicCatalogItemModel] })
+  items: PublicCatalogItemModel[];
+
+  @Expose()
+  @ApiProperty()
+  pageNumber: number;
+
+  @Expose()
+  @ApiProperty()
+  pageSize: number;
+
+  @Expose()
+  @ApiProperty()
+  totalCount: number;
+
+  @Expose()
+  @ApiProperty()
+  totalPages: number;
+}
+
+export class PublicCatalogResponseModel {
+  @Expose()
+  @ApiProperty({ example: 'Shri R.K. Jewellers' })
+  businessName: string;
+
+  @Expose()
+  @ApiProperty({ example: 'shri-rk-jewellers' })
+  catalogSlug: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  shopLogoUrl?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  address?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  phoneNumber?: string;
+
+  @Expose()
+  @ApiProperty({ example: true })
+  catalogEnabled: boolean;
+
+  @Expose()
+  @ApiProperty({ example: true })
+  catalogActive: boolean;
+
+  @Expose()
+  @Type(() => PublicCatalogPagedItemsModel)
+  @ApiProperty({ type: PublicCatalogPagedItemsModel })
+  catalog: PublicCatalogPagedItemsModel;
+}

@@ -20,6 +20,9 @@ export interface CreateUserInput {
   profilePhoto?: Buffer;
   profilePhotoFileName?: string;
   profilePhotoContentType?: string;
+  businessName?: string;
+  catalogSlug?: string | null;
+  catalogEnabled?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   trialEndsAt?: Date;

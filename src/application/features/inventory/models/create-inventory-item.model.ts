@@ -139,6 +139,11 @@ export class CreateInventoryItemRequestModel {
   @MaxLength(255)
   supplierName?: string;
 
+  @ApiPropertyOptional({ example: false, description: 'Show this item on the public catalog' })
+  @IsOptional()
+  @IsBoolean()
+  isCatalogVisible?: boolean;
+
   @ApiPropertyOptional({ description: 'Hallmark Unique Identification' })
   @IsOptional()
   @IsString()

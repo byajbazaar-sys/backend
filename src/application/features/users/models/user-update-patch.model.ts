@@ -49,6 +49,12 @@ export class UserUpdatePatch {
   businessName?: string;
 
   @Expose()
+  catalogSlug?: string;
+
+  @Expose()
+  catalogEnabled?: boolean;
+
+  @Expose()
   address?: string;
 
   @Expose()

@@ -8,3 +8,5 @@ export * from './i-barcode.service';
 export * from './barcode.service';
 export * from './i-inventory-report.service';
 export * from './inventory-report.service';
+export * from './i-inventory-catalog.service';
+export * from './inventory-catalog.service';

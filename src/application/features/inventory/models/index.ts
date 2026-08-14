@@ -10,3 +10,4 @@ export * from './list-inventory-items-query.model';
 export * from './inventory-item-sale-response.model';
 export * from './bulk-delete-inventory-items.model';
 export * from './inventory-image-ai-preview-response.model';
+export * from './inventory-catalog.models';

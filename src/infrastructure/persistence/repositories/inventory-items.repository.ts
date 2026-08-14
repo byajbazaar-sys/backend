@@ -198,4 +198,60 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
       .getMany();
     return entities.map((e) => this.mapEntity(e));
   }
+
+  async countCatalogVisible(createdBy: string): Promise<number> {
+    return this.repo.count({
+      where: { createdBy, isCatalogVisible: true },
+    });
+  }
+
+  async findPublicCatalog(
+    createdBy: string,
+    params: Pick<InventoryItemsFilterOptions, 'search' | 'categoryId' | 'metalType' | 'pageNumber' | 'pageSize'>,
+  ): Promise<Paged<InventoryItem>> {
+    const { pageNumber, pageSize, skip } = getPaginationValues(params);
+    const qb = this.repo
+      .createQueryBuilder('item')
+      .leftJoinAndSelect('item.category', 'category')
+      .where('item.created_by = :createdBy', { createdBy })
+      .andWhere('item.is_catalog_visible = true')
+      .andWhere('item.status = :status', { status: 'AVAILABLE' });
+
+    if (params.search?.trim()) {
+      qb.andWhere('(item.item_name ILIKE :search OR item.description ILIKE :search)', {
+        search: `%${params.search.trim()}%`,
+      });
+    }
+    if (params.categoryId) {
+      qb.andWhere('item.category_id = :categoryId', { categoryId: params.categoryId });
+    }
+    if (params.metalType) {
+      qb.andWhere('item.metal_type = :metalType', { metalType: params.metalType });
+    }
+
+    qb.orderBy('item.createdAt', 'DESC').skip(skip).take(pageSize);
+    const [items, totalCount] = await qb.getManyAndCount();
+    return toPaged(InventoryItem, {
+      items: items.map((e) => this.mapEntity(e)),
+      page: pageNumber,
+      perPage: pageSize,
+      totalCount,
+    });
+  }
+
+  async bulkUpdateCatalogVisibility(
+    ids: string[],
+    createdBy: string,
+    isCatalogVisible: boolean,
+  ): Promise<number> {
+    if (!ids.length) return 0;
+    const result = await this.repo
+      .createQueryBuilder()
+      .update(InventoryItemEntity)
+      .set({ isCatalogVisible })
+      .where('id IN (:...ids)', { ids })
+      .andWhere('created_by = :createdBy', { createdBy })
+      .execute();
+    return result.affected ?? 0;
+  }
 }

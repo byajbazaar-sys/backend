@@ -23,4 +23,10 @@ export interface IInventoryItemsRepository {
     createdBy: string,
   ): Promise<{ categoryId: string; categoryName: string; count: number; totalValue: number }[]>;
   countLowStock(createdBy: string, threshold: number): Promise<InventoryItem[]>;
+  countCatalogVisible(createdBy: string): Promise<number>;
+  findPublicCatalog(
+    createdBy: string,
+    params: Pick<InventoryItemsFilterOptions, 'search' | 'categoryId' | 'metalType' | 'pageNumber' | 'pageSize'>,
+  ): Promise<Paged<InventoryItem>>;
+  bulkUpdateCatalogVisibility(ids: string[], createdBy: string, isCatalogVisible: boolean): Promise<number>;
 }

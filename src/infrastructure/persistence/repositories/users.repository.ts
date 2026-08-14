@@ -71,6 +71,23 @@ export class UsersRepository implements IUsersRepository {
     return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
 
+  async findByCatalogSlug(catalogSlug: string): Promise<User> {
+    const user = await this.userRepo.findOne({ where: { catalogSlug } });
+    if (!user) return null;
+    return plainToInstance(User, user, { excludeExtraneousValues: true });
+  }
+
+  async existsCatalogSlug(catalogSlug: string, excludeUserId?: string): Promise<boolean> {
+    const qb = this.userRepo
+      .createQueryBuilder('user')
+      .where('user.catalog_slug = :catalogSlug', { catalogSlug });
+    if (excludeUserId) {
+      qb.andWhere('user.id != :excludeUserId', { excludeUserId });
+    }
+    const count = await qb.getCount();
+    return count > 0;
+  }
+
   async softDelete(id: string): Promise<void> {
     await this.userRepo.softDelete(id);
   }

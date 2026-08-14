@@ -25,6 +25,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
 import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
+import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../users/utils/catalog-slug.helper';
 import { IAuthService } from './interfaces';
 import {
   USERS_FILE_STORAGE,
@@ -222,12 +223,30 @@ export class AuthService implements IAuthService {
 
       const emailVerificationToken = randomBytes(32).toString('hex');
       const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const createdUser = await this.usersRepo.create({
-        ...user,
-        emailVerificationToken,
-        emailVerificationExpires,
-        isFirstLogin: true,
-      });
+
+      let catalogSlug: string | null = null;
+      if (user.businessName?.trim()) {
+        catalogSlug = await resolveCatalogSlugForBusinessName(this.usersRepo, user.businessName);
+      }
+
+      let createdUser: User;
+      try {
+        createdUser = await this.usersRepo.create({
+          ...user,
+          catalogSlug,
+          catalogEnabled: catalogSlug ? true : undefined,
+          emailVerificationToken,
+          emailVerificationExpires,
+          isFirstLogin: true,
+        });
+      } catch (err) {
+        if (isCatalogSlugUniqueViolation(err)) {
+          throw new ConflictException(
+            'This business name is already being used for a catalog URL. Please choose a unique business name.',
+          );
+        }
+        throw err;
+      }
 
       const verificationUrl = this.webAppOptions.buildVerifyEmailUrl(emailVerificationToken);
       const html = this.emailTemplateService.renderEmailVerification({
@@ -250,7 +269,7 @@ export class AuthService implements IAuthService {
           : undefined,
       };
     } catch (err) {
-      if (err instanceof BadRequestException) {
+      if (err instanceof BadRequestException || err instanceof ConflictException) {
         throw err;
       }
       throw err;
