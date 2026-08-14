@@ -4,7 +4,7 @@ const WHITE_THRESHOLD = 245;
 /** Max RGB distance treated as background (solid studio backdrops). */
 const HARD_BG_DISTANCE = 38;
 /** Soft feather beyond hard cutoff. */
-const SOFT_BG_DISTANCE = 72;
+const SOFT_BG_DISTANCE = 80;
 
 interface Rgb {
   r: number;
@@ -70,13 +70,6 @@ function sampleBackgroundColor(data: Buffer, width: number, height: number): Rgb
   };
 }
 
-function alphaForBackgroundPixel(dist: number, existingAlpha: number): number {
-  if (dist <= HARD_BG_DISTANCE) return 0;
-  if (dist >= SOFT_BG_DISTANCE) return existingAlpha;
-  const t = (dist - HARD_BG_DISTANCE) / (SOFT_BG_DISTANCE - HARD_BG_DISTANCE);
-  return Math.round(existingAlpha * t);
-}
-
 /**
  * Flood-fill from image borders through background-like pixels only.
  * Keeps enclosed studio-coloured regions inside filigree (not connected to the border).
@@ -121,6 +114,26 @@ function markExternalBackground(data: Buffer, width: number, height: number, bg:
   }
 
   return external;
+}
+
+const PURE_WHITE: Rgb = { r: 255, g: 255, b: 255 };
+
+/** Flatten detected exterior backdrop to #FFFFFF before alpha cutout. */
+function normalizeExternalToWhite(data: Buffer, external: Uint8Array): void {
+  for (let i = 0; i < external.length; i++) {
+    if (!external[i]) continue;
+    const o = i * 4;
+    data[o] = 255;
+    data[o + 1] = 255;
+    data[o + 2] = 255;
+  }
+}
+
+function applyExternalTransparency(data: Buffer, external: Uint8Array): void {
+  for (let i = 0; i < external.length; i++) {
+    if (!external[i]) continue;
+    data[i * 4 + 3] = 0;
+  }
 }
 
 function defringeHalos(data: Buffer, width: number, height: number, bg: Rgb): void {
@@ -177,24 +190,18 @@ export async function removeSolidColorBackground(buffer: Buffer): Promise<Buffer
     .toBuffer({ resolveWithObject: true });
 
   const bg = sampleBackgroundColor(data, info.width, info.height);
-  const external = markExternalBackground(data, info.width, info.height, bg);
+  let external = markExternalBackground(data, info.width, info.height, bg);
 
-  for (let y = 0; y < info.height; y++) {
-    for (let x = 0; x < info.width; x++) {
-      const i = y * info.width + x;
-      if (!external[i]) continue;
+  // Pass 1: homogenize exterior backdrop to pure white (handles gradients/shadows).
+  normalizeExternalToWhite(data, external);
 
-      const o = i * 4;
-      const pixel: Rgb = { r: data[o], g: data[o + 1], b: data[o + 2] };
-      const dist = rgbDistance(pixel, bg);
-
-      if (isNearWhite(pixel)) {
-        data[o + 3] = 0;
-      } else {
-        data[o + 3] = alphaForBackgroundPixel(dist, data[o + 3]);
-      }
-    }
+  // Pass 2: expand mask through newly white pixels, then cut alpha.
+  const expanded = markExternalBackground(data, info.width, info.height, PURE_WHITE);
+  for (let i = 0; i < expanded.length; i++) {
+    if (expanded[i]) external[i] = 1;
   }
+  normalizeExternalToWhite(data, external);
+  applyExternalTransparency(data, external);
 
   defringeHalos(data, info.width, info.height, bg);
 
