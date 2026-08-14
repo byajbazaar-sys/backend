@@ -12,9 +12,11 @@ import {
   DuesPagedResponseModel,
   DueResponseModel,
   GetDueParamsModel,
+  GetTransactionParamsModel,
   ListDuesQueryRequestModel,
   UpdateTransactionRequestModel,
   DeleteTransactionQueryRequestModel,
+  TransactionDetailResponseModel,
 } from './models';
 import { ITransactionService, TRANSACTION_SERVICE } from './service';
 import { plainToInstance } from 'class-transformer';
@@ -224,6 +226,23 @@ export class TransactionsController {
     this.logger.info({ params, identity }, 'getDueById called');
     const due = await this.transactionService.getDueById(params.id, identity.userId);
     return plainToInstance(DueResponseModel, due, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get transaction details with edit history' })
+  @ApiParam({ name: 'id', description: 'Transaction ID', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
+  @ApiOkResponse({ type: TransactionDetailResponseModel })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Transaction not found' })
+  @HttpCode(HttpStatus.OK)
+  async getTransactionById(
+    @Param() params: GetTransactionParamsModel,
+    @Identity() identity: IIdentity,
+  ): Promise<TransactionDetailResponseModel> {
+    this.logger.info({ params, identity }, 'getTransactionById called');
+    const detail = await this.transactionService.getTransactionDetail(params.id, identity.userId);
+    return plainToInstance(TransactionDetailResponseModel, detail, {
       excludeExtraneousValues: true,
     });
   }

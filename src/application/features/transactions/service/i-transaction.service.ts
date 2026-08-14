@@ -1,5 +1,5 @@
 import { Paged } from '@shared-libs';
-import { Transaction, UpdateTransactionData } from '../domain';
+import { Transaction, TransactionLog, UpdateTransactionData } from '../domain';
 import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, DuesFilterOptions } from '../options';
 import { Due } from '../../../shared';
 
@@ -13,6 +13,7 @@ export const TRANSACTION_SERVICE = 'ITransactionService';
 export interface ITransactionService {
   create(data: Transaction, expectedLoanVersion?: number): Promise<Transaction>;
   getById(id: string, createdBy: string): Promise<Transaction>;
+  getTransactionDetail(id: string, createdBy: string): Promise<{ transaction: Transaction; logs: TransactionLog[] }>;
   update(id: string, updates: UpdateTransactionData, createdBy: string): Promise<Transaction>;
   getTransactions(params: TransactionsFilterOptions): Promise<Paged<Transaction>>;
   getTransactionsForDownload(params: TransactionsDownloadFilterOptions): Promise<Transaction[]>;

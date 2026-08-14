@@ -3,6 +3,8 @@ export * from './create-transaction-input.model';
 export * from './update-transaction-request.model';
 export * from './delete-transaction-query.model';
 export * from './transaction-response.model';
+export * from './transaction-log-response.model';
+export * from './transaction-detail-response.model';
 export * from './get-transaction-params.model';
 export * from './list-transactions-query.model';
 export * from './download-transactions-query.model';

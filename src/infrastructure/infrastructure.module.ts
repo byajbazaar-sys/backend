@@ -16,6 +16,7 @@ import {
   NOTIFICATIONS_REPOSITORY,
   SUPPORT_REQUESTS_REPOSITORY,
   TRANSACTIONS_REPOSITORY,
+  TRANSACTION_LOGS_REPOSITORY,
   TWILIO_SERVICE,
   USERS_FILE_STORAGE,
   USERS_REPOSITORY,
@@ -55,6 +56,7 @@ import {
   NotificationsRepository,
   SupportRequestsRepository,
   TransactionsRepository,
+  TransactionLogsRepository,
   UsersRepository,
   InventoryCategoriesRepository,
   InventoryItemsRepository,
@@ -153,6 +155,10 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: TRANSACTIONS_REPOSITORY,
       useClass: TransactionsRepository,
+    },
+    {
+      provide: TRANSACTION_LOGS_REPOSITORY,
+      useClass: TransactionLogsRepository,
     },
     {
       provide: DUES_REPOSITORY,
@@ -451,6 +457,7 @@ import { GoogleOAuthService } from './google-oauth';
     COUPON_REDEMPTIONS_REPOSITORY,
     REFUNDS_REPOSITORY,
     WEBSOCKET_MESSAGE_SERVICE,
+    TRANSACTION_LOGS_REPOSITORY,
     EMAIL_SERVICE,
     GOOGLE_OAUTH_SERVICE,
     FileStorageOptions,

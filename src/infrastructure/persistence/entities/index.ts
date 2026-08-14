@@ -30,6 +30,7 @@ import { TryOnAssetEntity } from './try-on-asset.entity';
 import { DepositAccountEntity } from './deposit-account.entity';
 import { DepositTransactionEntity } from './deposit-transaction.entity';
 import { DepositReceiptEntity } from './deposit-receipt.entity';
+import { TransactionLogEntity } from './transaction-log.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -63,6 +64,7 @@ export { TryOnAssetEntity } from './try-on-asset.entity';
 export { DepositAccountEntity } from './deposit-account.entity';
 export { DepositTransactionEntity } from './deposit-transaction.entity';
 export { DepositReceiptEntity } from './deposit-receipt.entity';
+export { TransactionLogEntity } from './transaction-log.entity';
 
 export default [
   UserEntity,
@@ -97,4 +99,5 @@ export default [
   DepositAccountEntity,
   DepositTransactionEntity,
   DepositReceiptEntity,
+  TransactionLogEntity,
 ];

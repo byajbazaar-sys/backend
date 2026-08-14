@@ -1,18 +1,19 @@
 import { Inject, Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { emptyLoanEffect, LoanEffect, Transaction, UpdateTransactionData } from '../domain';
+import { emptyLoanEffect, LoanEffect, Transaction, TransactionLog, UpdateTransactionData, CreateTransactionLogInput } from '../domain';
 import { ITransactionService } from './i-transaction.service';
 import { LoanReplayService } from './loan-replay.service';
 import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, DuesFilterOptions } from '../options';
 import { Paged, toPaged } from '@shared-libs';
 import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus, Loan, ILoanService, LOAN_SERVICE, EInterestCalculationMethod, assertLoanVersion } from '../../loans';
-import { ETransactionType, ETransactionPaidIn } from '../enums';
-import { DUES_REPOSITORY, EDueType, IDuesRepository, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY, IUnitOfWork, UNIT_OF_WORK } from '../../../shared';
+import { ETransactionLogAction, ETransactionType, ETransactionPaidIn } from '../enums';
+import { DUES_REPOSITORY, EDueType, IDuesRepository, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY, ITransactionLogsRepository, TRANSACTION_LOGS_REPOSITORY, IUnitOfWork, UNIT_OF_WORK } from '../../../shared';
 
 @Injectable()
 export class TransactionService implements ITransactionService {
   constructor(
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
+    @Inject(TRANSACTION_LOGS_REPOSITORY) private readonly transactionLogsRepo: ITransactionLogsRepository,
     @Inject(LOANS_REPOSITORY) private readonly loansRepo: ILoansRepository,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
     @Inject(LOAN_SERVICE) private readonly loanService: ILoanService,
@@ -130,6 +131,18 @@ export class TransactionService implements ITransactionService {
 
       const transaction = await this.transactionsRepo.create(data);
 
+      const loanAfterCreate = await this.loansRepo.findById(data.loanId, data.createdBy);
+      await this.recordLog({
+        transactionId: transaction.id,
+        loanId: transaction.loanId,
+        action: ETransactionLogAction.CREATE,
+        transactionType: transaction.transactionType,
+        newAmount: Number(transaction.amount),
+        newPaidIn: transaction.paidIn,
+        loanVersion: loanAfterCreate?.version,
+        performedBy: data.createdBy,
+      });
+
       this.logger.info({ transactionId: transaction.id, loanId: loan.id }, 'Transaction created successfully');
       return transaction;
     } catch (err) {
@@ -144,6 +157,16 @@ export class TransactionService implements ITransactionService {
       this.logger.error({ err, loanId: data.loanId, dueId: data.dueId }, 'Error creating transaction');
       throw err;
     }
+  }
+
+  async getTransactionDetail(
+    id: string,
+    createdBy: string,
+  ): Promise<{ transaction: Transaction; logs: TransactionLog[] }> {
+    const transaction = await this.getById(id, createdBy);
+    const logs = await this.transactionLogsRepo.findByTransactionId(id, createdBy);
+    logs.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return { transaction, logs };
   }
 
   async getById(id: string, createdBy: string): Promise<Transaction> {
@@ -188,14 +211,35 @@ export class TransactionService implements ITransactionService {
       const oldAmount = this.roundMoney(Number(existing.amount));
       if (newAmount !== oldAmount) {
         current = await this.reviseAmount(existing, newAmount, createdBy);
+        await this.recordLog({
+          transactionId: id,
+          loanId: existing.loanId,
+          action: ETransactionLogAction.UPDATE_AMOUNT,
+          transactionType: existing.transactionType,
+          previousAmount: oldAmount,
+          newAmount,
+          loanVersion: updates.expectedLoanVersion,
+          performedBy: createdBy,
+        });
       }
     }
 
     if (updates.paidIn !== undefined && updates.paidIn !== current.paidIn) {
+      const previousPaidIn = current.paidIn;
       const updated = await this.transactionsRepo.updatePaidIn(id, createdBy, updates.paidIn);
       if (!updated) {
         throw new NotFoundException('Transaction not found');
       }
+      await this.recordLog({
+        transactionId: id,
+        loanId: existing.loanId,
+        action: ETransactionLogAction.UPDATE_PAID_IN,
+        transactionType: existing.transactionType,
+        previousPaidIn,
+        newPaidIn: updates.paidIn,
+        loanVersion: updates.expectedLoanVersion,
+        performedBy: createdBy,
+      });
       this.logger.info({ transactionId: id, paidIn: updates.paidIn }, 'Transaction payment method updated');
       current = updated;
     }
@@ -410,6 +454,16 @@ export class TransactionService implements ITransactionService {
 
       if (await this.isLatestOnLoan(existing, createdBy)) {
         const loan = await this.assertLatestOnOpenLoan(existing, createdBy);
+        await this.recordLog({
+          transactionId: id,
+          loanId: existing.loanId,
+          action: ETransactionLogAction.DELETE,
+          transactionType: existing.transactionType,
+          previousAmount: Number(existing.amount),
+          previousPaidIn: existing.paidIn,
+          loanVersion: loan.version,
+          performedBy: createdBy,
+        });
         await this.rollbackTransactionEffects(existing, loan, createdBy);
         await this.transactionsRepo.delete(id);
         this.logger.info({ transactionId: id, loanId: existing.loanId }, 'Transaction deleted with rollback');
@@ -419,6 +473,17 @@ export class TransactionService implements ITransactionService {
       // Later transactions were applied on top of this one, so undoing it alone
       // would leave them describing a loan that no longer exists.
       await this.assertOpenLoan(existing.loanId, createdBy);
+      const loanBeforeReplay = await this.loansRepo.findById(existing.loanId, createdBy);
+      await this.recordLog({
+        transactionId: id,
+        loanId: existing.loanId,
+        action: ETransactionLogAction.DELETE,
+        transactionType: existing.transactionType,
+        previousAmount: Number(existing.amount),
+        previousPaidIn: existing.paidIn,
+        loanVersion: loanBeforeReplay?.version,
+        performedBy: createdBy,
+      });
       await this.replayService.replay(existing.loanId, createdBy, {
         kind: 'delete',
         transactionId: id,
@@ -799,5 +864,9 @@ export class TransactionService implements ITransactionService {
     } catch (err) {
       throw err;
     }
+  }
+
+  private async recordLog(input: CreateTransactionLogInput): Promise<void> {
+    await this.transactionLogsRepo.create(input);
   }
 }
