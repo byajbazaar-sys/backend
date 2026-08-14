@@ -61,7 +61,6 @@ import { AivotService } from './ai/services/aivot.service';
 import { BedrockService } from './ai/services/bedrock.service';
 import { GeminiService } from './ai/services/gemini.service';
 import { ReplicateTryOnService } from './ai/services/replicate.service';
-import { SharpProductImageService } from './ai/services/sharp-product-image.service';
 import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.service';
 import CronServices from './cron';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
@@ -338,7 +337,6 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     AivotService,
     ReplicateTryOnService,
     CloudflareTryOnService,
-    SharpProductImageService,
     TryOnOrchestratorService,
     {
       provide: TRY_ON_ORCHESTRATOR,

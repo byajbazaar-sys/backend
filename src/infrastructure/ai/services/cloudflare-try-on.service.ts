@@ -18,7 +18,7 @@ import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '
 import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.prompts';
 import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
-import { compressPngForApiPreview, ensureTransparentProductPng, flattenExteriorBackgroundToWhite } from '../utils/product-image.util';
+import { compressPngForApiPreview, ensureTransparentProductPng } from '../utils/product-image.util';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
 interface CloudflareRunResponse {
@@ -151,12 +151,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     }
 
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
-  }
-
-  async flattenProductBackgroundToWhite(image: ProductImageInput): Promise<GeneratedAiImage> {
-    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
-    const flattened = await flattenExteriorBackgroundToWhite(input);
-    return { base64: flattened.toString('base64'), mimeType: 'image/png' };
   }
 
   async polishTransparentPng(image: ProductImageInput): Promise<GeneratedAiImage> {

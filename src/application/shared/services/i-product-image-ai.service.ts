@@ -9,9 +9,6 @@ export interface IProductImageAiService {
    */
   removeProductBackground(image: ProductImageInput): Promise<GeneratedAiImage>;
 
-  /** Preview step: replace exterior backdrop with white, product stays opaque. */
-  flattenProductBackgroundToWhite(image: ProductImageInput): Promise<GeneratedAiImage>;
-
   /** Force near-white pixels transparent on an existing PNG cutout. */
   polishTransparentPng(image: ProductImageInput): Promise<GeneratedAiImage>;
 
