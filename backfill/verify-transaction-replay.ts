@@ -233,7 +233,8 @@ async function main(): Promise<void> {
     check('impossible correction was refused', !!rejection, rejection);
     if (rejection) {
       console.log(`  (refused) ${rejection}`);
-      check('refusal names the blocking transaction', /Principal|PRINCIPAL/.test(rejection), rejection);
+      check('refusal names the blocking transaction', /principal payment|interest payment/i.test(rejection), rejection);
+      check('refusal tells user to fix the blocking payment first', /delete or adjust/i.test(rejection), rejection);
     }
     const after = await snapshot(loan.id);
     check('refused correction left the loan byte-identical', JSON.stringify(before) === JSON.stringify(after), { before, after });

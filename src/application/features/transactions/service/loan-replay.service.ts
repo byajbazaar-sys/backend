@@ -375,7 +375,7 @@ export class LoanReplayService {
       case ETransactionType.INTEREST: {
         if (Number(loan.interestRemaining) < amount) {
           throw new BadRequestException(
-            this.blockedBy(transaction, `interest payment of ${amount} exceeds the ${loan.interestRemaining} interest outstanding at that point`),
+            this.overpaymentBlockedBy(transaction, amount, Number(loan.interestRemaining), 'interest'),
           );
         }
         loan.interestRemaining = this.round(Number(loan.interestRemaining) - amount);
@@ -387,7 +387,7 @@ export class LoanReplayService {
       case ETransactionType.PRINCIPAL: {
         if (Number(loan.amountRemaining) < amount) {
           throw new BadRequestException(
-            this.blockedBy(transaction, `principal payment of ${amount} exceeds the ${loan.amountRemaining} principal outstanding at that point`),
+            this.overpaymentBlockedBy(transaction, amount, Number(loan.amountRemaining), 'principal'),
           );
         }
         loan.amountRemaining = this.round(Number(loan.amountRemaining) - amount);
@@ -536,14 +536,59 @@ export class LoanReplayService {
   }
 
   private blockedBy(transaction: Transaction, reason: string): string {
-    const when = transaction.createdAt
+    const when = this.formatTransactionDate(transaction);
+    const typeLabel = this.transactionTypeLabel(transaction.transactionType);
+    return `Cannot apply this correction: the ${typeLabel} recorded on ${when} becomes invalid because ${reason}.`;
+  }
+
+  /**
+   * When an earlier correction shrinks balances, a later payment may exceed what
+   * would have been outstanding — replay rejects the edit rather than leaving an
+   * impossible payment in place.
+   */
+  private overpaymentBlockedBy(
+    transaction: Transaction,
+    paymentAmount: number,
+    remainingAfterPriorSteps: number,
+    balanceKind: 'principal' | 'interest',
+  ): string {
+    const when = this.formatTransactionDate(transaction);
+    const paymentLabel = balanceKind === 'principal' ? 'principal payment' : 'interest payment';
+    const remainingLabel = balanceKind === 'principal' ? 'principal' : 'interest';
+    return (
+      `Cannot apply this correction: you must delete or adjust the ` +
+      `${this.formatMoney(paymentAmount)} ${paymentLabel} recorded on ${when} first. ` +
+      `After this change, only ${this.formatMoney(remainingAfterPriorSteps)} ${remainingLabel} would remain outstanding.`
+    );
+  }
+
+  private transactionTypeLabel(type: ETransactionType): string {
+    switch (type) {
+      case ETransactionType.PRINCIPAL:
+        return 'principal payment';
+      case ETransactionType.INTEREST:
+        return 'interest payment';
+      case ETransactionType.TOP_UP:
+        return 'top-up';
+      case ETransactionType.DUE_PAYMENT:
+        return 'due payment';
+      default:
+        return String(type);
+    }
+  }
+
+  private formatTransactionDate(transaction: Transaction): string {
+    return transaction.createdAt
       ? new Date(transaction.createdAt).toLocaleDateString('en-GB', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
       })
       : 'an unknown date';
-    return `Cannot apply this correction: the ${transaction.transactionType} recorded on ${when} becomes invalid because ${reason}.`;
+  }
+
+  private formatMoney(value: number): string {
+    return `₹${this.round(value).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
   }
 
   private describe(err: unknown): string {
