@@ -8,17 +8,18 @@ import {
   OneToMany,
   JoinColumn,
 } from 'typeorm';
+
+import { CustomerEntity } from './customer.entity';
+import { DueEntity } from './due.entity';
+import { LoanItemEntity } from './loan-item.entity';
+import { TransactionEntity } from './transaction.entity';
+import { UserEntity } from './user.entity';
 import {
   ELoanTenureType,
   EInterestCalculationMethod,
   EInterestType,
   ELoanStatus,
 } from '../../../application/features/loans/enums';
-import { UserEntity } from './user.entity';
-import { CustomerEntity } from './customer.entity';
-import { LoanItemEntity } from './loan-item.entity';
-import { TransactionEntity } from './transaction.entity';
-import { DueEntity } from './due.entity';
 
 @Entity('loans')
 export class LoanEntity {

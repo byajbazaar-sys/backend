@@ -1,3 +1,5 @@
+import { Paged } from '@shared-libs';
+
 import {
   DepositAccount,
   DepositTransaction,
@@ -7,7 +9,6 @@ import {
   RefundDepositData,
 } from '../domain';
 import { DepositsFilterOptions, DepositsDownloadFilterOptions } from '../options';
-import { Paged } from '@shared-libs';
 import { DepositStats } from './deposit-stats';
 
 export const DEPOSIT_SERVICE = 'IDepositService';

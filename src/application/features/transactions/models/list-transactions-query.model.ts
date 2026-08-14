@@ -43,4 +43,3 @@ export class ListTransactionsQueryRequestModel {
   @IsUUID()
   loanId?: string;
 }
-

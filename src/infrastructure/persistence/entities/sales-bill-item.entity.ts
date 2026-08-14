@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+
 import { SalesBillEntity } from './sales-bill.entity';
 
 @Entity('sales_bill_items')

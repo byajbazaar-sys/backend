@@ -1,21 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
+import { Repository } from 'typeorm';
+
+import { CreateTransactionLogInput, ITransactionLogsRepository, TransactionLog } from '../../../application';
 import { TransactionLogEntity } from '../entities/transaction-log.entity';
 import { TransactionalContext } from '../transactional-context';
-import {
-  CreateTransactionLogInput,
-  ITransactionLogsRepository,
-  TransactionLog,
-} from '../../../application';
 
 @Injectable()
 export class TransactionLogsRepository implements ITransactionLogsRepository {
   constructor(
     @InjectRepository(TransactionLogEntity)
     private readonly defaultRepo: Repository<TransactionLogEntity>,
-  ) { }
+  ) {}
 
   private get repo(): Repository<TransactionLogEntity> {
     return TransactionalContext.repositoryFor(TransactionLogEntity, this.defaultRepo);

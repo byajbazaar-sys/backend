@@ -1,15 +1,42 @@
-import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import {
+  Inject,
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
+import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { assertLoanVersion, Loan, LoanExtended, LoanItem, LoanStats, LoanBaselineData } from '../domain';
 import { UpdateLoanItemPatch } from '../models';
-import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { ILoanService } from './i-loan.service';
+import { ILoansRepository, LOANS_REPOSITORY } from './i-loans.repository';
 import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from './i-loan-items.repository';
-import { DUES_REPOSITORY, EDueType, IDuesRepository, IUsersFileStorage, USERS_FILE_STORAGE, IItemsRepository, ITEMS_REPOSITORY, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY, IUnitOfWork, UNIT_OF_WORK } from '../../../shared';
-import { EInterestCalculationMethod, EInterestType, ELoanTenureType, ELoanStatus, EInterestPrincipalBasis } from '../enums';
-import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import {
+  DUES_REPOSITORY,
+  EDueType,
+  IDuesRepository,
+  IUsersFileStorage,
+  USERS_FILE_STORAGE,
+  IItemsRepository,
+  ITEMS_REPOSITORY,
+  Due,
+  ITransactionsRepository,
+  TRANSACTIONS_REPOSITORY,
+  IUnitOfWork,
+  UNIT_OF_WORK,
+} from '../../../shared';
+import {
+  EInterestCalculationMethod,
+  EInterestType,
+  ELoanTenureType,
+  ELoanStatus,
+  EInterestPrincipalBasis,
+} from '../enums';
 
 /** Unpaid due types replaced when recalculating a loan schedule. */
 const UNPAID_DUE_TYPES = [EDueType.UPCOMING_DUE, EDueType.PAST_DUE, EDueType.OVERDUE];
@@ -25,7 +52,7 @@ export class LoanService implements ILoanService {
     @Inject(ITEMS_REPOSITORY) private readonly itemsRepo: IItemsRepository,
     @Inject(UNIT_OF_WORK) private readonly unitOfWork: IUnitOfWork,
     @InjectPinoLogger(LoanService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   private isStorageKey(value: string): boolean {
     return !!value && !value.startsWith('http');
@@ -73,7 +100,12 @@ export class LoanService implements ILoanService {
         tenureValue < 0
       ) {
         this.logger.error(
-          { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod: data.interestCalculationMethod },
+          {
+            amountRemaining,
+            interestPercentage,
+            tenureValue,
+            interestCalculationMethod: data.interestCalculationMethod,
+          },
           'Invalid values for interest calculation',
         );
         throw new BadRequestException('Invalid loan parameters for interest calculation');
@@ -89,7 +121,13 @@ export class LoanService implements ILoanService {
       // Ensure interestRemaining is a valid number
       if (isNaN(data.interestRemaining) || !isFinite(data.interestRemaining)) {
         this.logger.error(
-          { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod: data.interestCalculationMethod, calculatedInterest: data.interestRemaining },
+          {
+            amountRemaining,
+            interestPercentage,
+            tenureValue,
+            interestCalculationMethod: data.interestCalculationMethod,
+            calculatedInterest: data.interestRemaining,
+          },
           'Calculated interest is NaN or infinite',
         );
         throw new BadRequestException('Invalid interest calculation result');
@@ -104,7 +142,7 @@ export class LoanService implements ILoanService {
       const loan = await this.loansRepo.create(data);
       this.logger.debug({ loanId: loan.id }, 'Loan created, processing loan items');
 
-      for (const loanItem of data.loanItems!) {
+      for (const loanItem of data.loanItems) {
         if (loanItem.image) {
           const normalized = await normalizeImageBufferForStorageOrThrow(
             loanItem.image.buffer,
@@ -113,10 +151,14 @@ export class LoanService implements ILoanService {
           );
           const proposedRef = `loans/items/${loan.id}/${loanItem.id}.${normalized.fileExtension}`;
           // Persist S3 key returned by writeAsync (extension may be corrected from buffer sniffing)
-          loanItem.imageRef = await this.loansFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+          loanItem.imageRef = await this.loansFileStorage.writeAsync(
+            proposedRef,
+            normalized.buffer,
+            normalized.mimetype,
+          );
         }
       }
-      await this.loanItemsRepo.bulkInsert(data.loanItems!);
+      await this.loanItemsRepo.bulkInsert(data.loanItems);
 
       // Prefer explicit start date (stored as createdAt). CreateDateColumn may overwrite on insert,
       // so re-apply and pass it into dues so schedules match the selected issue date.
@@ -152,7 +194,7 @@ export class LoanService implements ILoanService {
       );
 
       this.logger.info({ loanId: loan.id }, 'Loan created successfully with dues');
-      await this.enrichLoanItemsWithImageUrls(data.loanItems!);
+      await this.enrichLoanItemsWithImageUrls(data.loanItems);
       await this.enrichLoanWithVoucherSignatureUrls(loan);
       return { ...loan, loanItems: data.loanItems };
     } catch (err) {
@@ -192,9 +234,7 @@ export class LoanService implements ILoanService {
       throw new Error('Customer ID and Created By are required');
     }
 
-    const startDate = this.startOfDay(
-      options?.startDate ?? (createdAt ? new Date(createdAt) : new Date()),
-    );
+    const startDate = this.startOfDay(options?.startDate ?? (createdAt ? new Date(createdAt) : new Date()));
     const remainingAmount = Number(options?.remainingAmount ?? amountRemaining);
     const remainingInterest = Number(options?.remainingInterest ?? interestRemaining);
     const remainingTenure = Number(options?.remainingTenure ?? tenureValue);
@@ -209,8 +249,7 @@ export class LoanService implements ILoanService {
     }
 
     const numberOfDues =
-      options?.duePeriodCount ??
-      this.calculateNumberOfDues(interestType, tenureType, remainingTenure);
+      options?.duePeriodCount ?? this.calculateNumberOfDues(interestType, tenureType, remainingTenure);
     if (numberOfDues <= 0) {
       throw new Error('Invalid number of dues calculated');
     }
@@ -273,11 +312,7 @@ export class LoanService implements ILoanService {
    * Number of due periods between an earlier start and a later start,
    * using the same frequency logic as createDuesForLoan / calculateDueDate.
    */
-  private countDuePeriodsBetween(
-    earlierStart: Date,
-    laterStart: Date,
-    interestType: EInterestType,
-  ): number {
+  private countDuePeriodsBetween(earlierStart: Date, laterStart: Date, interestType: EInterestType): number {
     const earlier = this.startOfDay(earlierStart);
     const laterMs = this.startOfDay(laterStart).getTime();
     if (earlier.getTime() >= laterMs) {
@@ -317,9 +352,7 @@ export class LoanService implements ILoanService {
 
     // Interest / principal / top-up payments redistribute remaining balances without marking dues PAID.
     if (paidDues.length === 0 && (interestPaid > 0 || amountPaid > 0)) {
-      throw new BadRequestException(
-        'Loan start date cannot be changed after interest, principal, or top-up payments.',
-      );
+      throw new BadRequestException('Loan start date cannot be changed after interest, principal, or top-up payments.');
     }
 
     // Fully paid loans cannot have their start date moved
@@ -331,31 +364,21 @@ export class LoanService implements ILoanService {
 
     // Moving start date later: reject if any paid due falls before the new start date
     if (next > current) {
-      const hasPaidDueBeforeNewStart = paidDues.some(
-        (due) => this.startOfDay(new Date(due.dueDate)).getTime() < next,
-      );
+      const hasPaidDueBeforeNewStart = paidDues.some((due) => this.startOfDay(new Date(due.dueDate)).getTime() < next);
       if (hasPaidDueBeforeNewStart) {
-        throw new BadRequestException(
-          'Loan start date cannot be moved after existing paid dues.',
-        );
+        throw new BadRequestException('Loan start date cannot be moved after existing paid dues.');
       }
       return;
     }
 
     // Moving start date earlier: N new dues would be prepended based on frequency
-    const newDuesAtBeginning = this.countDuePeriodsBetween(
-      newStartDate,
-      currentStartDate,
-      interestType,
-    );
+    const newDuesAtBeginning = this.countDuePeriodsBetween(newStartDate, currentStartDate, interestType);
     if (newDuesAtBeginning <= 0) {
       return;
     }
 
     // Sorted ascending by due date — last N are the trailing dues of the current schedule
-    const sortedDues = [...allDues].sort(
-      (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
-    );
+    const sortedDues = [...allDues].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     const lastNDues = sortedDues.slice(-newDuesAtBeginning);
     const lastNHasPaid = lastNDues.some((due) => due.type === EDueType.PAID);
     if (lastNHasPaid) {
@@ -465,7 +488,10 @@ export class LoanService implements ILoanService {
         throw new NotFoundException('Loan not found');
       }
 
-      this.logger.info({ loanId: id, oldStatus: existingLoan.status, newStatus: status }, 'Loan status updated successfully');
+      this.logger.info(
+        { loanId: id, oldStatus: existingLoan.status, newStatus: status },
+        'Loan status updated successfully',
+      );
       return updatedLoan;
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof BadRequestException) {
@@ -517,7 +543,10 @@ export class LoanService implements ILoanService {
           try {
             await this.loansFileStorage.removeAsync(existingLoanItem.imageRef);
           } catch (err) {
-            this.logger.warn({ err, imageRef: existingLoanItem.imageRef }, 'Failed to delete loan item image from storage');
+            this.logger.warn(
+              { err, imageRef: existingLoanItem.imageRef },
+              'Failed to delete loan item image from storage',
+            );
           }
         }
         updateData.imageRef = null;
@@ -530,7 +559,11 @@ export class LoanService implements ILoanService {
           updateData.image.originalname,
         );
         const proposedRef = `loans/items/${loanId}/${itemId}.${normalized.fileExtension}`;
-        updateData.imageRef = await this.loansFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+        updateData.imageRef = await this.loansFileStorage.writeAsync(
+          proposedRef,
+          normalized.buffer,
+          normalized.mimetype,
+        );
       }
 
       // Update the loan item
@@ -561,8 +594,13 @@ export class LoanService implements ILoanService {
 
       // Ensure amount remaining doesn't go negative
       if (newAmountRemaining < 0) {
-        this.logger.warn({ loanId, newAmountRemaining, amountPaid: amountPaidNum }, 'New loan amount would be less than amount paid');
-        throw new BadRequestException('Cannot update loan item: new loan amount would be less than amount already paid');
+        this.logger.warn(
+          { loanId, newAmountRemaining, amountPaid: amountPaidNum },
+          'New loan amount would be less than amount paid',
+        );
+        throw new BadRequestException(
+          'Cannot update loan item: new loan amount would be less than amount already paid',
+        );
       }
 
       // Update loan with new amount
@@ -587,7 +625,12 @@ export class LoanService implements ILoanService {
         tenureValue < 0
       ) {
         this.logger.error(
-          { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod: existingLoan.interestCalculationMethod },
+          {
+            amountRemaining,
+            interestPercentage,
+            tenureValue,
+            interestCalculationMethod: existingLoan.interestCalculationMethod,
+          },
           'Invalid values for interest calculation in updateLoanItem',
         );
         throw new BadRequestException('Invalid loan parameters for interest calculation');
@@ -603,7 +646,13 @@ export class LoanService implements ILoanService {
       // Ensure interestRemaining is a valid number
       if (isNaN(updatedLoanData.interestRemaining) || !isFinite(updatedLoanData.interestRemaining)) {
         this.logger.error(
-          { amountRemaining, interestPercentage, tenureValue, interestCalculationMethod: existingLoan.interestCalculationMethod, calculatedInterest: updatedLoanData.interestRemaining },
+          {
+            amountRemaining,
+            interestPercentage,
+            tenureValue,
+            interestCalculationMethod: existingLoan.interestCalculationMethod,
+            calculatedInterest: updatedLoanData.interestRemaining,
+          },
           'Calculated interest is NaN or infinite in updateLoanItem',
         );
         throw new BadRequestException('Invalid interest calculation result');
@@ -654,7 +703,10 @@ export class LoanService implements ILoanService {
           remainingInterest,
           remainingTenure,
         });
-        this.logger.info({ loanId, remainingTenure, paidDuesCount }, 'Dues recalculated successfully after loan item update');
+        this.logger.info(
+          { loanId, remainingTenure, paidDuesCount },
+          'Dues recalculated successfully after loan item update',
+        );
       }
 
       this.logger.info({ loanId, itemId }, 'Loan item updated successfully');
@@ -715,7 +767,7 @@ export class LoanService implements ILoanService {
         signatureNormalized.mimetype,
       );
 
-      let storedFingerprintKey: string = existingLoan.fingerprintRef!;
+      let storedFingerprintKey: string = existingLoan.fingerprintRef;
 
       if (removeFingerprint) {
         if (existingLoan.fingerprintRef && this.isStorageKey(existingLoan.fingerprintRef)) {
@@ -738,7 +790,10 @@ export class LoanService implements ILoanService {
           try {
             await this.loansFileStorage.removeAsync(existingLoan.fingerprintRef);
           } catch (err) {
-            this.logger.warn({ err, key: existingLoan.fingerprintRef }, 'Failed to delete old fingerprint from storage');
+            this.logger.warn(
+              { err, key: existingLoan.fingerprintRef },
+              'Failed to delete old fingerprint from storage',
+            );
           }
         }
 
@@ -815,7 +870,9 @@ export class LoanService implements ILoanService {
       // Prevent status updates through regular update endpoint (use updateStatus instead)
       if (updateData.status && updateData.status !== existingLoan.status) {
         this.logger.warn({ loanId: id }, 'Attempted to update status through regular update endpoint');
-        throw new BadRequestException('Cannot update loan status through this endpoint. Use PATCH /loans/:id/status instead');
+        throw new BadRequestException(
+          'Cannot update loan status through this endpoint. Use PATCH /loans/:id/status instead',
+        );
       }
 
       // Validate start-date rules before any writes
@@ -828,7 +885,7 @@ export class LoanService implements ILoanService {
       const paidDues = allDues.filter((due) => due.type === EDueType.PAID);
       const currentStartDate = existingLoan.createdAt ? new Date(existingLoan.createdAt) : new Date();
       const startDateProvided = updateData.createdAt != null;
-      const requestedStartDate = startDateProvided ? new Date(updateData.createdAt!) : currentStartDate;
+      const requestedStartDate = startDateProvided ? new Date(updateData.createdAt) : currentStartDate;
 
       if (startDateProvided) {
         this.assertStartDateUpdateAllowed(
@@ -847,8 +904,7 @@ export class LoanService implements ILoanService {
       const loanTermsChanged =
         startDateChanged ||
         (updateData.tenureType != null && updateData.tenureType !== existingLoan.tenureType) ||
-        (updateData.tenureValue != null &&
-          Number(updateData.tenureValue) !== Number(existingLoan.tenureValue)) ||
+        (updateData.tenureValue != null && Number(updateData.tenureValue) !== Number(existingLoan.tenureValue)) ||
         (updateData.interestType != null && updateData.interestType !== existingLoan.interestType) ||
         (updateData.interestPercentage != null &&
           Number(updateData.interestPercentage) !== Number(existingLoan.interestPercentage)) ||
@@ -856,13 +912,10 @@ export class LoanService implements ILoanService {
           updateData.interestCalculationMethod !== existingLoan.interestCalculationMethod);
 
       const hasPriorPayments =
-        paidDues.length > 0 ||
-        Number(existingLoan.amountPaid ?? 0) > 0 ||
-        Number(existingLoan.interestPaid ?? 0) > 0;
+        paidDues.length > 0 || Number(existingLoan.amountPaid ?? 0) > 0 || Number(existingLoan.interestPaid ?? 0) > 0;
 
       // Check if fields that affect dues calculation have changed
-      const duesNeedRecalculation =
-        loanTermsChanged || !!updateData.amountRemaining;
+      const duesNeedRecalculation = loanTermsChanged || !!updateData.amountRemaining;
 
       // Merge update data with existing loan data to get final values
       // Exclude status from updateData to prevent status changes through this endpoint
@@ -898,10 +951,10 @@ export class LoanService implements ILoanService {
         const interestPaid = Number(existingLoan.interestPaid ?? 0);
         const interestPercentage = Number(updateData.interestPercentage ?? existingLoan.interestPercentage);
         const tenureValue = Number(updateData.tenureValue ?? existingLoan.tenureValue);
-        const interestCalculationMethod = updateData.interestCalculationMethod ?? existingLoan.interestCalculationMethod;
+        const interestCalculationMethod =
+          updateData.interestCalculationMethod ?? existingLoan.interestCalculationMethod;
 
-        const useTotalPrincipal =
-          hasPriorPayments && principalBasis === EInterestPrincipalBasis.TOTAL;
+        const useTotalPrincipal = hasPriorPayments && principalBasis === EInterestPrincipalBasis.TOTAL;
         const principalForInterest = useTotalPrincipal ? amountRemaining + amountPaid : amountRemaining;
 
         // Validate that all required values are valid numbers
@@ -927,10 +980,9 @@ export class LoanService implements ILoanService {
           interestCalculationMethod,
         );
 
-        finalLoanData.interestRemaining =
-          useTotalPrincipal
-            ? Math.max(0, Number((calculatedInterest - interestPaid).toFixed(2)))
-            : calculatedInterest;
+        finalLoanData.interestRemaining = useTotalPrincipal
+          ? Math.max(0, Number((calculatedInterest - interestPaid).toFixed(2)))
+          : calculatedInterest;
 
         // Ensure interestRemaining is a valid number
         if (isNaN(finalLoanData.interestRemaining) || !isFinite(finalLoanData.interestRemaining)) {
@@ -971,9 +1023,7 @@ export class LoanService implements ILoanService {
       const remainingDuePeriods = Math.max(0, totalDuePeriods - paidDuesCount);
 
       if (totalDuePeriods < paidDuesCount) {
-        throw new BadRequestException(
-          'Loan tenure cannot be shorter than the number of dues already paid',
-        );
+        throw new BadRequestException('Loan tenure cannot be shorter than the number of dues already paid');
       }
 
       let unpaidDues: Due[] = [];
@@ -1011,12 +1061,7 @@ export class LoanService implements ILoanService {
             },
           );
         } else if (remainingDuePeriods > 0) {
-          const dueStartDate = this.resolveUnpaidDueStartDate(
-            finalLoanData,
-            paidDues,
-            currentStartDate,
-            false,
-          );
+          const dueStartDate = this.resolveUnpaidDueStartDate(finalLoanData, paidDues, currentStartDate, false);
 
           unpaidDues = this.buildDuesForLoan(
             {
@@ -1036,12 +1081,7 @@ export class LoanService implements ILoanService {
           );
         } else {
           // All nominal periods paid but balance remains — single due for outstanding amount
-          const dueStartDate = this.resolveUnpaidDueStartDate(
-            finalLoanData,
-            paidDues,
-            currentStartDate,
-            false,
-          );
+          const dueStartDate = this.resolveUnpaidDueStartDate(finalLoanData, paidDues, currentStartDate, false);
           unpaidDues = this.buildDuesForLoan(
             {
               ...loanForDuesBase,
@@ -1211,9 +1251,7 @@ export class LoanService implements ILoanService {
     }
 
     const anchor = this.startOfDay(scheduleStartDate);
-    const paidDueTimes = new Set(
-      paidDues.map((d) => this.startOfDay(new Date(d.dueDate)).getTime()),
-    );
+    const paidDueTimes = new Set(paidDues.map((d) => this.startOfDay(new Date(d.dueDate)).getTime()));
 
     const unpaidDueDates: Date[] = [];
     for (let period = 1; period <= totalDuePeriods; period++) {
@@ -1254,19 +1292,12 @@ export class LoanService implements ILoanService {
    * When dues are paid, returns the last paid due date so period 1 lands on the
    * next unpaid due (buildDuesForLoan adds one period to the anchor).
    */
-  private resolveUnpaidDueStartDate(
-    loan: Loan,
-    paidDues: Due[],
-    loanStartDate: Date,
-    useLoanStartDate: boolean,
-  ): Date {
+  private resolveUnpaidDueStartDate(loan: Loan, paidDues: Due[], loanStartDate: Date, useLoanStartDate: boolean): Date {
     if (useLoanStartDate || paidDues.length === 0) {
       return this.startOfDay(loanStartDate);
     }
 
-    const sortedPaid = [...paidDues].sort(
-      (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
-    );
+    const sortedPaid = [...paidDues].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     const lastPaidDue = sortedPaid[sortedPaid.length - 1];
     return this.startOfDay(new Date(lastPaidDue.dueDate));
   }

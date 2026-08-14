@@ -1,10 +1,6 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
+
 import { Plan, RazorpayCreateMonthlyPlanData } from '../domain';
 import { CreatePlanRequestModel, UpdatePlanRequestModel } from '../models';
 import { IPlanService } from './i-plan.service';
@@ -76,9 +72,7 @@ export class PlanService implements IPlanService {
     }
 
     if (body.price !== undefined && body.price !== Number(existing.price)) {
-      throw new BadRequestException(
-        'Price changes require a new Razorpay plan. Create a new plan instead.',
-      );
+      throw new BadRequestException('Price changes require a new Razorpay plan. Create a new plan instead.');
     }
 
     return this.plansRepo.update(id, {

@@ -1,7 +1,7 @@
-import { Expose } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString } from 'class-validator';
 import { PaginationFilterOptions } from '@shared-libs';
+import { Expose } from 'class-transformer';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class ListAdminSubscriptionsQueryModel extends PaginationFilterOptions {
   @Expose()

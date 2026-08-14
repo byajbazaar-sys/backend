@@ -14,17 +14,13 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOkResponse,
-  ApiOperation,
-  ApiParam,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { EUserType, Roles, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { JEWELLERY_EVENT_SYNC_STATES } from './constants';
 import {
   CreateJewelleryEventRequestModel,
   JewelleryEventResponseModel,
@@ -33,7 +29,6 @@ import {
   UpdateJewelleryEventRequestModel,
 } from './models';
 import { IJewelleryEventService, JEWELLERY_EVENT_SERVICE } from './service/i-jewellery-event.service';
-import { JEWELLERY_EVENT_SYNC_STATES } from './constants';
 
 @ApiTags('events')
 @Controller('events')
@@ -49,9 +44,7 @@ export class AdminEventsController {
   @Roles(EUserType.Admin)
   @ApiOperation({ summary: 'Admin list jewellery events' })
   @ApiOkResponse({ type: JewelleryEventsPagedResponseModel })
-  async listAdmin(
-    @Query() query: ListJewelleryEventsQueryModel,
-  ): Promise<JewelleryEventsPagedResponseModel> {
+  async listAdmin(@Query() query: ListJewelleryEventsQueryModel): Promise<JewelleryEventsPagedResponseModel> {
     const paged = await this.eventsService.listAdmin(query);
     return plainToInstance(
       JewelleryEventsPagedResponseModel,

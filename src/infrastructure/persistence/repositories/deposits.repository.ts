@@ -1,21 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
-import { DepositAccountEntity } from '../entities/deposit-account.entity';
-import { DepositTransactionEntity } from '../entities/deposit-transaction.entity';
-import { DepositReceiptEntity } from '../entities/deposit-receipt.entity';
-import { DepositAccount, DepositTransaction, CreateDepositReceiptData, DepositReceiptResult } from '../../../application/features/deposits/domain';
+import { Repository } from 'typeorm';
+
+import {
+  DepositAccount,
+  DepositTransaction,
+  CreateDepositReceiptData,
+  DepositReceiptResult,
+} from '../../../application/features/deposits/domain';
+import { EDepositStatus, EDepositTransactionType } from '../../../application/features/deposits/enums';
 import {
   CreateDepositAccountInput,
   CreateDepositTransactionInput,
   UpdateDepositAccountPatch,
 } from '../../../application/features/deposits/models';
 import { DepositsFilterOptions, DepositsDownloadFilterOptions } from '../../../application/features/deposits/options';
-import { EDepositStatus, EDepositTransactionType } from '../../../application/features/deposits/enums';
-import { IDepositsRepository } from '../../../application/features/deposits/service/i-deposits.repository';
 import { DepositStats } from '../../../application/features/deposits/service/deposit-stats';
-import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
+import { IDepositsRepository } from '../../../application/features/deposits/service/i-deposits.repository';
+import { DepositAccountEntity } from '../entities/deposit-account.entity';
+import { DepositReceiptEntity } from '../entities/deposit-receipt.entity';
+import { DepositTransactionEntity } from '../entities/deposit-transaction.entity';
 
 @Injectable()
 export class DepositsRepository implements IDepositsRepository {
@@ -210,7 +216,9 @@ export class DepositsRepository implements IDepositsRepository {
   }
 
   private mapAccount(entity: DepositAccountEntity): DepositAccount {
-    const customer = (entity as DepositAccountEntity & { customer?: { firstName?: string; lastName?: string; phone?: string } }).customer;
+    const customer = (
+      entity as DepositAccountEntity & { customer?: { firstName?: string; lastName?: string; phone?: string } }
+    ).customer;
     return plainToInstance(
       DepositAccount,
       {

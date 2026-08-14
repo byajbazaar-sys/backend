@@ -65,14 +65,9 @@ export const CLOUDFLARE_TRYON_MODEL_OPTIONS = {
 
 export type CloudflareTryOnModelKey = keyof typeof CLOUDFLARE_TRYON_MODEL_OPTIONS;
 
-export const CLOUDFLARE_TRYON_MODEL_KEYS = Object.keys(
-  CLOUDFLARE_TRYON_MODEL_OPTIONS,
-) as CloudflareTryOnModelKey[];
+export const CLOUDFLARE_TRYON_MODEL_KEYS = Object.keys(CLOUDFLARE_TRYON_MODEL_OPTIONS) as CloudflareTryOnModelKey[];
 
-export function resolveCloudflareTryOnModelId(
-  modelKey?: string,
-  fallback = CLOUDFLARE_TRYON_MODEL,
-): string {
+export function resolveCloudflareTryOnModelId(modelKey?: string, fallback = CLOUDFLARE_TRYON_MODEL): string {
   const trimmed = modelKey?.trim();
   if (!trimmed) {
     return fallback;

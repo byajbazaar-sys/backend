@@ -1,11 +1,8 @@
-import { DepositAccount, DepositTransaction, CreateDepositReceiptData, DepositReceiptResult } from '../domain';
-import {
-  CreateDepositAccountInput,
-  CreateDepositTransactionInput,
-  UpdateDepositAccountPatch,
-} from '../models';
-import { DepositsFilterOptions, DepositsDownloadFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
+
+import { DepositAccount, DepositTransaction, CreateDepositReceiptData, DepositReceiptResult } from '../domain';
+import { CreateDepositAccountInput, CreateDepositTransactionInput, UpdateDepositAccountPatch } from '../models';
+import { DepositsFilterOptions, DepositsDownloadFilterOptions } from '../options';
 import { DepositStats } from './deposit-stats';
 
 export const DEPOSITS_REPOSITORY = 'DEPOSITS_REPOSITORY';

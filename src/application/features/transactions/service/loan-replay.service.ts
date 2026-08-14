@@ -1,16 +1,6 @@
 import { Inject, Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { emptyLoanEffect, LoanEffect, Transaction } from '../domain';
-import { ETransactionType } from '../enums';
-import {
-  LOANS_REPOSITORY,
-  ILoansRepository,
-  ELoanStatus,
-  Loan,
-  ILoanService,
-  LOAN_SERVICE,
-  EInterestCalculationMethod,
-} from '../../loans';
+
 import {
   DUES_REPOSITORY,
   EDueType,
@@ -21,6 +11,17 @@ import {
   IUnitOfWork,
   UNIT_OF_WORK,
 } from '../../../shared';
+import {
+  LOANS_REPOSITORY,
+  ILoansRepository,
+  ELoanStatus,
+  Loan,
+  ILoanService,
+  LOAN_SERVICE,
+  EInterestCalculationMethod,
+} from '../../loans';
+import { emptyLoanEffect, LoanEffect, Transaction } from '../domain';
+import { ETransactionType } from '../enums';
 
 /** How a replay should differ from the history currently on record. */
 export type ReplayMutation =
@@ -76,7 +77,7 @@ export class LoanReplayService {
     @Inject(LOAN_SERVICE) private readonly loanService: ILoanService,
     @Inject(UNIT_OF_WORK) private readonly unitOfWork: IUnitOfWork,
     @InjectPinoLogger(LoanReplayService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   /**
    * Joins the caller's transaction when there is one, and opens its own when
@@ -85,16 +86,10 @@ export class LoanReplayService {
    * failure the surrounding transaction restores exactly the prior state.
    */
   async replay(loanId: string, createdBy: string, mutation: ReplayMutation): Promise<void> {
-    return this.unitOfWork.runInTransaction(() =>
-      this.replayWithinTransaction(loanId, createdBy, mutation),
-    );
+    return this.unitOfWork.runInTransaction(() => this.replayWithinTransaction(loanId, createdBy, mutation));
   }
 
-  private async replayWithinTransaction(
-    loanId: string,
-    createdBy: string,
-    mutation: ReplayMutation,
-  ): Promise<void> {
+  private async replayWithinTransaction(loanId: string, createdBy: string, mutation: ReplayMutation): Promise<void> {
     const loan = await this.loadReplayableLoan(loanId, createdBy);
     const history = await this.transactionsRepo.findAllByLoanIdOrdered(loanId, createdBy);
     const baselineSeq = Number(loan.baselineSeq ?? 0);
@@ -156,7 +151,12 @@ export class LoanReplayService {
     if (loan.status === ELoanStatus.CLOSED) {
       throw new BadRequestException('Cannot modify transactions on a closed loan');
     }
-    if (loan.baselineAmountRemaining == null || loan.baselineInterestRemaining == null) {
+    if (
+      loan.baselineAmountRemaining === null ||
+      loan.baselineAmountRemaining === undefined ||
+      loan.baselineInterestRemaining === null ||
+      loan.baselineInterestRemaining === undefined
+    ) {
       throw new BadRequestException(
         'This loan has no replay checkpoint yet, so earlier transactions cannot be corrected. Only the latest transaction can be changed.',
       );
@@ -166,7 +166,7 @@ export class LoanReplayService {
 
   private isFrozen(transaction: Transaction, baselineSeq: number): boolean {
     const seq = transaction.loanSeq;
-    return seq == null || Number(seq) <= baselineSeq;
+    return seq === null || seq === undefined || Number(seq) <= baselineSeq;
   }
 
   private assertMutationTargetIsReplayable(
@@ -192,7 +192,10 @@ export class LoanReplayService {
    */
   private assertHistoryIsReplaySafe(replayable: Transaction[]): void {
     for (const transaction of replayable) {
-      if (transaction.transactionType === ETransactionType.TOP_UP && transaction.periodsAtCreation == null) {
+      if (
+        transaction.transactionType === ETransactionType.TOP_UP &&
+        (transaction.periodsAtCreation === null || transaction.periodsAtCreation === undefined)
+      ) {
         throw new BadRequestException(
           'A top-up in this loan does not record the tenure its interest was priced against, so the history cannot be replayed. Please adjust the loan manually.',
         );
@@ -205,10 +208,7 @@ export class LoanReplayService {
     }
   }
 
-  private async captureDueDates(
-    replayable: Transaction[],
-    createdBy: string,
-  ): Promise<Map<string, number>> {
+  private async captureDueDates(replayable: Transaction[], createdBy: string): Promise<Map<string, number>> {
     const dueDates = new Map<string, number>();
     for (const transaction of replayable) {
       if (transaction.transactionType !== ETransactionType.DUE_PAYMENT) continue;
@@ -261,8 +261,8 @@ export class LoanReplayService {
   private buildPlan(
     replayable: Transaction[],
     mutation: ReplayMutation,
-  ): Array<{ transaction: Transaction; amount: number }> {
-    const plan: Array<{ transaction: Transaction; amount: number }> = [];
+  ): { transaction: Transaction; amount: number }[] {
+    const plan: { transaction: Transaction; amount: number }[] = [];
     for (const transaction of replayable) {
       if (mutation.kind === 'delete' && transaction.id === mutation.transactionId) {
         continue;
@@ -284,7 +284,7 @@ export class LoanReplayService {
   private async runReplay(
     loan: Loan,
     frozen: Transaction[],
-    plan: Array<{ transaction: Transaction; amount: number }>,
+    plan: { transaction: Transaction; amount: number }[],
     dueDatesByTransaction: Map<string, number>,
     createdBy: string,
   ): Promise<AppliedEffect[]> {
@@ -315,15 +315,10 @@ export class LoanReplayService {
    * The verification pass is what makes this safe to assert — collapsing
    * rebuilds that did matter would change the outcome and be caught there.
    */
-  private needsScheduleRebuild(
-    plan: Array<{ transaction: Transaction; amount: number }>,
-    index: number,
-  ): boolean {
+  private needsScheduleRebuild(plan: { transaction: Transaction; amount: number }[], index: number): boolean {
     const type = plan[index].transaction.transactionType;
     const affectsSchedule =
-      type === ETransactionType.INTEREST ||
-      type === ETransactionType.PRINCIPAL ||
-      type === ETransactionType.TOP_UP;
+      type === ETransactionType.INTEREST || type === ETransactionType.PRINCIPAL || type === ETransactionType.TOP_UP;
     if (!affectsSchedule) return false;
 
     const next = plan[index + 1];
@@ -416,7 +411,10 @@ export class LoanReplayService {
         const due = await this.findUnpaidDueOnDate(loanId, dueDatesByTransaction.get(transaction.id), transaction);
         if (this.round(Number(due.dueAmount)) !== this.round(amount)) {
           throw new BadRequestException(
-            this.blockedBy(transaction, `it paid ${amount} against a due that is ${due.dueAmount} once earlier history is corrected. Delete this payment and record it again`),
+            this.blockedBy(
+              transaction,
+              `it paid ${amount} against a due that is ${due.dueAmount} once earlier history is corrected. Delete this payment and record it again`,
+            ),
           );
         }
         await this.duesRepo.update(due.id, {
@@ -461,14 +459,17 @@ export class LoanReplayService {
     dueDate: number | undefined,
     transaction: Transaction,
   ): Promise<Due> {
-    if (dueDate == null) {
+    if (dueDate === undefined) {
       throw new BadRequestException(this.blockedBy(transaction, 'its due date is unknown'));
     }
     const unpaid = await this.duesRepo.findByLoanIdAndType(loanId, UNPAID_DUE_TYPES);
     const match = unpaid.find((due) => this.startOfDay(due.dueDate) === dueDate);
     if (!match) {
       throw new BadRequestException(
-        this.blockedBy(transaction, 'the due it paid is no longer part of the schedule once earlier history is corrected. Delete this payment and record it again'),
+        this.blockedBy(
+          transaction,
+          'the due it paid is no longer part of the schedule once earlier history is corrected. Delete this payment and record it again',
+        ),
       );
     }
     return match;
@@ -510,8 +511,14 @@ export class LoanReplayService {
       amountPaid: this.round(Number(current.amountPaid)),
       interestRemaining: this.round(Number(current.interestRemaining)),
       interestPaid: this.round(Number(current.interestPaid)),
-      paidDues: dues.filter((d) => d.type === EDueType.PAID).map(describe).sort(),
-      unpaidDues: dues.filter((d) => d.type !== EDueType.PAID).map(describe).sort(),
+      paidDues: dues
+        .filter((d) => d.type === EDueType.PAID)
+        .map(describe)
+        .sort(),
+      unpaidDues: dues
+        .filter((d) => d.type !== EDueType.PAID)
+        .map(describe)
+        .sort(),
     };
   }
 
@@ -580,10 +587,10 @@ export class LoanReplayService {
   private formatTransactionDate(transaction: Transaction): string {
     return transaction.createdAt
       ? new Date(transaction.createdAt).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      })
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })
       : 'an unknown date';
   }
 

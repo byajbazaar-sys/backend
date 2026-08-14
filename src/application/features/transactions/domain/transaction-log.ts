@@ -1,4 +1,5 @@
 import { Expose, Type } from 'class-transformer';
+
 import { ETransactionLogAction, ETransactionPaidIn, ETransactionType } from '../enums';
 
 export class TransactionLog {

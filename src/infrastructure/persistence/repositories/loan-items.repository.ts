@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { LoanItemEntity } from '../entities/loan-item.entity';
 import { plainToInstance } from 'class-transformer';
+import { In, Repository } from 'typeorm';
+
 import { ILoanItemsRepository, LoanItem, UpdateLoanItemPatch } from '../../../application';
+import { LoanItemEntity } from '../entities/loan-item.entity';
 
 @Injectable()
 export class LoanItemsRepository implements ILoanItemsRepository {

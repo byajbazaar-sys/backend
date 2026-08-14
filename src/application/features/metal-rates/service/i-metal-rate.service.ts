@@ -1,5 +1,5 @@
-import { CreateMetalRateRequestModel, ListMetalRatesQueryModel } from '../models';
 import { MetalRate } from '../domain';
+import { CreateMetalRateRequestModel, ListMetalRatesQueryModel } from '../models';
 import { CurrentMetalRatesResponseModel, MetalRateChartPointModel } from '../models/metal-rate-response.model';
 
 export const METAL_RATE_SERVICE = 'METAL_RATE_SERVICE';
@@ -7,7 +7,10 @@ export const METAL_RATE_SERVICE = 'METAL_RATE_SERVICE';
 export interface IMetalRateService {
   getCurrent(userId: string): Promise<CurrentMetalRatesResponseModel>;
   create(data: CreateMetalRateRequestModel, userId: string): Promise<MetalRate>;
-  listHistory(userId: string, query: ListMetalRatesQueryModel): Promise<{
+  listHistory(
+    userId: string,
+    query: ListMetalRatesQueryModel,
+  ): Promise<{
     items: MetalRate[];
     totalCount: number;
     page: number;

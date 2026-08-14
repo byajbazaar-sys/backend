@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+
 import { IPdfColumnConfig } from './interfaces';
 
 /**
@@ -6,7 +7,7 @@ import { IPdfColumnConfig } from './interfaces';
  */
 function getByPath(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((acc: unknown, part) => {
-    if (acc != null && typeof acc === 'object' && part in (acc as object)) {
+    if (acc != null && typeof acc === 'object' && part in acc) {
       return (acc as Record<string, unknown>)[part];
     }
     return undefined;
@@ -68,7 +69,10 @@ export async function toPDF<T extends Record<string, unknown>>(
         doc.text(headerText, x + CELL_PADDING / 2, y, { width: w, height: ROW_HEIGHT - 4, ellipsis: true });
         x += scaledWidths[i];
       });
-      doc.moveTo(MARGIN, y + ROW_HEIGHT - 4).lineTo(MARGIN + contentWidth, y + ROW_HEIGHT - 4).stroke();
+      doc
+        .moveTo(MARGIN, y + ROW_HEIGHT - 4)
+        .lineTo(MARGIN + contentWidth, y + ROW_HEIGHT - 4)
+        .stroke();
       y += ROW_HEIGHT;
     };
 
@@ -88,7 +92,7 @@ export async function toPDF<T extends Record<string, unknown>>(
       columns.forEach((col, i) => {
         let val = getByPath(row, col.key);
         if (col.formatter) val = col.formatter(val);
-        else if (val instanceof Date) val = (val as Date).toISOString();
+        else if (val instanceof Date) val = val.toISOString();
         else val = String(val ?? '');
         const cellText = String(val);
         const w = scaledWidths[i] - CELL_PADDING;

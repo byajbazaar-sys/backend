@@ -1,22 +1,16 @@
-import { randomUUID } from 'crypto';
 import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import axios, { AxiosError, type AxiosInstance } from 'axios';
+import { randomUUID } from 'crypto';
 import FormData from 'form-data';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { AivotTryOnOptions } from '../aivot-try-on.options';
-import { AIVOT_TRYON_GENERATE_PATH, AIVOT_TRYON_MIME } from '../ai.constants';
-import {
-  isTransientTryOnStatus,
-  mapAivotHttpError,
-} from '../exceptions/aivot-try-on.errors';
-import type {
-  AiImageInput,
-  JewelleryTryOnRequest,
-  OutfitRecolorRequest,
-} from '../interfaces/ai-media.types';
-import { stripDataUrl } from '../utils/image.util';
-import { BedrockService } from './bedrock.service';
+
 import { ITryOnAiService, GeneratedAiImage } from '../../../application';
+import { AIVOT_TRYON_GENERATE_PATH, AIVOT_TRYON_MIME } from '../ai.constants';
+import { AivotTryOnOptions } from '../aivot-try-on.options';
+import { BedrockService } from './bedrock.service';
+import { isTransientTryOnStatus, mapAivotHttpError } from '../exceptions/aivot-try-on.errors';
+import type { JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
+import { stripDataUrl } from '../utils/image.util';
 
 interface AivotGenerateResponse {
   statusCode?: number;
@@ -87,9 +81,7 @@ export class AivotService implements ITryOnAiService {
 
   private assertConfigured(): void {
     if (!this.options.isConfigured) {
-      throw new BadRequestException(
-        'Try-on AI provider is not configured (TRYON_API_BASE_URL is missing)',
-      );
+      throw new BadRequestException('Try-on AI provider is not configured (TRYON_API_BASE_URL is missing)');
     }
   }
 
@@ -224,10 +216,7 @@ export class AivotService implements ITryOnAiService {
         const axiosErr = err as AxiosError;
         const status = axiosErr.response?.status;
 
-        if (
-          (axiosErr.code === 'ECONNABORTED' || axiosErr.code === 'ETIMEDOUT') &&
-          attempt < maxAttempts
-        ) {
+        if ((axiosErr.code === 'ECONNABORTED' || axiosErr.code === 'ETIMEDOUT') && attempt < maxAttempts) {
           this.logRetryScheduled({
             correlationId,
             attempt,
@@ -285,9 +274,7 @@ export class AivotService implements ITryOnAiService {
       }
     }
 
-    throw lastError instanceof Error
-      ? lastError
-      : mapAivotHttpError(502, 'Try-on AI provider request failed');
+    throw lastError instanceof Error ? lastError : mapAivotHttpError(502, 'Try-on AI provider request failed');
   }
 
   private retryDelayMs(attempt: number): number {

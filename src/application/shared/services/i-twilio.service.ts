@@ -1,5 +1,5 @@
-import { TwilioMessage } from './twilio-message';
 import { SendSMSDto } from './send-sms-dto';
+import { TwilioMessage } from './twilio-message';
 
 export const TWILIO_SERVICE = 'ITwilioService';
 

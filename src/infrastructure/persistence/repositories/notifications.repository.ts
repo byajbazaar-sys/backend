@@ -1,21 +1,29 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { NotificationEntity } from '../entities/notification.entity';
+import {
+  ENotificationChannel,
+  ENotificationStatus,
+  ESortOrder,
+  getPaginationValues,
+  Paged,
+  toPaged,
+} from '@shared-libs';
 import { plainToInstance, instanceToPlain } from 'class-transformer';
+import { Repository } from 'typeorm';
+
 import {
   INotificationsRepository,
   Notification,
   NotificationsFilterOptions,
   NotificationDeliveryPatch,
 } from '../../../application/features/notifications';
-import { ENotificationChannel, ENotificationStatus, ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
+import { NotificationEntity } from '../entities/notification.entity';
 
 @Injectable()
 export class NotificationsRepository implements INotificationsRepository {
   constructor(
     @InjectRepository(NotificationEntity) private readonly notificationRepo: Repository<NotificationEntity>,
-  ) { }
+  ) {}
 
   async create(notification: Notification): Promise<Notification> {
     const entity = this.notificationRepo.create({

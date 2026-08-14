@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Resend } from 'resend';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
-import { IEmailService, SendEmail } from '../../application';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { Resend } from 'resend';
+
 import { ResendOptions } from './options';
+import { IEmailService, SendEmail } from '../../application';
 
 @Injectable()
 export class ResendService implements IEmailService {

@@ -1,7 +1,8 @@
-import { Context, Handler } from 'aws-lambda';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from '../app.module';
+import { Context, Handler } from 'aws-lambda';
 import { DataSource } from 'typeorm';
+
+import { AppModule } from '../app.module';
 import { SeedingService } from '../infrastructure/persistence/seeds/seeding.service';
 
 export const handler: Handler = async (_event: unknown, context: Context) => {

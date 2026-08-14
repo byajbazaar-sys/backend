@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+
 import { EBillStatus, EPaymentMode, EDocumentType } from '../enums';
 import { SalesBillLineItemResponseModel } from './sales-bill-line-item-response.model';
 

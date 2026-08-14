@@ -1,16 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { DueEntity } from '../entities/due.entity';
-import { TransactionalContext } from '../transactional-context';
-import { TransactionEntity } from '../entities/transaction.entity';
-import { plainToInstance } from 'class-transformer';
-import { Due, DuesFilterOptions, IDuesRepository, EDueType } from '../../../application';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
+import { In, Repository } from 'typeorm';
+
+import { Due, DuesFilterOptions, IDuesRepository, EDueType } from '../../../application';
+import { DueEntity } from '../entities/due.entity';
+import { TransactionEntity } from '../entities/transaction.entity';
+import { TransactionalContext } from '../transactional-context';
 
 @Injectable()
 export class DuesRepository implements IDuesRepository {
-  constructor(@InjectRepository(DueEntity) private readonly defaultDueRepo: Repository<DueEntity>) { }
+  constructor(@InjectRepository(DueEntity) private readonly defaultDueRepo: Repository<DueEntity>) {}
 
   private get dueRepo(): Repository<DueEntity> {
     return TransactionalContext.repositoryFor(DueEntity, this.defaultDueRepo);
@@ -22,18 +23,13 @@ export class DuesRepository implements IDuesRepository {
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
     const sortField = params.sortField || 'dueDate';
 
-    const qb = this.dueRepo
-      .createQueryBuilder('d')
-      .leftJoinAndSelect('d.customer', 'customer');
+    const qb = this.dueRepo.createQueryBuilder('d').leftJoinAndSelect('d.customer', 'customer');
 
     if (loanIds?.length) qb.andWhere('d.loanId IN (:...loanIds)', { loanIds });
     if (createdBy) qb.andWhere('d.created_by = :createdBy', { createdBy });
     if (type?.length) qb.andWhere('d.type IN (:...type)', { type });
     if (customerName) {
-      qb.andWhere(
-        '(customer.first_name ILIKE :name OR customer.last_name ILIKE :name)',
-        { name: `%${customerName}%` },
-      );
+      qb.andWhere('(customer.first_name ILIKE :name OR customer.last_name ILIKE :name)', { name: `%${customerName}%` });
     }
 
     qb.orderBy(`d.${sortField}`, sortOrder).skip(skip).take(pageSize);
@@ -44,12 +40,12 @@ export class DuesRepository implements IDuesRepository {
     const customerIds = [...new Set(items.map((d) => d.customerId))];
     const latestTxs = customerIds.length
       ? await txRepo
-        .createQueryBuilder('t')
-        .where('t.customerId IN (:...customerIds)', { customerIds })
-        .orderBy('t.createdAt', 'DESC')
-        .getMany()
+          .createQueryBuilder('t')
+          .where('t.customerId IN (:...customerIds)', { customerIds })
+          .orderBy('t.createdAt', 'DESC')
+          .getMany()
       : [];
-    const latestByCustomer = new Map<string, typeof latestTxs[0]>();
+    const latestByCustomer = new Map<string, (typeof latestTxs)[0]>();
     for (const tx of latestTxs) {
       if (!latestByCustomer.has(tx.customerId)) {
         latestByCustomer.set(tx.customerId, tx);
@@ -115,7 +111,7 @@ export class DuesRepository implements IDuesRepository {
     // absent id would return an arbitrary due of this user's.
     if (!id) return null;
     const due = await this.dueRepo.findOne({
-      where: { id, createdBy: createdBy },
+      where: { id, createdBy },
     });
     if (!due) return null;
     return plainToInstance(Due, due, { excludeExtraneousValues: true });
@@ -124,7 +120,7 @@ export class DuesRepository implements IDuesRepository {
   async findByIdWithDetails(id: string, createdBy: string): Promise<Due> {
     if (!id) return null;
     const due = await this.dueRepo.findOne({
-      where: { id, createdBy: createdBy },
+      where: { id, createdBy },
       relations: ['customer'],
     });
     if (!due) return null;
@@ -142,7 +138,13 @@ export class DuesRepository implements IDuesRepository {
   }
 
   async update(id: string, due: Due): Promise<Due> {
-    const { id: _omitId, customer, latestTransaction, createdBy: _omitCreatedBy, ...rest } = due as Due & { id?: string };
+    const {
+      id: _omitId,
+      customer,
+      latestTransaction,
+      createdBy: _omitCreatedBy,
+      ...rest
+    } = due as Due & { id?: string };
     await this.dueRepo.update(id, rest as Partial<DueEntity>);
     const updated = await this.dueRepo.findOne({ where: { id } });
     if (!updated) return null;
@@ -159,11 +161,7 @@ export class DuesRepository implements IDuesRepository {
 
   async deleteByLoanIdExcept(loanId: string, keepDueIds: string[]): Promise<void> {
     if (!loanId) return;
-    const qb = this.dueRepo
-      .createQueryBuilder()
-      .delete()
-      .from(DueEntity)
-      .where('loanId = :loanId', { loanId });
+    const qb = this.dueRepo.createQueryBuilder().delete().from(DueEntity).where('loanId = :loanId', { loanId });
     if (keepDueIds?.length) {
       qb.andWhere('id NOT IN (:...keepDueIds)', { keepDueIds });
     }

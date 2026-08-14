@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { EUserType, NAME_REGEX, PHONE_E164_REGEX, PASSWORD_COMPLEXITY_REGEX } from '@shared-libs';
+import { NAME_REGEX, PHONE_E164_REGEX, PASSWORD_COMPLEXITY_REGEX } from '@shared-libs';
 import { Expose } from 'class-transformer';
-import { IsEmail, IsString, IsOptional, IsEnum, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsEmail, IsString, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
 
 export class SignupRequestModel {
   @Expose()
@@ -34,7 +34,6 @@ export class SignupRequestModel {
   @MaxLength(50, { message: 'Last name cannot exceed 50 characters' })
   @Matches(NAME_REGEX, { message: 'Last name can only contain letters, spaces, hyphens, and apostrophes' })
   lastName: string;
-
 
   @Expose()
   @ApiProperty({

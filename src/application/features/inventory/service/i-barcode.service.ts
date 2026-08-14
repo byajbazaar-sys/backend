@@ -1,5 +1,5 @@
-import { EBarcodeFormat, EBarcodeSize } from '../enums';
 import { InventoryQrPayload } from '../domain';
+import { EBarcodeFormat, EBarcodeSize } from '../enums';
 
 export const BARCODE_SERVICE = 'BARCODE_SERVICE';
 

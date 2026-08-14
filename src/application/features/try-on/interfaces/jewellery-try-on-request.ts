@@ -1,6 +1,6 @@
-import type { TryOnOccasion } from './try-on-occasion';
 import { TryOnImageInput } from './try-on-image-input';
 import { TryOnJewelleryItemInput } from './try-on-jewellery-item-input';
+import type { TryOnOccasion } from './try-on-occasion';
 
 export interface JewelleryTryOnRequest {
   personImage: TryOnImageInput;

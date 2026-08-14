@@ -1,30 +1,16 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { randomBytes } from 'crypto';
-import { compareSync, hashSync } from 'bcrypt';
+import { ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { BCRYPT_SALT_ROUNDS, IIdentity, hashAccessToken } from '@shared-libs';
+import { compareSync, hashSync } from 'bcrypt';
+import { randomBytes } from 'crypto';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { ApiConfiguration } from '../domain';
-import {
-  API_ACCESS_TOKEN_REPOSITORY,
-  IApiAccessTokenRepository,
-} from './i-api-access-token.repository';
-import {
-  API_CONFIGURATION_REPOSITORY,
-  IApiConfigurationRepository,
-} from './i-api-configuration.repository';
-import {
-  API_ACCESS_TOKEN_TTL_SECONDS,
-  IApiAuthService,
-} from './i-api-auth.service';
 import { ApiCredentialsGenerateResult } from './api-credentials-generate-result';
 import { ApiTokenExchangeResult } from './api-token-exchange-result';
+import { API_ACCESS_TOKEN_REPOSITORY, IApiAccessTokenRepository } from './i-api-access-token.repository';
+import { API_ACCESS_TOKEN_TTL_SECONDS, IApiAuthService } from './i-api-auth.service';
+import { API_CONFIGURATION_REPOSITORY, IApiConfigurationRepository } from './i-api-configuration.repository';
 
 function generateApiKey(): string {
   return `pk_live_${randomBytes(24).toString('hex')}`;
@@ -57,7 +43,7 @@ export class ApiAuthService implements IApiAuthService {
     }
 
     const configuration = await this.configRepo.findByApiKey(trimmedKey);
-    if (!configuration || !configuration.isActive) {
+    if (!configuration?.isActive) {
       throw new UnauthorizedException('Invalid API credentials');
     }
 
@@ -68,11 +54,11 @@ export class ApiAuthService implements IApiAuthService {
     const accessToken = generateAccessToken();
     const expiresAt = new Date(Date.now() + API_ACCESS_TOKEN_TTL_SECONDS * 1000);
     await this.tokenRepo.create({
-      apiConfigurationId: configuration.id!,
+      apiConfigurationId: configuration.id,
       accessTokenHash: hashAccessToken(accessToken),
       expiresAt,
     });
-    await this.configRepo.touchLastUsed(configuration.id!);
+    await this.configRepo.touchLastUsed(configuration.id);
 
     this.logger.info({ userId: configuration.userId }, 'API access token issued');
 
@@ -106,7 +92,7 @@ export class ApiAuthService implements IApiAuthService {
     const now = new Date();
     await Promise.all([
       this.tokenRepo.touchLastUsed(tokenRecord.id, now),
-      this.configRepo.touchLastUsed(configuration.id!, now),
+      this.configRepo.touchLastUsed(configuration.id, now),
     ]);
 
     return {
@@ -121,10 +107,7 @@ export class ApiAuthService implements IApiAuthService {
     return this.configRepo.findByUserId(userId);
   }
 
-  async generateCredentials(
-    userId: string,
-    confirmRegenerate = false,
-  ): Promise<ApiCredentialsGenerateResult> {
+  async generateCredentials(userId: string, confirmRegenerate = false): Promise<ApiCredentialsGenerateResult> {
     const existing = await this.configRepo.findByUserId(userId);
     if (existing && !confirmRegenerate) {
       throw new ConflictException('API credentials already exist. Confirm regeneration to continue.');

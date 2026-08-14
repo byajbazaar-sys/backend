@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IPageable } from '@shared-libs';
 import { Expose, Type } from 'class-transformer';
+
 import { SalesBillResponseModel } from './sales-bill-response.model';
 
 export class SalesBillsPagedResponseModel implements IPageable<SalesBillResponseModel> {

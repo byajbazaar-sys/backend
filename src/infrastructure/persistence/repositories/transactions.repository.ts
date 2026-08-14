@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { TransactionEntity } from '../entities/transaction.entity';
-import { TransactionalContext } from '../transactional-context';
+import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
+import { Repository } from 'typeorm';
+
 import {
   ETransactionType,
   ETransactionPaidIn,
@@ -15,14 +15,15 @@ import {
   TransactionsDownloadFilterOptions,
 } from '../../../application';
 import { CreateTransactionInput } from '../../../application/features/transactions/models';
-import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
+import { TransactionEntity } from '../entities/transaction.entity';
+import { TransactionalContext } from '../transactional-context';
 
 @Injectable()
 export class TransactionsRepository implements ITransactionsRepository {
   constructor(
     @InjectRepository(TransactionEntity)
     private readonly defaultTransactionRepo: Repository<TransactionEntity>,
-  ) { }
+  ) {}
 
   private get transactionRepo(): Repository<TransactionEntity> {
     return TransactionalContext.repositoryFor(TransactionEntity, this.defaultTransactionRepo);
@@ -51,7 +52,7 @@ export class TransactionsRepository implements ITransactionsRepository {
   async findById(id: string, createdBy: string): Promise<Transaction> {
     if (!id) return null;
     const transaction = await this.transactionRepo.findOne({
-      where: { id, createdBy: createdBy },
+      where: { id, createdBy },
       relations: ['customer', 'due'],
     });
     if (!transaction) return null;
@@ -62,7 +63,7 @@ export class TransactionsRepository implements ITransactionsRepository {
     const { loanId, createdBy } = params;
     const { pageNumber, pageSize, skip } = getPaginationValues(params);
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
-    const sortField = params.sortField === 'paidAt' ? 'createdAt' : (params.sortField || 'createdAt');
+    const sortField = params.sortField === 'paidAt' ? 'createdAt' : params.sortField || 'createdAt';
 
     const qb = this.transactionRepo
       .createQueryBuilder('t')
@@ -114,7 +115,7 @@ export class TransactionsRepository implements ITransactionsRepository {
   async listAllTransactions(params: TransactionsDownloadFilterOptions): Promise<Transaction[]> {
     const { loanId, createdBy, startDate, endDate } = params;
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
-    const sortField = params.sortField === 'paidAt' ? 'createdAt' : (params.sortField || 'createdAt');
+    const sortField = params.sortField === 'paidAt' ? 'createdAt' : params.sortField || 'createdAt';
 
     const qb = this.transactionRepo
       .createQueryBuilder('t')
@@ -148,10 +149,7 @@ export class TransactionsRepository implements ITransactionsRepository {
     return plainToInstance(Transaction, items, { excludeExtraneousValues: true });
   }
 
-  async findByLoanIdAndTransactionType(
-    loanId: string,
-    transactionType: ETransactionType,
-  ): Promise<Transaction[]> {
+  async findByLoanIdAndTransactionType(loanId: string, transactionType: ETransactionType): Promise<Transaction[]> {
     const transactions = await this.transactionRepo.find({
       where: { loanId, transactionType },
       relations: ['customer'],
@@ -160,11 +158,7 @@ export class TransactionsRepository implements ITransactionsRepository {
     return plainToInstance(Transaction, transactions, { excludeExtraneousValues: true });
   }
 
-  async updatePaidIn(
-    id: string,
-    createdBy: string,
-    paidIn: ETransactionPaidIn,
-  ): Promise<Transaction> {
+  async updatePaidIn(id: string, createdBy: string, paidIn: ETransactionPaidIn): Promise<Transaction> {
     if (!id) return null;
     const existing = await this.transactionRepo.findOne({
       where: { id, createdBy },
@@ -241,11 +235,7 @@ export class TransactionsRepository implements ITransactionsRepository {
     return plainToInstance(Transaction, entities, { excludeExtraneousValues: true });
   }
 
-  async applyReplayResult(
-    id: string,
-    createdBy: string,
-    patch: TransactionReplayPatch,
-  ): Promise<Transaction> {
+  async applyReplayResult(id: string, createdBy: string, patch: TransactionReplayPatch): Promise<Transaction> {
     if (!id) return null;
     const existing = await this.transactionRepo.findOne({
       where: { id, createdBy },

@@ -1,25 +1,16 @@
-import { APIGatewayProxyWebsocketEventV2, APIGatewayProxyWebsocketHandlerV2 } from 'aws-lambda';
 import { JwtService } from '@nestjs/jwt';
 import { UsersAuthOptions } from '@shared-libs';
+import { APIGatewayProxyWebsocketEventV2, APIGatewayProxyWebsocketHandlerV2 } from 'aws-lambda';
+
 import {
   IWebSocketConnectionsRepository,
   WEBSOCKET_CONNECTIONS_REPOSITORY,
   WEBSOCKET_MESSAGE_SERVICE,
   IWebSocketMessageService,
 } from '../application';
-import {
-  getTokenFromEvent,
-  getWebSocketApp,
-  getWebSocketHandler,
-  parseBody,
-  wsResponse,
-} from './websocket-bootstrap';
+import { getTokenFromEvent, getWebSocketApp, getWebSocketHandler, parseBody, wsResponse } from './websocket-bootstrap';
 
-function logWs(
-  level: 'info' | 'warn' | 'error',
-  message: string,
-  meta?: Record<string, unknown>,
-) {
+function logWs(level: 'info' | 'warn' | 'error', message: string, meta?: Record<string, unknown>) {
   const line = meta ? `${message} ${JSON.stringify(meta)}` : message;
   if (level === 'error') console.error(`[WS:message] ${line}`);
   else if (level === 'warn') console.warn(`[WS:message] ${line}`);
@@ -36,7 +27,7 @@ async function getUserIdFromToken(token: string): Promise<string> {
       audience: options.audience,
       issuer: options.issuer,
       algorithms: [options.algorithm],
-    }) as { userId?: string; sub?: string };
+    });
 
     const userId = payload.userId ?? payload.sub;
     if (!userId) {
@@ -190,9 +181,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
         type: 'error',
         message,
         route: routeKey,
-        ...(routeKey === 'barcodeScanned' && body.barcode
-          ? { barcode: String(body.barcode) }
-          : {}),
+        ...(routeKey === 'barcodeScanned' && body.barcode ? { barcode: String(body.barcode) } : {}),
       });
     } catch {
       // ignore secondary failure

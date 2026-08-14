@@ -1,4 +1,5 @@
 import { Expose } from 'class-transformer';
+
 import { EDocumentType } from '../enums';
 
 export class SalesAnalyticsFilterOptions {

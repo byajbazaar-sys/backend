@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, MoreThan, Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
-import { ApiAccessTokenEntity } from '../entities/api-access-token.entity';
+import { IsNull, MoreThan, Repository } from 'typeorm';
+
 import { ApiAccessToken, IApiAccessTokenRepository } from '../../../application';
+import { ApiAccessTokenEntity } from '../entities/api-access-token.entity';
 
 @Injectable()
 export class ApiAccessTokenRepository implements IApiAccessTokenRepository {
@@ -35,10 +36,7 @@ export class ApiAccessTokenRepository implements IApiAccessTokenRepository {
   }
 
   async revokeAllByConfigurationId(apiConfigurationId: string): Promise<void> {
-    await this.repo.update(
-      { apiConfigurationId, revokedAt: IsNull() },
-      { revokedAt: new Date() },
-    );
+    await this.repo.update({ apiConfigurationId, revokedAt: IsNull() }, { revokedAt: new Date() });
   }
 
   async touchLastUsed(id: string, at: Date = new Date()): Promise<void> {

@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsUUID } from 'class-validator';
 import { Expose } from 'class-transformer';
+import { IsString, IsUUID } from 'class-validator';
 
 export class GetLoanItemParamsModel {
   @Expose()

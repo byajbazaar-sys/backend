@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
+
 import { InventoryItem } from './domain';
 import { EBarcodeFormat, EBarcodeSize } from './enums';
 import { BARCODE_SERVICE, IBarcodeService, INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
@@ -109,7 +110,7 @@ export class BarcodeController {
   @Header('Access-Control-Expose-Headers', 'Content-Disposition')
   async downloadQr(@Param('id') id: string, @Identity() identity: IIdentity): Promise<StreamableFile> {
     const item = await this.itemService.getById(id, identity.userId);
-    const payload = this.barcodeService.resolveQrPayload(item.qrValue, item.id!, item.sku!);
+    const payload = this.barcodeService.resolveQrPayload(item.qrValue, item.id, item.sku);
     const buffer = await this.barcodeService.generateQrPng(payload);
     return new StreamableFile(buffer, {
       type: 'image/png',
@@ -147,16 +148,16 @@ export class BarcodeController {
   ): string {
     switch (mode) {
       case 'sku':
-        return item.sku!;
+        return item.sku;
       case 'barcode':
-        return item.barcode ?? item.sku!;
+        return item.barcode ?? item.sku;
       case 'url':
         return `/inventory/${item.id}`;
       case 'custom':
-        return customQrValue?.trim() || item.sku!;
+        return customQrValue?.trim() || item.sku;
       case 'inventory':
       default:
-        return this.barcodeService.resolveQrPayload(item.qrValue, item.id!, item.sku!);
+        return this.barcodeService.resolveQrPayload(item.qrValue, item.id, item.sku);
     }
   }
 

@@ -69,7 +69,9 @@ function proportionDescription(item: AiImageInput, imageLabel: string): string {
 
   if (type.includes('nose')) {
     const percent = Math.round((height / NOSE_WIDTH_INCHES) * 100);
-    const placement = type.includes('ring') ? 'left nostril, sitting flush in the piercing' : 'left nostril, pinned to the side of the nose';
+    const placement = type.includes('ring')
+      ? 'left nostril, sitting flush in the piercing'
+      : 'left nostril, pinned to the side of the nose';
     return `${imageLabel} shows the ${typeLabel} (size: ${height} in). PROPORTION LOCK: Nose jewellery equals EXACTLY ${percent}% of nose width. Placement: ${placement}.`;
   }
 
@@ -85,7 +87,7 @@ function buildSizeRule(items: AiImageInput[]): string {
   if (!hasHeight) {
     return 'Render each jewellery piece at a realistic, proportionate size. Do NOT make any piece oversized or smaller than it would look in real life.';
   }
-  return 'CRITICAL SIZE RULE — PROPORTION LOCK: The exact anatomical ratios specified in each piece\'s description above are MANDATORY and must remain identical across ALL variations. Small jewellery MUST look small; large pieces MUST look proportionally large.';
+  return "CRITICAL SIZE RULE — PROPORTION LOCK: The exact anatomical ratios specified in each piece's description above are MANDATORY and must remain identical across ALL variations. Small jewellery MUST look small; large pieces MUST look proportionally large.";
 }
 
 function buildCountRule(items: AiImageInput[]): string {
@@ -149,10 +151,7 @@ function buildAivotPromptParts(items: AiImageInput[]) {
   };
 }
 
-export function buildJewelleryTryOnPrompt(
-  items: AiImageInput[],
-  _opts?: { zeroBased?: boolean },
-): string {
+export function buildJewelleryTryOnPrompt(items: AiImageInput[], _opts?: { zeroBased?: boolean }): string {
   const { imageDescriptions, designFidelity, countRule, sizeRule, placementRule, imageCount } =
     buildAivotPromptParts(items);
 
@@ -177,21 +176,18 @@ export function buildOutfitTryOnPrompt(opts: {
   color?: string;
   zeroBased?: boolean;
 }): string {
-  const { imageDescriptions, designFidelity, countRule, sizeRule, placementRule, imageCount } =
-    buildAivotPromptParts(opts.items);
+  const { imageDescriptions, designFidelity, countRule, sizeRule, placementRule, imageCount } = buildAivotPromptParts(
+    opts.items,
+  );
 
   const outfit = opts.outfit || 'an elegant outfit';
   const occasion = opts.occasion || 'Portrait';
   const outfitColor = opts.color?.trim();
-  const styling = outfitColor
-    ? `appropriate for ${occasion}`
-    : occasionStyling(occasion);
+  const styling = outfitColor ? `appropriate for ${occasion}` : occasionStyling(occasion);
   const colorLock = outfitColor
     ? `OUTFIT COLOUR LOCK: The garment fabric must be exactly ${outfitColor} — match this precise shade with zero deviation. Do NOT substitute a similar, lighter, darker, or complementary colour.`
     : '';
-  const colorHint = outfitColor
-    ? ''
-    : 'Choose a colour that naturally complements the occasion and jewellery. ';
+  const colorHint = outfitColor ? '' : 'Choose a colour that naturally complements the occasion and jewellery. ';
 
   return [
     `You are given ${imageCount} images. Image 1 is a photograph of a specific person. ${imageDescriptions}`,
@@ -209,10 +205,7 @@ export function buildOutfitTryOnPrompt(opts: {
 }
 
 /** @deprecated Use buildTryOnImageMapPrompt — kept for backwards compatibility */
-export function buildReplicateImageMapPrompt(
-  basePrompt: string,
-  _jewelleryItems: AiImageInput[],
-): string {
+export function buildReplicateImageMapPrompt(basePrompt: string, _jewelleryItems: AiImageInput[]): string {
   return basePrompt;
 }
 

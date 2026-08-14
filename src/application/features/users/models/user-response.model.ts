@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EUserType } from '@shared-libs';
-import { Expose, Type } from 'class-transformer';
+import { Expose } from 'class-transformer';
 
 export class UserResponseModel {
   @Expose()
@@ -40,7 +40,12 @@ export class UserResponseModel {
   updatedAt: string;
 
   @Expose()
-  @ApiProperty({ example: 'https://example.com/profile.jpg', nullable: true, required: false, description: 'URL of the profile photo' })
+  @ApiProperty({
+    example: 'https://example.com/profile.jpg',
+    nullable: true,
+    required: false,
+    description: 'URL of the profile photo',
+  })
   profilePhotoUrl?: string;
 
   @Expose()
@@ -48,7 +53,12 @@ export class UserResponseModel {
   businessName?: string;
 
   @Expose()
-  @ApiProperty({ example: '123 Main Street, City, State, ZIP Code', nullable: true, required: false, description: 'Business address' })
+  @ApiProperty({
+    example: '123 Main Street, City, State, ZIP Code',
+    nullable: true,
+    required: false,
+    description: 'Business address',
+  })
   address?: string;
 
   @Expose()

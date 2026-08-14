@@ -1,3 +1,4 @@
+import { EUserType } from '@shared-libs';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -7,13 +8,13 @@ import {
   DeleteDateColumn,
   OneToMany,
 } from 'typeorm';
-import { EUserType } from '@shared-libs';
+
 import { CustomerEntity } from './customer.entity';
-import { LoanEntity } from './loan.entity';
-import { ItemEntity } from './item.entity';
-import { TransactionEntity } from './transaction.entity';
 import { DueEntity } from './due.entity';
+import { ItemEntity } from './item.entity';
+import { LoanEntity } from './loan.entity';
 import { NotificationEntity } from './notification.entity';
+import { TransactionEntity } from './transaction.entity';
 
 @Entity('users')
 export class UserEntity {

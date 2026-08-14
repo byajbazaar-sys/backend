@@ -1,10 +1,10 @@
-import { InventoryDashboardStats } from './inventory-dashboard-stats';
-import { InventoryMetalBreakdown } from './inventory-metal-breakdown';
-import { InventoryStatusBreakdown } from './inventory-status-breakdown';
 import { InventoryAgingBucket } from './inventory-aging-bucket';
+import { InventoryDashboardStats } from './inventory-dashboard-stats';
 import { InventoryDeadStockItem } from './inventory-dead-stock-item';
 import { InventoryLowStockItem } from './inventory-low-stock-item';
+import { InventoryMetalBreakdown } from './inventory-metal-breakdown';
 import { InventoryReorderSuggestion } from './inventory-reorder-suggestion';
+import { InventoryStatusBreakdown } from './inventory-status-breakdown';
 
 export interface InventoryAnalytics extends InventoryDashboardStats {
   reservedItems: number;

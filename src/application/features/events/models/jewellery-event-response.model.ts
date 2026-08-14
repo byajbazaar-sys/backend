@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+
 import { EJewelleryEventStatus } from '../domain';
 
 export class JewelleryEventResponseModel {

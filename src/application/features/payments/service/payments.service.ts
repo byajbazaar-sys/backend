@@ -6,14 +6,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { SUBSCRIPTION_PROVIDER_RAZORPAY, DEFAULT_PAGE_NUMBER, DEFAULT_PAGE_SIZE } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { RazorpayOptions } from '../../../shared';
 import {
-  SUBSCRIPTION_PROVIDER_RAZORPAY,
-  DEFAULT_PAGE_NUMBER,
-  DEFAULT_PAGE_SIZE,
-} from '@shared-libs';
-import { ESubscriptionStatus, Subscription, RazorpayCreateSubscriptionData, SubscriptionUserProfileData } from '../domain';
+  ESubscriptionStatus,
+  Subscription,
+  RazorpayCreateSubscriptionData,
+  SubscriptionUserProfileData,
+} from '../domain';
 import {
   ApplyCouponRequestModel,
   ApplyCouponResponseModel,
@@ -23,23 +26,15 @@ import {
   PaymentResponseModel,
   SubscriptionStatusResponseModel,
 } from '../models';
-import { RazorpayOptions } from '../../../shared';
-import { IPaymentsService } from './i-payments.service';
-import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
 import { COUPON_SERVICE, ICouponService } from './i-coupon.service';
-import {
-  ISubscriptionsRepository,
-  SUBSCRIPTIONS_REPOSITORY,
-} from './i-subscriptions.repository';
 import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
+import { IPaymentsService } from './i-payments.service';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
+import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
+import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
-import {
-  isTrialActive,
-  resolveTrialEndsAt,
-  trialDaysRemaining,
-} from '../utils/trial.util';
 import { requireCheckoutPlan } from '../utils/checkout-plan.util';
+import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
 
 @Injectable()
 export class PaymentsService implements IPaymentsService {
@@ -95,14 +90,11 @@ export class PaymentsService implements IPaymentsService {
       if (blocking.status === ESubscriptionStatus.Active) {
         throw new ConflictException('You already have an active subscription');
       }
-      if (
-        blocking.status === ESubscriptionStatus.Created ||
-        blocking.status === ESubscriptionStatus.Authenticated
-      ) {
+      if (blocking.status === ESubscriptionStatus.Created || blocking.status === ESubscriptionStatus.Authenticated) {
         if (blocking.providerSubscriptionId) {
           if (!this.checkoutTermsMatch(blocking, couponId, discountAmount, finalAmount)) {
             await this.invalidateCheckoutSubscription(blocking);
-            blocking = await this.subscriptionsRepo.findById(blocking.id!);
+            blocking = await this.subscriptionsRepo.findById(blocking.id);
           } else {
             const reuse = await this.tryReuseCheckoutSubscription(blocking);
             if (reuse === 'already_active') {
@@ -112,18 +104,15 @@ export class PaymentsService implements IPaymentsService {
               this.assertCouponApplied(body.couponCode, Number(reuse.discountAmount));
               return reuse;
             }
-            blocking = await this.subscriptionsRepo.findById(blocking.id!);
+            blocking = await this.subscriptionsRepo.findById(blocking.id);
           }
         }
       }
       if (
         blocking &&
-        (blocking.status === ESubscriptionStatus.Pending ||
-          blocking.status === ESubscriptionStatus.Paused)
+        (blocking.status === ESubscriptionStatus.Pending || blocking.status === ESubscriptionStatus.Paused)
       ) {
-        throw new ConflictException(
-          `A subscription is already in progress (status: ${blocking.status})`,
-        );
+        throw new ConflictException(`A subscription is already in progress (status: ${blocking.status})`);
       }
     }
 
@@ -146,13 +135,12 @@ export class PaymentsService implements IPaymentsService {
     const incompleteCheckout =
       blocking &&
       !blocking.providerSubscriptionId &&
-      (blocking.status === ESubscriptionStatus.Created ||
-        blocking.status === ESubscriptionStatus.Authenticated)
+      (blocking.status === ESubscriptionStatus.Created || blocking.status === ESubscriptionStatus.Authenticated)
         ? blocking
         : null;
 
     const local = incompleteCheckout
-      ? await this.subscriptionsRepo.update(incompleteCheckout.id!, {
+      ? await this.subscriptionsRepo.update(incompleteCheckout.id, {
           planId: razorpayPlanId,
           providerCustomerId,
           amount: finalAmount,
@@ -181,7 +169,7 @@ export class PaymentsService implements IPaymentsService {
         planId: razorpayPlanId,
         notes: {
           userId,
-          subscriptionId: local.id!,
+          subscriptionId: local.id,
           couponCode: body.couponCode?.trim().toUpperCase() ?? '',
         },
         notifyInfo: {
@@ -191,7 +179,7 @@ export class PaymentsService implements IPaymentsService {
       }),
     );
 
-    const updated = await this.subscriptionsRepo.update(local.id!, {
+    const updated = await this.subscriptionsRepo.update(local.id, {
       providerSubscriptionId: rzpSub.id,
       status: this.mapRzpStatus(rzpSub.status),
       currentStart: rzpSub.current_start ? new Date(rzpSub.current_start * 1000) : null,
@@ -251,10 +239,7 @@ export class PaymentsService implements IPaymentsService {
     );
   }
 
-  async cancel(
-    userId: string,
-    body: CancelSubscriptionRequestModel,
-  ): Promise<SubscriptionStatusResponseModel> {
+  async cancel(userId: string, body: CancelSubscriptionRequestModel): Promise<SubscriptionStatusResponseModel> {
     const sub = await this.requireOwnedActiveOrPaused(userId);
     if (!sub.providerSubscriptionId) {
       throw new BadRequestException('Subscription is not linked to Razorpay');
@@ -263,7 +248,7 @@ export class PaymentsService implements IPaymentsService {
     const cancelAtPeriodEnd = body.cancelAtPeriodEnd !== false;
     await this.razorpay.cancelSubscription(sub.providerSubscriptionId, cancelAtPeriodEnd);
 
-    await this.subscriptionsRepo.update(sub.id!, {
+    await this.subscriptionsRepo.update(sub.id, {
       cancelAtPeriodEnd,
       status: cancelAtPeriodEnd ? sub.status : ESubscriptionStatus.Cancelled,
       cancelledAt: cancelAtPeriodEnd ? null : new Date(),
@@ -274,7 +259,7 @@ export class PaymentsService implements IPaymentsService {
 
   async resume(userId: string): Promise<SubscriptionStatusResponseModel> {
     const latest = await this.subscriptionsRepo.findLatestByUserId(userId);
-    if (!latest || latest.userId !== userId) {
+    if (latest?.userId !== userId) {
       throw new NotFoundException('Subscription not found');
     }
     if (!latest.providerSubscriptionId) {
@@ -284,13 +269,13 @@ export class PaymentsService implements IPaymentsService {
     if (latest.cancelAtPeriodEnd && latest.status === ESubscriptionStatus.Active) {
       // Undo cancel-at-period-end by clearing local flag; Razorpay cancel-at-cycle-end
       // cannot always be reversed — attempt resume/pause path for halted/paused.
-      await this.subscriptionsRepo.update(latest.id!, { cancelAtPeriodEnd: false });
+      await this.subscriptionsRepo.update(latest.id, { cancelAtPeriodEnd: false });
       return this.getStatus(userId);
     }
 
     if (latest.status === ESubscriptionStatus.Paused || latest.status === ESubscriptionStatus.Halted) {
       await this.razorpay.resumeSubscription(latest.providerSubscriptionId);
-      await this.subscriptionsRepo.update(latest.id!, {
+      await this.subscriptionsRepo.update(latest.id, {
         status: ESubscriptionStatus.Active,
         cancelAtPeriodEnd: false,
       });
@@ -300,16 +285,9 @@ export class PaymentsService implements IPaymentsService {
     throw new BadRequestException('Subscription cannot be resumed in its current state');
   }
 
-  async applyCoupon(
-    userId: string,
-    body: ApplyCouponRequestModel,
-  ): Promise<ApplyCouponResponseModel> {
+  async applyCoupon(userId: string, body: ApplyCouponRequestModel): Promise<ApplyCouponResponseModel> {
     const activePlan = await requireCheckoutPlan(this.plansRepo);
-    const preview = await this.couponService.preview(
-      body.code,
-      userId,
-      Number(activePlan.price),
-    );
+    const preview = await this.couponService.preview(body.code, userId, Number(activePlan.price));
     return this.couponService.toResponse(preview);
   }
 
@@ -381,15 +359,12 @@ export class PaymentsService implements IPaymentsService {
       );
     }
 
-    await this.subscriptionsRepo.update(subscription.id!, {
+    await this.subscriptionsRepo.update(subscription.id, {
       providerSubscriptionId: null,
     });
   }
 
-  private toCreateSubscriptionResponse(
-    subscription: Subscription,
-    shortUrl?: string,
-  ): CreateSubscriptionResponseModel {
+  private toCreateSubscriptionResponse(subscription: Subscription, shortUrl?: string): CreateSubscriptionResponseModel {
     return plainToInstance(
       CreateSubscriptionResponseModel,
       {
@@ -415,7 +390,7 @@ export class PaymentsService implements IPaymentsService {
 
     try {
       const rzp = await this.razorpay.fetchSubscription(subscription.providerSubscriptionId);
-      return this.subscriptionsRepo.update(subscription.id!, {
+      return this.subscriptionsRepo.update(subscription.id, {
         status: this.mapRzpStatus(rzp.status),
         currentStart: rzp.current_start ? new Date(rzp.current_start * 1000) : null,
         currentEnd: rzp.current_end ? new Date(rzp.current_end * 1000) : null,
@@ -440,7 +415,7 @@ export class PaymentsService implements IPaymentsService {
     try {
       const rzp = await this.razorpay.fetchSubscription(subscription.providerSubscriptionId);
       const mappedStatus = this.mapRzpStatus(rzp.status);
-      const updated = await this.subscriptionsRepo.update(subscription.id!, {
+      const updated = await this.subscriptionsRepo.update(subscription.id, {
         status: mappedStatus,
         currentStart: rzp.current_start ? new Date(rzp.current_start * 1000) : null,
         currentEnd: rzp.current_end ? new Date(rzp.current_end * 1000) : null,
@@ -451,14 +426,11 @@ export class PaymentsService implements IPaymentsService {
         return 'already_active';
       }
 
-      if (
-        mappedStatus === ESubscriptionStatus.Created ||
-        mappedStatus === ESubscriptionStatus.Authenticated
-      ) {
+      if (mappedStatus === ESubscriptionStatus.Created || mappedStatus === ESubscriptionStatus.Authenticated) {
         return this.toCreateSubscriptionResponse(updated, rzp.short_url);
       }
 
-      await this.subscriptionsRepo.update(subscription.id!, {
+      await this.subscriptionsRepo.update(subscription.id, {
         providerSubscriptionId: null,
       });
       return null;
@@ -467,7 +439,7 @@ export class PaymentsService implements IPaymentsService {
         { err, providerSubscriptionId: subscription.providerSubscriptionId },
         'Stale Razorpay subscription — creating a fresh checkout session',
       );
-      await this.subscriptionsRepo.update(subscription.id!, {
+      await this.subscriptionsRepo.update(subscription.id, {
         providerSubscriptionId: null,
       });
       return null;

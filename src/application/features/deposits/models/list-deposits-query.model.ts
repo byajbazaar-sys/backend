@@ -1,8 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ESortOrder } from '@shared-libs';
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+
 import { EDepositStatus } from '../enums';
-import { ESortOrder } from '@shared-libs';
 
 export class ListDepositsQueryModel {
   @ApiPropertyOptional({ default: 1 })

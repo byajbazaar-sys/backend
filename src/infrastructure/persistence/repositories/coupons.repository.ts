@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
+import { Repository } from 'typeorm';
+
 import { Coupon, ICouponsRepository } from '../../../application';
 import { CouponEntity } from '../entities/coupon.entity';
 
@@ -19,8 +20,7 @@ export class CouponsRepository implements ICouponsRepository {
         ...entity,
         value: Number(entity.value),
         minimumAmount: Number(entity.minimumAmount),
-        maximumDiscount:
-          entity.maximumDiscount != null ? Number(entity.maximumDiscount) : null,
+        maximumDiscount: entity.maximumDiscount != null ? Number(entity.maximumDiscount) : null,
       },
       { excludeExtraneousValues: true },
     );

@@ -1,26 +1,12 @@
-import { randomUUID } from 'crypto';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { plainToInstance } from 'class-transformer';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
-import { IUsersFileStorage, ITryOnAiService, ITryOnOrchestrator, TRY_ON_AI_SERVICE, TRY_ON_ORCHESTRATOR, USERS_FILE_STORAGE, type TryOnProviderRoute } from '../../shared';
+import { plainToInstance } from 'class-transformer';
+import { randomUUID } from 'crypto';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { TryOnAsset, CreateTryOnAssetData } from './domain';
-import {
-  ITryOnAssetsRepository,
-  TRY_ON_ASSETS_REPOSITORY,
-} from './service';
-import type {
-  GeneratedImage,
-  JewelleryTryOnRequest,
-  OutfitRecolorRequest,
-  TryOnJobRecord,
-} from './interfaces';
+import type { GeneratedImage, JewelleryTryOnRequest, OutfitRecolorRequest, TryOnJobRecord } from './interfaces';
 import type {
   CreateTryOnJobRequestModel,
   RecolorTryOnRequestModel,
@@ -28,9 +14,18 @@ import type {
   TryOnAssetType,
 } from './models';
 import { TRY_ON_ASSET_TYPES } from './models';
+import { ITryOnAssetsRepository, TRY_ON_ASSETS_REPOSITORY } from './service';
+import {
+  IUsersFileStorage,
+  ITryOnAiService,
+  ITryOnOrchestrator,
+  TRY_ON_AI_SERVICE,
+  TRY_ON_ORCHESTRATOR,
+  USERS_FILE_STORAGE,
+} from '../../shared';
 import { ITryOnService } from './service/i-try-on.service';
-import { UploadTryOnAssetInput } from './service/upload-try-on-asset-input';
 import { TryOnLambdaPayload } from './service/try-on-lambda-payload';
+import { UploadTryOnAssetInput } from './service/upload-try-on-asset-input';
 
 export const TRY_ON_SERVICE = 'TRY_ON_SERVICE';
 
@@ -75,11 +70,7 @@ export class TryOnService implements ITryOnService {
 
   private async writeJob(record: TryOnJobRecord): Promise<void> {
     const key = jobMetaKey(record.userId, record.jobId);
-    await this.fileStorage.writeAsync(
-      key,
-      Buffer.from(JSON.stringify(record), 'utf8'),
-      'application/json',
-    );
+    await this.fileStorage.writeAsync(key, Buffer.from(JSON.stringify(record), 'utf8'), 'application/json');
   }
 
   private async readJob(userId: string, jobId: string): Promise<TryOnJobRecord> {
@@ -123,7 +114,7 @@ export class TryOnService implements ITryOnService {
       throw new BadRequestException('image file is required');
     }
 
-    let heightInInches = input.heightInInches;
+    const heightInInches = input.heightInInches;
     if (heightInInches != null) {
       if (Number.isNaN(heightInInches) || heightInInches < 0.1 || heightInInches > 24) {
         throw new BadRequestException('heightInInches must be between 0.1 and 24');
@@ -143,11 +134,7 @@ export class TryOnService implements ITryOnService {
       input.file.originalname,
     );
     const proposedKey = assetImageKey(userId, assetId, normalized.fileExtension);
-    const imageKey = await this.fileStorage.writeAsync(
-      proposedKey,
-      normalized.buffer,
-      normalized.mimetype,
-    );
+    const imageKey = await this.fileStorage.writeAsync(proposedKey, normalized.buffer, normalized.mimetype);
 
     const record = await this.assetsRepo.insert(
       plainToInstance(CreateTryOnAssetData, {
@@ -304,7 +291,7 @@ export class TryOnService implements ITryOnService {
 
   async getJob(userId: string, jobId: string): Promise<TryOnJobRecord> {
     const record = await this.readJob(userId, jobId);
-    if (!record || record.userId !== userId) {
+    if (record?.userId !== userId) {
       throw new NotFoundException('Try-on job not found');
     }
     if (record.status === 'COMPLETED' || record.status === 'FAILED') {
@@ -327,7 +314,10 @@ export class TryOnService implements ITryOnService {
     try {
       const images: GeneratedImage[] = [];
       if (payload.mode === 'recolor') {
-        this.logger.info({ jobId: payload.jobId, provider: payload.providerRoute?.provider, mode: 'recolor' }, 'Try-on job processing started');
+        this.logger.info(
+          { jobId: payload.jobId, provider: payload.providerRoute?.provider, mode: 'recolor' },
+          'Try-on job processing started',
+        );
         const req = payload.request as OutfitRecolorRequest;
         images.push(await this.tryOnAi.recolorOutfit(req));
       } else {
@@ -344,11 +334,7 @@ export class TryOnService implements ITryOnService {
             },
             'Try-on job processing started',
           );
-          const generated = await this.tryOnOrchestrator.generateTryOnImages(
-            payload.providerRoute,
-            req,
-            mode,
-          );
+          const generated = await this.tryOnOrchestrator.generateTryOnImages(payload.providerRoute, req, mode);
           images.push(...generated);
         } else if (typeof this.tryOnAi.generateTryOnImages === 'function') {
           this.logger.info(

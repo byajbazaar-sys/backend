@@ -1,7 +1,8 @@
 import { ExecutionContext, ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { EUserType, IIdentity, ISubscriptionAccessChecker } from '@shared-libs';
-import { IPaymentsService, PAYMENTS_SERVICE } from '../service/i-payments.service';
+
 import { isPremiumApiPath } from '../constants';
+import { IPaymentsService, PAYMENTS_SERVICE } from '../service/i-payments.service';
 
 @Injectable()
 export class SubscriptionAccessChecker implements ISubscriptionAccessChecker {

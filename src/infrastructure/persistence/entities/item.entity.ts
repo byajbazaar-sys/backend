@@ -8,8 +8,9 @@ import {
   OneToMany,
   JoinColumn,
 } from 'typeorm';
-import { UserEntity } from './user.entity';
+
 import { LoanItemEntity } from './loan-item.entity';
+import { UserEntity } from './user.entity';
 
 @Entity('items')
 export class ItemEntity {

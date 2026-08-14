@@ -1,11 +1,12 @@
-import { PinoLogger } from 'nestjs-pino';
-import { IFileStorage } from './i-file-storage';
-import { IFileSystemStorageOptions } from './options';
 import { existsSync } from 'fs';
 import { writeFile, readFile, copyFile, unlink } from 'fs/promises';
-import { join } from 'path';
+import { PinoLogger } from 'nestjs-pino';
 import { platform } from 'os';
+import { join } from 'path';
+
 import { FileHelper } from './file-helper';
+import { IFileStorage } from './i-file-storage';
+import { IFileSystemStorageOptions } from './options';
 
 export abstract class FileSystemStorage implements IFileStorage {
   protected readonly helper: FileHelper;

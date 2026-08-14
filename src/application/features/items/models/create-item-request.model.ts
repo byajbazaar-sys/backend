@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsEnum, IsOptional } from 'class-validator';
 import { Expose } from 'class-transformer';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class CreateItemRequestModel {
   @Expose()

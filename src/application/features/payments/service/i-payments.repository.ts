@@ -1,4 +1,5 @@
 import { Paged } from '@shared-libs';
+
 import { Payment } from '../domain';
 
 export const PAYMENTS_REPOSITORY = 'PAYMENTS_REPOSITORY';

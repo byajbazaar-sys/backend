@@ -1,4 +1,5 @@
 import { Expose, Type } from 'class-transformer';
+
 import { EJewelleryEventStatus } from './enums';
 
 export class JewelleryEvent {

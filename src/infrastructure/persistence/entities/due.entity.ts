@@ -8,10 +8,11 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
-import { EDueType } from '../../../application/shared/enums';
-import { UserEntity } from './user.entity';
-import { LoanEntity } from './loan.entity';
+
 import { CustomerEntity } from './customer.entity';
+import { LoanEntity } from './loan.entity';
+import { UserEntity } from './user.entity';
+import { EDueType } from '../../../application/shared/enums';
 
 @Entity('dues')
 @Index(['loanId', 'dueDate'])

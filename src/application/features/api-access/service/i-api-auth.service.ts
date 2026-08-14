@@ -1,7 +1,8 @@
 import { IIdentity } from '@shared-libs';
+
 import { ApiConfiguration } from '../domain';
-import { ApiTokenExchangeResult } from './api-token-exchange-result';
 import { ApiCredentialsGenerateResult } from './api-credentials-generate-result';
+import { ApiTokenExchangeResult } from './api-token-exchange-result';
 
 export const API_AUTH_SERVICE = 'API_AUTH_SERVICE';
 

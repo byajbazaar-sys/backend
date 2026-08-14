@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { plainToInstance } from 'class-transformer';
 import { SYSTEM_USER_ID } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
+import { In, Repository } from 'typeorm';
+
+import {
+  IInventoryCategoriesRepository,
+  InventoryCategory,
+  UpdateInventoryCategoryRequestModel,
+} from '../../../application';
 import { InventoryCategoryEntity } from '../entities/inventory-category.entity';
-import { IInventoryCategoriesRepository, InventoryCategory, UpdateInventoryCategoryRequestModel } from '../../../application';
 
 @Injectable()
 export class InventoryCategoriesRepository implements IInventoryCategoriesRepository {

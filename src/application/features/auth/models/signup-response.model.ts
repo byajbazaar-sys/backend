@@ -35,7 +35,12 @@ export class SignupResponseModel {
   businessName?: string;
 
   @Expose()
-  @ApiProperty({ example: '123 Main Street, City, State, ZIP Code', nullable: true, required: false, description: 'Business address' })
+  @ApiProperty({
+    example: '123 Main Street, City, State, ZIP Code',
+    nullable: true,
+    required: false,
+    description: 'Business address',
+  })
   address?: string;
 
   @Expose()
@@ -46,7 +51,8 @@ export class SignupResponseModel {
   @Expose()
   @ApiProperty({
     example: true,
-    description: 'New accounts start as first-login until they complete a login or email verification that issues a session.',
+    description:
+      'New accounts start as first-login until they complete a login or email verification that issues a session.',
   })
   isFirstLogin: boolean;
 }

@@ -1,5 +1,6 @@
-import { EDepositStatus } from '../enums';
 import { Expose, Type } from 'class-transformer';
+
+import { EDepositStatus } from '../enums';
 import { DepositTransaction } from './deposit-transaction';
 
 export class DepositAccount {

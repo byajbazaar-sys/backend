@@ -1,11 +1,19 @@
-import { Inject, Injectable, ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { Item } from '../domain';
-import { IItemsRepository, ITEMS_REPOSITORY } from '../../../shared';
-import { IItemService } from './i-item.service';
-import { CreateItemRequestModel, UpdateItemRequestModel } from '../models';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import {
+  Inject,
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { SYSTEM_USER_ID } from '@shared-libs';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { IItemsRepository, ITEMS_REPOSITORY } from '../../../shared';
+import { Item } from '../domain';
+import { IItemService } from './i-item.service';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans';
+import { CreateItemRequestModel, UpdateItemRequestModel } from '../models';
 
 @Injectable()
 export class ItemService implements IItemService {
@@ -13,7 +21,7 @@ export class ItemService implements IItemService {
     @Inject(ITEMS_REPOSITORY) private readonly itemsRepo: IItemsRepository,
     @Inject(LOAN_ITEMS_REPOSITORY) private readonly loanItemsRepo: ILoanItemsRepository,
     @InjectPinoLogger(ItemService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   async create(data: CreateItemRequestModel, userId: string): Promise<Item> {
     try {
@@ -85,7 +93,10 @@ export class ItemService implements IItemService {
 
       // Check if the item is system-generated (created by system)
       if (existingItem.createdBy === SYSTEM_USER_ID) {
-        this.logger.warn({ itemId: id, createdBy: existingItem.createdBy }, 'Attempted to update system-generated item');
+        this.logger.warn(
+          { itemId: id, createdBy: existingItem.createdBy },
+          'Attempted to update system-generated item',
+        );
         throw new ForbiddenException('Cannot update system-generated items');
       }
 

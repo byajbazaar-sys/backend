@@ -1,26 +1,16 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
+
 import { ECouponType, ESubscriptionStatus } from '../domain';
-import { ApplyCouponResponseModel } from '../models';
 import { Coupon, CouponRedemption, Subscription } from '../domain';
-import { COUPONS_REPOSITORY, ICouponsRepository } from './i-coupons.repository';
-import {
-  COUPON_REDEMPTIONS_REPOSITORY,
-  ICouponRedemptionsRepository,
-} from './i-coupon-redemptions.repository';
+import { ApplyCouponResponseModel } from '../models';
 import { CouponPreview } from './coupon-preview';
+import { COUPON_REDEMPTIONS_REPOSITORY, ICouponRedemptionsRepository } from './i-coupon-redemptions.repository';
 import { ICouponService } from './i-coupon.service';
-import { RazorpayOptions } from '../../../shared';
+import { COUPONS_REPOSITORY, ICouponsRepository } from './i-coupons.repository';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
-import {
-  ISubscriptionsRepository,
-  SUBSCRIPTIONS_REPOSITORY,
-} from './i-subscriptions.repository';
+import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
+import { RazorpayOptions } from '../../../shared';
 import { requireCheckoutPlan } from '../utils/checkout-plan.util';
 
 @Injectable()
@@ -64,24 +54,17 @@ export class CouponService implements ICouponService {
     if (coupon.expiry && new Date(coupon.expiry) < new Date()) {
       throw new BadRequestException('Coupon has expired');
     }
-    if (
-      coupon.maximumRedemption != null &&
-      Number(coupon.usedCount) >= Number(coupon.maximumRedemption)
-    ) {
+    if (coupon.maximumRedemption != null && Number(coupon.usedCount) >= Number(coupon.maximumRedemption)) {
       throw new BadRequestException('Coupon redemption limit reached');
     }
 
-    const amount =
-      originalAmount ??
-      Number((await requireCheckoutPlan(this.plansRepo)).price);
+    const amount = originalAmount ?? Number((await requireCheckoutPlan(this.plansRepo)).price);
     if (Number(coupon.minimumAmount) > amount) {
-      throw new BadRequestException(
-        `Minimum subscription amount for this coupon is ₹${coupon.minimumAmount}`,
-      );
+      throw new BadRequestException(`Minimum subscription amount for this coupon is ₹${coupon.minimumAmount}`);
     }
 
     if (coupon.oncePerUser !== false) {
-      const existing = await this.redemptionsRepo.findByCouponAndUser(coupon.id!, userId);
+      const existing = await this.redemptionsRepo.findByCouponAndUser(coupon.id, userId);
       if (existing && (await this.isConsumingRedemption(existing))) {
         throw new BadRequestException('You have already redeemed this coupon');
       }
@@ -128,10 +111,7 @@ export class CouponService implements ICouponService {
       return;
     }
 
-    const existingByUser = await this.redemptionsRepo.findByCouponAndUser(
-      subscription.couponId,
-      subscription.userId,
-    );
+    const existingByUser = await this.redemptionsRepo.findByCouponAndUser(subscription.couponId, subscription.userId);
     if (existingByUser) {
       if (await this.isConsumingRedemption(existingByUser)) {
         return;

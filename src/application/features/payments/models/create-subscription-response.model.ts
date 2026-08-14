@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
+
 import { ESubscriptionStatus } from '../domain';
 
 export class CreateSubscriptionResponseModel {

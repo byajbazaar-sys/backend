@@ -1,5 +1,5 @@
-import type { TryOnAssetType } from '../models';
 import { TryOnAsset, CreateTryOnAssetData } from '../domain';
+import type { TryOnAssetType } from '../models';
 
 export const TRY_ON_ASSETS_REPOSITORY = 'TRY_ON_ASSETS_REPOSITORY';
 

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, QueryDeepPartialEntity, Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
+import { In, QueryDeepPartialEntity, Repository } from 'typeorm';
+
 import {
   ACTIVE_SUBSCRIPTION_STATUSES,
   DUPLICATE_BLOCKING_STATUSES,
@@ -11,8 +12,8 @@ import {
   Subscription,
   SubscriptionPatch,
 } from '../../../application';
-import { SubscriptionEntity } from '../entities/subscription.entity';
 import { ESubscriptionStatus } from '../../../application/features/payments/domain/enums';
+import { SubscriptionEntity } from '../entities/subscription.entity';
 
 @Injectable()
 export class SubscriptionsRepository implements ISubscriptionsRepository {
@@ -148,9 +149,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     const pageSize = Math.min(100, Math.max(1, query.pageSize));
     const skip = (page - 1) * pageSize;
 
-    const qb = this.subscriptionRepo
-      .createQueryBuilder('s')
-      .leftJoinAndSelect('s.user', 'user');
+    const qb = this.subscriptionRepo.createQueryBuilder('s').leftJoinAndSelect('s.user', 'user');
 
     if (query.status === 'active') {
       qb.andWhere('s.status = :status', { status: ESubscriptionStatus.Active });
@@ -164,10 +163,9 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
 
     const search = query.search?.trim();
     if (search) {
-      qb.andWhere(
-        `(user.email ILIKE :search OR user.firstName ILIKE :search OR user.lastName ILIKE :search)`,
-        { search: `%${search}%` },
-      );
+      qb.andWhere(`(user.email ILIKE :search OR user.firstName ILIKE :search OR user.lastName ILIKE :search)`, {
+        search: `%${search}%`,
+      });
     }
 
     qb.orderBy('s.createdAt', 'DESC').skip(skip).take(pageSize);

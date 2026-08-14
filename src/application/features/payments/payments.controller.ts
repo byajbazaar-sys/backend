@@ -11,18 +11,14 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiHeader,
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
 import { Request } from 'express';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { SubscriptionUserProfileData } from './domain';
 import {
   ApplyCouponRequestModel,
   ApplyCouponResponseModel,
@@ -32,10 +28,9 @@ import {
   PaymentResponseModel,
   SubscriptionStatusResponseModel,
 } from './models';
-import { SubscriptionUserProfileData } from './domain';
+import { USERS_REPOSITORY, IUsersRepository } from '../users';
 import { IPaymentsService, PAYMENTS_SERVICE } from './service/i-payments.service';
 import { IWebhookService, WEBHOOK_SERVICE } from './service/i-webhook.service';
-import { USERS_REPOSITORY, IUsersRepository } from '../users';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -123,8 +118,7 @@ export class PaymentsController {
     @Headers('x-razorpay-signature') signature: string,
   ): Promise<{ received: boolean; duplicate?: boolean }> {
     const rawBody =
-      req.rawBody?.toString('utf8') ||
-      (typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}));
+      req.rawBody?.toString('utf8') || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}));
 
     try {
       return await this.webhookService.handleWebhook(rawBody, signature);
@@ -146,5 +140,4 @@ export class PaymentsController {
   ): Promise<PaymentResponseModel[]> {
     return this.paymentsService.listPayments(identity.userId, page, pageSize);
   }
-
 }

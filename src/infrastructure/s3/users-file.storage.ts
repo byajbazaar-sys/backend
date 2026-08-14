@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { IUsersFileStorage ,FileStorageOptions} from '../../application';
 import { S3FileStorage } from '@shared-libs';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { IUsersFileStorage, FileStorageOptions } from '../../application';
 
 @Injectable()
 export class UsersFileStorage extends S3FileStorage implements IUsersFileStorage {

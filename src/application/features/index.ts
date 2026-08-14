@@ -1,26 +1,27 @@
 import { JwtService } from '@nestjs/jwt';
-import { UsersController } from './users';
+
+import { SettingsApiController } from './api-access';
 import { AuthController } from './auth';
 import { CustomersController } from './customers';
-import { LoansController } from './loans';
-import { TransactionsController } from './transactions';
-import { ItemsController } from './items';
-import { NotificationsController } from './notifications';
-import { SupportController } from './support';
+import { DepositsController } from './deposits';
+import { EventsController, AdminEventsController } from './events';
 import {
   InventoryCategoriesController,
   InventoryItemsController,
   InventoryReportsController,
   BarcodeController,
 } from './inventory';
-import { PosSessionsController, PosSessionPublicController, PosSessionLeaveController } from './pos';
-import { SalesBillsController } from './sales-bills';
+import { ItemsController } from './items';
+import { LoansController } from './loans';
 import { MetalRatesController } from './metal-rates';
-import { SettingsApiController } from './api-access';
+import { NotificationsController } from './notifications';
 import { PaymentsController, AdminPaymentsController } from './payments';
-import { EventsController, AdminEventsController } from './events';
+import { PosSessionsController, PosSessionPublicController, PosSessionLeaveController } from './pos';
+import { SupportController } from './support';
+import { SalesBillsController } from './sales-bills';
+import { TransactionsController } from './transactions';
 import { TryOnController } from './try-on';
-import { DepositsController } from './deposits';
+import { UsersController } from './users';
 
 export * from './users';
 export * from './auth';

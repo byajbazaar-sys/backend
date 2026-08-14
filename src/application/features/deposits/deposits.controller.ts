@@ -13,18 +13,13 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOkResponse,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
-import { ExportFormat } from '../../shared';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { CreateDepositAccountData, AddDepositData, AdjustDepositData, RefundDepositData } from './domain';
 import {
   AddDepositAmountRequestModel,
   AdjustDepositRequestModel,
@@ -37,9 +32,9 @@ import {
   ListDepositsQueryModel,
   RefundDepositRequestModel,
 } from './models';
-import { CreateDepositAccountData, AddDepositData, AdjustDepositData, RefundDepositData } from './domain';
-import { DEPOSIT_SERVICE, IDepositService } from './service';
 import { DepositsFilterOptions, DepositsDownloadFilterOptions } from './options';
+import { DEPOSIT_SERVICE, IDepositService } from './service';
+import { ExportFormat } from '../../shared';
 
 @ApiTags('deposits')
 @ApiBearerAuth('user')
@@ -55,7 +50,10 @@ export class DepositsController {
   @ApiOperation({ summary: 'Create a deposit account' })
   @ApiResponse({ status: HttpStatus.CREATED, type: DepositResponseModel })
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() body: CreateDepositRequestModel, @Identity() identity: IIdentity): Promise<DepositResponseModel> {
+  async create(
+    @Body() body: CreateDepositRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<DepositResponseModel> {
     const data = plainToInstance(CreateDepositAccountData, body, { excludeExtraneousValues: true });
     const account = await this.depositService.create(body.customerId, identity.userId, data);
     return plainToInstance(DepositResponseModel, account, { excludeExtraneousValues: true });
@@ -129,7 +127,10 @@ export class DepositsController {
   @Get(':id')
   @ApiOkResponse({ type: DepositResponseModel })
   @HttpCode(HttpStatus.OK)
-  async findOne(@Param() params: GetDepositParamsModel, @Identity() identity: IIdentity): Promise<DepositResponseModel> {
+  async findOne(
+    @Param() params: GetDepositParamsModel,
+    @Identity() identity: IIdentity,
+  ): Promise<DepositResponseModel> {
     const account = await this.depositService.findOne(params.id, identity.userId);
     return plainToInstance(DepositResponseModel, account, { excludeExtraneousValues: true });
   }

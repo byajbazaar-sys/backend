@@ -1,8 +1,8 @@
 import { SalesDailyPoint } from './sales-daily-point';
-import { SalesTopItem } from './sales-top-item';
+import { SalesDocumentTypeBreakdown } from './sales-document-type-breakdown';
 import { SalesMetalBreakdown } from './sales-metal-breakdown';
 import { SalesPaymentBreakdown } from './sales-payment-breakdown';
-import { SalesDocumentTypeBreakdown } from './sales-document-type-breakdown';
+import { SalesTopItem } from './sales-top-item';
 
 export interface SalesAnalytics {
   billCount: number;

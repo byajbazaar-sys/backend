@@ -1,7 +1,7 @@
 import { Subscription } from '../domain';
 import { SubscriptionPatch } from '../models';
-import { AdminSubscriptionListRow } from './admin-subscription-list-row';
 import { AdminSubscriptionListQuery } from './admin-subscription-list-query';
+import { AdminSubscriptionListRow } from './admin-subscription-list-row';
 
 export const SUBSCRIPTIONS_REPOSITORY = 'SUBSCRIPTIONS_REPOSITORY';
 

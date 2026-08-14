@@ -5,13 +5,7 @@ export class SesOptions {
   public sender: string;
   public senderName?: string;
 
-  constructor(
-    region: string,
-    accessKeyId: string,
-    secretAccessKey: string,
-    sender: string,
-    senderName?: string,
-  ) {
+  constructor(region: string, accessKeyId: string, secretAccessKey: string, sender: string, senderName?: string) {
     this.region = region;
     this.accessKeyId = accessKeyId;
     this.secretAccessKey = secretAccessKey;

@@ -1,7 +1,8 @@
 import { Paged } from '@shared-libs';
+
 import { Notification } from '../domain';
-import { NotificationsFilterOptions } from '../options';
 import { SendEmailRequestModel } from '../models';
+import { NotificationsFilterOptions } from '../options';
 
 export const NOTIFICATION_SERVICE = 'INotificationService';
 

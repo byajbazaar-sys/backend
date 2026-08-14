@@ -7,8 +7,9 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { LoanEntity } from './loan.entity';
+
 import { ItemEntity } from './item.entity';
+import { LoanEntity } from './loan.entity';
 import { UserEntity } from './user.entity';
 
 @Entity('loan_items')

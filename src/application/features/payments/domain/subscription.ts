@@ -1,4 +1,5 @@
 import { Expose, Type } from 'class-transformer';
+
 import { ESubscriptionStatus } from './enums';
 
 export class Subscription {

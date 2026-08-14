@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import {
-  GeneratedAiImage,
-  IProductImageAiService,
-  ProductImageInput,
-} from '../../../application';
+
+import { GeneratedAiImage, IProductImageAiService, ProductImageInput } from '../../../application';
 import { stripDataUrl } from '../utils/image.util';
 import {
   ensureTransparentProductPng,
@@ -14,9 +11,7 @@ import {
 
 @Injectable()
 export class SharpProductImageService implements IProductImageAiService {
-  constructor(
-    @InjectPinoLogger(SharpProductImageService.name) private readonly logger: PinoLogger,
-  ) {}
+  constructor(@InjectPinoLogger(SharpProductImageService.name) private readonly logger: PinoLogger) {}
 
   async removeProductBackground(image: ProductImageInput): Promise<GeneratedAiImage> {
     const input = Buffer.from(stripDataUrl(image.base64), 'base64');

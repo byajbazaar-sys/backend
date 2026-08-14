@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+
 import { ETransactionLogAction, ETransactionPaidIn, ETransactionType } from '../enums';
 
 export class TransactionLogResponseModel {

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
+import { Repository } from 'typeorm';
+
 import { CouponRedemption, ICouponRedemptionsRepository } from '../../../application';
 import { CouponRedemptionEntity } from '../entities/coupon-redemption.entity';
 

@@ -16,8 +16,12 @@ import {
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiExtraModels, ApiTags, ApiBearerAuth, ApiOkResponse, ApiResponse, ApiConsumes } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { EUserType, Identity, IIdentity, Roles, RolesGuard, UserAuthGuard } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { User } from './domain';
 import {
   GetUserParamsModel,
   ListUsersQueryModel,
@@ -25,10 +29,7 @@ import {
   UpdateUserRequestModel,
   UserResponseModel,
 } from './models';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import { IUsersService, USERS_SERVICE } from './service';
-import { plainToInstance } from 'class-transformer';
-import { User } from './domain';
 
 @ApiTags('users')
 @ApiBearerAuth('user')
@@ -39,7 +40,7 @@ export class UsersController {
   constructor(
     @Inject(USERS_SERVICE) private readonly usersService: IUsersService,
     @InjectPinoLogger(UsersController.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   @Get()
   @ApiOkResponse({ type: PaginatedUserResponseModel })

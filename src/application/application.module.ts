@@ -70,16 +70,13 @@ import {
   DEPOSIT_SERVICE,
   DepositService,
 } from './features';
+import { EMAIL_TEMPLATE_SERVICE, EmailTemplateService } from './features/notifications';
 import {
   POS_SESSION_SERVICE,
   PosSessionService,
   WEBSOCKET_HANDLER_SERVICE,
   WebSocketHandlerService,
 } from './features/pos';
-import {
-  EMAIL_TEMPLATE_SERVICE,
-  EmailTemplateService,
-} from './features/notifications';
 
 @Global()
 @Module({

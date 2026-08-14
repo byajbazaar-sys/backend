@@ -11,11 +11,11 @@ function looksHeicByFilename(name?: string): boolean {
   return lower.endsWith('.heic') || lower.endsWith('.heif');
 }
 
-export type NormalizedImageForStorage = {
+export interface NormalizedImageForStorage {
   buffer: Buffer;
   mimetype: string;
   fileExtension: string;
-};
+}
 
 /**
  * HEIC/HEIF buffers often fail file-type detection or are rejected downstream.
@@ -40,14 +40,10 @@ export async function normalizeImageBufferForStorage(
     (mimeLower === 'application/octet-stream' && looksHeicByFilename(originalFilename));
 
   const isHeicDetected =
-    fromBuffer &&
-    (fromBuffer.mime === 'image/heic' ||
-      fromBuffer.mime === 'image/heif' ||
-      fromBuffer.ext === 'heic');
+    fromBuffer && (fromBuffer.mime === 'image/heic' || fromBuffer.mime === 'image/heif' || fromBuffer.ext === 'heic');
 
   if (!isHeicMime && !isHeicDetected) {
-    const ext =
-      mimeLower.split('/')[1]?.split(';')[0]?.split('+')[0] || fromBuffer?.ext || 'bin';
+    const ext = mimeLower.split('/')[1]?.split(';')[0]?.split('+')[0] || fromBuffer?.ext || 'bin';
     return {
       buffer,
       mimetype: declaredMime || fromBuffer?.mime || 'application/octet-stream',

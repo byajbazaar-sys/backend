@@ -14,18 +14,12 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiConsumes,
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import {
   CreateTryOnJobRequestModel,
   RecolorTryOnRequestModel,
@@ -76,9 +70,7 @@ export class TryOnController {
     @Body('color') color?: string,
   ): Promise<TryOnAssetResponseModel> {
     const heightInInches =
-      heightInInchesRaw != null && heightInInchesRaw !== ''
-        ? Number(heightInInchesRaw)
-        : undefined;
+      heightInInchesRaw != null && heightInInchesRaw !== '' ? Number(heightInInchesRaw) : undefined;
     const asset = await this.tryOnService.uploadAsset(identity.userId, {
       type,
       label,
@@ -100,9 +92,7 @@ export class TryOnController {
     return plainToInstance(
       TryOnAssetsListResponseModel,
       {
-        items: items.map((item) =>
-          plainToInstance(TryOnAssetResponseModel, item, { excludeExtraneousValues: true }),
-        ),
+        items: items.map((item) => plainToInstance(TryOnAssetResponseModel, item, { excludeExtraneousValues: true })),
       },
       { excludeExtraneousValues: true },
     );
@@ -111,10 +101,7 @@ export class TryOnController {
   @Delete('assets/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a custom try-on asset' })
-  async deleteAsset(
-    @Identity() identity: IIdentity,
-    @Param('id') id: string,
-  ): Promise<void> {
+  async deleteAsset(@Identity() identity: IIdentity, @Param('id') id: string): Promise<void> {
     await this.tryOnService.deleteAsset(identity.userId, id);
   }
 
@@ -146,10 +133,7 @@ export class TryOnController {
   @Get(':jobId')
   @ApiOperation({ summary: 'Poll try-on job status / result' })
   @ApiOkResponse({ type: TryOnJobResponseModel })
-  async getJob(
-    @Identity() identity: IIdentity,
-    @Param('jobId') jobId: string,
-  ): Promise<TryOnJobResponseModel> {
+  async getJob(@Identity() identity: IIdentity, @Param('jobId') jobId: string): Promise<TryOnJobResponseModel> {
     const job = await this.tryOnService.getJob(identity.userId, jobId);
     return plainToInstance(TryOnJobResponseModel, job, { excludeExtraneousValues: true });
   }

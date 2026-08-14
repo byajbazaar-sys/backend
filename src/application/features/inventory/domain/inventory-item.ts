@@ -1,4 +1,5 @@
 import { Expose } from 'class-transformer';
+
 import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../enums';
 
 export class InventoryItem {

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Request } from 'express';
 import { extractRequestToken, IAuthenticationProvider, IIdentity, UsersAuthOptions } from '@shared-libs';
+import { Request } from 'express';
+
 import { API_AUTH_SERVICE, IApiAuthService } from '../service';
 
 @Injectable()

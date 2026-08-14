@@ -1,7 +1,8 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IPageable } from '@shared-libs';
 import { Expose, Type } from 'class-transformer';
+
 import { TransactionResponseModel } from './transaction-response.model';
-import { ApiProperty } from '@nestjs/swagger';
 
 export class TransactionsPagedResponseModel implements IPageable<TransactionResponseModel> {
   @Expose()
@@ -37,4 +38,3 @@ export class TransactionsPagedResponseModel implements IPageable<TransactionResp
   @ApiProperty({ description: 'Has previous page', example: true })
   hasPreviousPage: boolean;
 }
-

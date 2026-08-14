@@ -1,6 +1,6 @@
 import { AdminSeed } from './admin.seed';
-import { ItemsSeed } from './items.seed';
 import { InventoryCategoriesSeed } from './inventory-categories.seed';
+import { ItemsSeed } from './items.seed';
 import { SeedingService } from './seeding.service';
 
 export * from './seeding.service';

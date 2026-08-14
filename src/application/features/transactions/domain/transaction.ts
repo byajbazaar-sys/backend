@@ -1,7 +1,8 @@
 import { Expose, Type } from 'class-transformer';
-import { ETransactionType, ETransactionPaidIn } from '../enums';
-import { Customer } from '../../customers';
+
 import { Due } from '../../../shared';
+import { Customer } from '../../customers';
+import { ETransactionType, ETransactionPaidIn } from '../enums';
 
 export class Transaction {
   @Expose()

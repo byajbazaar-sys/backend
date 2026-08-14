@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Expose } from 'class-transformer';
 import { EUserType } from '@shared-libs';
+import { Expose } from 'class-transformer';
 
 export class GoogleSsoResponseModel {
   @Expose()

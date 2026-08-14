@@ -1,8 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsEnum, IsInt, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
 import { ENotificationChannel, ENotificationStatus } from '@shared-libs';
+import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsEnum, IsInt, Min, Max } from 'class-validator';
 
 export class ListNotificationsQueryModel {
   @ApiPropertyOptional({ enum: ENotificationChannel })

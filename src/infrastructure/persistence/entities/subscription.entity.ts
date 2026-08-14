@@ -8,9 +8,10 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { ESubscriptionStatus } from '../../../application/features/payments/domain/enums';
-import { UserEntity } from './user.entity';
+
 import { CouponEntity } from './coupon.entity';
+import { UserEntity } from './user.entity';
+import { ESubscriptionStatus } from '../../../application/features/payments/domain/enums';
 
 @Entity('subscriptions')
 @Index('IDX_subscriptions_user_id_status', ['userId', 'status'])

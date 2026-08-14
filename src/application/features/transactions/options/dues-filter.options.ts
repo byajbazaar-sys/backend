@@ -1,5 +1,6 @@
-import { Expose, Type } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
+import { Expose, Type } from 'class-transformer';
+
 import { EDueType } from '../../../shared';
 
 export class DuesFilterOptions {

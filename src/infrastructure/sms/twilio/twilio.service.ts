@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import twilio from 'twilio';
+
 import { TwilioOptions } from './twilio.options';
 import { SendSMSDto, TwilioMessage, ITwilioService } from '../../../application';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 @Injectable()
 export class TwilioService implements ITwilioService {
@@ -44,7 +45,7 @@ export class TwilioService implements ITwilioService {
       return this.sendSMS({
         to: originalFrom,
         from: originalTo,
-        message: message,
+        message,
       });
     } catch (error) {
       this.logger.error({ err: error, to: originalFrom, from: originalTo }, 'Error sending SMS reply');

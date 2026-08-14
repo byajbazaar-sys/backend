@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
+
 import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../enums';
 
 export class InventoryItemResponseModel {

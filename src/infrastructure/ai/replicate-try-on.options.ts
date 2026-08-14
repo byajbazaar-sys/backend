@@ -1,12 +1,12 @@
 export class ReplicateTryOnOptions {
   constructor(
-    public apiToken: string = '',
+    public apiToken = '',
     /** Replicate model slug, e.g. black-forest-labs/flux-2-pro */
-    public modelId: string = 'black-forest-labs/flux-2-pro',
+    public modelId = 'black-forest-labs/flux-2-pro',
     /** Per-request timeout in milliseconds */
-    public timeoutMs: number = 120_000,
+    public timeoutMs = 120_000,
     /** Max retries for transient failures */
-    public maxRetries: number = 2,
+    public maxRetries = 2,
   ) {}
 
   get isConfigured(): boolean {

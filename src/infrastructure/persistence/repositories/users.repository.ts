@@ -1,28 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { hashSync } from 'bcrypt';
 import { BCRYPT_SALT_ROUNDS, EUserType } from '@shared-libs';
-import { UserEntity } from '../entities/user.entity';
+import { hashSync } from 'bcrypt';
 import { plainToInstance } from 'class-transformer';
+import { Repository, In } from 'typeorm';
+
 import { IUsersRepository, User, CreateUserInput, UserUpdatePatch } from '../../../application';
 import { defaultTrialEndsAt } from '../../../application/features/payments/utils/trial.util';
+import { UserEntity } from '../entities/user.entity';
 
 const DEFAULT_TRIAL_DAYS = Number(process.env.DEFAULT_TRIAL_DAYS ?? 7);
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {
-  constructor(@InjectRepository(UserEntity) private userRepo: Repository<UserEntity>) { }
+  constructor(@InjectRepository(UserEntity) private userRepo: Repository<UserEntity>) {}
 
   async create(createUserDto: CreateUserInput): Promise<User> {
     const dto = { ...createUserDto };
     if (dto.password) {
       dto.password = hashSync(dto.password, BCRYPT_SALT_ROUNDS);
     }
-    if (
-      !dto.trialEndsAt &&
-      dto.userType !== EUserType.Admin
-    ) {
+    if (!dto.trialEndsAt && dto.userType !== EUserType.Admin) {
       dto.trialEndsAt = defaultTrialEndsAt(DEFAULT_TRIAL_DAYS);
     }
     const entity = this.userRepo.create(dto);
@@ -56,7 +54,7 @@ export class UsersRepository implements IUsersRepository {
   }
 
   async getUsers(ids?: string[]): Promise<User[]> {
-    const where = ids?.length ? { id: In(ids as string[]) } : {};
+    const where = ids?.length ? { id: In(ids) } : {};
     const users = await this.userRepo.find({ where });
     return plainToInstance(User, users, { excludeExtraneousValues: true });
   }

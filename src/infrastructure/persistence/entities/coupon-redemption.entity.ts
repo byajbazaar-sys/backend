@@ -1,15 +1,8 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  Index,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
-import { UserEntity } from './user.entity';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index, ManyToOne, JoinColumn } from 'typeorm';
+
 import { CouponEntity } from './coupon.entity';
 import { SubscriptionEntity } from './subscription.entity';
+import { UserEntity } from './user.entity';
 
 @Entity('coupon_redemptions')
 @Index('UQ_coupon_redemptions_coupon_user', ['couponId', 'userId'], { unique: true })

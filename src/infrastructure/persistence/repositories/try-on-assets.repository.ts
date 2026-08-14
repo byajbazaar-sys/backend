@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
+import { Repository } from 'typeorm';
+
 import { ITryOnAssetsRepository, TryOnAsset, CreateTryOnAssetData, TryOnAssetType } from '../../../application';
 import { TryOnAssetEntity } from '../entities/try-on-asset.entity';
 
@@ -21,8 +22,7 @@ export class TryOnAssetsRepository implements ITryOnAssetsRepository {
         type: entity.type,
         imageKey: entity.imageKey,
         label: entity.label ?? undefined,
-        heightInInches:
-          entity.heightInInches != null ? Number(entity.heightInInches) : undefined,
+        heightInInches: entity.heightInInches != null ? Number(entity.heightInInches) : undefined,
         color: entity.color ?? undefined,
         createdAt: entity.createdAt,
       },

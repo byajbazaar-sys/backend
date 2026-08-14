@@ -1,4 +1,5 @@
 import { DEFAULT_PAGE_NUMBER, DEFAULT_PAGE_SIZE } from 'libs/constants';
+
 import { IPaginationParams } from './i-pagination-params';
 import { IPaginationResult } from './i-pagination-result';
 

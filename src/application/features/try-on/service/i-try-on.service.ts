@@ -1,9 +1,5 @@
-import type {
-  CreateTryOnJobRequestModel,
-  RecolorTryOnRequestModel,
-  TryOnAssetResponseModel,
-} from '../models';
 import type { TryOnJobRecord } from '../interfaces';
+import type { CreateTryOnJobRequestModel, RecolorTryOnRequestModel, TryOnAssetResponseModel } from '../models';
 import type { TryOnLambdaPayload } from './try-on-lambda-payload';
 import type { UploadTryOnAssetInput } from './upload-try-on-asset-input';
 

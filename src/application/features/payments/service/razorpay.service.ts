@@ -1,22 +1,16 @@
-import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-  OnModuleInit,
-} from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { BadRequestException, Injectable, InternalServerErrorException, OnModuleInit } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import Razorpay from 'razorpay';
-import { RazorpayOptions } from '../../../shared';
-import {
-  IRazorpayService,
-} from './i-razorpay.service';
+
+import { IRazorpayService } from './i-razorpay.service';
 import { RazorpayCustomerResult } from './razorpay-customer-result';
 import { RazorpayInvoiceResult } from './razorpay-invoice-result';
 import { RazorpayOrderResult } from './razorpay-order-result';
 import { RazorpayPlanResult } from './razorpay-plan-result';
 import { RazorpayRefundResult } from './razorpay-refund-result';
 import { RazorpaySubscriptionResult } from './razorpay-subscription-result';
+import { RazorpayOptions } from '../../../shared';
 import {
   RazorpayCreateMonthlyPlanData,
   RazorpayCreateCustomerData,
@@ -134,10 +128,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
     const client = this.getClient();
 
     if (params.existingPlanId?.trim()) {
-      const existing = (await client.plans.fetch(params.existingPlanId.trim())) as unknown as Record<
-        string,
-        unknown
-      >;
+      const existing = (await client.plans.fetch(params.existingPlanId.trim())) as unknown as Record<string, unknown>;
       const item = (existing.item ?? {}) as Record<string, unknown>;
       return {
         id: String(existing.id),
@@ -251,9 +242,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
       } as Record<string, unknown>)) as unknown as {
         items?: Record<string, unknown>[];
       };
-      const match = (listed.items ?? []).find(
-        (item) => String(item.email ?? '').toLowerCase() === normalized,
-      );
+      const match = (listed.items ?? []).find((item) => String(item.email ?? '').toLowerCase() === normalized);
       if (!match) {
         return null;
       }
@@ -296,10 +285,10 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
     cancelAtCycleEnd: boolean,
   ): Promise<RazorpaySubscriptionResult> {
     const client = this.getClient();
-    const raw = (await client.subscriptions.cancel(
-      providerSubscriptionId,
-      cancelAtCycleEnd,
-    )) as unknown as Record<string, unknown>;
+    const raw = (await client.subscriptions.cancel(providerSubscriptionId, cancelAtCycleEnd)) as unknown as Record<
+      string,
+      unknown
+    >;
     return this.toSubscriptionResult(raw);
   }
 
@@ -321,10 +310,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
 
   async fetchSubscription(providerSubscriptionId: string): Promise<RazorpaySubscriptionResult> {
     const client = this.getClient();
-    const raw = (await client.subscriptions.fetch(providerSubscriptionId)) as unknown as Record<
-      string,
-      unknown
-    >;
+    const raw = (await client.subscriptions.fetch(providerSubscriptionId)) as unknown as Record<string, unknown>;
     return this.toSubscriptionResult(raw);
   }
 
@@ -387,10 +373,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
       return false;
     }
     try {
-      const expected = crypto
-        .createHmac('sha256', this.options.webhookSecret)
-        .update(rawBody)
-        .digest('hex');
+      const expected = crypto.createHmac('sha256', this.options.webhookSecret).update(rawBody).digest('hex');
       const expectedBuf = Buffer.from(expected, 'utf8');
       const actualBuf = Buffer.from(signature, 'utf8');
       if (expectedBuf.length !== actualBuf.length) {

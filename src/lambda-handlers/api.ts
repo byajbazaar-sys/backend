@@ -1,15 +1,16 @@
-import { Context, Handler } from 'aws-lambda';
+import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { AppModule } from '../app.module';
-import { ValidationPipe } from '@nestjs/common';
-import { GlobalResponseInterceptor } from '@shared-libs';
-import { ConfigService } from '@nestjs/config';
-import { IMsConfig, IApiOptions } from '../configurations';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { RequestMethod } from '@nestjs/common';
-import { parse } from 'qs';
+import { GlobalResponseInterceptor } from '@shared-libs';
 import * as serverlessExpress from '@vendia/serverless-express';
+import { Context, Handler } from 'aws-lambda';
+import { parse } from 'qs';
+
+import { AppModule } from '../app.module';
+import { IMsConfig, IApiOptions } from '../configurations';
 
 let cachedServer: Handler;
 

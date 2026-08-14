@@ -7,13 +7,7 @@ function flattenForCsv(obj: Record<string, unknown>, prefix = ''): Record<string
   const result: Record<string, string> = {};
   for (const [k, v] of Object.entries(obj)) {
     const key = prefix ? `${prefix}_${k}` : k;
-    if (
-      v !== null &&
-      v !== undefined &&
-      typeof v === 'object' &&
-      !Array.isArray(v) &&
-      !(v instanceof Date)
-    ) {
+    if (v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)) {
       Object.assign(result, flattenForCsv(v as Record<string, unknown>, key));
     } else {
       result[key] = v instanceof Date ? v.toISOString() : String(v ?? '');

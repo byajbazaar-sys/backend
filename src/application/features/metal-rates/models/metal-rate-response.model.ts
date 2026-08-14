@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+
 import { EMetalType } from '../../inventory/enums';
 
 export class CurrentMetalRatesResponseModel {

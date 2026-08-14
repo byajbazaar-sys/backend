@@ -1,5 +1,5 @@
-import { Expose } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
+import { Expose } from 'class-transformer';
 
 /** Filter options for customer list download (no pagination) */
 export class CustomersDownloadFilterOptions {

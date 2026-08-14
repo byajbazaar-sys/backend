@@ -1,5 +1,6 @@
-import { EDepositTransactionType } from '../enums';
 import { Expose, Type } from 'class-transformer';
+
+import { EDepositTransactionType } from '../enums';
 
 export class DepositTransaction {
   @Expose()

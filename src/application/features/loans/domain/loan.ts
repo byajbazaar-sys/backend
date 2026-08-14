@@ -1,5 +1,12 @@
 import { Expose, Type } from 'class-transformer';
-import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus, EInterestPrincipalBasis } from '../enums';
+
+import {
+  ELoanTenureType,
+  EInterestCalculationMethod,
+  EInterestType,
+  ELoanStatus,
+  EInterestPrincipalBasis,
+} from '../enums';
 import { LoanItem } from './loan-item';
 
 export class Loan {

@@ -1,6 +1,7 @@
 import * as Papa from 'papaparse';
-import { EDocumentType } from '../enums';
+
 import { SalesBill } from '../domain';
+import { EDocumentType } from '../enums';
 
 export const GST_EXPORT_COLUMNS = [
   'Invoice Number',

@@ -1,4 +1,5 @@
 import { Paged } from '@shared-libs';
+
 import { Notification } from '../domain';
 import { NotificationDeliveryPatch } from '../models';
 import { NotificationsFilterOptions } from '../options';

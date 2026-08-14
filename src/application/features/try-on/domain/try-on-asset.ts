@@ -1,4 +1,5 @@
 import { Expose } from 'class-transformer';
+
 import type { TryOnAssetType } from '../models';
 
 export class TryOnAsset {

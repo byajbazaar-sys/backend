@@ -3,14 +3,7 @@ import { EMetalType } from '../inventory/enums';
 export const GOLD_RATE_PURITIES = ['24K', '22K', '20K', '18K', '14K'] as const;
 export const SILVER_RATE_PURITIES = ['999', '925'] as const;
 
-export const CURRENT_RATE_KEYS = [
-  'gold24',
-  'gold22',
-  'gold20',
-  'gold18',
-  'silver999',
-  'silver925',
-] as const;
+export const CURRENT_RATE_KEYS = ['gold24', 'gold22', 'gold20', 'gold18', 'silver999', 'silver925'] as const;
 
 export type CurrentRateKey = (typeof CURRENT_RATE_KEYS)[number];
 

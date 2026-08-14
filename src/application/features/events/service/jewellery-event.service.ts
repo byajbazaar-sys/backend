@@ -1,32 +1,25 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { plainToInstance } from 'class-transformer';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Paged } from '@shared-libs';
-import { EJewelleryEventStatus, JewelleryEvent, JewelleryEventDuplicateQuery, JewelleryEventRelatedQuery } from '../domain';
+import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { DiscoveredEvent, EVENTS_DISCOVERY_SERVICE, IEventsDiscoveryService } from '../../../shared';
 import { JEWELLERY_EVENT_SYNC_STATES } from '../constants';
-import { buildEventSlug, eventDedupeKey } from '../utils/slug.util';
+import {
+  EJewelleryEventStatus,
+  JewelleryEvent,
+  JewelleryEventDuplicateQuery,
+  JewelleryEventRelatedQuery,
+} from '../domain';
 import {
   CreateJewelleryEventRequestModel,
   ListJewelleryEventsQueryModel,
   UpdateJewelleryEventRequestModel,
   JewelleryEventUpdatePatch,
 } from '../models';
-import {
-  DiscoveredEvent,
-  EVENTS_DISCOVERY_SERVICE,
-  IEventsDiscoveryService,
-} from '../../../shared';
-import {
-  IJewelleryEventsRepository,
-  JEWELLERY_EVENTS_REPOSITORY,
-} from './i-jewellery-events.repository';
 import { IJewelleryEventService } from './i-jewellery-event.service';
+import { IJewelleryEventsRepository, JEWELLERY_EVENTS_REPOSITORY } from './i-jewellery-events.repository';
+import { buildEventSlug, eventDedupeKey } from '../utils/slug.util';
 
 @Injectable()
 export class JewelleryEventService implements IJewelleryEventService {
@@ -45,7 +38,10 @@ export class JewelleryEventService implements IJewelleryEventService {
 
   private normalizeTags(tags?: string[]): string[] {
     if (!Array.isArray(tags)) return [];
-    return tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 6);
+    return tags
+      .map((t) => String(t).trim())
+      .filter(Boolean)
+      .slice(0, 6);
   }
 
   private assertValidDates(startDate?: Date, endDate?: Date): void {
@@ -54,10 +50,7 @@ export class JewelleryEventService implements IJewelleryEventService {
     }
   }
 
-  private async resolveUniqueSlug(
-    desired: string,
-    excludeId?: string,
-  ): Promise<string> {
+  private async resolveUniqueSlug(desired: string, excludeId?: string): Promise<string> {
     let slug = desired || `event-${Date.now()}`;
     let attempt = 0;
     while (attempt < 50) {
@@ -103,9 +96,7 @@ export class JewelleryEventService implements IJewelleryEventService {
 
   private fromGemini(event: DiscoveredEvent): JewelleryEvent {
     const startDate = this.toDate(event.startDate);
-    const slug =
-      (event.slug && event.slug.trim()) ||
-      buildEventSlug({ name: event.name, city: event.city, startDate });
+    const slug = (event.slug && event.slug.trim()) || buildEventSlug({ name: event.name, city: event.city, startDate });
     return plainToInstance(
       JewelleryEvent,
       {
@@ -157,7 +148,7 @@ export class JewelleryEventService implements IJewelleryEventService {
     }
     const related = await this.eventsRepo.findRelated(
       plainToInstance(JewelleryEventRelatedQuery, {
-        excludeId: event.id!,
+        excludeId: event.id,
         city: event.city,
         state: event.state,
         limit: 6,
@@ -197,9 +188,7 @@ export class JewelleryEventService implements IJewelleryEventService {
       throw new ConflictException('An event with the same name, city and start date already exists');
     }
 
-    const baseSlug =
-      data.slug ||
-      buildEventSlug({ name: data.name, city: data.city, startDate: data.startDate });
+    const baseSlug = data.slug || buildEventSlug({ name: data.name, city: data.city, startDate: data.startDate });
     data.slug = await this.resolveUniqueSlug(baseSlug);
 
     return this.eventsRepo.create({
@@ -227,14 +216,12 @@ export class JewelleryEventService implements IJewelleryEventService {
     const duplicate = await this.eventsRepo.findDuplicate(
       plainToInstance(JewelleryEventDuplicateQuery, { name, city, startDate }),
     );
-    if (duplicate && duplicate.id !== id) {
+    if (duplicate?.id !== id) {
       throw new ConflictException('An event with the same name, city and start date already exists');
     }
 
     if (data.slug || data.name || data.city !== undefined || data.startDate !== undefined) {
-      const baseSlug =
-        data.slug ||
-        buildEventSlug({ name, city, startDate });
+      const baseSlug = data.slug || buildEventSlug({ name, city, startDate });
       data.slug = await this.resolveUniqueSlug(baseSlug, id);
     }
 
@@ -257,15 +244,9 @@ export class JewelleryEventService implements IJewelleryEventService {
     const known: DiscoveredEvent[] = [];
 
     for (const event of basic) {
-      const slug =
-        event.slug ||
-        buildEventSlug({ name: event.name, city: event.city, startDate: event.startDate });
+      const slug = event.slug || buildEventSlug({ name: event.name, city: event.city, startDate: event.startDate });
       const existing = await this.eventsRepo.findBySlug(slug);
-      const missingDetails =
-        !event.description ||
-        !event.visitorEntryFee ||
-        !event.contactEmail ||
-        !event.contactPhone;
+      const missingDetails = !event.description || !event.visitorEntryFee || !event.contactEmail || !event.contactPhone;
       if (!existing || missingDetails) {
         needsEnrichment.push(event);
       } else {
@@ -273,9 +254,7 @@ export class JewelleryEventService implements IJewelleryEventService {
       }
     }
 
-    const enriched = needsEnrichment.length
-      ? await this.eventsDiscovery.enrichEvents(needsEnrichment)
-      : [];
+    const enriched = needsEnrichment.length ? await this.eventsDiscovery.enrichEvents(needsEnrichment) : [];
 
     return [...known, ...enriched];
   }
@@ -313,9 +292,7 @@ export class JewelleryEventService implements IJewelleryEventService {
   }
 
   async syncStates(states?: string[]): Promise<{ states: string[]; upserted: number }> {
-    const targetStates = (states?.length ? states : [...JEWELLERY_EVENT_SYNC_STATES]).map((s) =>
-      s.trim(),
-    );
+    const targetStates = (states?.length ? states : [...JEWELLERY_EVENT_SYNC_STATES]).map((s) => s.trim());
     const all: DiscoveredEvent[] = [];
     for (const state of targetStates) {
       try {
@@ -329,7 +306,7 @@ export class JewelleryEventService implements IJewelleryEventService {
     return { states: targetStates, upserted: result.upserted };
   }
 
-  async listActiveSlugs(): Promise<Array<{ slug: string; updatedAt: Date }>> {
+  async listActiveSlugs(): Promise<{ slug: string; updatedAt: Date }[]> {
     return this.eventsRepo.listActiveSlugs();
   }
 }

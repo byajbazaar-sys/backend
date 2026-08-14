@@ -1,4 +1,5 @@
 import { Expose, Type } from 'class-transformer';
+
 import { EPaymentMode, EBillStatus, EDocumentType } from '../enums';
 import { SalesBillLineItem } from './sales-bill-line-item';
 

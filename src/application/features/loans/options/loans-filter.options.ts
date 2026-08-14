@@ -1,5 +1,6 @@
-import { Expose, Type } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
+import { Expose, Type } from 'class-transformer';
+
 import { ELoanStatus } from '../enums';
 
 export class LoansFilterOptions {
@@ -26,4 +27,3 @@ export class LoansFilterOptions {
   @Expose()
   public status?: ELoanStatus;
 }
-

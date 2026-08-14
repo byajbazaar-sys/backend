@@ -81,12 +81,7 @@ function alphaForBackgroundPixel(dist: number, existingAlpha: number): number {
  * Flood-fill from image borders through background-like pixels only.
  * Keeps enclosed studio-coloured regions inside filigree (not connected to the border).
  */
-function markExternalBackground(
-  data: Buffer,
-  width: number,
-  height: number,
-  bg: Rgb,
-): Uint8Array {
+function markExternalBackground(data: Buffer, width: number, height: number, bg: Rgb): Uint8Array {
   const external = new Uint8Array(width * height);
   const visited = new Uint8Array(width * height);
   const queue: number[] = [];
@@ -210,10 +205,7 @@ export async function removeSolidColorBackground(buffer: Buffer): Promise<Buffer
     .toBuffer();
 
   try {
-    return await sharp(cutout)
-      .trim({ threshold: 10 })
-      .png({ compressionLevel: 9, adaptiveFiltering: true })
-      .toBuffer();
+    return await sharp(cutout).trim({ threshold: 10 }).png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer();
   } catch {
     return cutout;
   }
@@ -223,11 +215,7 @@ export async function removeSolidColorBackground(buffer: Buffer): Promise<Buffer
  * Final polish: force near-white pixels transparent (legacy AI JPEG outputs).
  */
 export async function ensureTransparentProductPng(buffer: Buffer): Promise<Buffer> {
-  const { data, info } = await sharp(buffer)
-    .rotate()
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const { data, info } = await sharp(buffer).rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true });
 
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
@@ -250,10 +238,7 @@ export async function ensureTransparentProductPng(buffer: Buffer): Promise<Buffe
 }
 
 /** Keep API preview payloads under Lambda's 6MB response limit. */
-export async function compressPngForApiPreview(
-  buffer: Buffer,
-  maxDimension = 1024,
-): Promise<Buffer> {
+export async function compressPngForApiPreview(buffer: Buffer, maxDimension = 1024): Promise<Buffer> {
   return sharp(buffer)
     .resize(maxDimension, maxDimension, { fit: 'inside', withoutEnlargement: true })
     .png({ compressionLevel: 9, adaptiveFiltering: true })

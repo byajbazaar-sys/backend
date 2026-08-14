@@ -10,8 +10,8 @@ export class AIOptions {
     public claudeApiKey: string,
     public provider: AiProvider = 'bedrock',
     public geminiApiKeys: string[] = [],
-    public bedrockRegion: string = 'ap-south-1',
-    public bedrockModelId: string = 'global.amazon.nova-2-lite-v1:0',
+    public bedrockRegion = 'ap-south-1',
+    public bedrockModelId = 'global.amazon.nova-2-lite-v1:0',
     /** Defaults to AI_PROVIDER when unset; set TRY_ON_PROVIDER=aivot to use Aivot. */
     public tryOnProvider: TryOnAiProvider = 'bedrock',
   ) {}

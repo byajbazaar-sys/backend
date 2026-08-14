@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ESortOrder } from '@shared-libs';
 import { Expose, Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+
 import { ELoanStatus } from '../enums';
 
 export class ListLoansQueryRequestModel {
@@ -55,4 +56,3 @@ export class ListLoansQueryRequestModel {
   @IsEnum(ELoanStatus)
   status?: ELoanStatus;
 }
-

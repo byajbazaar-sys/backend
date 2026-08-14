@@ -6,28 +6,44 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Paged } from '@shared-libs';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { EInventoryItemStatus } from '../../inventory/enums';
-import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from '../../inventory/service/i-inventory-items.repository';
 import {
   IInventoryCategoriesRepository,
   INVENTORY_CATEGORIES_REPOSITORY,
 } from '../../inventory/service/i-inventory-categories.repository';
+import {
+  IInventoryItemsRepository,
+  INVENTORY_ITEMS_REPOSITORY,
+} from '../../inventory/service/i-inventory-items.repository';
 import { SalesBill, SalesBillLineItem, SalesAnalytics } from '../domain';
-import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder, EDocumentType, BILL_NUMBER_PREFIX } from '../enums';
-import { CreateSalesBillRequestModel, ListSalesBillsQueryModel, UpdateSalesBillRequestModel, UpdateSalesBillPatch } from '../models';
+import {
+  EBillStatus,
+  EPaymentMode,
+  ESalesBillSortField,
+  ESalesBillSortOrder,
+  EDocumentType,
+  BILL_NUMBER_PREFIX,
+} from '../enums';
+import {
+  CreateSalesBillRequestModel,
+  ListSalesBillsQueryModel,
+  UpdateSalesBillRequestModel,
+  UpdateSalesBillPatch,
+} from '../models';
 import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options';
-import { toGstExportCsv } from '../utils/gst-export.util';
+import { BillLineUpdate } from './bill-line-update';
 import { ISalesBillService } from './i-sales-bill.service';
+import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
+import { InventoryStockDeduction } from './inventory-stock-deduction';
+import { toGstExportCsv } from '../utils/gst-export.util';
 import {
   computeUnitPurchaseCost,
   computeLineProfit,
   recalcLineProfitFromExisting,
 } from '../utils/purchase-profit.util';
-import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
-import { InventoryStockDeduction } from './inventory-stock-deduction';
-import { BillLineUpdate } from './bill-line-update';
 
 const DEFAULT_CGST_RATE = 1.5;
 const DEFAULT_SGST_RATE = 1.5;
@@ -73,7 +89,7 @@ export class SalesBillService implements ISalesBillService {
       dateTo: query.dateTo ? new Date(query.dateTo) : undefined,
       paymentMode: query.paymentMode,
       status: query.status,
-      documentType: query.documentType as EDocumentType,
+      documentType: query.documentType,
       customerId: query.customerId,
       sortField: (query.sortField as ESalesBillSortField) ?? ESalesBillSortField.CreatedAt,
       sortOrder: (query.sortOrder as ESalesBillSortOrder) ?? ESalesBillSortOrder.Desc,
@@ -90,7 +106,7 @@ export class SalesBillService implements ISalesBillService {
     if (billStatus !== EBillStatus.Completed) return [];
 
     const linkedLines = lineItems.filter((line) => line.inventoryItemId);
-    const linkedIds = linkedLines.map((line) => line.inventoryItemId!);
+    const linkedIds = linkedLines.map((line) => line.inventoryItemId);
 
     const uniqueIds = [...new Set(linkedIds)];
     if (uniqueIds.length !== linkedIds.length) {
@@ -100,7 +116,7 @@ export class SalesBillService implements ISalesBillService {
     const deductions: InventoryStockDeduction[] = [];
 
     for (const line of linkedLines) {
-      const id = line.inventoryItemId!;
+      const id = line.inventoryItemId;
       const qty = Number(line.quantity);
       if (!Number.isFinite(qty) || qty < 1) {
         throw new BadRequestException('Linked inventory items must have quantity of at least 1');
@@ -259,9 +275,7 @@ export class SalesBillService implements ISalesBillService {
 
     const stockDeductions = await this.resolveInventoryStockDeductions(lineItems, userId, status);
 
-    const customerName =
-      data.customerName?.trim() ||
-      (documentType === EDocumentType.InformalBill ? '' : 'Walk-in');
+    const customerName = data.customerName?.trim() || (documentType === EDocumentType.InformalBill ? '' : 'Walk-in');
 
     const bill: SalesBill = {
       billNumber: await this.generateBillNumber(userId, documentType),
@@ -327,10 +341,7 @@ export class SalesBillService implements ISalesBillService {
     return this.billsRepo.findAll(this.mapListQuery(userId, query));
   }
 
-  async exportGstCsv(
-    userId: string,
-    query: ListSalesBillsQueryModel,
-  ): Promise<{ buffer: Buffer; filename: string }> {
+  async exportGstCsv(userId: string, query: ListSalesBillsQueryModel): Promise<{ buffer: Buffer; filename: string }> {
     const filter = this.mapListQuery(userId, query);
     const { pageNumber: _pageNumber, pageSize: _pageSize, ...exportFilter } = filter;
     const bills = await this.billsRepo.findAllForExport(exportFilter);
@@ -339,11 +350,7 @@ export class SalesBillService implements ISalesBillService {
     return { buffer: Buffer.from(csv, 'utf-8'), filename };
   }
 
-  async listByCustomer(
-    customerId: string,
-    userId: string,
-    query: ListSalesBillsQueryModel,
-  ): Promise<Paged<SalesBill>> {
+  async listByCustomer(customerId: string, userId: string, query: ListSalesBillsQueryModel): Promise<Paged<SalesBill>> {
     return this.billsRepo.findByCustomerId(customerId, {
       ...this.mapListQuery(userId, query),
       customerId,
@@ -423,7 +430,7 @@ export class SalesBillService implements ISalesBillService {
         if (!billLineIds.has(patch.id)) {
           throw new BadRequestException(`Line item ${patch.id} not found on this bill`);
         }
-        const line = (bill.items ?? []).find((l) => l.id === patch.id)!;
+        const line = (bill.items ?? []).find((l) => l.id === patch.id);
         const qty = patch.quantity ?? Number(line.quantity);
         const price = patch.sellingPrice ?? Number(line.sellingPrice);
         const lineTotal = Math.round(price * qty * 100) / 100;
@@ -481,8 +488,7 @@ export class SalesBillService implements ISalesBillService {
 
     if (data.customerName !== undefined) {
       patch.customerName =
-        data.customerName.trim() ||
-        (bill.documentType === EDocumentType.InformalBill ? '' : 'Walk-in');
+        data.customerName.trim() || (bill.documentType === EDocumentType.InformalBill ? '' : 'Walk-in');
     }
     if (data.customerMobile !== undefined) {
       patch.customerMobile = data.customerMobile.trim() || undefined;
@@ -518,10 +524,7 @@ export class SalesBillService implements ISalesBillService {
     const bill = await this.getById(id, userId);
     const restoreStock = bill.status === EBillStatus.Completed;
     await this.billsRepo.deleteBill(id, restoreStock);
-    this.logger.info(
-      { billId: id, billNumber: bill.billNumber, restoreStock },
-      'Sales bill deleted',
-    );
+    this.logger.info({ billId: id, billNumber: bill.billNumber, restoreStock }, 'Sales bill deleted');
   }
 
   async bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }> {

@@ -1,7 +1,12 @@
 import { Global, Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
+
+import { AIOptions, AivotTryOnOptions, ReplicateTryOnOptions, CloudflareTryOnOptions } from './ai';
+import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
+import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
+import { LambdaOptions, LambdaService } from './lambda';
 import {
   CUSTOMERS_REPOSITORY,
   DUES_REPOSITORY,
@@ -46,6 +51,21 @@ import {
   PRODUCT_IMAGE_AI_SERVICE,
   UNIT_OF_WORK,
 } from '../application';
+import { TwilioOptions, TwilioService } from './sms';
+import { SendGridOptions, SendGridService } from './send-grid';
+import { SesOptions, SesService } from './ses';
+import { ResendOptions, ResendService } from './resend';
+import { resolveEmailServiceProvider } from './email/resolve-email-service';
+import { WebAppOptions } from '../application';
+import { AivotService } from './ai/services/aivot.service';
+import { BedrockService } from './ai/services/bedrock.service';
+import { GeminiService } from './ai/services/gemini.service';
+import { ReplicateTryOnService } from './ai/services/replicate.service';
+import { SharpProductImageService } from './ai/services/sharp-product-image.service';
+import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.service';
+import CronServices from './cron';
+import { AESEncrypt, AESEncryptOptions } from './crypto';
+import { GoogleOAuthService } from './google-oauth';
 import {
   UnitOfWork,
   CustomersRepository,
@@ -78,35 +98,11 @@ import {
   TryOnAssetsRepository,
   DepositsRepository,
 } from './persistence';
-import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
-import { WebSocketMessageService } from './websocket/websocket-message.service';
-import { AESEncrypt, AESEncryptOptions } from './crypto';
-import { FileStorageMock, UsersFileStorage } from './s3';
-import { LambdaOptions, LambdaService } from './lambda';
-import {
-  AIOptions,
-  AivotTryOnOptions,
-  ReplicateTryOnOptions,
-  CloudflareTryOnOptions,
-} from './ai';
-import { AivotService } from './ai/services/aivot.service';
-import { BedrockService } from './ai/services/bedrock.service';
-import { GeminiService } from './ai/services/gemini.service';
-import { ReplicateTryOnService } from './ai/services/replicate.service';
-import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
-import { SharpProductImageService } from './ai/services/sharp-product-image.service';
-import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.service';
-import { TwilioOptions, TwilioService } from './sms';
-import { SendGridOptions, SendGridService } from './send-grid';
-import { SesOptions, SesService } from './ses';
-import { ResendOptions, ResendService } from './resend';
-import { resolveEmailServiceProvider } from './email/resolve-email-service';
-import { WebAppOptions } from '../application';
-import CronServices from './cron';
-import { generateDataSourceOptions } from './persistence/type-orm.config';
 import Entities from './persistence/entities';
 import Seeds from './persistence/seeds';
-import { GoogleOAuthService } from './google-oauth';
+import { generateDataSourceOptions } from './persistence/type-orm.config';
+import { FileStorageMock, UsersFileStorage } from './s3';
+import { WebSocketMessageService } from './websocket/websocket-message.service';
 
 @Global()
 @Module({
@@ -354,14 +350,7 @@ import { GoogleOAuthService } from './google-oauth';
     },
     {
       provide: TRY_ON_AI_SERVICE,
-      inject: [
-        AIOptions,
-        GeminiService,
-        BedrockService,
-        AivotService,
-        ReplicateTryOnService,
-        CloudflareTryOnService,
-      ],
+      inject: [AIOptions, GeminiService, BedrockService, AivotService, ReplicateTryOnService, CloudflareTryOnService],
       useFactory: (
         options: AIOptions,
         gemini: GeminiService,
@@ -416,7 +405,7 @@ import { GoogleOAuthService } from './google-oauth';
     {
       provide: GOOGLE_OAUTH_SERVICE,
       useClass: GoogleOAuthService,
-    }
+    },
   ],
   exports: [
     UNIT_OF_WORK,
@@ -468,4 +457,4 @@ import { GoogleOAuthService } from './google-oauth';
     ...CronServices,
   ],
 })
-export class InfrastructureModule { }
+export class InfrastructureModule {}

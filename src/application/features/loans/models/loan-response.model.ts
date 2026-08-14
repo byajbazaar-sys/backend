@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+
 import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus } from '../enums';
 import { LoanItemResponseModel } from './loan-item-response.model';
 
@@ -26,7 +27,11 @@ export class LoanResponseModel {
   tenureValue: number;
 
   @Expose()
-  @ApiProperty({ enum: EInterestCalculationMethod, example: EInterestCalculationMethod.SIMPLE, description: 'Interest calculation method' })
+  @ApiProperty({
+    enum: EInterestCalculationMethod,
+    example: EInterestCalculationMethod.SIMPLE,
+    description: 'Interest calculation method',
+  })
   interestCalculationMethod: EInterestCalculationMethod;
 
   @Expose()
@@ -115,4 +120,3 @@ export class LoanResponseModel {
   })
   baselineSeq?: number;
 }
-

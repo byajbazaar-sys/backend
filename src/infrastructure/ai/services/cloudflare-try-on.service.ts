@@ -1,9 +1,10 @@
-import { randomInt } from 'crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
+import { randomInt } from 'crypto';
 import FormData from 'form-data';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import sharp from 'sharp';
+
 import {
   CLOUDFLARE_TRYON_MAX_IMAGE_PX,
   CLOUDFLARE_TRYON_MIME,
@@ -11,32 +12,23 @@ import {
   resolveCloudflareTryOnModelId,
 } from '../ai.constants';
 import { CloudflareTryOnOptions, type CloudflareCredential } from '../cloudflare-try-on.options';
-import type {
-  AiImageInput,
-  JewelleryTryOnRequest,
-  OutfitRecolorRequest,
-} from '../interfaces/ai-media.types';
+import { BedrockService } from './bedrock.service';
+import { GeneratedAiImage, IProductImageAiService, ITryOnAiService, ProductImageInput } from '../../../application';
+import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
 import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.prompts';
 import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
-import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 import { compressPngForApiPreview, ensureTransparentProductPng } from '../utils/product-image.util';
-import { BedrockService } from './bedrock.service';
-import {
-  GeneratedAiImage,
-  IProductImageAiService,
-  ITryOnAiService,
-  ProductImageInput,
-} from '../../../application';
+import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
-type CloudflareRunResponse = {
+interface CloudflareRunResponse {
   success?: boolean;
   result?: {
     image?: string;
     description?: string;
   };
-  errors?: Array<{ message?: string }>;
-};
+  errors?: { message?: string }[];
+}
 
 @Injectable()
 export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiService {
@@ -56,10 +48,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     return (await this.generateTryOnImages(request, 'outfit'))[0];
   }
 
-  async generateTryOnImages(
-    request: JewelleryTryOnRequest,
-    mode: 'jewellery' | 'outfit',
-  ): Promise<GeneratedAiImage[]> {
+  async generateTryOnImages(request: JewelleryTryOnRequest, mode: 'jewellery' | 'outfit'): Promise<GeneratedAiImage[]> {
     this.assertConfigured();
     const count = Math.min(2, Math.max(1, request.variations ?? 2));
     const modelId = this.resolveModelId(request);
@@ -135,10 +124,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
         return generated;
       } catch (err) {
         lastError = err;
-        const status =
-          err instanceof AxiosError
-            ? err.response?.status
-            : (err as Error & { status?: number }).status;
+        const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
         const willRotate = this.shouldRotateToken(err, status);
         this.logger.warn(
           {
@@ -214,9 +200,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     const msg = this.errorMessage(err).toLowerCase();
     return (
       status === 429 &&
-      (msg.includes('neurons') ||
-        msg.includes('daily free allocation') ||
-        msg.includes('workers paid'))
+      (msg.includes('neurons') || msg.includes('daily free allocation') || msg.includes('workers paid'))
     );
   }
 
@@ -341,10 +325,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
         return image;
       } catch (err) {
         lastError = err;
-        const status =
-          err instanceof AxiosError
-            ? err.response?.status
-            : (err as Error & { status?: number }).status;
+        const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
         const failureReason = this.errorMessage(err);
         const willRotate = this.shouldRotateToken(err, status);
         const nextAction =
@@ -417,10 +398,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       form.append('seed', String(seed));
     }
 
-    const response = await axios.post<CloudflareRunResponse>(
-      this.buildRunUrl(credential.accountId, modelId),
-      form,
-      {
+    const response = await axios.post<CloudflareRunResponse>(this.buildRunUrl(credential.accountId, modelId), form, {
       headers: {
         Authorization: `Bearer ${credential.apiToken}`,
         ...form.getHeaders(),
@@ -429,13 +407,11 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
       validateStatus: () => true,
-    },
-    );
+    });
 
     if (response.status < 200 || response.status >= 300 || response.data?.success === false) {
       const message =
-        response.data?.errors?.[0]?.message ||
-        `Cloudflare Workers AI request failed with status ${response.status}`;
+        response.data?.errors?.[0]?.message || `Cloudflare Workers AI request failed with status ${response.status}`;
       const err = new Error(message);
       (err as Error & { status?: number }).status = response.status;
       throw err;

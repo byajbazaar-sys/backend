@@ -1,11 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { plainToInstance } from 'class-transformer';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
-import { SalesBillEntity } from '../entities/sales-bill.entity';
-import { SalesBillItemEntity } from '../entities/sales-bill-item.entity';
-import { InventoryItemEntity } from '../entities/inventory-item.entity';
+import { plainToInstance } from 'class-transformer';
+import { Repository } from 'typeorm';
+
 import {
   ISalesBillsRepository,
   SalesBill,
@@ -19,6 +17,9 @@ import {
   InventoryItemSale,
   UpdateSalesBillPatch,
 } from '../../../application';
+import { InventoryItemEntity } from '../entities/inventory-item.entity';
+import { SalesBillItemEntity } from '../entities/sales-bill-item.entity';
+import { SalesBillEntity } from '../entities/sales-bill.entity';
 
 @Injectable()
 export class SalesBillsRepository implements ISalesBillsRepository {
@@ -41,10 +42,9 @@ export class SalesBillsRepository implements ISalesBillsRepository {
 
     if (filter.search?.trim()) {
       const term = `%${filter.search.trim()}%`;
-      qb.andWhere(
-        '(bill.billNumber ILIKE :term OR bill.customerName ILIKE :term OR bill.customerMobile ILIKE :term)',
-        { term },
-      );
+      qb.andWhere('(bill.billNumber ILIKE :term OR bill.customerName ILIKE :term OR bill.customerMobile ILIKE :term)', {
+        term,
+      });
     }
     if (filter.dateFrom) {
       qb.andWhere('bill.issuedAt >= :dateFrom', { dateFrom: filter.dateFrom });
@@ -65,10 +65,9 @@ export class SalesBillsRepository implements ISalesBillsRepository {
       qb.andWhere('bill.customerId = :customerId', { customerId: filter.customerId });
     }
 
-    const sortColumn =
-      filter.sortField === ESalesBillSortField.GrandTotal ? 'bill.grandTotal' : 'bill.createdAt';
+    const sortColumn = filter.sortField === ESalesBillSortField.GrandTotal ? 'bill.grandTotal' : 'bill.createdAt';
     const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    qb.orderBy(sortColumn, sortOrder as 'ASC' | 'DESC');
+    qb.orderBy(sortColumn, sortOrder);
 
     return qb;
   }
@@ -106,7 +105,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
         where: { id: saved.id },
         relations: ['items'],
       });
-      return this.mapBill(withItems!);
+      return this.mapBill(withItems);
     });
   }
 
@@ -131,17 +130,12 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     });
   }
 
-  async findAllForExport(
-    filter: Omit<SalesBillsFilterOptions, 'pageNumber' | 'pageSize'>,
-  ): Promise<SalesBill[]> {
+  async findAllForExport(filter: Omit<SalesBillsFilterOptions, 'pageNumber' | 'pageSize'>): Promise<SalesBill[]> {
     const rows = await this.buildQuery(filter).getMany();
     return rows.map((e) => this.mapBill(e));
   }
 
-  async findByCustomerId(
-    customerId: string,
-    params: SalesBillsFilterOptions,
-  ): Promise<Paged<SalesBill>> {
+  async findByCustomerId(customerId: string, params: SalesBillsFilterOptions): Promise<Paged<SalesBill>> {
     return this.findAll({ ...params, customerId });
   }
 
@@ -164,11 +158,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return Number.isNaN(seq) ? 1 : seq + 1;
   }
 
-  async updateBill(
-    id: string,
-    patch: UpdateSalesBillPatch,
-    lineUpdates: BillLineUpdate[] = [],
-  ): Promise<SalesBill> {
+  async updateBill(id: string, patch: UpdateSalesBillPatch, lineUpdates: BillLineUpdate[] = []): Promise<SalesBill> {
     return this.billsRepo.manager.transaction(async (manager) => {
       const billsRepo = manager.getRepository(SalesBillEntity);
       const itemsRepo = manager.getRepository(SalesBillItemEntity);
@@ -358,10 +348,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     };
   }
 
-  async findSalesByInventoryItemId(
-    inventoryItemId: string,
-    createdBy: string,
-  ): Promise<InventoryItemSale[]> {
+  async findSalesByInventoryItemId(inventoryItemId: string, createdBy: string): Promise<InventoryItemSale[]> {
     const rows = await this.itemsRepo
       .createQueryBuilder('item')
       .innerJoinAndSelect('item.bill', 'bill')

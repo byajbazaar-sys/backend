@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
-import { TransactionResponseModel } from './transaction-response.model';
+
 import { TransactionLogResponseModel } from './transaction-log-response.model';
+import { TransactionResponseModel } from './transaction-response.model';
 
 export class TransactionDetailResponseModel {
   @Expose()

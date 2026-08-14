@@ -1,4 +1,5 @@
 import { Expose, Type } from 'class-transformer';
+
 import { EBillStatus, EPaymentMode, ESalesBillSortField, ESalesBillSortOrder, EDocumentType } from '../enums';
 
 export class SalesBillsFilterOptions {

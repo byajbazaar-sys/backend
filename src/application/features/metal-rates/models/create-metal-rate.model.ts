@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNumber, IsString, Min } from 'class-validator';
+
 import { EMetalType } from '../../inventory/enums';
 
 export class CreateMetalRateRequestModel {

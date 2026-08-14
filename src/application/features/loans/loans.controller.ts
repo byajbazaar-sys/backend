@@ -17,6 +17,7 @@ import {
   StreamableFile,
   Header,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiResponse,
@@ -28,7 +29,12 @@ import {
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { UserAuthGuard, RolesGuard, Identity, IIdentity, ParseFormDataJsonPipe } from '@shared-libs';
+import { toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { v4 as uuidv4 } from 'uuid';
+
+import { Loan, LoanItem } from './domain';
 import {
   CreateLoanRequestModel,
   DownloadLoansQueryRequestModel,
@@ -45,14 +51,9 @@ import {
   LoanStatsResponseModel,
   UploadLoanVoucherSignaturesRequestModel,
 } from './models';
-import { ILoanService, LOAN_SERVICE } from './service';
-import { plainToInstance } from 'class-transformer';
 import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from './options';
-import { toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { ILoanService, LOAN_SERVICE } from './service';
 import { ExportFormat } from '../../shared';
-import { Loan, LoanItem } from './domain';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { v4 as uuidv4 } from 'uuid';
 
 @ApiTags('loans')
 @ApiBearerAuth('user')
@@ -62,7 +63,7 @@ export class LoansController {
   constructor(
     @InjectPinoLogger(LoansController.name) private readonly logger: PinoLogger,
     @Inject(LOAN_SERVICE) private readonly loanService: ILoanService,
-  ) { }
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new loan' })
@@ -78,8 +79,7 @@ export class LoansController {
       loanItemImages?: Express.Multer.File[];
     },
   ): Promise<LoanResponseModel> {
-
-    console.log("files=>", files);
+    console.log('files=>', files);
     const loanData = plainToInstance(Loan, body, {
       excludeExtraneousValues: true,
     });
@@ -91,7 +91,7 @@ export class LoansController {
 
     const loanId = uuidv4();
     loanData.id = loanId;
-    let loanAmount: number = 0;
+    let loanAmount = 0;
 
     if (!Array.isArray(loanData.loanItems)) {
       loanData.loanItems = loanData.loanItems ? [loanData.loanItems] : [];
@@ -116,7 +116,7 @@ export class LoansController {
     loanData.amountRemaining = loanAmount;
     loanData.createdBy = identity.userId;
     const loan = await this.loanService.create(loanData);
-    console.log("loan=>", loan);
+    console.log('loan=>', loan);
     return plainToInstance(LoanResponseModel, loan, {
       excludeExtraneousValues: true,
     });
@@ -242,7 +242,7 @@ export class LoansController {
     const loanItemData = plainToInstance(LoanItem, body, {
       excludeExtraneousValues: true,
     });
-    console.log("files=>", files);
+    console.log('files=>', files);
     if (files.image && files.image.length > 0) {
       loanItemData.image = files.image[0];
     }

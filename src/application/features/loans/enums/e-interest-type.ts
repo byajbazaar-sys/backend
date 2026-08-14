@@ -1,5 +1,4 @@
 export enum EInterestType {
- MONTHLY = 'Monthly',
- DAILY = 'Daily',
+  MONTHLY = 'Monthly',
+  DAILY = 'Daily',
 }
-

@@ -1,3 +1,4 @@
+import { SubscriptionUserProfileData } from '../domain';
 import {
   ApplyCouponRequestModel,
   ApplyCouponResponseModel,
@@ -7,7 +8,6 @@ import {
   PaymentResponseModel,
   SubscriptionStatusResponseModel,
 } from '../models';
-import { SubscriptionUserProfileData } from '../domain';
 
 export const PAYMENTS_SERVICE = 'PAYMENTS_SERVICE';
 

@@ -13,19 +13,18 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard, toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
-import { ExportFormat } from '../../shared/enums/e-export-format.enum';
-import { InventoryItemResponseModel } from './models';
+
 import { InventoryAnalytics } from './domain';
+import { InventoryItemResponseModel } from './models';
 import { INVENTORY_REPORT_SERVICE, IInventoryReportService } from './service';
+import { ExportFormat } from '../../shared/enums/e-export-format.enum';
 
 @ApiTags('inventory-reports')
 @ApiBearerAuth('user')
 @UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('inventory/reports')
 export class InventoryReportsController {
-  constructor(
-    @Inject(INVENTORY_REPORT_SERVICE) private readonly reportService: IInventoryReportService,
-  ) {}
+  constructor(@Inject(INVENTORY_REPORT_SERVICE) private readonly reportService: IInventoryReportService) {}
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Inventory dashboard statistics' })
@@ -63,10 +62,7 @@ export class InventoryReportsController {
   @ApiOperation({ summary: 'Low stock report' })
   @ApiQuery({ name: 'threshold', required: false })
   async lowStock(@Identity() identity: IIdentity, @Query('threshold') threshold?: string) {
-    const items = await this.reportService.getLowStockReport(
-      identity.userId,
-      threshold ? parseFloat(threshold) : 1,
-    );
+    const items = await this.reportService.getLowStockReport(identity.userId, threshold ? parseFloat(threshold) : 1);
     return plainToInstance(InventoryItemResponseModel, items, { excludeExtraneousValues: true });
   }
 

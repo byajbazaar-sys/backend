@@ -1,6 +1,6 @@
 import { Paged } from '@shared-libs';
+
 import { Customer } from '../domain';
-import { CreateCustomerRequestModel, UpdateCustomerRequestModel } from '../models';
 import { CustomersFilterOptions, CustomersDownloadFilterOptions } from '../options';
 
 export const CUSTOMER_SERVICE = 'ICustomerService';

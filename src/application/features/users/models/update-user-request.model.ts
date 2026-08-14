@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { EUserType, NAME_REGEX, NAME_MIN_LENGTH, NAME_MAX_LENGTH, PHONE_E164_REGEX, parseMultipartBoolean, emptyStringToUndefined } from '@shared-libs';
+import {
+  EUserType,
+  NAME_REGEX,
+  NAME_MIN_LENGTH,
+  NAME_MAX_LENGTH,
+  PHONE_E164_REGEX,
+  parseMultipartBoolean,
+  emptyStringToUndefined,
+} from '@shared-libs';
 import { Transform, Type } from 'class-transformer';
 import { IsOptional, IsString, IsBoolean, IsEnum, MinLength, MaxLength, Matches } from 'class-validator';
 

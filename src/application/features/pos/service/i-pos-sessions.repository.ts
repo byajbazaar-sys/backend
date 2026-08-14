@@ -1,6 +1,6 @@
 import { PosSession } from '../domain';
-import { PosSessionPatch } from '../models';
 import { EPosSessionStatus } from '../enums';
+import { PosSessionPatch } from '../models';
 
 export const POS_SESSIONS_REPOSITORY = 'POS_SESSIONS_REPOSITORY';
 

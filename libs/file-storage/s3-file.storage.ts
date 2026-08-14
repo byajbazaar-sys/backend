@@ -12,9 +12,10 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PinoLogger } from 'nestjs-pino';
 import { Readable } from 'stream';
+
+import { FileHelper } from './file-helper';
 import { IFileStorage } from './i-file-storage';
 import { IFileUrlResolver } from './i-file-url.resolver';
-import { FileHelper } from './file-helper';
 import { IS3StorageOptions } from './options';
 import { EAttachmentMimeType } from '../enums';
 import { compressImage } from './image-compressor';
@@ -36,9 +37,7 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
         secretAccessKey: storageOptions.secretAccessKey,
       },
       region: storageOptions.region,
-      ...(storageOptions.endpoint
-        ? { endpoint: storageOptions.endpoint, forcePathStyle: true }
-        : {}),
+      ...(storageOptions.endpoint ? { endpoint: storageOptions.endpoint, forcePathStyle: true } : {}),
     });
     this.helper = new FileHelper(allowedMimeTypes);
   }

@@ -1,1 +1,1 @@
-export * from "./sendgrid.options";
+export * from './sendgrid.options';

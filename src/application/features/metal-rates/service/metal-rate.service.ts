@@ -1,20 +1,10 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { EMetalType } from '../../inventory/enums';
+import { CURRENT_RATE_KEYS, CurrentRateKey, isAllowedRatePurity, purityToCurrentKey } from '../constants';
 import { MetalRate } from '../domain';
-import {
-  CURRENT_RATE_KEYS,
-  CurrentRateKey,
-  isAllowedRatePurity,
-  purityToCurrentKey,
-} from '../constants';
 import {
   CreateMetalRateRequestModel,
   CurrentMetalRatesResponseModel,
@@ -110,11 +100,7 @@ export class MetalRateService implements IMetalRateService {
     return { deletedCount: uniqueIds.length };
   }
 
-  async getChart(
-    userId: string,
-    startDate?: string,
-    endDate?: string,
-  ): Promise<MetalRateChartPointModel[]> {
+  async getChart(userId: string, startDate?: string, endDate?: string): Promise<MetalRateChartPointModel[]> {
     const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : new Date();
     const start = startDate
       ? new Date(`${startDate}T00:00:00.000Z`)

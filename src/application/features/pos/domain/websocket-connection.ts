@@ -1,4 +1,5 @@
 import { Expose } from 'class-transformer';
+
 import { EDeviceType } from '../enums';
 
 export class WebSocketConnection {

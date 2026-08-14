@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumber, IsOptional, Min, Max, IsUUID } from 'class-validator';
-import { Expose, Transform, Type } from 'class-transformer';
 import { AMOUNT_MAX, WEIGHT_MAX, RATE_MAX } from '@shared-libs';
+import { Expose, Transform, Type } from 'class-transformer';
+import { IsString, IsNotEmpty, IsNumber, IsOptional, Min, Max, IsUUID } from 'class-validator';
 
 export class CreateLoanItemRequestModel {
   @Expose()

@@ -16,6 +16,7 @@ import {
   StreamableFile,
   Header,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiConsumes,
@@ -23,13 +24,15 @@ import {
   ApiTags,
   ApiOperation,
   ApiOkResponse,
-  ApiQuery,
   ApiParam,
-  getSchemaPath,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { Customer } from './domain';
 import {
   CreateCustomerRequestModel,
   CustomerResponseModel,
@@ -39,12 +42,8 @@ import {
   ListCustomersQueryRequestModel,
   UpdateCustomerRequestModel,
 } from './models';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { ICustomerService, CUSTOMER_SERVICE } from './service';
-import { plainToInstance } from 'class-transformer';
 import { CustomersFilterOptions, CustomersDownloadFilterOptions } from './options';
-import { Customer } from './domain';
-import { toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { ICustomerService, CUSTOMER_SERVICE } from './service';
 import { ExportFormat } from '../../shared';
 
 @ApiTags('customers')
@@ -55,7 +54,7 @@ export class CustomersController {
   constructor(
     @InjectPinoLogger(CustomersController.name) private readonly logger: PinoLogger,
     @Inject(CUSTOMER_SERVICE) private readonly customerService: ICustomerService,
-  ) { }
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new customer' })
@@ -181,7 +180,10 @@ export class CustomersController {
   @ApiOkResponse({ type: CustomerResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Customer not found' })
   @HttpCode(HttpStatus.OK)
-  async getById(@Param() params: GetCustomerParamsModel, @Identity() identity: IIdentity): Promise<CustomerResponseModel> {
+  async getById(
+    @Param() params: GetCustomerParamsModel,
+    @Identity() identity: IIdentity,
+  ): Promise<CustomerResponseModel> {
     this.logger.info({ params, identity }, 'getById called');
     const customer = await this.customerService.getById(params.id, identity.userId);
     return plainToInstance(CustomerResponseModel, customer, { excludeExtraneousValues: true });

@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+
 import { EPaymentMode, EBillStatus, EDocumentType } from '../enums';
 
 export class ListSalesBillsQueryModel {

@@ -1,4 +1,5 @@
 import { APIGatewayProxyWebsocketHandlerV2 } from 'aws-lambda';
+
 import { getWebSocketHandler } from './websocket-bootstrap';
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context) => {

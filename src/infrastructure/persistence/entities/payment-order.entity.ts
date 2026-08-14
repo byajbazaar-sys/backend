@@ -1,14 +1,7 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  Index,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
-import { UserEntity } from './user.entity';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index, ManyToOne, JoinColumn } from 'typeorm';
+
 import { SubscriptionEntity } from './subscription.entity';
+import { UserEntity } from './user.entity';
 
 @Entity('payment_orders')
 @Index('IDX_payment_orders_user_id', ['userId'])

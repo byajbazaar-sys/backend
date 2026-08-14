@@ -1,17 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import {
-  GEMINI_EVENTS_MODEL,
-  GEMINI_TRYON_FALLBACK_MODEL,
-  GEMINI_TRYON_MODEL,
-  GEMINI_TRYON_TIMEOUT_MS,
-} from '../ai.constants';
-import { AIOptions } from '../ai.options';
-import type {
-  AiImageInput,
-  JewelleryTryOnRequest,
-  OutfitRecolorRequest,
-} from '../interfaces/ai-media.types';
+
 import type {
   DiscoveredEvent,
   DiscoveredEventsPayload,
@@ -19,26 +8,29 @@ import type {
   IEventsDiscoveryService,
   ITryOnAiService,
 } from '../../../application';
-import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
 import {
-  buildFullTryOnPrompt,
-  buildOutfitRecolorPrompt,
-} from '../prompts/try-on.prompts';
+  GEMINI_EVENTS_MODEL,
+  GEMINI_TRYON_FALLBACK_MODEL,
+  GEMINI_TRYON_MODEL,
+  GEMINI_TRYON_TIMEOUT_MS,
+} from '../ai.constants';
+import { AIOptions } from '../ai.options';
+import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
+import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
+import { buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts/try-on.prompts';
 import { extractJsonObject } from '../utils/ai-response.util';
-import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
+import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
 type GoogleGenAICtor = new (opts: { apiKey: string }) => {
   models: { generateContent: (args: Record<string, unknown>) => Promise<unknown> };
 };
 
-type GeminiGenClient = {
+interface GeminiGenClient {
   models: { generateContent: (args: Record<string, unknown>) => Promise<unknown> };
-};
+}
 
-type GeminiPart =
-  | { text: string }
-  | { inlineData: { data: string; mimeType: string } };
+type GeminiPart = { text: string } | { inlineData: { data: string; mimeType: string } };
 
 @Injectable()
 export class GeminiService implements ITryOnAiService, IEventsDiscoveryService {
@@ -124,7 +116,7 @@ export class GeminiService implements ITryOnAiService, IEventsDiscoveryService {
     return this.generateImage([request.image, prompt]);
   }
 
-  private async generateImage(parts: Array<AiImageInput | string>): Promise<GeneratedAiImage> {
+  private async generateImage(parts: (AiImageInput | string)[]): Promise<GeneratedAiImage> {
     await this.ensureGenClients();
     const geminiParts: GeminiPart[] = parts.map((p) =>
       typeof p === 'string'
@@ -201,7 +193,7 @@ export class GeminiService implements ITryOnAiService, IEventsDiscoveryService {
 
   private extractGeneratedImage(response: unknown): GeneratedAiImage {
     const res = response as {
-      candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }>;
+      candidates?: { content?: { parts?: { inlineData?: { data?: string; mimeType?: string } }[] } }[];
     };
     for (const part of res?.candidates?.[0]?.content?.parts ?? []) {
       if (part.inlineData?.data) {

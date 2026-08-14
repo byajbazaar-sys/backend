@@ -7,7 +7,10 @@ export class CustomerResponseModel {
   id: string;
 
   @Expose()
-  @ApiProperty({ description: 'User ID of the creator of this record', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
+  @ApiProperty({
+    description: 'User ID of the creator of this record',
+    example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327',
+  })
   createdBy: string;
 
   @Expose()

@@ -2,6 +2,7 @@ import { Body, Controller, HttpCode, HttpStatus, Inject, Post, UseGuards } from 
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { IsString, IsUUID } from 'class-validator';
+
 import { WEBSOCKET_HANDLER_SERVICE, IWebSocketHandlerService } from './service';
 
 class PosSessionLeaveBody {
@@ -19,9 +20,7 @@ class PosSessionLeaveBody {
 @Controller('pos/sessions')
 @UseGuards(ThrottlerGuard)
 export class PosSessionLeaveController {
-  constructor(
-    @Inject(WEBSOCKET_HANDLER_SERVICE) private readonly wsHandler: IWebSocketHandlerService,
-  ) {}
+  constructor(@Inject(WEBSOCKET_HANDLER_SERVICE) private readonly wsHandler: IWebSocketHandlerService) {}
 
   @Post('leave')
   @ApiOperation({ summary: 'Mobile scanner leaves POS session (notifies desktop)' })

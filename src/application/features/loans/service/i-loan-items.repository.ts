@@ -12,5 +12,5 @@ export interface ILoanItemsRepository {
   findByLoanIds(loanIds: string[]): Promise<LoanItem[]>;
   update(id: string, loanId: string, updateData: UpdateLoanItemPatch): Promise<LoanItem>;
   deleteByLoanId(loanId: string): Promise<void>;
-  findByItemId(itemId: string): Promise<LoanItem>
+  findByItemId(itemId: string): Promise<LoanItem>;
 }

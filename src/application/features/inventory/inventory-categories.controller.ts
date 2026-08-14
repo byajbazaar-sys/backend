@@ -14,12 +14,10 @@ import {
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
-import {
-  CreateInventoryCategoryRequestModel,
-  InventoryCategoryResponseModel,
-} from './models';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { CreateInventoryCategoryRequestModel, InventoryCategoryResponseModel } from './models';
 import { INVENTORY_CATEGORY_SERVICE, IInventoryCategoryService } from './service';
 
 @ApiTags('inventory-categories')
@@ -54,10 +52,7 @@ export class InventoryCategoriesController {
   @Get(':id')
   @ApiOperation({ summary: 'Get inventory category by ID' })
   @ApiParam({ name: 'id' })
-  async getById(
-    @Param('id') id: string,
-    @Identity() identity: IIdentity,
-  ): Promise<InventoryCategoryResponseModel> {
+  async getById(@Param('id') id: string, @Identity() identity: IIdentity): Promise<InventoryCategoryResponseModel> {
     const category = await this.categoryService.getById(id, identity.userId);
     return plainToInstance(InventoryCategoryResponseModel, category, { excludeExtraneousValues: true });
   }

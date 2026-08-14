@@ -1,7 +1,6 @@
 import { isLocal } from '@shared-libs';
 import { Params } from 'nestjs-pino';
 
-
 const getTransport = (): any => {
   if (!isLocal()) {
     return undefined;
@@ -23,5 +22,5 @@ export const generateLoggerConfig = (): Params => {
     },
   };
 
-  return result as Params;
+  return result;
 };

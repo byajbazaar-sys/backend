@@ -7,8 +7,9 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { EMetalType } from '../../../application/features/inventory/enums';
+
 import { UserEntity } from './user.entity';
+import { EMetalType } from '../../../application/features/inventory/enums';
 
 @Entity('metal_rates')
 export class MetalRateEntity {

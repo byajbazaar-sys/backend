@@ -1,14 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import mjml2html from 'mjml';
-import {
-  EmailVerificationTemplateData,
-  ForgotPasswordTemplateData,
-} from '../domain';
+
+import { EmailVerificationTemplateData, ForgotPasswordTemplateData } from '../domain';
 import { IEmailTemplateService } from '../interfaces';
-import {
-  EMAIL_VERIFICATION_TEMPLATE,
-  FORGOT_PASSWORD_TEMPLATE,
-} from '../templates';
+import { EMAIL_VERIFICATION_TEMPLATE, FORGOT_PASSWORD_TEMPLATE } from '../templates';
 
 @Injectable()
 export class EmailTemplateService implements IEmailTemplateService {
@@ -32,10 +27,7 @@ export class EmailTemplateService implements IEmailTemplateService {
     return html;
   }
 
-  private compileTemplate(
-    mjmlContent: string,
-    variables: Record<string, string | number>,
-  ): string {
+  private compileTemplate(mjmlContent: string, variables: Record<string, string | number>): string {
     let content = mjmlContent;
     for (const [key, value] of Object.entries(variables)) {
       content = content.replace(new RegExp(`{{${key}}}`, 'g'), String(value));

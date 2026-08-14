@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+
 import { EDepositStatus } from '../enums';
 import { DepositTransactionResponseModel } from './deposit-transaction-response.model';
 

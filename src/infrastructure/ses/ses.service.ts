@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { Injectable } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
-import { IEmailService, SendEmail } from '../../application';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { SesOptions } from './options';
+import { IEmailService, SendEmail } from '../../application';
 
 @Injectable()
 export class SesService implements IEmailService {

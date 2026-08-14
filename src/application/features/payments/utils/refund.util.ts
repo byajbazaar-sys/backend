@@ -7,9 +7,7 @@ export function isPaymentRefundable(status: string): boolean {
 }
 
 export function sumRefundedAmount(refunds: Refund[], statuses: string[] = ['processed']): number {
-  return refunds
-    .filter((r) => statuses.includes(r.status))
-    .reduce((sum, r) => sum + Number(r.amount), 0);
+  return refunds.filter((r) => statuses.includes(r.status)).reduce((sum, r) => sum + Number(r.amount), 0);
 }
 
 export function remainingRefundableAmount(paymentAmount: number, refunds: Refund[]): number {
@@ -43,11 +41,7 @@ export function resolvePaymentStatusAfterRefund(
 
   const activeRefundTotal = sumRefundedAmount(refunds, ['processed', 'pending']);
   if (activeRefundTotal > 0) {
-    if (
-      currentStatus === 'captured' ||
-      currentStatus === 'partially_refunded' ||
-      currentStatus === 'refunded'
-    ) {
+    if (currentStatus === 'captured' || currentStatus === 'partially_refunded' || currentStatus === 'refunded') {
       return 'partially_refunded';
     }
     return currentStatus;

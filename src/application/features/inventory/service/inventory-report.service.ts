@@ -1,17 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import { InventoryAnalytics, InventoryDashboardStats, InventoryItem } from '../domain';
 import { EInventoryItemStatus, EMetalType } from '../enums';
+import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import { IInventoryReportService } from './i-inventory-report.service';
-import {
-  IInventoryItemsRepository,
-  INVENTORY_ITEMS_REPOSITORY,
-} from './i-inventory-items.repository';
 
 @Injectable()
 export class InventoryReportService implements IInventoryReportService {
-  constructor(
-    @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly itemsRepo: IInventoryItemsRepository,
-  ) {}
+  constructor(@Inject(INVENTORY_ITEMS_REPOSITORY) private readonly itemsRepo: IInventoryItemsRepository) {}
 
   async getDashboardStats(userId: string): Promise<InventoryDashboardStats> {
     const analytics = await this.getAnalytics(userId);
@@ -31,8 +27,7 @@ export class InventoryReportService implements IInventoryReportService {
     const now = Date.now();
     const MS_DAY = 86_400_000;
 
-    const countByStatus = (status: EInventoryItemStatus) =>
-      all.filter((i) => i.status === status).length;
+    const countByStatus = (status: EInventoryItemStatus) => all.filter((i) => i.status === status).length;
 
     const available = all.filter((i) => i.status === EInventoryItemStatus.Available);
     const sold = all.filter((i) => i.status === EInventoryItemStatus.Sold);
@@ -44,10 +39,8 @@ export class InventoryReportService implements IInventoryReportService {
     const goldNetWeight = goldAvailable.reduce((sum, i) => sum + (Number(i.netWeight) || 0), 0);
     const goldAvailableValue = goldAvailable.reduce((sum, i) => sum + (Number(i.sellingPrice) || 0), 0);
 
-    const sellThroughRate =
-      all.length > 0 ? Math.round((sold.length / all.length) * 1000) / 10 : 0;
-    const inventoryTurnover =
-      available.length > 0 ? Math.round((sold.length / available.length) * 100) / 100 : 0;
+    const sellThroughRate = all.length > 0 ? Math.round((sold.length / all.length) * 1000) / 10 : 0;
+    const inventoryTurnover = available.length > 0 ? Math.round((sold.length / available.length) * 100) / 100 : 0;
 
     const metalMap = new Map<
       string,
@@ -91,7 +84,7 @@ export class InventoryReportService implements IInventoryReportService {
 
     const deadStock = available
       .map((i) => ({
-        id: i.id!,
+        id: i.id,
         itemName: i.itemName,
         sku: i.sku ?? '',
         daysInStock: Math.floor((now - new Date(i.createdAt ?? now).getTime()) / MS_DAY),
@@ -104,7 +97,7 @@ export class InventoryReportService implements IInventoryReportService {
       .slice(0, 15);
 
     const lowStockItems = lowStockRaw.slice(0, 15).map((i) => ({
-      id: i.id!,
+      id: i.id,
       itemName: i.itemName,
       sku: i.sku ?? '',
       netWeight: Number(i.netWeight) || 0,

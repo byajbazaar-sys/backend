@@ -3,7 +3,7 @@ export class RazorpayOptions {
     public readonly keyId: string,
     public readonly keySecret: string,
     public readonly webhookSecret: string,
-    public readonly planCurrency: string = 'INR',
-    public readonly defaultTrialDays: number = 7,
+    public readonly planCurrency = 'INR',
+    public readonly defaultTrialDays = 7,
   ) {}
 }

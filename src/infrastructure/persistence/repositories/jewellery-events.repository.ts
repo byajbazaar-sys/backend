@@ -1,20 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { plainToInstance } from 'class-transformer';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
-import { JewelleryEventEntity } from '../entities/jewellery-event.entity';
+import { plainToInstance } from 'class-transformer';
+import { Repository } from 'typeorm';
+
 import {
   EJewelleryEventStatus,
   JewelleryEvent,
   JewelleryEventDuplicateQuery,
   JewelleryEventRelatedQuery,
 } from '../../../application/features/events/domain';
-import {
-  IJewelleryEventsRepository,
-} from '../../../application/features/events/service/i-jewellery-events.repository';
-import { JewelleryEventsFilter } from '../../../application/features/events/service/jewellery-events-filter';
 import { JewelleryEventUpdatePatch } from '../../../application/features/events/models';
+import { IJewelleryEventsRepository } from '../../../application/features/events/service/i-jewellery-events.repository';
+import { JewelleryEventsFilter } from '../../../application/features/events/service/jewellery-events-filter';
+import { JewelleryEventEntity } from '../entities/jewellery-event.entity';
 
 @Injectable()
 export class JewelleryEventsRepository implements IJewelleryEventsRepository {
@@ -40,7 +39,12 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
   }
 
   async update(id: string, data: JewelleryEventUpdatePatch): Promise<JewelleryEvent> {
-    const { id: _omit, createdAt: _c, updatedAt: _u, ...rest } = data as JewelleryEvent & {
+    const {
+      id: _omit,
+      createdAt: _c,
+      updatedAt: _u,
+      ...rest
+    } = data as JewelleryEvent & {
       id?: string;
     };
     await this.eventRepo.update(id, rest as Partial<JewelleryEventEntity>);
@@ -113,10 +117,7 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
       qb.andWhere('(e.end_date IS NULL OR e.end_date >= CURRENT_DATE)');
     }
 
-    qb.orderBy('e.is_featured', 'DESC')
-      .addOrderBy('e.start_date', 'ASC', 'NULLS LAST')
-      .skip(skip)
-      .take(pageSize);
+    qb.orderBy('e.is_featured', 'DESC').addOrderBy('e.start_date', 'ASC', 'NULLS LAST').skip(skip).take(pageSize);
 
     const [rows, totalCount] = await qb.getManyAndCount();
     return toPaged(JewelleryEvent, {
@@ -161,7 +162,7 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
     return this.create(data);
   }
 
-  async listActiveSlugs(): Promise<Array<{ slug: string; updatedAt: Date }>> {
+  async listActiveSlugs(): Promise<{ slug: string; updatedAt: Date }[]> {
     const rows = await this.eventRepo.find({
       where: { status: EJewelleryEventStatus.ACTIVE },
       select: ['slug', 'updatedAt'],

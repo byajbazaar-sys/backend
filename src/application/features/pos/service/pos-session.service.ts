@@ -1,19 +1,14 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { UsersAuthOptions } from '@shared-libs';
+import { randomBytes } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import * as QRCode from 'qrcode';
-import { randomBytes } from 'crypto';
-import { UsersAuthOptions } from '@shared-libs';
+
 import { IPosSessionsRepository, POS_SESSIONS_REPOSITORY } from './i-pos-sessions.repository';
 import { PosSession } from '../domain';
-import { PosSessionQrResponseModel, PosSessionValidateResponseModel } from '../models';
 import { EPosSessionStatus } from '../enums';
+import { PosSessionQrResponseModel, PosSessionValidateResponseModel } from '../models';
 import { IPosSessionService } from './i-pos-session.service';
 
 const SESSION_TTL_MINUTES = 30;
@@ -43,7 +38,7 @@ export class PosSessionService implements IPosSessionService {
       audience: this.options.audience,
       issuer: this.options.issuer,
       algorithms: [this.options.algorithm],
-    }) as { sessionId: string; userId: string; type: string };
+    });
   }
 
   private getWebsocketUrl(): string {
@@ -111,10 +106,7 @@ export class PosSessionService implements IPosSessionService {
     return this.buildQrResponse(session, userId);
   }
 
-  async validateSessionForScanner(
-    sessionId: string,
-    token: string,
-  ): Promise<PosSessionValidateResponseModel> {
+  async validateSessionForScanner(sessionId: string, token: string): Promise<PosSessionValidateResponseModel> {
     const session = await this.validateSessionToken(sessionId, token);
     return {
       valid: true,

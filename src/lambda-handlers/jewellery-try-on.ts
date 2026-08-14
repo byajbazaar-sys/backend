@@ -1,11 +1,8 @@
-import { Context, Handler } from 'aws-lambda';
 import { NestFactory } from '@nestjs/core';
+import { Context, Handler } from 'aws-lambda';
+
 import { AppModule } from '../app.module';
-import {
-  ITryOnService,
-  TRY_ON_SERVICE,
-  TryOnLambdaPayload,
-} from '../application/features/try-on/try-on.service';
+import { ITryOnService, TRY_ON_SERVICE, TryOnLambdaPayload } from '../application/features/try-on/try-on.service';
 
 let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
@@ -24,10 +21,7 @@ async function bootstrap() {
 export const handler: Handler = async (event: unknown, context: Context) => {
   context.callbackWaitsForEmptyEventLoop = false;
 
-  const payload =
-    typeof event === 'string'
-      ? (JSON.parse(event) as TryOnLambdaPayload)
-      : (event as TryOnLambdaPayload);
+  const payload = typeof event === 'string' ? (JSON.parse(event) as TryOnLambdaPayload) : (event as TryOnLambdaPayload);
 
   if (!payload?.jobId || !payload?.userId || !payload?.request) {
     throw new Error('Invalid try-on payload: jobId, userId, and request are required');

@@ -1,5 +1,5 @@
-import { Expose } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Expose } from 'class-transformer';
 import { IsDateString, IsInt, IsOptional, Min, ValidateIf } from 'class-validator';
 
 export class ExtendTrialRequestModel {

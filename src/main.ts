@@ -3,12 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from './app.module';
-import { IApiOptions, IMsConfig } from './configurations';
 import { GlobalResponseInterceptor, isLocal } from '@shared-libs';
 import { parse } from 'qs';
-import { SeedingService } from './infrastructure/persistence/seeds/seeding.service';
+
+import { AppModule } from './app.module';
+import { IApiOptions, IMsConfig } from './configurations';
 import { CronService } from './infrastructure/cron';
+import { SeedingService } from './infrastructure/persistence/seeds/seeding.service';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
@@ -33,12 +34,14 @@ async function bootstrap(): Promise<void> {
     .getInstance()
     .set('query parser', (str: string) => parse(str, { depth: Infinity }));
   // Global validation pipe
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-    transformOptions: { enableImplicitConversion: true }
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
   app.useGlobalInterceptors(new GlobalResponseInterceptor());
   const config = app.get<ConfigService<IMsConfig>>(ConfigService);
   const apiConfig = config.get<IApiOptions>('apiConfig');
@@ -50,11 +53,11 @@ async function bootstrap(): Promise<void> {
     .setTitle('byajbazaar Microservice')
     .setDescription(
       '## Authentication\n\n' +
-      '**Web app (JWT):** Authorize **user** with the JWT from `POST /auth/login`.\n\n' +
-      '**External apps (API access):**\n' +
-      '1. On `POST /auth/api-token`, enter **x-api-key** and **x-api-secret** in the two header fields (do not also use Authorize for api-key on this request).\n' +
-      '2. Copy `accessToken` from the response (`at_live_...`).\n' +
-      '3. Authorize **user** with that access token (Bearer). Inventory and all other protected APIs use **user** only.\n',
+        '**Web app (JWT):** Authorize **user** with the JWT from `POST /auth/login`.\n\n' +
+        '**External apps (API access):**\n' +
+        '1. On `POST /auth/api-token`, enter **x-api-key** and **x-api-secret** in the two header fields (do not also use Authorize for api-key on this request).\n' +
+        '2. Copy `accessToken` from the response (`at_live_...`).\n' +
+        '3. Authorize **user** with that access token (Bearer). Inventory and all other protected APIs use **user** only.\n',
     )
     .addBearerAuth(
       {

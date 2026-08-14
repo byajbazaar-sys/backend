@@ -1,12 +1,25 @@
-import { UseGuards, Controller, Post, Get, Patch, Delete, HttpStatus, HttpCode, Body, Param, Inject } from '@nestjs/common';
+import {
+  UseGuards,
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Delete,
+  HttpStatus,
+  HttpCode,
+  Body,
+  Param,
+  Inject,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { Item } from './domain';
 import { CreateItemRequestModel, UpdateItemRequestModel, ItemResponseModel, GetItemParamsModel } from './models';
 import { IItemService, ITEM_SERVICE } from './service';
-import { plainToInstance } from 'class-transformer';
-import { Item } from './domain';
 
 @ApiTags('items')
 @ApiBearerAuth('user')
@@ -16,7 +29,7 @@ export class ItemsController {
   constructor(
     @InjectPinoLogger(ItemsController.name) private readonly logger: PinoLogger,
     @Inject(ITEM_SERVICE) private readonly itemService: IItemService,
-  ) { }
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new item' })

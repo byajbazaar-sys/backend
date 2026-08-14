@@ -7,7 +7,6 @@ import {
   ConflictException,
   Optional,
 } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { JwtService } from '@nestjs/jwt';
 import {
   IIdentity,
@@ -18,12 +17,15 @@ import {
   EUserType,
   normalizeImageBufferForStorageOrThrow,
 } from '@shared-libs';
+import { compareSync, hashSync } from 'bcrypt';
+import { plainToInstance } from 'class-transformer';
 import { randomBytes } from 'crypto';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { v4 as uuidv4 } from 'uuid';
+
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
 import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
 import { IAuthService } from './interfaces';
-import { compareSync, hashSync } from 'bcrypt';
-import { plainToInstance } from 'class-transformer';
 import {
   USERS_FILE_STORAGE,
   IUsersFileStorage,
@@ -35,15 +37,8 @@ import {
   GOOGLE_OAUTH_SERVICE,
   GoogleUserInfo,
 } from '../../shared';
-import { v4 as uuidv4 } from 'uuid';
-import {
-  EMAIL_TEMPLATE_SERVICE,
-  IEmailTemplateService,
-} from '../notifications';
-import {
-  IPaymentsService,
-  PAYMENTS_SERVICE,
-} from '../payments/service/i-payments.service';
+import { EMAIL_TEMPLATE_SERVICE, IEmailTemplateService } from '../notifications';
+import { IPaymentsService, PAYMENTS_SERVICE } from '../payments/service/i-payments.service';
 
 type ResolvedUser = User & { id: string; email: string; userType: EUserType };
 
@@ -77,7 +72,7 @@ export class AuthService implements IAuthService {
     @Inject(EMAIL_TEMPLATE_SERVICE) private readonly emailTemplateService: IEmailTemplateService,
     @Optional() @Inject(PAYMENTS_SERVICE) private readonly paymentsService: IPaymentsService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   private requireEmail(email: string, message = 'Email is required'): string {
     const normalized = email?.toLowerCase().trim();
@@ -145,7 +140,7 @@ export class AuthService implements IAuthService {
       // User exists but is a Google-only user (no password set)
       if (!user.password || (typeof user.password === 'string' && user.password.trim() === '')) {
         throw new UnauthorizedException(
-          'This account was created with Google Sign-In. Please use "Forgot Password" to set a password and login, or sign in with Google.'
+          'This account was created with Google Sign-In. Please use "Forgot Password" to set a password and login, or sign in with Google.',
         );
       }
 
@@ -199,7 +194,7 @@ export class AuthService implements IAuthService {
       // User exists - check if it's a Google user
       if (existingUser.isGoogleUser) {
         throw new ConflictException(
-          'This email is already registered with Google Sign-In. Please sign in with Google or use "Forgot Password" to set a password.'
+          'This email is already registered with Google Sign-In. Please sign in with Google or use "Forgot Password" to set a password.',
         );
       }
       // Regular user already exists
@@ -218,7 +213,11 @@ export class AuthService implements IAuthService {
           user.profilePhotoFileName,
         );
         const proposedRef = `users/profiles/${userId}.${normalized.fileExtension}`;
-        user.profilePhotoRef = await this.usersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+        user.profilePhotoRef = await this.usersFileStorage.writeAsync(
+          proposedRef,
+          normalized.buffer,
+          normalized.mimetype,
+        );
       }
 
       const emailVerificationToken = randomBytes(32).toString('hex');
@@ -232,7 +231,9 @@ export class AuthService implements IAuthService {
 
       const verificationUrl = this.webAppOptions.buildVerifyEmailUrl(emailVerificationToken);
       const html = this.emailTemplateService.renderEmailVerification({
-        userName: user.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() || user.email : user.email ?? 'User',
+        userName: user.firstName
+          ? `${user.firstName} ${user.lastName ?? ''}`.trim() || user.email
+          : (user.email ?? 'User'),
         verificationUrl,
       });
       await this.emailService.sendEmail({
@@ -527,24 +528,30 @@ export class AuthService implements IAuthService {
       );
     } catch (error: unknown) {
       const err = asHttpLikeError(error);
-      this.logger.error({
-        error: err.message,
-        stack: err.stack,
-        response: err.response?.data,
-        status: err.response?.status,
-      }, 'Google SSO error');
+      this.logger.error(
+        {
+          error: err.message,
+          stack: err.stack,
+          response: err.response?.data,
+          status: err.response?.status,
+        },
+        'Google SSO error',
+      );
 
       if (err.response?.status === 401) {
         throw new UnauthorizedException('Invalid Google authorization code');
       }
       if (err.response?.status === 400) {
-        const googleError =
-          err.response?.data?.error_description || err.response?.data?.error || err.message;
+        const googleError = err.response?.data?.error_description || err.response?.data?.error || err.message;
         throw new BadRequestException(
-          `Invalid authorization code or client credentials: ${googleError || 'Please check your Google OAuth configuration'}`
+          `Invalid authorization code or client credentials: ${googleError || 'Please check your Google OAuth configuration'}`,
         );
       }
-      if (error instanceof BadRequestException || error instanceof UnauthorizedException || error instanceof ConflictException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof UnauthorizedException ||
+        error instanceof ConflictException
+      ) {
         throw error;
       }
       throw new BadRequestException(`Google SSO failed: ${err.message || 'Unknown error'}`);
@@ -561,5 +568,3 @@ export class AuthService implements IAuthService {
     });
   }
 }
-
-

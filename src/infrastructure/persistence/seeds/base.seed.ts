@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { SeedEntity } from '../entities/seed.entity';
 import { ESeedType } from '@shared-libs';
+import { Repository } from 'typeorm';
+
+import { SeedEntity } from '../entities/seed.entity';
 
 @Injectable()
 export abstract class BaseSeed {
@@ -10,9 +11,7 @@ export abstract class BaseSeed {
   protected abstract readonly name: ESeedType;
   protected abstract get version(): number;
 
-  constructor(
-    @InjectRepository(SeedEntity) protected readonly seedRepo: Repository<SeedEntity>,
-  ) {}
+  constructor(@InjectRepository(SeedEntity) protected readonly seedRepo: Repository<SeedEntity>) {}
 
   async runAsync(): Promise<boolean> {
     try {

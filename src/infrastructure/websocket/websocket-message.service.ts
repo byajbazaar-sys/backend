@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
 import {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
   GoneException,
 } from '@aws-sdk/client-apigatewaymanagementapi';
+import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { IWebSocketMessageService } from '../../application';
 
 @Injectable()

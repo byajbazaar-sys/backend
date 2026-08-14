@@ -1,4 +1,5 @@
 import { Paged } from '@shared-libs';
+
 import { Customer } from '../domain';
 import { CustomersFilterOptions, CustomersDownloadFilterOptions } from '../options';
 

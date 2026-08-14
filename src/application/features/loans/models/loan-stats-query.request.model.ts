@@ -1,5 +1,5 @@
-import { Expose, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Expose, Type } from 'class-transformer';
 import { IsDate, IsOptional, IsUUID } from 'class-validator';
 
 export class LoanStatsQueryRequestModel {

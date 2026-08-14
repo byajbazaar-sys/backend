@@ -1,5 +1,5 @@
-import { ApplyCouponResponseModel } from '../models';
 import { Coupon, Subscription } from '../domain';
+import { ApplyCouponResponseModel } from '../models';
 import { CouponPreview } from './coupon-preview';
 
 export const COUPON_SERVICE = 'COUPON_SERVICE';

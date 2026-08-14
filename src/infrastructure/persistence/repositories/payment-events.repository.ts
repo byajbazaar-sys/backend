@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryDeepPartialEntity, Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
+import { QueryDeepPartialEntity, Repository } from 'typeorm';
+
 import { IPaymentEventsRepository, PaymentEvent, PaymentEventLinksData } from '../../../application';
 import { PaymentEventEntity } from '../entities/payment-event.entity';
 
@@ -101,10 +102,7 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
     return this.mapEntity(updated);
   }
 
-  async findByProviderSubscriptionId(
-    providerSubscriptionId: string,
-    limit = 50,
-  ): Promise<PaymentEvent[]> {
+  async findByProviderSubscriptionId(providerSubscriptionId: string, limit = 50): Promise<PaymentEvent[]> {
     const entities = await this.paymentEventRepo
       .createQueryBuilder('e')
       .where(`e.payload::text ILIKE :pattern`, { pattern: `%${providerSubscriptionId}%` })

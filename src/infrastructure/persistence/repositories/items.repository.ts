@@ -1,14 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { ItemEntity } from '../entities/item.entity';
 import { plainToInstance } from 'class-transformer';
-import { IItemsRepository, Item, UpdateItemRequestModel } from '../../../application';
 import { SYSTEM_USER_ID } from 'libs/constants/constants';
+import { In, Repository } from 'typeorm';
+
+import { IItemsRepository, Item, UpdateItemRequestModel } from '../../../application';
+import { ItemEntity } from '../entities/item.entity';
 
 @Injectable()
 export class ItemsRepository implements IItemsRepository {
-  constructor(@InjectRepository(ItemEntity) private itemRepo: Repository<ItemEntity>) { }
+  constructor(@InjectRepository(ItemEntity) private itemRepo: Repository<ItemEntity>) {}
 
   async create(createItem: Item): Promise<Item> {
     const entity = this.itemRepo.create({
@@ -28,7 +29,7 @@ export class ItemsRepository implements IItemsRepository {
   }
 
   async findByName(name: string, createdBy: string): Promise<Item> {
-    const item = await this.itemRepo.findOne({ where: { name, createdBy: createdBy } });
+    const item = await this.itemRepo.findOne({ where: { name, createdBy } });
     if (!item) {
       throw new NotFoundException('Item not found');
     }

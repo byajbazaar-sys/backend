@@ -14,17 +14,12 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOkResponse,
-  ApiOperation,
-  ApiParam,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { SalesAnalytics } from './domain';
 import {
   CreateSalesBillRequestModel,
@@ -138,10 +133,7 @@ export class SalesBillsController {
   @Post(':id/convert-to-normal')
   @ApiOperation({ summary: 'Convert an informal bill to a normal GST bill' })
   @ApiParam({ name: 'id', type: String })
-  async convertToNormal(
-    @Param('id') id: string,
-    @Identity() identity: IIdentity,
-  ): Promise<SalesBillResponseModel> {
+  async convertToNormal(@Param('id') id: string, @Identity() identity: IIdentity): Promise<SalesBillResponseModel> {
     const bill = await this.billService.convertToNormalBill(id, identity.userId);
     return plainToInstance(SalesBillResponseModel, bill, { excludeExtraneousValues: true });
   }

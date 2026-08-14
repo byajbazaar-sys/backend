@@ -8,8 +8,9 @@ import {
   OneToMany,
   JoinColumn,
 } from 'typeorm';
-import { UserEntity } from './user.entity';
+
 import { InventoryItemEntity } from './inventory-item.entity';
+import { UserEntity } from './user.entity';
 
 @Entity('inventory_categories')
 export class InventoryCategoryEntity {

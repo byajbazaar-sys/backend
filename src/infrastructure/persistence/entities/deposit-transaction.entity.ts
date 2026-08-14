@@ -8,11 +8,12 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+
 import { CustomerEntity } from './customer.entity';
-import { UserEntity } from './user.entity';
-import { SalesBillEntity } from './sales-bill.entity';
 import { DepositAccountEntity } from './deposit-account.entity';
 import { DepositReceiptEntity } from './deposit-receipt.entity';
+import { SalesBillEntity } from './sales-bill.entity';
+import { UserEntity } from './user.entity';
 import { EDepositTransactionType } from '../../../application/features/deposits/enums';
 
 @Entity('deposit_transactions')

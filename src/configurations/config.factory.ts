@@ -1,5 +1,6 @@
 import { generateLoggerConfig, UsersAuthOptions, type Environment } from '@shared-libs';
 import { Algorithm } from 'jsonwebtoken';
+
 import { IMsConfig } from './i-ms.config';
 import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions } from '../application';
 import {
@@ -39,10 +40,7 @@ function resolveTryOnProvider(): TryOnAiProvider {
   if (process.env.TRYON_API_BASE_URL?.trim()) {
     return 'aivot';
   }
-  if (
-    process.env.CLOUDFLARE_ACCOUNT_ID?.trim() &&
-    process.env.CLOUDFLARE_API_TOKEN?.trim()
-  ) {
+  if (process.env.CLOUDFLARE_ACCOUNT_ID?.trim() && process.env.CLOUDFLARE_API_TOKEN?.trim()) {
     return 'cloudflare';
   }
   if (process.env.REPLICATE_API_TOKEN?.trim()) {
@@ -63,16 +61,10 @@ function resolveS3KeyPrefix(): string {
 function resolveFileStorageOptions(): FileStorageOptions {
   const r2Endpoint = process.env.CLOUDFLARE_R2_ENDPOINT?.trim();
   return new FileStorageOptions(
-    r2Endpoint
-      ? process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || ''
-      : process.env?.S3_AWS_ACCESS_KEY_ID || '',
-    r2Endpoint
-      ? process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || ''
-      : process.env?.S3_AWS_SECRET_ACCESS_KEY || '',
-    r2Endpoint
-      ? process.env.CLOUDFLARE_R2_BUCKET || ''
-      : process.env?.S3_BUCKET_NAME ?? 'jobs-file-storage',
-    r2Endpoint ? 'auto' : process.env?.S3_BUCKET_REGION ?? 'ap-south-1',
+    r2Endpoint ? process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || '' : process.env?.S3_AWS_ACCESS_KEY_ID || '',
+    r2Endpoint ? process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || '' : process.env?.S3_AWS_SECRET_ACCESS_KEY || '',
+    r2Endpoint ? process.env.CLOUDFLARE_R2_BUCKET || '' : (process.env?.S3_BUCKET_NAME ?? 'jobs-file-storage'),
+    r2Endpoint ? 'auto' : (process.env?.S3_BUCKET_REGION ?? 'ap-south-1'),
     r2Endpoint,
     resolveS3KeyPrefix(),
   );
@@ -135,10 +127,7 @@ export const configFactory = (): IMsConfig => ({
     Number(process.env.REPLICATE_TRYON_MAX_RETRIES) || REPLICATE_TRYON_MAX_RETRIES,
   ),
   cloudflareTryOn: new CloudflareTryOnOptions(
-    parseCloudflareCredentials(
-      process.env.CLOUDFLARE_ACCOUNT_ID || '',
-      process.env.CLOUDFLARE_API_TOKEN || '',
-    ),
+    parseCloudflareCredentials(process.env.CLOUDFLARE_ACCOUNT_ID || '', process.env.CLOUDFLARE_API_TOKEN || ''),
     process.env.CLOUDFLARE_TRYON_MODEL?.trim() || CLOUDFLARE_TRYON_MODEL,
     Number(process.env.CLOUDFLARE_TRYON_TIMEOUT_MS) || CLOUDFLARE_TRYON_TIMEOUT_MS,
     Number(process.env.CLOUDFLARE_TRYON_MAX_RETRIES) || CLOUDFLARE_TRYON_MAX_RETRIES,

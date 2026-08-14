@@ -1,25 +1,10 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Inject,
-  Patch,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Patch, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import {
   ApiConfigurationResponseModel,
   GenerateApiCredentialsRequestModel,
@@ -64,10 +49,7 @@ export class SettingsApiController {
     @Body() body: GenerateApiCredentialsRequestModel,
   ): Promise<GenerateApiCredentialsResponseModel> {
     this.logger.info({ userId: identity.userId }, 'generateApiCredentials called');
-    const result = await this.apiAuthService.generateCredentials(
-      identity.userId,
-      body.confirmRegenerate === true,
-    );
+    const result = await this.apiAuthService.generateCredentials(identity.userId, body.confirmRegenerate === true);
     return plainToInstance(
       GenerateApiCredentialsResponseModel,
       {

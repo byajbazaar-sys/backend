@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
-import { ETransactionType, ETransactionPaidIn } from '../enums';
+
 import { CustomerResponseModel } from '../../customers';
+import { ETransactionType, ETransactionPaidIn } from '../enums';
 import { DueResponseModel } from './dues-response.model';
 
 export class TransactionResponseModel {
@@ -27,7 +28,10 @@ export class TransactionResponseModel {
   paidIn: ETransactionPaidIn;
 
   @Expose()
-  @ApiProperty({ description: 'User ID of the creator of this record', example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327' })
+  @ApiProperty({
+    description: 'User ID of the creator of this record',
+    example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327',
+  })
   createdBy: string;
 
   @Expose()

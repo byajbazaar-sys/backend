@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { UpdateDuesCronService } from './update-dues.cron.service';
+
 import { CloseExpiredLoansCronService } from './close-expired-loans.cron.service';
+import { UpdateDuesCronService } from './update-dues.cron.service';
 
 /** EventBridge / serverless `detail.job` value for update dues Lambda. */
 export const CRON_JOB_UPDATE_DUES = 'updateDues';

@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Transform } from 'class-transformer';
-import { ESortOrder } from '../enums';
 import { isArray } from 'class-validator';
+
+import { ESortOrder } from '../enums';
 
 export class PagedQueryRequestModel {
   @Expose()

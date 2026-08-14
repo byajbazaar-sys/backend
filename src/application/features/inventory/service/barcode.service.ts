@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import bwipjs from 'bwip-js';
 import * as QRCode from 'qrcode';
+
 import { InventoryQrPayload } from '../domain';
 import { EBarcodeFormat, EBarcodeSize } from '../enums';
 import { IBarcodeService } from './i-barcode.service';

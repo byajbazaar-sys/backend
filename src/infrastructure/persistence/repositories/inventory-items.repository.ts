@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { plainToInstance } from 'class-transformer';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
-import { InventoryItemEntity } from '../entities/inventory-item.entity';
+import { plainToInstance } from 'class-transformer';
+import { Repository } from 'typeorm';
+
 import {
   IInventoryItemsRepository,
   InventoryItem,
   InventoryItemsFilterOptions,
   InventoryItemUpdatePatch,
 } from '../../../application';
+import { InventoryItemEntity } from '../entities/inventory-item.entity';
 
 @Injectable()
 export class InventoryItemsRepository implements IInventoryItemsRepository {
@@ -19,10 +20,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
   ) {}
 
   private buildQuery(
-    filter: Pick<
-      InventoryItemsFilterOptions,
-      'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'
-    >,
+    filter: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>,
   ) {
     const qb = this.repo
       .createQueryBuilder('item')
@@ -99,7 +97,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
       .leftJoinAndSelect('item.category', 'category')
       .where('item.created_by = :createdBy', { createdBy })
       .andWhere(
-        'UPPER(item.barcode) = UPPER(:code) OR UPPER(item.sku) = UPPER(:code) OR UPPER(COALESCE(item.itemCode, \'\')) = UPPER(:code)',
+        "UPPER(item.barcode) = UPPER(:code) OR UPPER(item.sku) = UPPER(:code) OR UPPER(COALESCE(item.itemCode, '')) = UPPER(:code)",
         { code: trimmed },
       );
 
@@ -116,10 +114,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     const { pageNumber, pageSize, skip } = getPaginationValues(params);
     const filter = params;
     const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    const qb = this.buildQuery(filter)
-      .orderBy('item.createdAt', sortOrder as 'ASC' | 'DESC')
-      .skip(skip)
-      .take(pageSize);
+    const qb = this.buildQuery(filter).orderBy('item.createdAt', sortOrder).skip(skip).take(pageSize);
     const [items, totalCount] = await qb.getManyAndCount();
     return toPaged(InventoryItem, {
       items: items.map((e) => this.mapEntity(e)),
@@ -136,9 +131,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     >,
   ): Promise<InventoryItem[]> {
     const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    const entities = await this.buildQuery(filter)
-      .orderBy('item.createdAt', sortOrder as 'ASC' | 'DESC')
-      .getMany();
+    const entities = await this.buildQuery(filter).orderBy('item.createdAt', sortOrder).getMany();
     return entities.map((e) => this.mapEntity(e));
   }
 

@@ -1,17 +1,17 @@
-import { OAuth2Client } from 'google-auth-library';
-import { GoogleOAuthOptions, GoogleUserInfo, GoogleTokenResponse, IGoogleOAuthService } from '../../application';
 import { Injectable } from '@nestjs/common';
+import { OAuth2Client } from 'google-auth-library';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { GoogleOAuthOptions, GoogleUserInfo, GoogleTokenResponse, IGoogleOAuthService } from '../../application';
 
 @Injectable()
 export class GoogleOAuthService implements IGoogleOAuthService {
   private readonly client: OAuth2Client;
-  constructor(private readonly options: GoogleOAuthOptions, @InjectPinoLogger(GoogleOAuthService.name) private readonly logger: PinoLogger) {
-    this.client = new OAuth2Client(
-      this.options.clientId,
-      this.options.clientSecret,
-      this.options.redirectUri
-    );
+  constructor(
+    private readonly options: GoogleOAuthOptions,
+    @InjectPinoLogger(GoogleOAuthService.name) private readonly logger: PinoLogger,
+  ) {
+    this.client = new OAuth2Client(this.options.clientId, this.options.clientSecret, this.options.redirectUri);
     this.logger.info({ options: this.options }, 'GoogleOAuthService constructor');
   }
 
@@ -22,28 +22,27 @@ export class GoogleOAuthService implements IGoogleOAuthService {
 
     try {
       this.logger.debug({ redirectUri: this.options.redirectUri }, 'Attempting token exchange with redirectUri');
-      
-      const client = new OAuth2Client(
-        this.options.clientId,
-        this.options.clientSecret,
-        this.options.redirectUri
-      );
-      
+
+      const client = new OAuth2Client(this.options.clientId, this.options.clientSecret, this.options.redirectUri);
+
       const { tokens } = await client.getToken({
         code,
         redirect_uri: this.options.redirectUri,
       });
-      
+
       client.setCredentials(tokens);
       this.logger.info({ redirectUri: this.options.redirectUri }, 'Successfully exchanged authorization code');
       return tokens as GoogleTokenResponse;
     } catch (error: any) {
       const errorData = error?.response?.data || {};
-      this.logger.error({
-        redirectUri: this.options.redirectUri,
-        error: error?.message,
-        details: errorData,
-      }, 'Token exchange failed');
+      this.logger.error(
+        {
+          redirectUri: this.options.redirectUri,
+          error: error?.message,
+          details: errorData,
+        },
+        'Token exchange failed',
+      );
       throw error;
     }
   }

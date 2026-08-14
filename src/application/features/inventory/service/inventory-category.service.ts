@@ -6,16 +6,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { SYSTEM_USER_ID } from '@shared-libs';
-import {
-  IInventoryCategoriesRepository,
-  INVENTORY_CATEGORIES_REPOSITORY,
-} from './i-inventory-categories.repository';
-import {
-  IInventoryItemsRepository,
-  INVENTORY_ITEMS_REPOSITORY,
-} from './i-inventory-items.repository';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { IInventoryCategoriesRepository, INVENTORY_CATEGORIES_REPOSITORY } from './i-inventory-categories.repository';
+import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import { InventoryCategory } from '../domain';
 import { CreateInventoryCategoryRequestModel, UpdateInventoryCategoryRequestModel } from '../models';
 import { IInventoryCategoryService } from './i-inventory-category.service';
@@ -51,11 +46,7 @@ export class InventoryCategoryService implements IInventoryCategoryService {
     return category;
   }
 
-  async update(
-    id: string,
-    data: UpdateInventoryCategoryRequestModel,
-    userId: string,
-  ): Promise<InventoryCategory> {
+  async update(id: string, data: UpdateInventoryCategoryRequestModel, userId: string): Promise<InventoryCategory> {
     const category = await this.getById(id, userId);
     if (category.isSystem || category.createdBy === SYSTEM_USER_ID) {
       throw new ForbiddenException('Cannot update system categories');

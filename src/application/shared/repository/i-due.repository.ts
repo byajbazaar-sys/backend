@@ -1,7 +1,8 @@
 import { Paged } from '@shared-libs';
+
 import { DuesFilterOptions } from '../../features';
-import { Due } from '../domain';
 import { EDueType } from '../../shared';
+import { Due } from '../domain';
 
 export const DUES_REPOSITORY = 'IDuesRepository';
 

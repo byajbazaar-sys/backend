@@ -6,17 +6,23 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { Customer } from '../domain';
-import { ICustomersRepository, CUSTOMERS_REPOSITORY } from './i-customers.repository';
-import { ICustomerService } from './i-customer.service';
-import { UpdateCustomerRequestModel } from '../models';
-import { USERS_FILE_STORAGE, IUsersFileStorage, FileStorageOptions, DUES_REPOSITORY, IDuesRepository } from '../../../shared';
-import { CustomersFilterOptions, CustomersDownloadFilterOptions } from '../options';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
-import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
+
+import { Customer } from '../domain';
+import { ICustomerService } from './i-customer.service';
+import { ICustomersRepository, CUSTOMERS_REPOSITORY } from './i-customers.repository';
+import {
+  USERS_FILE_STORAGE,
+  IUsersFileStorage,
+  FileStorageOptions,
+  DUES_REPOSITORY,
+  IDuesRepository,
+} from '../../../shared';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans/service/i-loan-items.repository';
+import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
+import { CustomersFilterOptions, CustomersDownloadFilterOptions } from '../options';
 
 @Injectable()
 export class CustomerService implements ICustomerService {
@@ -28,11 +34,9 @@ export class CustomerService implements ICustomerService {
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
     protected readonly fileStorageOptions: FileStorageOptions,
     @InjectPinoLogger(CustomerService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
-  private async enrichCustomerSignedUrls(
-    customer: Customer,
-  ): Promise<
+  private async enrichCustomerSignedUrls(customer: Customer): Promise<
     Customer & {
       profilePhotoUrl: string;
       aadhaarCardUrl: string;
@@ -40,7 +44,9 @@ export class CustomerService implements ICustomerService {
     }
   > {
     const [profilePhotoUrl, aadhaarCardUrl, panCardUrl] = await Promise.all([
-      customer.profilePhotoRef ? this.customersFileStorage.getUrlAsync(customer.profilePhotoRef) : Promise.resolve(null),
+      customer.profilePhotoRef
+        ? this.customersFileStorage.getUrlAsync(customer.profilePhotoRef)
+        : Promise.resolve(null),
       customer.aadhaarCardRef ? this.customersFileStorage.getUrlAsync(customer.aadhaarCardRef) : Promise.resolve(null),
       customer.panCardRef ? this.customersFileStorage.getUrlAsync(customer.panCardRef) : Promise.resolve(null),
     ]);
@@ -63,7 +69,11 @@ export class CustomerService implements ICustomerService {
           body.profilePhoto.originalname,
         );
         const proposedRef = `customers/profiles/${newId}.${normalized.fileExtension}`;
-        body.profilePhotoRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+        body.profilePhotoRef = await this.customersFileStorage.writeAsync(
+          proposedRef,
+          normalized.buffer,
+          normalized.mimetype,
+        );
       }
 
       if (body.aadharCard) {
@@ -73,7 +83,11 @@ export class CustomerService implements ICustomerService {
           body.aadharCard.originalname,
         );
         const proposedRef = `customers/documents/aadhar/${newId}.${normalized.fileExtension}`;
-        body.aadhaarCardRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+        body.aadhaarCardRef = await this.customersFileStorage.writeAsync(
+          proposedRef,
+          normalized.buffer,
+          normalized.mimetype,
+        );
       }
 
       if (body.panCard) {
@@ -83,7 +97,11 @@ export class CustomerService implements ICustomerService {
           body.panCard.originalname,
         );
         const proposedRef = `customers/documents/pan/${newId}.${normalized.fileExtension}`;
-        body.panCardRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+        body.panCardRef = await this.customersFileStorage.writeAsync(
+          proposedRef,
+          normalized.buffer,
+          normalized.mimetype,
+        );
       }
 
       const createdCustomer = await this.customersRepo.create(body);
@@ -191,7 +209,11 @@ export class CustomerService implements ICustomerService {
           body.profilePhoto.originalname,
         );
         const proposedRef = `customers/profiles/${id}.${normalized.fileExtension}`;
-        body.profilePhotoRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+        body.profilePhotoRef = await this.customersFileStorage.writeAsync(
+          proposedRef,
+          normalized.buffer,
+          normalized.mimetype,
+        );
       }
 
       if (body.aadharCard) {
@@ -208,7 +230,11 @@ export class CustomerService implements ICustomerService {
           body.aadharCard.originalname,
         );
         const proposedRef = `customers/documents/aadhar/${id}.${normalized.fileExtension}`;
-        body.aadhaarCardRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+        body.aadhaarCardRef = await this.customersFileStorage.writeAsync(
+          proposedRef,
+          normalized.buffer,
+          normalized.mimetype,
+        );
       }
 
       if (body.panCard) {
@@ -225,7 +251,11 @@ export class CustomerService implements ICustomerService {
           body.panCard.originalname,
         );
         const proposedRef = `customers/documents/pan/${id}.${normalized.fileExtension}`;
-        body.panCardRef = await this.customersFileStorage.writeAsync(proposedRef, normalized.buffer, normalized.mimetype);
+        body.panCardRef = await this.customersFileStorage.writeAsync(
+          proposedRef,
+          normalized.buffer,
+          normalized.mimetype,
+        );
       }
 
       const { profilePhoto, aadharCard, panCard, removeAadharCard, removePanCard, ...dataToUpdate } = body;
@@ -305,7 +335,10 @@ export class CustomerService implements ICustomerService {
 
       // Finally, delete the customer
       await this.customersRepo.delete(id, createdBy);
-      this.logger.info({ customerId: id, deletedLoans: customerLoans.length }, 'Customer and all related data deleted successfully');
+      this.logger.info(
+        { customerId: id, deletedLoans: customerLoans.length },
+        'Customer and all related data deleted successfully',
+      );
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;

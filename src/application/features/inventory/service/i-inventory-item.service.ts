@@ -1,4 +1,5 @@
 import { Paged } from '@shared-libs';
+
 import { InventoryItem, InventoryItemSale } from '../domain';
 import {
   CreateInventoryItemRequestModel,
@@ -19,12 +20,7 @@ export interface IInventoryItemService {
   delete(id: string, userId: string): Promise<void>;
   bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }>;
   generateSku(userId: string): Promise<string>;
-  uploadImage(
-    id: string,
-    userId: string,
-    file?: Express.Multer.File,
-    removeImage?: boolean,
-  ): Promise<InventoryItem>;
+  uploadImage(id: string, userId: string, file?: Express.Multer.File, removeImage?: boolean): Promise<InventoryItem>;
   previewAiImage(file: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel>;
   previewAiImageForItem(id: string, userId: string): Promise<InventoryImageAiPreviewResponseModel>;
 }

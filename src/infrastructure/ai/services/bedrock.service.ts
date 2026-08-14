@@ -1,19 +1,7 @@
+import { BedrockRuntimeClient, ConverseCommand, type ContentBlock } from '@aws-sdk/client-bedrock-runtime';
 import { Injectable } from '@nestjs/common';
-import {
-  BedrockRuntimeClient,
-  ConverseCommand,
-  type ContentBlock,
-} from '@aws-sdk/client-bedrock-runtime';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import {
-  GEMINI_TRYON_TIMEOUT_MS,
-  resolveBedrockModelId,
-} from '../ai.constants';
-import { AIOptions } from '../ai.options';
-import type {
-  JewelleryTryOnRequest,
-  OutfitRecolorRequest,
-} from '../interfaces/ai-media.types';
+
 import type {
   DiscoveredEvent,
   DiscoveredEventsPayload,
@@ -21,14 +9,14 @@ import type {
   IEventsDiscoveryService,
   ITryOnAiService,
 } from '../../../application';
-import {
-  buildFullTryOnPrompt,
-  buildOutfitRecolorPrompt,
-} from '../prompts/try-on.prompts';
+import { GEMINI_TRYON_TIMEOUT_MS, resolveBedrockModelId } from '../ai.constants';
+import { AIOptions } from '../ai.options';
+import type { JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
 import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
+import { buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts/try-on.prompts';
 import { extractJsonObject } from '../utils/ai-response.util';
-import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 import { mimeToImageFormat, stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
+import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
 @Injectable()
 export class BedrockService implements ITryOnAiService, IEventsDiscoveryService {
@@ -40,9 +28,7 @@ export class BedrockService implements ITryOnAiService, IEventsDiscoveryService 
     @InjectPinoLogger(BedrockService.name) private readonly logger: PinoLogger,
   ) {
     const accessKeyId =
-      process.env.BEDROCK_AWS_ACCESS_KEY_ID ||
-      process.env.LAMBDA_AWS_ACCESS_KEY_ID ||
-      process.env.AWS_ACCESS_KEY_ID;
+      process.env.BEDROCK_AWS_ACCESS_KEY_ID || process.env.LAMBDA_AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
     const secretAccessKey =
       process.env.BEDROCK_AWS_SECRET_ACCESS_KEY ||
       process.env.LAMBDA_AWS_SECRET_ACCESS_KEY ||
@@ -76,26 +62,19 @@ export class BedrockService implements ITryOnAiService, IEventsDiscoveryService 
   async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {
     const prompt = buildOutfitRecolorPrompt(request.color);
     this.logger.info({ color: request.color }, 'Bedrock outfit recolor');
-    return this.generateTryOnImage(
-      [request.image],
-      `${prompt}\n\nGenerate a single photorealistic output image.`,
-    );
+    return this.generateTryOnImage([request.image], `${prompt}\n\nGenerate a single photorealistic output image.`);
   }
 
   private async generateTryOnImage(
-    images: Array<{ base64: string; mimeType: string }>,
+    images: { base64: string; mimeType: string }[],
     prompt: string,
   ): Promise<GeneratedAiImage> {
-    return withTimeout(
-      this.converseWithImages(prompt, images),
-      GEMINI_TRYON_TIMEOUT_MS,
-      'bedrock-try-on',
-    );
+    return withTimeout(this.converseWithImages(prompt, images), GEMINI_TRYON_TIMEOUT_MS, 'bedrock-try-on');
   }
 
   private async converseWithImages(
     prompt: string,
-    images: Array<{ base64: string; mimeType: string }>,
+    images: { base64: string; mimeType: string }[],
     maxTokens = 4096,
   ): Promise<GeneratedAiImage> {
     const content: ContentBlock[] = [
@@ -121,11 +100,7 @@ export class BedrockService implements ITryOnAiService, IEventsDiscoveryService 
       if (block.image?.source?.bytes) {
         const base64 = Buffer.from(block.image.source.bytes).toString('base64');
         const mimeType =
-          block.image.format === 'jpeg'
-            ? 'image/jpeg'
-            : block.image.format === 'png'
-              ? 'image/png'
-              : 'image/png';
+          block.image.format === 'jpeg' ? 'image/jpeg' : block.image.format === 'png' ? 'image/png' : 'image/png';
         return toGeneratedImage(base64, mimeType);
       }
     }

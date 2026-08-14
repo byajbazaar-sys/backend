@@ -1,7 +1,4 @@
-import {
-  EmailVerificationTemplateData,
-  ForgotPasswordTemplateData,
-} from '../domain';
+import { EmailVerificationTemplateData, ForgotPasswordTemplateData } from '../domain';
 
 export const EMAIL_TEMPLATE_SERVICE = 'IEmailTemplateService';
 

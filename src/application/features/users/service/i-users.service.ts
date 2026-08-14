@@ -1,5 +1,6 @@
-import { User } from '../domain';
 import { Paged } from '@shared-libs';
+
+import { User } from '../domain';
 
 export const USERS_SERVICE = 'USERS_SERVICE';
 

@@ -1,11 +1,7 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { plainToInstance } from 'class-transformer';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DEFAULT_PAGE_NUMBER, DEFAULT_PAGE_SIZE } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
+
 import { ESubscriptionStatus, RazorpayCreateRefundData } from '../domain';
 import {
   AdminSubscriptionDetailResponseModel,
@@ -18,29 +14,19 @@ import {
   RefundResponseModel,
   WebhookEventSummaryModel,
 } from '../models';
-import { ISubscriptionAdminService } from './i-subscription-admin.service';
-import {
-  ISubscriptionsRepository,
-  SUBSCRIPTIONS_REPOSITORY,
-} from './i-subscriptions.repository';
-import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
-import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
-import {
-  IPaymentEventsRepository,
-  PAYMENT_EVENTS_REPOSITORY,
-} from './i-payment-events.repository';
 import { ICouponsRepository, COUPONS_REPOSITORY } from './i-coupons.repository';
+import { IPaymentEventsRepository, PAYMENT_EVENTS_REPOSITORY } from './i-payment-events.repository';
+import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
+import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
 import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
-import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
+import { ISubscriptionAdminService } from './i-subscription-admin.service';
+import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { REFUND_SERVICE, RefundService } from './refund.service';
 import { RazorpayOptions } from '../../../shared';
-import {
-  isTrialActive,
-  resolveTrialEndsAt,
-  trialDaysRemaining,
-} from '../utils/trial.util';
+import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { isPaymentRefundable, remainingRefundableAmount } from '../utils/refund.util';
+import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
 
 @Injectable()
 export class SubscriptionAdminService implements ISubscriptionAdminService {
@@ -67,9 +53,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
       search: query.search,
     });
 
-    const mapped = await Promise.all(
-      items.map(async (row) => this.toListItem(row)),
-    );
+    const mapped = await Promise.all(items.map(async (row) => this.toListItem(row)));
 
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     return plainToInstance(
@@ -97,7 +81,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
       throw new BadRequestException('Subscription is not linked to Razorpay');
     }
     await this.razorpay.cancelSubscription(sub.providerSubscriptionId, false);
-    const updated = await this.subscriptionsRepo.update(sub.id!, {
+    const updated = await this.subscriptionsRepo.update(sub.id, {
       cancelAtPeriodEnd: false,
     });
     const userRow = await this.loadUserRow(updated.userId);
@@ -111,14 +95,14 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     }
 
     if (sub.cancelAtPeriodEnd && sub.status === ESubscriptionStatus.Active) {
-      const updated = await this.subscriptionsRepo.update(sub.id!, { cancelAtPeriodEnd: false });
+      const updated = await this.subscriptionsRepo.update(sub.id, { cancelAtPeriodEnd: false });
       const userRow = await this.loadUserRow(updated.userId);
       return this.toDetail(updated, null, userRow);
     }
 
     if (sub.status === ESubscriptionStatus.Paused || sub.status === ESubscriptionStatus.Halted) {
       await this.razorpay.resumeSubscription(sub.providerSubscriptionId);
-      const updated = await this.subscriptionsRepo.update(sub.id!, {
+      const updated = await this.subscriptionsRepo.update(sub.id, {
         status: ESubscriptionStatus.Active,
         cancelAtPeriodEnd: false,
       });
@@ -136,7 +120,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     }
 
     const remote = await this.razorpay.fetchSubscription(sub.providerSubscriptionId);
-    const updated = await this.subscriptionsRepo.update(sub.id!, {
+    const updated = await this.subscriptionsRepo.update(sub.id, {
       status: this.mapRzpStatus(remote.status),
       currentStart: remote.current_start ? new Date(remote.current_start * 1000) : null,
       currentEnd: remote.current_end ? new Date(remote.current_end * 1000) : null,
@@ -147,10 +131,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     return this.toDetail(updated, remote.raw, userRow);
   }
 
-  async refundPayment(
-    paymentId: string,
-    body: CreateRefundRequestModel,
-  ): Promise<RefundResponseModel> {
+  async refundPayment(paymentId: string, body: CreateRefundRequestModel): Promise<RefundResponseModel> {
     const payment = await this.paymentsRepo.findById(paymentId);
     if (!payment?.id) {
       throw new NotFoundException('Payment not found');
@@ -171,9 +152,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
 
     const refundAmountInr = body.amount ?? remaining;
     if (refundAmountInr <= 0 || refundAmountInr > remaining + 0.01) {
-      throw new BadRequestException(
-        `Refund amount must be between 0.01 and ${remaining} ${payment.currency ?? 'INR'}`,
-      );
+      throw new BadRequestException(`Refund amount must be between 0.01 and ${remaining} ${payment.currency ?? 'INR'}`);
     }
 
     const amountPaise = Math.round(refundAmountInr * 100);
@@ -197,10 +176,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     return plainToInstance(RefundResponseModel, saved, { excludeExtraneousValues: true });
   }
 
-  async extendTrial(
-    id: string,
-    body: ExtendTrialRequestModel,
-  ): Promise<AdminSubscriptionDetailResponseModel> {
+  async extendTrial(id: string, body: ExtendTrialRequestModel): Promise<AdminSubscriptionDetailResponseModel> {
     if (!body.days && !body.trialEndsAt) {
       throw new BadRequestException('Provide days or trialEndsAt');
     }
@@ -218,7 +194,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
       const currentEnds = resolveTrialEndsAt(user, this.razorpayOptions.defaultTrialDays);
       const now = new Date();
       const base = currentEnds && currentEnds > now ? currentEnds : now;
-      newTrialEndsAt = new Date(base.getTime() + body.days! * 24 * 60 * 60 * 1000);
+      newTrialEndsAt = new Date(base.getTime() + body.days * 24 * 60 * 60 * 1000);
     }
 
     if (Number.isNaN(newTrialEndsAt.getTime())) {
@@ -234,7 +210,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     const user = await this.usersRepo.findById(userId);
     if (!user?.email) return null;
     return {
-      userId: user.id!,
+      userId: user.id,
       email: user.email,
       firstName: user.firstName ?? null,
       lastName: user.lastName ?? null,
@@ -297,14 +273,10 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
       couponCode = coupon?.code ?? null;
     }
 
-    const payments = sub.id
-      ? await this.paymentsRepo.findBySubscriptionId(sub.id)
-      : [];
+    const payments = sub.id ? await this.paymentsRepo.findBySubscriptionId(sub.id) : [];
 
     const paymentIds = payments.map((p) => p.id).filter((id): id is string => !!id);
-    const refunds = paymentIds.length
-      ? await this.refundsRepo.findByPaymentIds(paymentIds)
-      : [];
+    const refunds = paymentIds.length ? await this.refundsRepo.findByPaymentIds(paymentIds) : [];
 
     const webhookEvents = sub.providerSubscriptionId
       ? await this.paymentEventsRepo.findByProviderSubscriptionId(sub.providerSubscriptionId)
@@ -321,8 +293,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     }
 
     const email = userRow?.email ?? '';
-    const userName =
-      [userRow?.firstName, userRow?.lastName].filter(Boolean).join(' ') || email;
+    const userName = [userRow?.firstName, userRow?.lastName].filter(Boolean).join(' ') || email;
     const trialUser = userRow
       ? {
           trialEndsAt: userRow.trialEndsAt,
@@ -330,9 +301,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
         }
       : null;
     const defaultTrialDays = this.razorpayOptions.defaultTrialDays;
-    const resolvedTrialEndsAt = trialUser
-      ? resolveTrialEndsAt(trialUser, defaultTrialDays)
-      : null;
+    const resolvedTrialEndsAt = trialUser ? resolveTrialEndsAt(trialUser, defaultTrialDays) : null;
     const onTrial = trialUser ? isTrialActive(trialUser, defaultTrialDays) : false;
     const daysRemaining = trialUser ? trialDaysRemaining(trialUser, defaultTrialDays) : 0;
 

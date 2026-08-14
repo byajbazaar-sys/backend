@@ -1,11 +1,8 @@
-import { Context, Handler } from 'aws-lambda';
 import { NestFactory } from '@nestjs/core';
+import { Context, Handler } from 'aws-lambda';
+
 import { AppModule } from '../app.module';
-import {
-  DiscoveredEvent,
-  IJewelleryEventService,
-  JEWELLERY_EVENT_SERVICE,
-} from '../application';
+import { DiscoveredEvent, IJewelleryEventService, JEWELLERY_EVENT_SERVICE } from '../application';
 
 let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
@@ -17,11 +14,11 @@ async function bootstrap() {
   return cachedApp;
 }
 
-type StateResult = {
+interface StateResult {
   state?: string;
   events?: DiscoveredEvent[];
   count?: number;
-};
+}
 
 /**
  * Step Functions merge task — combine Map outputs and upsert into jewellery_events.

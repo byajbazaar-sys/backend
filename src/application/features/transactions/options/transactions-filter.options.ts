@@ -1,5 +1,5 @@
-import { Expose, Type } from 'class-transformer';
 import { ESortOrder } from '@shared-libs';
+import { Expose, Type } from 'class-transformer';
 
 export class TransactionsFilterOptions {
   @Expose()
@@ -22,4 +22,3 @@ export class TransactionsFilterOptions {
   @Expose()
   public sortField: string;
 }
-

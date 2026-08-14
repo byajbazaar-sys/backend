@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryDeepPartialEntity, Repository } from 'typeorm';
-import { plainToInstance } from 'class-transformer';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
+import { QueryDeepPartialEntity, Repository } from 'typeorm';
+
 import { IPaymentsRepository, Payment } from '../../../application';
 import { PaymentEntity } from '../entities/payment.entity';
 
@@ -74,7 +75,7 @@ export class PaymentsRepository implements IPaymentsRepository {
       };
       await this.paymentRepo.update(existing.id, updateData);
       const updated = await this.paymentRepo.findOne({ where: { id: existing.id } });
-      return this.mapEntity(updated!);
+      return this.mapEntity(updated);
     }
 
     return this.insert(data);
@@ -111,7 +112,11 @@ export class PaymentsRepository implements IPaymentsRepository {
   }
 
   async findByUserId(userId: string, page: number, pageSize: number): Promise<Paged<Payment>> {
-    const { pageNumber, pageSize: size, skip } = getPaginationValues({
+    const {
+      pageNumber,
+      pageSize: size,
+      skip,
+    } = getPaginationValues({
       pageNumber: page,
       pageSize,
     });

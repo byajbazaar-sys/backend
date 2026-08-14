@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { SupportRequest } from '../domain';
 import { ISupportRequestsRepository, SUPPORT_REQUESTS_REPOSITORY } from './i-support-requests.repository';
 import { ISupportService } from './i-support.service';
-import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class SupportService implements ISupportService {

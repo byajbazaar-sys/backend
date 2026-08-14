@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { DataSource, DataSourceOptions } from 'typeorm';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
+
 import Entities from './entities';
 import { IDbOptions } from './options';
-import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
 const DB_PORT = 5432;
 

@@ -1,3 +1,4 @@
+import { ENotificationChannel, ENotificationStatus } from '@shared-libs';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -7,7 +8,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { ENotificationChannel, ENotificationStatus } from '@shared-libs';
+
 import { UserEntity } from './user.entity';
 
 @Entity('notifications')

@@ -1,19 +1,13 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+
+import { LoanEntity } from './loan.entity';
+import { TransactionEntity } from './transaction.entity';
+import { UserEntity } from './user.entity';
 import {
   ETransactionLogAction,
   ETransactionPaidIn,
   ETransactionType,
 } from '../../../application/features/transactions/enums';
-import { UserEntity } from './user.entity';
-import { LoanEntity } from './loan.entity';
-import { TransactionEntity } from './transaction.entity';
 
 @Entity('transaction_logs')
 export class TransactionLogEntity {

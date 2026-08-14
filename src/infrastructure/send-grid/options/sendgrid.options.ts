@@ -3,11 +3,7 @@ export class SendGridOptions {
   public sender?: string;
   public senderName?: string;
 
-  constructor(
-    apiKey: string,
-    sender?: string,
-    senderName?: string,
-  ) {
+  constructor(apiKey: string, sender?: string, senderName?: string) {
     this.apiKey = apiKey;
     this.sender = sender;
     this.senderName = senderName;

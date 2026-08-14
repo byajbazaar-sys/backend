@@ -1,5 +1,6 @@
-import { User } from '../../users';
 import { IIdentity } from '@shared-libs';
+
+import { User } from '../../users';
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from '../models';
 
 export const AUTH_SERVICE = 'IAuthService';

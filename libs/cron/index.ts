@@ -1,1 +1,1 @@
-export * from "./base-cron.service";
+export * from './base-cron.service';

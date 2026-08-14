@@ -9,7 +9,7 @@ export function deriveBusinessSkuPrefix(businessName: string): string {
     .split(/\s+/)
     .map((token) => token.replace(/[^a-zA-Z0-9]/g, ''))
     .filter((token) => token.length > 0 && !STOP_WORDS.has(token.toLowerCase()))
-    .map((token) => token[0]!.toUpperCase())
+    .map((token) => token[0].toUpperCase())
     .join('');
 
   if (initials.length >= 2) return initials.slice(0, 8);

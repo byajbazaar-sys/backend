@@ -1,23 +1,24 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { IIdentity, UsersAuthOptions } from '@shared-libs';
 import { instanceToPlain } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { IIdentity, UsersAuthOptions } from '@shared-libs';
+
+import { POS_SESSION_SERVICE, IPosSessionService } from './i-pos-session.service';
+import { IPosSessionsRepository, POS_SESSIONS_REPOSITORY } from './i-pos-sessions.repository';
+import {
+  IWebSocketConnectionsRepository,
+  WEBSOCKET_CONNECTIONS_REPOSITORY,
+} from './i-websocket-connections.repository';
 import { IWebSocketMessageService, WEBSOCKET_MESSAGE_SERVICE } from '../../../shared';
 import { InventoryItem } from '../../inventory/domain';
 import { BARCODE_SERVICE, IBarcodeService } from '../../inventory/service/i-barcode.service';
-import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from '../../inventory/service/i-inventory-items.repository';
-import { IPosSessionsRepository, POS_SESSIONS_REPOSITORY } from './i-pos-sessions.repository';
-import { IWebSocketConnectionsRepository, WEBSOCKET_CONNECTIONS_REPOSITORY } from './i-websocket-connections.repository';
+import {
+  IInventoryItemsRepository,
+  INVENTORY_ITEMS_REPOSITORY,
+} from '../../inventory/service/i-inventory-items.repository';
 import { EDeviceType } from '../enums';
 import { IWebSocketHandlerService } from './i-websocket-handler.service';
-import { POS_SESSION_SERVICE, IPosSessionService } from './i-pos-session.service';
 
 @Injectable()
 export class WebSocketHandlerService implements IWebSocketHandlerService {
@@ -42,7 +43,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
         audience: this.options.audience,
         issuer: this.options.issuer,
         algorithms: [this.options.algorithm],
-      }) as IIdentity;
+      });
     } catch {
       throw new UnauthorizedException('Invalid token');
     }
@@ -56,7 +57,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
         audience: this.options.audience,
         issuer: this.options.issuer,
         algorithms: [this.options.algorithm],
-      }) as { userId: string; type: string };
+      });
       if (payload.type !== 'pos-session' || !payload.userId) {
         throw new UnauthorizedException('Invalid session token');
       }
@@ -73,8 +74,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     deviceType: EDeviceType = EDeviceType.Desktop,
   ): Promise<{ statusCode: number }> {
     try {
-      const resolvedDevice =
-        deviceType === EDeviceType.Mobile ? EDeviceType.Mobile : EDeviceType.Desktop;
+      const resolvedDevice = deviceType === EDeviceType.Mobile ? EDeviceType.Mobile : EDeviceType.Desktop;
       const userId =
         resolvedDevice === EDeviceType.Mobile
           ? this.verifyPosSessionConnectToken(token).userId
@@ -109,10 +109,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     this.logger.info({ sessionId, previousConnectionId }, 'Released previous mobile scanner slot');
   }
 
-  private async notifyDesktopScannerDisconnected(
-    sessionId: string,
-    desktopConnectionId: string,
-  ): Promise<void> {
+  private async notifyDesktopScannerDisconnected(sessionId: string, desktopConnectionId: string): Promise<void> {
     if (!desktopConnectionId) return;
     await this.wsMessage.sendToConnection(desktopConnectionId, {
       type: 'scannerDisconnected',
@@ -123,7 +120,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
 
   private async detachMobileScanner(sessionId: string, mobileConnectionId: string): Promise<void> {
     const session = await this.sessionsRepo.findById(sessionId);
-    if (!session || session.mobileConnectionId !== mobileConnectionId) return;
+    if (session?.mobileConnectionId !== mobileConnectionId) return;
 
     const desktopId = session.desktopConnectionId;
     await this.releaseMobileSlot(sessionId, mobileConnectionId);
@@ -256,11 +253,8 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
 
     await this.ensureMobileSlotAvailable(sessionId, connectionId, session.mobileConnectionId);
 
-    const existingMobile = await this.connectionsRepo.findActiveBySessionAndDevice(
-      sessionId,
-      EDeviceType.Mobile,
-    );
-    if (existingMobile && existingMobile.connectionId !== connectionId) {
+    const existingMobile = await this.connectionsRepo.findActiveBySessionAndDevice(sessionId, EDeviceType.Mobile);
+    if (existingMobile?.connectionId !== connectionId) {
       const alive = await this.wsMessage.probeConnection(existingMobile.connectionId);
       if (!alive) {
         await this.connectionsRepo.markDisconnected(existingMobile.connectionId);
@@ -393,15 +387,8 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     let desktopConnectionId = session.desktopConnectionId;
     if (desktopConnectionId !== connectionId) {
       const connection = await this.connectionsRepo.findByConnectionId(connectionId);
-      if (
-        connection?.deviceType === EDeviceType.Desktop &&
-        session.createdBy === userId
-      ) {
-        const updated = await this.posSessionService.attachDesktopConnection(
-          sessionId,
-          connectionId,
-          userId,
-        );
+      if (connection?.deviceType === EDeviceType.Desktop && session.createdBy === userId) {
+        const updated = await this.posSessionService.attachDesktopConnection(sessionId, connectionId, userId);
         desktopConnectionId = updated.desktopConnectionId;
       }
     }
@@ -442,16 +429,8 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     }
 
     if (allowed === 'desktop' && session.desktopConnectionId !== connectionId) {
-      if (
-        userId &&
-        connection?.deviceType === EDeviceType.Desktop &&
-        session.createdBy === userId
-      ) {
-        session = await this.posSessionService.attachDesktopConnection(
-          sessionId,
-          connectionId,
-          userId,
-        );
+      if (userId && connection?.deviceType === EDeviceType.Desktop && session.createdBy === userId) {
+        session = await this.posSessionService.attachDesktopConnection(sessionId, connectionId, userId);
       } else {
         throw new ForbiddenException('Only desktop POS can perform this action');
       }
@@ -551,10 +530,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     return { type: 'cartUpdatedAck', success: true };
   }
 
-  async handleLeaveSession(
-    connectionId: string,
-    body: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
+  async handleLeaveSession(connectionId: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
     const sessionId = body.sessionId as string;
     if (!sessionId) throw new ForbiddenException('sessionId required');
 

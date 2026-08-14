@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, IsIn, Min, IsEnum } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min, IsEnum } from 'class-validator';
 
 // Define allowed filter fields as enum for Swagger dropdown
 export enum EFilterField {

@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   HttpCode,
   HttpStatus,
   Inject,
@@ -11,7 +10,6 @@ import {
   Patch,
   Post,
   Query,
-  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -20,8 +18,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import {
   CreateInventoryItemRequestModel,
   InventoryItemResponseModel,
@@ -102,9 +101,7 @@ export class InventoryItemsController {
   })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('image'))
-  async previewAiImage(
-    @UploadedFile() image: Express.Multer.File,
-  ): Promise<InventoryImageAiPreviewResponseModel> {
+  async previewAiImage(@UploadedFile() image: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel> {
     const result = await this.itemService.previewAiImage(image);
     return plainToInstance(InventoryImageAiPreviewResponseModel, result, {
       excludeExtraneousValues: true,
@@ -147,10 +144,7 @@ export class InventoryItemsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get inventory item by ID' })
   @ApiParam({ name: 'id' })
-  async getById(
-    @Param('id') id: string,
-    @Identity() identity: IIdentity,
-  ): Promise<InventoryItemResponseModel> {
+  async getById(@Param('id') id: string, @Identity() identity: IIdentity): Promise<InventoryItemResponseModel> {
     const item = await this.itemService.getById(id, identity.userId);
     return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
   }

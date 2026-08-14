@@ -1,10 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, Max, Min } from 'class-validator';
-import { Expose, Type } from 'class-transformer';
-import { ETransactionPaidIn } from '../enums';
 import { AMOUNT_MAX } from '@shared-libs';
+import { Expose, Type } from 'class-transformer';
+import { IsEnum, IsNumber, IsOptional, Max, Min } from 'class-validator';
 
-/** Safe correction: payment method and/or latest-transaction amount only. */
+import { ETransactionPaidIn } from '../enums';
+
+/** Correct payment method and/or amount; replays loan history when the row is not the latest. */
 export class UpdateTransactionRequestModel {
   @Expose()
   @ApiPropertyOptional({ enum: ETransactionPaidIn, example: ETransactionPaidIn.CASH })
@@ -14,7 +15,10 @@ export class UpdateTransactionRequestModel {
 
   @Expose()
   @Type(() => Number)
-  @ApiPropertyOptional({ description: 'New amount (latest transaction only)', example: 5000 })
+  @ApiPropertyOptional({
+    description: 'New amount (due payments cannot be edited; invalid later history is rejected on replay)',
+    example: 5000,
+  })
   @IsOptional()
   @IsNumber()
   @Min(0.001)

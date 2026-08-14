@@ -1,4 +1,5 @@
 import { Expose } from 'class-transformer';
+
 import { EPosSessionStatus } from '../enums';
 
 export class PosSession {

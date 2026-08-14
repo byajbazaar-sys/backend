@@ -1,4 +1,5 @@
 import { Expose, Type } from 'class-transformer';
+
 import { EInventoryItemStatus, EInventoryItemSortOrder } from '../enums';
 
 export class InventoryItemsFilterOptions {

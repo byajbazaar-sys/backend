@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ESortOrder } from '@shared-libs';
 import { Expose, Type } from 'class-transformer';
 import { IsDate, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { ESortOrder } from '@shared-libs';
+
 import { ExportFormat } from '../../../shared';
 
 export class DownloadCustomersQueryRequestModel {
@@ -38,14 +39,24 @@ export class DownloadCustomersQueryRequestModel {
   name?: string;
 
   @Expose()
-  @ApiPropertyOptional({ type: Date, example: '2025-01-01', description: 'Filter records created on or after this date', required: false })
+  @ApiPropertyOptional({
+    type: Date,
+    example: '2025-01-01',
+    description: 'Filter records created on or after this date',
+    required: false,
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
   startDate?: Date;
 
   @Expose()
-  @ApiPropertyOptional({ type: Date, example: '2025-12-31', description: 'Filter records created on or before this date', required: false })
+  @ApiPropertyOptional({
+    type: Date,
+    example: '2025-12-31',
+    description: 'Filter records created on or before this date',
+    required: false,
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()

@@ -1,14 +1,15 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { plainToInstance } from 'class-transformer';
-import { Notification } from '../domain';
-import { INotificationService } from './i-notification.service';
-import { INotificationsRepository, NOTIFICATIONS_REPOSITORY } from '../repository';
-import { IEmailService, EMAIL_SERVICE, SendEmail } from '../../../shared';
-import { NotificationsFilterOptions } from '../options';
 import { Paged } from '@shared-libs';
 import { ENotificationChannel, ENotificationStatus } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { Notification } from '../domain';
+import { INotificationService } from './i-notification.service';
+import { IEmailService, EMAIL_SERVICE, SendEmail } from '../../../shared';
 import { SendEmailRequestModel } from '../models';
+import { NotificationsFilterOptions } from '../options';
+import { INotificationsRepository, NOTIFICATIONS_REPOSITORY } from '../repository';
 
 @Injectable()
 export class NotificationService implements INotificationService {
@@ -21,16 +22,20 @@ export class NotificationService implements INotificationService {
   async sendEmail(data: SendEmailRequestModel, createdBy?: string): Promise<Notification> {
     this.logger.info({ to: data.to, subject: data.subject, createdBy }, 'Sending email');
 
-    const notificationData = plainToInstance(Notification, {
-      recipient: data.to,
-      subject: data.subject,
-      body: data.body,
-      isHtml: data.isHtml ?? true,
-      attachments: data.attachments,
-      channel: ENotificationChannel.EMAIL,
-      status: ENotificationStatus.PENDING,
-      createdBy,
-    }, { excludeExtraneousValues: true });
+    const notificationData = plainToInstance(
+      Notification,
+      {
+        recipient: data.to,
+        subject: data.subject,
+        body: data.body,
+        isHtml: data.isHtml ?? true,
+        attachments: data.attachments,
+        channel: ENotificationChannel.EMAIL,
+        status: ENotificationStatus.PENDING,
+        createdBy,
+      },
+      { excludeExtraneousValues: true },
+    );
 
     const notification = await this.notificationsRepo.create(notificationData);
 

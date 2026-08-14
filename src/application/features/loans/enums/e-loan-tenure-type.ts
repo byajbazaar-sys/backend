@@ -3,4 +3,3 @@ export enum ELoanTenureType {
   MONTHS = 'Months',
   YEARS = 'Years',
 }
-

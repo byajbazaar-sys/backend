@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
-import { PosSessionEntity } from '../entities/pos-session.entity';
+import { Repository } from 'typeorm';
+
 import { IPosSessionsRepository, PosSession, PosSessionPatch } from '../../../application';
 import { EPosSessionStatus } from '../../../application/features/pos/enums/e-pos-session-status.enum';
+import { PosSessionEntity } from '../entities/pos-session.entity';
 
 @Injectable()
 export class PosSessionsRepository implements IPosSessionsRepository {

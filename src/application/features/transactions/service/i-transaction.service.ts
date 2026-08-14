@@ -1,7 +1,8 @@
 import { Paged } from '@shared-libs';
+
+import { Due } from '../../../shared';
 import { Transaction, TransactionLog, UpdateTransactionData } from '../domain';
 import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, DuesFilterOptions } from '../options';
-import { Due } from '../../../shared';
 
 export const TRANSACTION_SERVICE = 'ITransactionService';
 

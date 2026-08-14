@@ -11,15 +11,11 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { EUserType, Roles, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
+
 import {
   AdminSubscriptionDetailResponseModel,
   AdminSubscriptionsPagedResponseModel,
@@ -31,11 +27,8 @@ import {
   RefundResponseModel,
   UpdatePlanRequestModel,
 } from './models';
-import {
-  ISubscriptionAdminService,
-  SUBSCRIPTION_ADMIN_SERVICE,
-} from './service/i-subscription-admin.service';
 import { IPlanService, PLAN_SERVICE } from './service/i-plan.service';
+import { ISubscriptionAdminService, SUBSCRIPTION_ADMIN_SERVICE } from './service/i-subscription-admin.service';
 
 @ApiTags('payments')
 @ApiBearerAuth('user')
@@ -69,10 +62,7 @@ export class AdminPaymentsController {
   @Patch('plans/:id')
   @ApiOperation({ summary: 'Update subscription plan (admin)' })
   @ApiOkResponse({ type: PlanResponseModel })
-  async updatePlan(
-    @Param('id') id: string,
-    @Body() body: UpdatePlanRequestModel,
-  ): Promise<PlanResponseModel> {
+  async updatePlan(@Param('id') id: string, @Body() body: UpdatePlanRequestModel): Promise<PlanResponseModel> {
     const plan = await this.planService.update(id, body);
     return plainToInstance(PlanResponseModel, plan, { excludeExtraneousValues: true });
   }

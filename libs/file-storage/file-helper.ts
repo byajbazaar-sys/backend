@@ -1,8 +1,9 @@
-import { extname, basename, dirname, join } from 'path';
-import * as FileType from 'file-type';
-import { IComparePathOptions, IFileName, IFileType } from './types';
 import { InternalServerErrorException } from '@nestjs/common';
+import * as FileType from 'file-type';
 import * as Papa from 'papaparse';
+import { extname, basename, dirname, join } from 'path';
+
+import { IComparePathOptions, IFileName, IFileType } from './types';
 
 export class FileHelper {
   private readonly allowedMimeTypes?: string[];
@@ -78,7 +79,7 @@ export class FileHelper {
     if (!mime) return false;
 
     // If no whitelist defined → allow all
-    if (!this.allowedMimeTypes || this.allowedMimeTypes.length === 0) return true;
+    if (this.allowedMimeTypes?.length === 0) return true;
 
     return this.allowedMimeTypes.includes(mime.toLowerCase());
   }

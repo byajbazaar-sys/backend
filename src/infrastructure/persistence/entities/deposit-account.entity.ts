@@ -9,10 +9,11 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+
 import { CustomerEntity } from './customer.entity';
+import { DepositTransactionEntity } from './deposit-transaction.entity';
 import { UserEntity } from './user.entity';
 import { EDepositStatus } from '../../../application/features/deposits/enums';
-import { DepositTransactionEntity } from './deposit-transaction.entity';
 
 @Entity('deposit_accounts')
 @Index(['createdBy', 'depositNumber'], { unique: true })

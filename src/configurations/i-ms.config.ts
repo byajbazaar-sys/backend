@@ -1,5 +1,6 @@
-import { Params } from 'nestjs-pino';
 import { UsersAuthOptions, IDbOptions } from '@shared-libs';
+import { Params } from 'nestjs-pino';
+
 import { IApiOptions } from './i-api.options';
 import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions } from '../application';
 import {
@@ -14,7 +15,6 @@ import {
   SesOptions,
   ResendOptions,
 } from '../infrastructure';
-
 
 export interface IMsConfig {
   apiConfig: IApiOptions;

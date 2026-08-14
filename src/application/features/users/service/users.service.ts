@@ -1,12 +1,13 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { EUserType } from '@shared-libs';
+import { Paged, toPaged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { User } from '../domain';
 import { UserUpdatePatch } from '../models';
 import { IUsersRepository, USERS_REPOSITORY } from './i-users.repository';
 import { IUsersService } from './i-users.service';
-import { Paged, toPaged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { USERS_FILE_STORAGE, IUsersFileStorage } from '../../../shared';
 
 @Injectable()

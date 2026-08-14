@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+
 import { AdminSeed } from './admin.seed';
 import { ItemsSeed } from './items.seed';
 

@@ -8,6 +8,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+
 import { UserEntity } from './user.entity';
 import { EPosSessionStatus } from '../../../application/features/pos/enums/e-pos-session-status.enum';
 

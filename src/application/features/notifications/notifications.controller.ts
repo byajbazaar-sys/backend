@@ -2,8 +2,9 @@ import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, P
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import {
   SendEmailRequestModel,
   NotificationResponseModel,
@@ -11,8 +12,8 @@ import {
   GetNotificationParamsModel,
   NotificationsPagedResponseModel,
 } from './models';
-import { INotificationService, NOTIFICATION_SERVICE } from './service';
 import { NotificationsFilterOptions } from './options';
+import { INotificationService, NOTIFICATION_SERVICE } from './service';
 
 @ApiTags('notifications')
 @ApiBearerAuth('user')
@@ -22,7 +23,7 @@ export class NotificationsController {
   constructor(
     @InjectPinoLogger(NotificationsController.name) private readonly logger: PinoLogger,
     @Inject(NOTIFICATION_SERVICE) private readonly notificationService: INotificationService,
-  ) { }
+  ) {}
 
   @Post('email')
   @ApiOperation({ summary: 'Send an email and store notification record' })

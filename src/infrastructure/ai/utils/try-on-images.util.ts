@@ -1,5 +1,5 @@
-import type { AiImageInput } from '../interfaces/ai-media.types';
 import type { TryOnJewelleryType } from '../../../application/features/try-on/jewellery-types';
+import type { AiImageInput } from '../interfaces/ai-media.types';
 
 const JEWELLERY_ORDER: TryOnJewelleryType[] = [
   'necklace',
@@ -29,9 +29,6 @@ export function orderJewelleryItems(items: AiImageInput[]): AiImageInput[] {
 }
 
 /** Person first, then jewellery in stable order. */
-export function buildTryOnImageSequence(
-  personImage: AiImageInput,
-  jewelleryItems: AiImageInput[],
-): AiImageInput[] {
+export function buildTryOnImageSequence(personImage: AiImageInput, jewelleryItems: AiImageInput[]): AiImageInput[] {
   return [personImage, ...orderJewelleryItems(jewelleryItems)];
 }

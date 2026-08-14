@@ -1,6 +1,7 @@
 import { APIGatewayProxyWebsocketEventV2, APIGatewayProxyWebsocketHandlerV2 } from 'aws-lambda';
-import { EDeviceType } from '../application/features/pos/enums';
+
 import { getTokenFromEvent, getWebSocketHandler, wsResponse } from './websocket-bootstrap';
+import { EDeviceType } from '../application/features/pos/enums';
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
@@ -15,33 +16,41 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
     headers: evt.headers,
   });
   const deviceTypeParam = evt.queryStringParameters?.deviceType;
-  const deviceType =
-    deviceTypeParam === EDeviceType.Mobile ? EDeviceType.Mobile : EDeviceType.Desktop;
+  const deviceType = deviceTypeParam === EDeviceType.Mobile ? EDeviceType.Mobile : EDeviceType.Desktop;
 
-  console.log('[WS:connect] Attempt', JSON.stringify({
-    connectionId,
-    deviceType,
-    hasToken: !!token,
-    tokenLength: token?.length ?? 0,
-  }));
+  console.log(
+    '[WS:connect] Attempt',
+    JSON.stringify({
+      connectionId,
+      deviceType,
+      hasToken: !!token,
+      tokenLength: token?.length ?? 0,
+    }),
+  );
 
   try {
     const wsHandler = await getWebSocketHandler();
     const result = await wsHandler.handleConnect(connectionId, token, deviceType);
 
-    console.log('[WS:connect] Result', JSON.stringify({
-      connectionId,
-      deviceType,
-      statusCode: result.statusCode,
-    }));
+    console.log(
+      '[WS:connect] Result',
+      JSON.stringify({
+        connectionId,
+        deviceType,
+        statusCode: result.statusCode,
+      }),
+    );
 
     return wsResponse(result.statusCode);
   } catch (error) {
-    console.error('[WS:connect] Error', JSON.stringify({
-      connectionId,
-      deviceType,
-      error: error instanceof Error ? error.message : String(error),
-    }));
+    console.error(
+      '[WS:connect] Error',
+      JSON.stringify({
+        connectionId,
+        deviceType,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
     return wsResponse(500);
   }
 };

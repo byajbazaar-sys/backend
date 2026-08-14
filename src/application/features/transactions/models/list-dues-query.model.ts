@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ESortOrder } from '@shared-libs';
 import { Expose, Transform, Type } from 'class-transformer';
 import { IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+
 import { EDueType } from '../../../shared';
 
 export class ListDuesQueryRequestModel {
@@ -35,7 +36,11 @@ export class ListDuesQueryRequestModel {
   sortField?: string;
 
   @Expose()
-  @ApiPropertyOptional({ example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', description: 'Filter by loan ID', required: false })
+  @ApiPropertyOptional({
+    example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327',
+    description: 'Filter by loan ID',
+    required: false,
+  })
   @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
@@ -59,4 +64,3 @@ export class ListDuesQueryRequestModel {
   @IsString()
   customerName?: string;
 }
-

@@ -1,17 +1,13 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Inject,
-  Injectable,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { Request } from 'express';
+
+import { IIdentity } from '../interfaces';
 import {
   AUTHENTICATION_ORCHESTRATOR,
   IAuthenticationOrchestrator,
   ISubscriptionAccessChecker,
   SUBSCRIPTION_ACCESS_CHECKER,
 } from '../providers';
-import { IIdentity } from '../interfaces';
 
 @Injectable()
 export class UserAuthGuard implements CanActivate {

@@ -22,10 +22,7 @@ export const TransactionalContext = {
    * per call. Using the injected one inside a transaction would write on a
    * different connection and commit independently of it.
    */
-  repositoryFor<T extends ObjectLiteral>(
-    target: EntityTarget<T>,
-    fallback: Repository<T>,
-  ): Repository<T> {
+  repositoryFor<T extends ObjectLiteral>(target: EntityTarget<T>, fallback: Repository<T>): Repository<T> {
     const manager = storage.getStore();
     return manager ? manager.getRepository(target) : fallback;
   },

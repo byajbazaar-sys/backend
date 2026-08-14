@@ -6,24 +6,20 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { IInventoryCategoriesRepository, INVENTORY_CATEGORIES_REPOSITORY } from './i-inventory-categories.repository';
+import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import {
   IUsersFileStorage,
   USERS_FILE_STORAGE,
   IProductImageAiService,
   PRODUCT_IMAGE_AI_SERVICE,
 } from '../../../shared';
-import {
-  IInventoryCategoriesRepository,
-  INVENTORY_CATEGORIES_REPOSITORY,
-} from './i-inventory-categories.repository';
-import {
-  IInventoryItemsRepository,
-  INVENTORY_ITEMS_REPOSITORY,
-} from './i-inventory-items.repository';
-import { InventoryItemsFilterOptions } from '../options';
+import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from '../../sales-bills/service/i-sales-bills.repository';
+import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { InventoryItem, InventoryItemSale } from '../domain';
 import {
   CreateInventoryItemRequestModel,
@@ -32,12 +28,11 @@ import {
   UpdateInventoryItemRequestModel,
   InventoryItemUpdatePatch,
 } from '../models';
-import { IInventoryItemService } from './i-inventory-item.service';
+import { InventoryItemsFilterOptions } from '../options';
 import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
+import { IInventoryItemService } from './i-inventory-item.service';
 import { EInventoryItemStatus } from '../enums';
-import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { deriveBusinessSkuPrefix } from '../utils/business-sku-prefix';
-import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from '../../sales-bills/service/i-sales-bills.repository';
 
 @Injectable()
 export class InventoryItemService implements IInventoryItemService {
@@ -112,7 +107,7 @@ export class InventoryItemService implements IInventoryItemService {
 
     const created = await this.itemsRepo.create(item);
     if (created.id) {
-      const qrValue = this.barcodeService.buildInventoryQrPayload(created.id, created.sku!);
+      const qrValue = this.barcodeService.buildInventoryQrPayload(created.id, created.sku);
       const withQr = await this.itemsRepo.update(created.id, { qrValue });
       this.logger.info({ itemId: withQr.id, sku }, 'Inventory item created');
       return this.enrichItem(withQr);
@@ -171,11 +166,7 @@ export class InventoryItemService implements IInventoryItemService {
     return this.enrichItem(item);
   }
 
-  async update(
-    id: string,
-    data: UpdateInventoryItemRequestModel,
-    userId: string,
-  ): Promise<InventoryItem> {
+  async update(id: string, data: UpdateInventoryItemRequestModel, userId: string): Promise<InventoryItem> {
     await this.getById(id, userId);
     if (data.categoryId) {
       const category = await this.categoriesRepo.findById(data.categoryId);
@@ -223,11 +214,7 @@ export class InventoryItemService implements IInventoryItemService {
       throw new BadRequestException('Image file is required');
     }
 
-    const normalized = await normalizeImageBufferForStorageOrThrow(
-      file.buffer,
-      file.mimetype,
-      file.originalname,
-    );
+    const normalized = await normalizeImageBufferForStorageOrThrow(file.buffer, file.mimetype, file.originalname);
 
     let bufferToStore = normalized.buffer;
     let mimetype = normalized.mimetype;
@@ -242,10 +229,7 @@ export class InventoryItemService implements IInventoryItemService {
         base64: aiGenerated.base64,
         mimeType: aiGenerated.mimeType,
       });
-      bufferToStore = Buffer.from(
-        polished.base64.replace(/^data:[^;]+;base64,/, ''),
-        'base64',
-      );
+      bufferToStore = Buffer.from(polished.base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
       mimetype = 'image/png';
       fileExtension = 'png';
       this.logger.info({ itemId: id }, 'Inventory image background removed for try-on');
@@ -264,11 +248,7 @@ export class InventoryItemService implements IInventoryItemService {
     }
 
     // Persist the key S3 actually wrote (extension may differ from proposed).
-    const storageKey = await this.fileStorage.writeAsync(
-      proposedKey,
-      bufferToStore,
-      mimetype,
-    );
+    const storageKey = await this.fileStorage.writeAsync(proposedKey, bufferToStore, mimetype);
     const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] });
     this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
     return this.enrichItem(updated);
@@ -284,10 +264,7 @@ export class InventoryItemService implements IInventoryItemService {
     return this.buildAiPreview(originalBase64, mimeType);
   }
 
-  async previewAiImageForItem(
-    id: string,
-    userId: string,
-  ): Promise<InventoryImageAiPreviewResponseModel> {
+  async previewAiImageForItem(id: string, userId: string): Promise<InventoryImageAiPreviewResponseModel> {
     const existing = await this.itemsRepo.findById(id);
     if (!existing) throw new NotFoundException('Inventory item not found');
     if (existing.createdBy !== userId) throw new ForbiddenException('Access denied');
@@ -343,10 +320,7 @@ export class InventoryItemService implements IInventoryItemService {
         {
           mimeType,
           aiMimeType: aiGenerated.mimeType,
-          previewBytes: Buffer.from(
-            compressed.base64.replace(/^data:[^;]+;base64,/, ''),
-            'base64',
-          ).length,
+          previewBytes: Buffer.from(compressed.base64.replace(/^data:[^;]+;base64,/, ''), 'base64').length,
         },
         'Inventory AI image preview generated',
       );

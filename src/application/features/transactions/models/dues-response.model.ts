@@ -1,8 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
-import { CustomerResponseModel } from '../../customers';
-import { EDueType } from '../../../shared';
+
 import { TransactionResponseModel } from './transaction-response.model';
+import { EDueType } from '../../../shared';
+import { CustomerResponseModel } from '../../customers';
 export class DueResponseModel {
   @Expose()
   @ApiProperty({ example: 'c6cdd6bc-2339-4424-8134-7cbc1f26c327', description: 'Due ID' })

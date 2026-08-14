@@ -1,21 +1,19 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { Request } from 'express';
 import {
   IAuthenticationOrchestrator,
   IAuthenticationProvider,
   IIdentity,
   JwtAuthenticationProvider,
 } from '@shared-libs';
+import { Request } from 'express';
+
 import { ApiAccessAuthenticationProvider } from './api-access-authentication.provider';
 
 @Injectable()
 export class AuthenticationOrchestrator implements IAuthenticationOrchestrator {
   private readonly providers: IAuthenticationProvider[];
 
-  constructor(
-    jwtProvider: JwtAuthenticationProvider,
-    apiAccessProvider: ApiAccessAuthenticationProvider,
-  ) {
+  constructor(jwtProvider: JwtAuthenticationProvider, apiAccessProvider: ApiAccessAuthenticationProvider) {
     this.providers = [jwtProvider, apiAccessProvider];
   }
 

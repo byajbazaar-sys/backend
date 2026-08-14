@@ -1,9 +1,25 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UploadedFile, UseInterceptors, Inject, UnauthorizedException, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+  Inject,
+  UnauthorizedException,
+  Req,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiConsumes, ApiHeader } from '@nestjs/swagger';
-import { Request } from 'express';
 import { readRequestHeader } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
+import { Request } from 'express';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { User } from '../users';
 import { IAuthService } from './interfaces';
+import { AUTH_SERVICE } from './interfaces';
 import {
   LoginRequestModel,
   LoginResponseModel,
@@ -15,10 +31,6 @@ import {
   GoogleSsoRequestModel,
   GoogleSsoResponseModel,
 } from './models';
-import { User } from '../users';
-import { plainToInstance } from 'class-transformer';
-import { AUTH_SERVICE } from './interfaces';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { API_AUTH_SERVICE, IApiAuthService } from '../api-access';
 import { ApiTokenResponseModel } from '../api-access/models';
 
@@ -119,10 +131,13 @@ export class AuthController {
   @ApiOkResponse({ type: GoogleSsoResponseModel })
   @HttpCode(HttpStatus.OK)
   async googleSso(@Body() body: GoogleSsoRequestModel): Promise<GoogleSsoResponseModel> {
-    this.logger.info({
-      hasAuthCode: !!body.authCode,
-      hasAccessToken: !!body.accessToken
-    }, 'googleSso called');
+    this.logger.info(
+      {
+        hasAuthCode: !!body.authCode,
+        hasAccessToken: !!body.accessToken,
+      },
+      'googleSso called',
+    );
     const response = await this.authService.googleSso(body);
     return plainToInstance(GoogleSsoResponseModel, response, {
       excludeExtraneousValues: true,

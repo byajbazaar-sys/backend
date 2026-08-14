@@ -1,10 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, In, Repository } from 'typeorm';
-import { LoanEntity } from '../entities/loan.entity';
-import { DueEntity } from '../entities/due.entity';
-import { TransactionalContext } from '../transactional-context';
+import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
+import { EntityManager, In, Repository } from 'typeorm';
+
 import {
   ELoanStatus,
   ELoanTenureType,
@@ -18,11 +17,13 @@ import {
   LoanStatsFilterOptions,
 } from '../../../application';
 import { Due, EDueType } from '../../../application/shared';
-import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
+import { DueEntity } from '../entities/due.entity';
+import { LoanEntity } from '../entities/loan.entity';
+import { TransactionalContext } from '../transactional-context';
 
 @Injectable()
 export class LoansRepository implements ILoansRepository {
-  constructor(@InjectRepository(LoanEntity) private readonly defaultLoanRepo: Repository<LoanEntity>) { }
+  constructor(@InjectRepository(LoanEntity) private readonly defaultLoanRepo: Repository<LoanEntity>) {}
 
   private get loanRepo(): Repository<LoanEntity> {
     return TransactionalContext.repositoryFor(LoanEntity, this.defaultLoanRepo);
@@ -77,7 +78,7 @@ export class LoansRepository implements ILoansRepository {
     );
     // An UPDATE ... RETURNING comes back as [rows, affectedCount], unlike a
     // SELECT which returns the rows directly.
-    const rows: Array<{ txn_seq_counter: number }> = Array.isArray(result?.[0]) ? result[0] : result;
+    const rows: { txn_seq_counter: number }[] = Array.isArray(result?.[0]) ? result[0] : result;
     if (!rows?.length) {
       throw new Error(`Loan ${loanId} not found while allocating transaction sequence`);
     }
@@ -113,7 +114,7 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async getMaxTransactionSeq(loanId: string): Promise<number> {
-    const rows: Array<{ max_seq: number }> = await this.loanRepo.query(
+    const rows: { max_seq: number }[] = await this.loanRepo.query(
       `SELECT MAX("loan_seq") AS max_seq FROM "transactions" WHERE "loan_id" = $1`,
       [loanId],
     );
@@ -125,7 +126,7 @@ export class LoansRepository implements ILoansRepository {
     return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, updateDto: Loan): Promise<Loan| null> {
+  async update(id: string, updateDto: Loan): Promise<Loan | null> {
     if (!id) return null;
     // version is server-owned: callers may carry a stale one they read earlier.
     const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
@@ -146,7 +147,7 @@ export class LoansRepository implements ILoansRepository {
     updateDto: Loan,
     unpaidDues: Due[],
     unpaidTypes: EDueType[] = [EDueType.UPCOMING_DUE, EDueType.PAST_DUE, EDueType.OVERDUE],
-  ): Promise<Loan| null> {
+  ): Promise<Loan | null> {
     if (!id) return null;
     const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
@@ -163,11 +164,7 @@ export class LoansRepository implements ILoansRepository {
       existing.version = Number(existing.version ?? 0) + 1;
       await loanRepo.save(existing);
 
-      const deleteQb = dueRepo
-        .createQueryBuilder()
-        .delete()
-        .from(DueEntity)
-        .where('loanId = :loanId', { loanId: id });
+      const deleteQb = dueRepo.createQueryBuilder().delete().from(DueEntity).where('loanId = :loanId', { loanId: id });
       if (unpaidTypes.length) {
         deleteQb.andWhere('type IN (:...types)', { types: unpaidTypes });
       }
@@ -202,10 +199,10 @@ export class LoansRepository implements ILoansRepository {
     return active ? run(active) : this.defaultLoanRepo.manager.transaction(run);
   }
 
-  async findById(id: string, createdBy: string): Promise<Loan| null> {
+  async findById(id: string, createdBy: string): Promise<Loan | null> {
     if (!id) return null;
     const loan = await this.loanRepo.findOne({
-      where: { id, createdBy: createdBy },
+      where: { id, createdBy },
       relations: ['loanItems'],
     });
     if (!loan) return null;
@@ -219,7 +216,7 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async findByCreatedBy(createdBy: string): Promise<Loan[]> {
-    const loans = await this.loanRepo.find({ where: { createdBy: createdBy } });
+    const loans = await this.loanRepo.find({ where: { createdBy } });
     return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
@@ -252,7 +249,7 @@ export class LoansRepository implements ILoansRepository {
 
     const totals = await qb
       .clone()
-      .orderBy()   // removes order by
+      .orderBy() // removes order by
       .select([
         'ROUND(SUM(loan.amount_remaining),2) as "totalAmountRemaining"',
         'ROUND(SUM(loan.amount_paid),2) as "totalAmountPaid"',
@@ -389,14 +386,14 @@ export class LoansRepository implements ILoansRepository {
   }
 
   async delete(id: string, createdBy: string): Promise<void> {
-    await this.loanRepo.delete({ id, createdBy: createdBy });
+    await this.loanRepo.delete({ id, createdBy });
   }
 
   async deleteByCustomerId(customerId: string, createdBy: string): Promise<void> {
-    await this.loanRepo.delete({ customerId, createdBy: createdBy });
+    await this.loanRepo.delete({ customerId, createdBy });
   }
 
-  async findOpenLoanIdsPastMaturity(): Promise<Array<{ id: string; createdBy: string }>> {
+  async findOpenLoanIdsPastMaturity(): Promise<{ id: string; createdBy: string }[]> {
     const rows = await this.loanRepo
       .createQueryBuilder('loan')
       .select(['loan.id', 'loan.createdBy'])

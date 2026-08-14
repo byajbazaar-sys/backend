@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
-import { Paged } from './paged';
+
 import { IPageable } from './i-pageable';
+import { Paged } from './paged';
 
 export function toPaged<T>(
   type: new (...args: any[]) => T,

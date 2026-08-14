@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMinSize, IsArray, IsUUID } from 'class-validator';
 import { Expose } from 'class-transformer';
+import { ArrayMinSize, IsArray, IsUUID } from 'class-validator';
 
 export class BulkDeleteMetalRatesRequestModel {
   @ApiProperty({ type: [String], description: 'Metal rate history entry UUIDs to delete' })

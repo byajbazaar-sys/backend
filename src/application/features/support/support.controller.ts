@@ -1,11 +1,12 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards, Inject } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { SupportRequest } from './domain';
 import { CreateSupportRequestModel, SupportRequestResponseModel } from './models';
 import { ISupportService, SUPPORT_SERVICE } from './service';
-import { SupportRequest } from './domain';
 
 /**
  * Public endpoint for the in-app Contact Support form (no auth).

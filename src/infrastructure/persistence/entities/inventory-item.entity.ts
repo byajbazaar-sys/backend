@@ -8,13 +8,10 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
-import { UserEntity } from './user.entity';
+
 import { InventoryCategoryEntity } from './inventory-category.entity';
-import {
-  EInventoryItemStatus,
-  EMakingChargeMode,
-  EMetalType,
-} from '../../../application/features/inventory/enums';
+import { UserEntity } from './user.entity';
+import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../../../application/features/inventory/enums';
 
 @Entity('inventory_items')
 @Index('UQ_inventory_items_created_by_sku', ['createdBy', 'sku'], { unique: true })

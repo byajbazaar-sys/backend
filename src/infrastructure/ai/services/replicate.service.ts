@@ -1,28 +1,21 @@
-import { randomInt } from 'crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import axios from 'axios';
+import { randomInt } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import Replicate from 'replicate';
-import {
-  REPLICATE_TRYON_MIME,
-} from '../ai.constants';
-import type {
-  AiImageInput,
-  JewelleryTryOnRequest,
-  OutfitRecolorRequest,
-} from '../interfaces/ai-media.types';
-import {
-  buildFullTryOnPrompt,
-} from '../prompts/try-on.prompts';
-import { buildTryOnImageSequence } from '../utils/try-on-images.util';
+
+import { GeneratedAiImage, ITryOnAiService } from '../../../application';
+import { REPLICATE_TRYON_MIME } from '../ai.constants';
+import { BedrockService } from './bedrock.service';
+import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
+import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
 import { ReplicateTryOnOptions } from '../replicate-try-on.options';
 import { stripDataUrl, withTimeout } from '../utils/image.util';
-import { BedrockService } from './bedrock.service';
-import { GeneratedAiImage, ITryOnAiService } from '../../../application';
+import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
-type ReplicateFileOutput = {
+interface ReplicateFileOutput {
   url?: () => URL;
-};
+}
 
 @Injectable()
 export class ReplicateTryOnService implements ITryOnAiService {
@@ -33,9 +26,7 @@ export class ReplicateTryOnService implements ITryOnAiService {
     private readonly bedrock: BedrockService,
     @InjectPinoLogger(ReplicateTryOnService.name) private readonly logger: PinoLogger,
   ) {
-    this.client = this.options.isConfigured
-      ? new Replicate({ auth: this.options.apiToken.trim() })
-      : null;
+    this.client = this.options.isConfigured ? new Replicate({ auth: this.options.apiToken.trim() }) : null;
   }
 
   async generateJewelleryTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
@@ -46,10 +37,7 @@ export class ReplicateTryOnService implements ITryOnAiService {
     return (await this.generateTryOnImages(request, 'outfit'))[0];
   }
 
-  async generateTryOnImages(
-    request: JewelleryTryOnRequest,
-    mode: 'jewellery' | 'outfit',
-  ): Promise<GeneratedAiImage[]> {
+  async generateTryOnImages(request: JewelleryTryOnRequest, mode: 'jewellery' | 'outfit'): Promise<GeneratedAiImage[]> {
     this.assertConfigured();
     const count = Math.min(2, Math.max(1, request.variations ?? 2));
     const images: GeneratedAiImage[] = [];
@@ -68,9 +56,7 @@ export class ReplicateTryOnService implements ITryOnAiService {
 
   private assertConfigured(): void {
     if (!this.client) {
-      throw new BadRequestException(
-        'Try-on AI provider is not configured (REPLICATE_API_TOKEN is missing)',
-      );
+      throw new BadRequestException('Try-on AI provider is not configured (REPLICATE_API_TOKEN is missing)');
     }
   }
 
@@ -111,7 +97,7 @@ export class ReplicateTryOnService implements ITryOnAiService {
       const started = Date.now();
       try {
         const output = await withTimeout(
-          this.client!.run(this.options.modelId as `${string}/${string}`, {
+          this.client.run(this.options.modelId as `${string}/${string}`, {
             input: {
               prompt,
               input_images: inputImages,
@@ -148,9 +134,7 @@ export class ReplicateTryOnService implements ITryOnAiService {
       }
     }
 
-    throw lastError instanceof Error
-      ? lastError
-      : new BadRequestException('Replicate try-on request failed');
+    throw lastError instanceof Error ? lastError : new BadRequestException('Replicate try-on request failed');
   }
 
   private async normalizeOutput(output: unknown): Promise<GeneratedAiImage> {

@@ -1,7 +1,7 @@
 import { Loan, LoanExtended, LoanItem } from '../domain';
-import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 import { LoanStats } from '../domain';
 import { ELoanStatus } from '../enums';
+import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 
 export const LOAN_SERVICE = 'ILoanService';
 

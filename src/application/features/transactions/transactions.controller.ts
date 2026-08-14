@@ -1,8 +1,29 @@
-import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query, BadRequestException, StreamableFile, Header, Patch, Delete } from '@nestjs/common';
+import {
+  UseGuards,
+  Controller,
+  Post,
+  HttpStatus,
+  HttpCode,
+  Body,
+  Inject,
+  Get,
+  Param,
+  Query,
+  BadRequestException,
+  StreamableFile,
+  Header,
+  Patch,
+  Delete,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { Transaction } from './domain';
+import { ETransactionType } from './enums';
 import {
   CreateTransactionRequestModel,
   DownloadTransactionsQueryRequestModel,
@@ -18,13 +39,9 @@ import {
   DeleteTransactionQueryRequestModel,
   TransactionDetailResponseModel,
 } from './models';
-import { ITransactionService, TRANSACTION_SERVICE } from './service';
-import { plainToInstance } from 'class-transformer';
-import { Transaction } from './domain';
 import { DuesFilterOptions, TransactionsFilterOptions, TransactionsDownloadFilterOptions } from './options';
-import { toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { ITransactionService, TRANSACTION_SERVICE } from './service';
 import { ExportFormat } from '../../shared';
-import { ETransactionType } from './enums';
 
 @ApiTags('transactions')
 @ApiBearerAuth('user')
@@ -34,7 +51,7 @@ export class TransactionsController {
   constructor(
     @InjectPinoLogger(TransactionsController.name) private readonly logger: PinoLogger,
     @Inject(TRANSACTION_SERVICE) private readonly transactionService: ITransactionService,
-  ) { }
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new transaction' })
@@ -72,7 +89,8 @@ export class TransactionsController {
 
   @Patch(':id')
   @ApiOperation({
-    summary: 'Update payment method and/or amount on the latest transaction (amount rolls back and re-applies loan effects)',
+    summary:
+      'Update payment method and/or amount on a correctable transaction (replays loan history when not the latest)',
   })
   @ApiParam({ name: 'id', description: 'Transaction ID' })
   @ApiResponse({ status: HttpStatus.OK, type: TransactionResponseModel })
@@ -98,7 +116,7 @@ export class TransactionsController {
 
   @Delete(':id')
   @ApiOperation({
-    summary: 'Delete the latest transaction on a loan and roll back its loan/due effects',
+    summary: 'Delete a correctable transaction and rebuild loan balances (replays history when not the latest)',
   })
   @ApiParam({ name: 'id', description: 'Transaction ID' })
   @ApiResponse({ status: HttpStatus.NO_CONTENT })
@@ -171,12 +189,20 @@ export class TransactionsController {
       });
     }
     const fmt = {
-      truncateId: (v: unknown) => (v ? String(v).slice(0, 8) + '...' : ''),
-      formatDate: (v: unknown) =>
-        v instanceof Date ? v.toISOString().slice(0, 10) : v ? new Date(String(v)).toISOString().slice(0, 10) : '',
-      formatNum: (v: unknown) => (v != null ? Number(v).toFixed(2) : ''),
+      truncateId: (v: unknown): string =>
+        typeof v === 'string' || typeof v === 'number' ? `${String(v).slice(0, 8)}...` : '',
+      formatDate: (v: unknown): string => {
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        if (typeof v === 'string' || typeof v === 'number') {
+          return new Date(v).toISOString().slice(0, 10);
+        }
+        return '';
+      },
+      formatNum: (v: unknown): string => (v !== null && v !== undefined ? Number(v).toFixed(2) : ''),
       customer: (v: unknown) =>
-        v ? `${(v as { firstName?: string })?.firstName ?? ''} ${(v as { lastName?: string })?.lastName ?? ''}`.trim() : '',
+        v
+          ? `${(v as { firstName?: string })?.firstName ?? ''} ${(v as { lastName?: string })?.lastName ?? ''}`.trim()
+          : '',
     };
     const columns: IPdfColumnConfig[] = [
       { header: 'ID', key: 'id', width: 55, formatter: fmt.truncateId },
@@ -219,10 +245,7 @@ export class TransactionsController {
   @ApiOkResponse({ type: DueResponseModel })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Due not found' })
   @HttpCode(HttpStatus.OK)
-  async getDueById(
-    @Param() params: GetDueParamsModel,
-    @Identity() identity: IIdentity,
-  ): Promise<DueResponseModel> {
+  async getDueById(@Param() params: GetDueParamsModel, @Identity() identity: IIdentity): Promise<DueResponseModel> {
     this.logger.info({ params, identity }, 'getDueById called');
     const due = await this.transactionService.getDueById(params.id, identity.userId);
     return plainToInstance(DueResponseModel, due, {

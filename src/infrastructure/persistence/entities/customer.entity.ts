@@ -9,10 +9,11 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
-import { UserEntity } from './user.entity';
+
+import { DueEntity } from './due.entity';
 import { LoanEntity } from './loan.entity';
 import { TransactionEntity } from './transaction.entity';
-import { DueEntity } from './due.entity';
+import { UserEntity } from './user.entity';
 
 @Entity('customers')
 @Index(['createdBy', 'email'], { unique: true })

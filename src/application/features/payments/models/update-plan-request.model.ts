@@ -1,5 +1,5 @@
-import { Expose } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Expose } from 'class-transformer';
 import { IsBoolean, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class UpdatePlanRequestModel {

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
+
 import { EPosSessionStatus } from '../enums';
 
 export class PosSessionResponseModel {

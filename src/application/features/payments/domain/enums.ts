@@ -15,9 +15,7 @@ export enum ESubscriptionStatus {
   Paused = 'paused',
 }
 
-export const ACTIVE_SUBSCRIPTION_STATUSES: ESubscriptionStatus[] = [
-  ESubscriptionStatus.Active,
-];
+export const ACTIVE_SUBSCRIPTION_STATUSES: ESubscriptionStatus[] = [ESubscriptionStatus.Active];
 
 export const BLOCKING_SUBSCRIPTION_STATUSES: ESubscriptionStatus[] = [
   ESubscriptionStatus.Expired,

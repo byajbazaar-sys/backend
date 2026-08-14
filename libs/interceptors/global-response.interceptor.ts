@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import { isProd } from '@shared-libs';
 
 export interface ApiResponse<T> {
   statusCode: number;

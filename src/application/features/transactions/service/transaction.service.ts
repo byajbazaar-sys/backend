@@ -1,13 +1,48 @@
-import { Inject, Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
+import { Paged, toPaged } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { emptyLoanEffect, LoanEffect, Transaction, TransactionLog, UpdateTransactionData, CreateTransactionLogInput } from '../domain';
+
+import {
+  emptyLoanEffect,
+  LoanEffect,
+  Transaction,
+  TransactionLog,
+  UpdateTransactionData,
+  CreateTransactionLogInput,
+} from '../domain';
 import { ITransactionService } from './i-transaction.service';
 import { LoanReplayService } from './loan-replay.service';
+import {
+  DUES_REPOSITORY,
+  EDueType,
+  IDuesRepository,
+  Due,
+  ITransactionsRepository,
+  TRANSACTIONS_REPOSITORY,
+  ITransactionLogsRepository,
+  TRANSACTION_LOGS_REPOSITORY,
+  IUnitOfWork,
+  UNIT_OF_WORK,
+} from '../../../shared';
+import {
+  LOANS_REPOSITORY,
+  ILoansRepository,
+  ELoanStatus,
+  Loan,
+  ILoanService,
+  LOAN_SERVICE,
+  EInterestCalculationMethod,
+  assertLoanVersion,
+} from '../../loans';
+import { ETransactionLogAction, ETransactionType } from '../enums';
 import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, DuesFilterOptions } from '../options';
-import { Paged, toPaged } from '@shared-libs';
-import { LOANS_REPOSITORY, ILoansRepository, ELoanStatus, Loan, ILoanService, LOAN_SERVICE, EInterestCalculationMethod, assertLoanVersion } from '../../loans';
-import { ETransactionLogAction, ETransactionType, ETransactionPaidIn } from '../enums';
-import { DUES_REPOSITORY, EDueType, IDuesRepository, Due, ITransactionsRepository, TRANSACTIONS_REPOSITORY, ITransactionLogsRepository, TRANSACTION_LOGS_REPOSITORY, IUnitOfWork, UNIT_OF_WORK } from '../../../shared';
 
 @Injectable()
 export class TransactionService implements ITransactionService {
@@ -20,20 +55,18 @@ export class TransactionService implements ITransactionService {
     @Inject(UNIT_OF_WORK) private readonly unitOfWork: IUnitOfWork,
     private readonly replayService: LoanReplayService,
     @InjectPinoLogger(TransactionService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   async create(data: Transaction, expectedLoanVersion?: number): Promise<Transaction> {
-    return this.unitOfWork.runInTransaction(() =>
-      this.createWithinTransaction(data, expectedLoanVersion),
-    );
+    return this.unitOfWork.runInTransaction(() => this.createWithinTransaction(data, expectedLoanVersion));
   }
 
-  private async createWithinTransaction(
-    data: Transaction,
-    expectedLoanVersion?: number,
-  ): Promise<Transaction> {
+  private async createWithinTransaction(data: Transaction, expectedLoanVersion?: number): Promise<Transaction> {
     try {
-      this.logger.info({ loanId: data.loanId, dueId: data.dueId, transactionType: data.transactionType, amount: data.amount }, 'Creating transaction');
+      this.logger.info(
+        { loanId: data.loanId, dueId: data.dueId, transactionType: data.transactionType, amount: data.amount },
+        'Creating transaction',
+      );
       // Resolve the loan before validating, not after. A due-only request has no
       // loanId of its own, and every write below — balances, the sequence, the
       // transaction row — has to land on the loan whose lock is being held.
@@ -54,14 +87,15 @@ export class TransactionService implements ITransactionService {
 
       if (data.transactionType === ETransactionType.INTEREST) {
         if (loan.interestRemaining < data.amount) {
-          throw new BadRequestException('Transaction amount is greater than interest remaining(' + loan.interestRemaining + ')');
+          throw new BadRequestException(
+            'Transaction amount is greater than interest remaining(' + loan.interestRemaining + ')',
+          );
         }
         loan.interestRemaining -= data.amount;
         loan.interestPaid += data.amount;
         effect.interestRemainingDelta = -data.amount;
         effect.interestPaidDelta = data.amount;
       }
-
 
       if (data.transactionType === ETransactionType.PRINCIPAL) {
         if (loan.amountRemaining < data.amount) {
@@ -80,7 +114,10 @@ export class TransactionService implements ITransactionService {
         loan.amountRemaining += data.amount;
         effect.amountRemainingDelta = data.amount;
         // Add interest for the additional principal over remaining periods
-        const unpaidDues = await this.duesRepo.findByLoanIdAndType(data.loanId, [EDueType.UPCOMING_DUE, EDueType.PAST_DUE]);
+        const unpaidDues = await this.duesRepo.findByLoanIdAndType(data.loanId, [
+          EDueType.UPCOMING_DUE,
+          EDueType.PAST_DUE,
+        ]);
         const remainingTenure = unpaidDues.length;
         data.periodsAtCreation = remainingTenure;
         if (remainingTenure > 0) {
@@ -95,7 +132,7 @@ export class TransactionService implements ITransactionService {
       }
 
       if (data.dueId && data.transactionType === ETransactionType.DUE_PAYMENT) {
-        if (due.dueAmount != data.amount) {
+        if (Number(due.dueAmount) !== Number(data.amount)) {
           throw new BadRequestException('For due payment, transaction amount should be equal to due amount');
         }
         due.type = EDueType.PAID;
@@ -187,14 +224,8 @@ export class TransactionService implements ITransactionService {
     }
   }
 
-  async update(
-    id: string,
-    updates: UpdateTransactionData,
-    createdBy: string,
-  ): Promise<Transaction> {
-    return this.unitOfWork.runInTransaction(() =>
-      this.updateWithinTransaction(id, updates, createdBy),
-    );
+  async update(id: string, updates: UpdateTransactionData, createdBy: string): Promise<Transaction> {
+    return this.unitOfWork.runInTransaction(() => this.updateWithinTransaction(id, updates, createdBy));
   }
 
   private async updateWithinTransaction(
@@ -247,11 +278,7 @@ export class TransactionService implements ITransactionService {
     return current;
   }
 
-  private async reviseAmount(
-    existing: Transaction,
-    newAmount: number,
-    createdBy: string,
-  ): Promise<Transaction> {
+  private async reviseAmount(existing: Transaction, newAmount: number, createdBy: string): Promise<Transaction> {
     if (!Number.isFinite(newAmount) || newAmount <= 0) {
       throw new BadRequestException('Invalid transaction amount');
     }
@@ -277,11 +304,7 @@ export class TransactionService implements ITransactionService {
     }
 
     const revised = { ...existing, amount: newAmount };
-    const { effect, periodsAtCreation } = await this.applyTransactionEffects(
-      revised,
-      loanAfterRollback,
-      createdBy,
-    );
+    const { effect, periodsAtCreation } = await this.applyTransactionEffects(revised, loanAfterRollback, createdBy);
 
     const updated = await this.transactionsRepo.updateAmount(
       existing.id,
@@ -307,11 +330,7 @@ export class TransactionService implements ITransactionService {
    * The loan is rebuilt from its checkpoint instead, so one history explains the
    * balances, the schedule, and the transactions alike.
    */
-  private async reviseEarlierAmount(
-    existing: Transaction,
-    newAmount: number,
-    createdBy: string,
-  ): Promise<Transaction> {
+  private async reviseEarlierAmount(existing: Transaction, newAmount: number, createdBy: string): Promise<Transaction> {
     await this.assertOpenLoan(existing.loanId, createdBy);
     await this.replayService.replay(existing.loanId, createdBy, {
       kind: 'editAmount',
@@ -377,11 +396,7 @@ export class TransactionService implements ITransactionService {
    * Re-reads the transaction once its loan is locked, since a concurrent writer
    * could have changed it between the lookup that told us which loan to lock.
    */
-  private async loadForWrite(
-    id: string,
-    createdBy: string,
-    expectedLoanVersion?: number,
-  ): Promise<Transaction> {
+  private async loadForWrite(id: string, createdBy: string, expectedLoanVersion?: number): Promise<Transaction> {
     const initial = await this.transactionsRepo.findById(id, createdBy);
     if (!initial) {
       throw new NotFoundException('Transaction not found');
@@ -433,16 +448,10 @@ export class TransactionService implements ITransactionService {
   }
 
   async delete(id: string, createdBy: string, expectedLoanVersion?: number): Promise<void> {
-    return this.unitOfWork.runInTransaction(() =>
-      this.deleteWithinTransaction(id, createdBy, expectedLoanVersion),
-    );
+    return this.unitOfWork.runInTransaction(() => this.deleteWithinTransaction(id, createdBy, expectedLoanVersion));
   }
 
-  private async deleteWithinTransaction(
-    id: string,
-    createdBy: string,
-    expectedLoanVersion?: number,
-  ): Promise<void> {
+  private async deleteWithinTransaction(id: string, createdBy: string, expectedLoanVersion?: number): Promise<void> {
     try {
       this.logger.info({ transactionId: id, createdBy }, 'Deleting transaction');
       const existing = await this.loadForWrite(id, createdBy, expectedLoanVersion);
@@ -506,11 +515,7 @@ export class TransactionService implements ITransactionService {
     }
   }
 
-  private async rollbackTransactionEffects(
-    transaction: Transaction,
-    loan: Loan,
-    createdBy: string,
-  ): Promise<void> {
+  private async rollbackTransactionEffects(transaction: Transaction, loan: Loan, createdBy: string): Promise<void> {
     const loanId = transaction.loanId;
     const effect = await this.resolveRollbackEffect(transaction, createdBy);
 
@@ -546,10 +551,7 @@ export class TransactionService implements ITransactionService {
    * predate that tracking, so their effect is re-derived — which is only exact
    * for types whose effect is a direct function of the amount or of the due row.
    */
-  private async resolveRollbackEffect(
-    transaction: Transaction,
-    createdBy: string,
-  ): Promise<LoanEffect> {
+  private async resolveRollbackEffect(transaction: Transaction, createdBy: string): Promise<LoanEffect> {
     const recorded = this.getRecordedEffect(transaction);
     if (recorded) {
       return recorded;
@@ -663,7 +665,7 @@ export class TransactionService implements ITransactionService {
         effect.amountRemainingDelta = amount;
         // Correcting a top-up keeps the tenure it was originally priced against;
         // today's schedule may have moved on since.
-        if (transaction.periodsAtCreation != null) {
+        if (transaction.periodsAtCreation !== undefined && transaction.periodsAtCreation !== null) {
           periodsAtCreation = Number(transaction.periodsAtCreation);
         } else {
           const unpaidDues = await this.duesRepo.findByLoanIdAndType(loanId, [
@@ -820,50 +822,46 @@ export class TransactionService implements ITransactionService {
   }
 
   private async validateTransaction(data: Transaction): Promise<{ loan?: Loan; due?: Due }> {
-    try {
-      const loan = await this.loansRepo.findById(data?.loanId, data.createdBy);
-      const due = await this.duesRepo.findById(data?.dueId, data.createdBy);
-      if (data.loanId && data.dueId) {
-        if (!loan) {
-          throw new NotFoundException('Loan not found');
-        }
-        if (!due) {
-          throw new NotFoundException('Due not found');
-        }
-        if (due.loanId !== loan.id) {
-          throw new BadRequestException('Due does not belong to the loan');
-        }
+    const loan = await this.loansRepo.findById(data?.loanId, data.createdBy);
+    const due = await this.duesRepo.findById(data?.dueId, data.createdBy);
+    if (data.loanId && data.dueId) {
+      if (!loan) {
+        throw new NotFoundException('Loan not found');
       }
-      if (data.loanId) {
-        if (!loan) {
-          throw new NotFoundException('Loan not found');
-        }
-
-        if (loan.status === ELoanStatus.CLOSED) {
-          throw new BadRequestException('Loan is closed');
-        }
-        const totalRemaining = loan.amountRemaining + loan.interestRemaining;
-        if (data.amount > totalRemaining && data.transactionType !== ETransactionType.TOP_UP) {
-          throw new BadRequestException('Amount should not be greater than loan remaining(' + totalRemaining + ')');
-        }
+      if (!due) {
+        throw new NotFoundException('Due not found');
       }
-      if (data.dueId) {
-        if (!due) {
-          throw new NotFoundException('Due not found');
-        }
-
-        if (due.type === EDueType.PAID) {
-          throw new BadRequestException('Due is already paid');
-        }
-
-        if (due.dueAmount < data.amount) {
-          throw new BadRequestException('transaction should be less than due amount');
-        }
+      if (due.loanId !== loan.id) {
+        throw new BadRequestException('Due does not belong to the loan');
       }
-      return { loan, due };
-    } catch (err) {
-      throw err;
     }
+    if (data.loanId) {
+      if (!loan) {
+        throw new NotFoundException('Loan not found');
+      }
+
+      if (loan.status === ELoanStatus.CLOSED) {
+        throw new BadRequestException('Loan is closed');
+      }
+      const totalRemaining = loan.amountRemaining + loan.interestRemaining;
+      if (data.amount > totalRemaining && data.transactionType !== ETransactionType.TOP_UP) {
+        throw new BadRequestException('Amount should not be greater than loan remaining(' + totalRemaining + ')');
+      }
+    }
+    if (data.dueId) {
+      if (!due) {
+        throw new NotFoundException('Due not found');
+      }
+
+      if (due.type === EDueType.PAID) {
+        throw new BadRequestException('Due is already paid');
+      }
+
+      if (due.dueAmount < data.amount) {
+        throw new BadRequestException('transaction should be less than due amount');
+      }
+    }
+    return { loan, due };
   }
 
   private async recordLog(input: CreateTransactionLogInput): Promise<void> {

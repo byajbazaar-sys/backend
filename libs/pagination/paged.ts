@@ -1,5 +1,6 @@
-import { IPageable } from './i-pageable';
 import { Expose, Type } from 'class-transformer';
+
+import { IPageable } from './i-pageable';
 
 export class Paged<T> implements IPageable<T> {
   @Expose()

@@ -2,9 +2,9 @@ import { PipeTransform, ArgumentMetadata } from '@nestjs/common';
 import { deepParseJson } from 'deep-parse-json';
 import * as _ from 'lodash';
 
-type TParseFormDataJsonOptions = {
+interface TParseFormDataJsonOptions {
   except?: string[];
-};
+}
 
 export class ParseFormDataJsonPipe implements PipeTransform {
   constructor(private options?: TParseFormDataJsonOptions) {}

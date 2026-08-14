@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
-import { MetalRateEntity } from '../entities/metal-rate.entity';
+import { Repository } from 'typeorm';
+
 import { IMetalRatesRepository, MetalRate } from '../../../application';
+import { MetalRateEntity } from '../entities/metal-rate.entity';
 
 @Injectable()
 export class MetalRatesRepository implements IMetalRatesRepository {

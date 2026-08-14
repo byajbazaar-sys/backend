@@ -1,16 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import { ESubscriptionStatus, Payment, Refund } from '../domain';
 import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
 import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
-import {
-  ISubscriptionsRepository,
-  SUBSCRIPTIONS_REPOSITORY,
-} from './i-subscriptions.repository';
-import {
-  isFullyRefunded,
-  parseRefundReason,
-  resolvePaymentStatusAfterRefund,
-} from '../utils/refund.util';
+import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
+import { isFullyRefunded, parseRefundReason, resolvePaymentStatusAfterRefund } from '../utils/refund.util';
 
 export const REFUND_SERVICE = 'REFUND_SERVICE';
 
@@ -32,11 +26,7 @@ export class RefundService {
     if (!payment.id) return;
 
     const refunds = await this.refundsRepo.findByPaymentId(payment.id);
-    const nextStatus = resolvePaymentStatusAfterRefund(
-      Number(payment.amount),
-      refunds,
-      payment.status,
-    );
+    const nextStatus = resolvePaymentStatusAfterRefund(Number(payment.amount), refunds, payment.status);
 
     if (nextStatus !== payment.status) {
       await this.paymentsRepo.upsertByProviderPaymentId({
@@ -57,19 +47,13 @@ export class RefundService {
     }
   }
 
-  buildRefundFromWebhook(
-    payment: Payment,
-    entity: Record<string, unknown>,
-  ): Refund {
+  buildRefundFromWebhook(payment: Payment, entity: Record<string, unknown>): Refund {
     const status = String(entity.status ?? '');
     const notesReason = parseRefundReason(entity.notes);
-    const failureReason =
-      status === 'failed' && entity.error_description
-        ? String(entity.error_description)
-        : null;
+    const failureReason = status === 'failed' && entity.error_description ? String(entity.error_description) : null;
 
     return {
-      paymentId: payment.id!,
+      paymentId: payment.id,
       providerRefundId: String(entity.id),
       amount: Number(entity.amount ?? 0) / 100,
       status,

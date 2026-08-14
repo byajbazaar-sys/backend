@@ -1,4 +1,5 @@
 import { Expose, Type } from 'class-transformer';
+
 import { ECouponType } from './enums';
 
 export class Coupon {

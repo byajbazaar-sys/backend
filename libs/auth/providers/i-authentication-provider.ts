@@ -1,4 +1,5 @@
 import { Request } from 'express';
+
 import { IIdentity } from '../interfaces';
 
 export const AUTHENTICATION_PROVIDERS = 'AUTHENTICATION_PROVIDERS';

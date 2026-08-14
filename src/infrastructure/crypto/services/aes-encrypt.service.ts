@@ -1,8 +1,9 @@
-import * as crypto from 'crypto';
 import { Injectable } from '@nestjs/common';
-import { AESEncryptOptions } from '../options';
 import { IAESEncryptService } from '@shared-libs';
+import * as crypto from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { AESEncryptOptions } from '../options';
 
 @Injectable()
 export class AESEncrypt implements IAESEncryptService {

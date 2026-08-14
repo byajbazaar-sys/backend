@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { MailService } from '@sendgrid/mail';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { plainToInstance } from 'class-transformer';
-import { IEmailService, SendEmail } from '../../application';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
 import { SendGridOptions } from './options';
+import { IEmailService, SendEmail } from '../../application';
 
 const HTML_MIME = 'text/html';
 const TEXT_MIME = 'text/plain';

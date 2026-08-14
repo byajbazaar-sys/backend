@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsUUID } from 'class-validator';
 import { Expose } from 'class-transformer';
+import { IsString, IsNotEmpty, IsUUID } from 'class-validator';
 
 export class GetItemParamsModel {
   @Expose()

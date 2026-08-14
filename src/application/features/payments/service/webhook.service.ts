@@ -1,36 +1,17 @@
-import {
-  Inject,
-  Injectable,
-  UnauthorizedException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { SUBSCRIPTION_PROVIDER_RAZORPAY } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import {
-  ESubscriptionStatus,
-  Payment,
-  PaymentEvent,
-  PaymentOrder,
-  PaymentEventLinksData,
-} from '../domain';
-import {
-  IPaymentEventsRepository,
-  PAYMENT_EVENTS_REPOSITORY,
-} from './i-payment-events.repository';
-import {
-  ISubscriptionsRepository,
-  SUBSCRIPTIONS_REPOSITORY,
-} from './i-subscriptions.repository';
+
+import { ESubscriptionStatus, Payment, PaymentEvent, PaymentOrder, PaymentEventLinksData } from '../domain';
+import { COUPON_SERVICE, ICouponService } from './i-coupon.service';
+import { IPaymentEventsRepository, PAYMENT_EVENTS_REPOSITORY } from './i-payment-events.repository';
+import { IPaymentOrdersRepository, PAYMENT_ORDERS_REPOSITORY } from './i-payment-orders.repository';
+import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
+import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { SubscriptionPatch } from '../models';
 import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
-import {
-  IPaymentOrdersRepository,
-  PAYMENT_ORDERS_REPOSITORY,
-} from './i-payment-orders.repository';
-import { REFUND_SERVICE, RefundService } from './refund.service';
-import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
-import { COUPON_SERVICE, ICouponService } from './i-coupon.service';
 import { IWebhookService } from './i-webhook.service';
-import { SUBSCRIPTION_PROVIDER_RAZORPAY } from '@shared-libs';
+import { REFUND_SERVICE, RefundService } from './refund.service';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 
 @Injectable()
@@ -47,10 +28,7 @@ export class WebhookService implements IWebhookService {
     @InjectPinoLogger(WebhookService.name) private readonly logger: PinoLogger,
   ) {}
 
-  async handleWebhook(
-    rawBody: string,
-    signature: string,
-  ): Promise<{ received: boolean; duplicate?: boolean }> {
+  async handleWebhook(rawBody: string, signature: string): Promise<{ received: boolean; duplicate?: boolean }> {
     if (!signature) {
       this.logger.warn('Missing x-razorpay-signature header');
       throw new UnauthorizedException('Missing webhook signature');
@@ -72,14 +50,11 @@ export class WebhookService implements IWebhookService {
     const eventId = this.extractEventId(payload);
     const eventContext = await this.resolveEventContext(payload);
 
-    const existing = await this.eventsRepo.findByProviderAndEventId(
-      SUBSCRIPTION_PROVIDER_RAZORPAY,
-      eventId,
-    );
+    const existing = await this.eventsRepo.findByProviderAndEventId(SUBSCRIPTION_PROVIDER_RAZORPAY, eventId);
     if (existing?.processed) {
       if (this.eventNeedsRelinking(existing)) {
         try {
-          await this.linkPaymentEventFromPayload(existing.id!, payload);
+          await this.linkPaymentEventFromPayload(existing.id, payload);
         } catch (err) {
           this.logger.error({ err, eventName, eventId }, 'Failed to relink processed webhook event');
         }
@@ -117,8 +92,8 @@ export class WebhookService implements IWebhookService {
 
     try {
       await this.dispatch(eventName, payload);
-      await this.linkPaymentEventFromPayload(eventRow.id!, payload);
-      await this.eventsRepo.markProcessed(eventRow.id!);
+      await this.linkPaymentEventFromPayload(eventRow.id, payload);
+      await this.eventsRepo.markProcessed(eventRow.id);
     } catch (err) {
       this.logger.error({ err, eventName, eventId }, 'Webhook processing failed');
       throw err;
@@ -170,17 +145,14 @@ export class WebhookService implements IWebhookService {
     return null;
   }
 
-  private async backfillSiblingPaymentEvents(
-    providerPaymentId: string,
-    links: PaymentEventLinksData,
-  ): Promise<void> {
+  private async backfillSiblingPaymentEvents(providerPaymentId: string, links: PaymentEventLinksData): Promise<void> {
     if (!links.userId && !links.paymentId && !links.paymentOrderId) {
       return;
     }
 
     const siblings = await this.eventsRepo.findUnlinkedByProviderPaymentId(providerPaymentId);
     for (const sibling of siblings) {
-      await this.eventsRepo.updateLinks(sibling.id!, links);
+      await this.eventsRepo.updateLinks(sibling.id, links);
     }
   }
 
@@ -192,7 +164,7 @@ export class WebhookService implements IWebhookService {
     const firstKey = Object.keys(entity)[0];
     const entityId =
       firstKey && (entity[firstKey] as { entity?: { id?: string } })?.entity?.id
-        ? String((entity[firstKey] as { entity?: { id?: string } }).entity!.id)
+        ? String((entity[firstKey] as { entity?: { id?: string } }).entity.id)
         : 'unknown';
     return `${payload.event}_${createdAt}_${entityId}`;
   }
@@ -256,9 +228,7 @@ export class WebhookService implements IWebhookService {
       providerOrderId = String(order.id);
       userId = userId || this.readUserIdFromEntityNotes(order);
       if (order.subscription_id && !userId) {
-        const local = await this.subscriptionsRepo.findByProviderSubscriptionId(
-          String(order.subscription_id),
-        );
+        const local = await this.subscriptionsRepo.findByProviderSubscriptionId(String(order.subscription_id));
         userId = local?.userId ?? null;
       }
     }
@@ -273,36 +243,26 @@ export class WebhookService implements IWebhookService {
     }
 
     if (payment?.subscription_id && !userId) {
-      const local = await this.subscriptionsRepo.findByProviderSubscriptionId(
-        String(payment.subscription_id),
-      );
+      const local = await this.subscriptionsRepo.findByProviderSubscriptionId(String(payment.subscription_id));
       userId = local?.userId ?? null;
     }
 
     if (invoice?.subscription_id && !userId) {
-      const local = await this.subscriptionsRepo.findByProviderSubscriptionId(
-        String(invoice.subscription_id),
-      );
+      const local = await this.subscriptionsRepo.findByProviderSubscriptionId(String(invoice.subscription_id));
       userId = local?.userId ?? null;
     }
 
     if (order?.subscription_id && !userId) {
-      const local = await this.subscriptionsRepo.findByProviderSubscriptionId(
-        String(order.subscription_id),
-      );
+      const local = await this.subscriptionsRepo.findByProviderSubscriptionId(String(order.subscription_id));
       userId = local?.userId ?? null;
     }
 
     return { userId, providerPaymentId, providerOrderId };
   }
 
-  private async resolveUserIdFromPaymentEntity(
-    entity: Record<string, unknown>,
-  ): Promise<string> {
+  private async resolveUserIdFromPaymentEntity(entity: Record<string, unknown>): Promise<string> {
     if (entity.customer_id) {
-      const sub = await this.subscriptionsRepo.findLatestByProviderCustomerId(
-        String(entity.customer_id),
-      );
+      const sub = await this.subscriptionsRepo.findLatestByProviderCustomerId(String(entity.customer_id));
       if (sub?.userId) {
         return sub.userId;
       }
@@ -324,18 +284,14 @@ export class WebhookService implements IWebhookService {
     userId: string,
   ): Promise<string> {
     if (entity.subscription_id) {
-      const sub = await this.subscriptionsRepo.findByProviderSubscriptionId(
-        String(entity.subscription_id),
-      );
+      const sub = await this.subscriptionsRepo.findByProviderSubscriptionId(String(entity.subscription_id));
       if (sub?.id) {
         return sub.id;
       }
     }
 
     if (entity.customer_id) {
-      const sub = await this.subscriptionsRepo.findLatestByProviderCustomerId(
-        String(entity.customer_id),
-      );
+      const sub = await this.subscriptionsRepo.findLatestByProviderCustomerId(String(entity.customer_id));
       if (sub?.id) {
         return sub.id;
       }
@@ -391,28 +347,22 @@ export class WebhookService implements IWebhookService {
   ): Promise<{ userId: string; subscriptionId: string }> {
     const notes = entity.notes;
     const noteRecord =
-      notes && typeof notes === 'object' && !Array.isArray(notes)
-        ? (notes as Record<string, string>)
-        : null;
+      notes && typeof notes === 'object' && !Array.isArray(notes) ? (notes as Record<string, string>) : null;
     let userId = noteRecord?.userId || noteRecord?.user_id || null;
     let subscriptionId = noteRecord?.subscriptionId || noteRecord?.subscription_id || null;
 
     if (entity.subscription_id) {
-      const sub = await this.subscriptionsRepo.findByProviderSubscriptionId(
-        String(entity.subscription_id),
-      );
+      const sub = await this.subscriptionsRepo.findByProviderSubscriptionId(String(entity.subscription_id));
       if (sub) {
-        subscriptionId = subscriptionId || sub.id!;
+        subscriptionId = subscriptionId || sub.id;
         userId = userId || sub.userId;
       }
     }
 
     if (!userId && entity.customer_id) {
-      const sub = await this.subscriptionsRepo.findLatestByProviderCustomerId(
-        String(entity.customer_id),
-      );
+      const sub = await this.subscriptionsRepo.findLatestByProviderCustomerId(String(entity.customer_id));
       if (sub) {
-        subscriptionId = subscriptionId || sub.id!;
+        subscriptionId = subscriptionId || sub.id;
         userId = sub.userId;
       }
     }
@@ -467,10 +417,7 @@ export class WebhookService implements IWebhookService {
     return { userId, subscriptionId: subscriptionId ?? null };
   }
 
-  private async linkPaymentEventFromPayload(
-    eventId: string,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
+  private async linkPaymentEventFromPayload(eventId: string, payload: Record<string, unknown>): Promise<void> {
     const context = await this.resolveEventContext(payload);
     let userId = context.userId;
     let paymentId: string = null;
@@ -480,19 +427,12 @@ export class WebhookService implements IWebhookService {
     if (paymentEntity?.id) {
       const owner = await this.resolvePaymentOwner(paymentEntity);
       if (owner) {
-        const saved = await this.upsertPaymentFromEntity(
-          paymentEntity,
-          owner.userId,
-          owner.subscriptionId,
-        );
+        const saved = await this.upsertPaymentFromEntity(paymentEntity, owner.userId, owner.subscriptionId);
         paymentId = saved.id ?? null;
         userId = userId || saved.userId;
         paymentOrderId =
-          (await this.ensurePaymentOrderFromPayment(
-            paymentEntity,
-            owner.userId,
-            owner.subscriptionId,
-          )) ?? paymentOrderId;
+          (await this.ensurePaymentOrderFromPayment(paymentEntity, owner.userId, owner.subscriptionId)) ??
+          paymentOrderId;
       } else {
         const existing = await this.paymentsRepo.findByProviderPaymentId(String(paymentEntity.id));
         if (existing?.id) {
@@ -555,9 +495,7 @@ export class WebhookService implements IWebhookService {
       const links = { userId, paymentId, paymentOrderId };
       await this.eventsRepo.updateLinks(eventId, links);
 
-      const providerPaymentId =
-        context.providerPaymentId ??
-        (paymentEntity?.id ? String(paymentEntity.id) : null);
+      const providerPaymentId = context.providerPaymentId ?? (paymentEntity?.id ? String(paymentEntity.id) : null);
       if (providerPaymentId) {
         await this.backfillSiblingPaymentEvents(providerPaymentId, links);
       }
@@ -622,10 +560,7 @@ export class WebhookService implements IWebhookService {
     }
   }
 
-  private async handleSubscriptionEvent(
-    eventName: string,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
+  private async handleSubscriptionEvent(eventName: string, payload: Record<string, unknown>): Promise<void> {
     const entity = this.getEntity(payload, 'subscription');
     if (!entity?.id) {
       this.logger.warn({ eventName }, 'Subscription entity missing in webhook');
@@ -658,10 +593,10 @@ export class WebhookService implements IWebhookService {
       patch.cancelledAt = new Date();
     }
 
-    await this.subscriptionsRepo.update(local.id!, patch);
+    await this.subscriptionsRepo.update(local.id, patch);
 
     if (eventName === 'subscription.activated' || eventName === 'subscription.charged') {
-      const refreshed = await this.subscriptionsRepo.findById(local.id!);
+      const refreshed = await this.subscriptionsRepo.findById(local.id);
       if (refreshed) {
         try {
           await this.couponService.recordRedemptionForSubscription(refreshed);
@@ -677,12 +612,8 @@ export class WebhookService implements IWebhookService {
     // subscription.charged often includes payment — persist if present
     const paymentEntity = this.getEntity(payload, 'payment');
     if (paymentEntity?.id) {
-      const saved = await this.upsertPaymentFromEntity(paymentEntity, local.userId, local.id!);
-      const paymentOrderId = await this.ensurePaymentOrderFromPayment(
-        paymentEntity,
-        local.userId,
-        local.id!,
-      );
+      const saved = await this.upsertPaymentFromEntity(paymentEntity, local.userId, local.id);
+      const paymentOrderId = await this.ensurePaymentOrderFromPayment(paymentEntity, local.userId, local.id);
       await this.backfillSiblingPaymentEvents(String(paymentEntity.id), {
         userId: local.userId,
         paymentId: saved.id ?? null,
@@ -691,10 +622,7 @@ export class WebhookService implements IWebhookService {
     }
   }
 
-  private async handlePaymentEvent(
-    eventName: string,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
+  private async handlePaymentEvent(eventName: string, payload: Record<string, unknown>): Promise<void> {
     const entity = this.getEntity(payload, 'payment');
     if (!entity?.id) return;
 
@@ -742,10 +670,7 @@ export class WebhookService implements IWebhookService {
       upi: entity.vpa ? String(entity.vpa) : null,
       fee: entity.fee != null ? Number(entity.fee) / 100 : null,
       tax: entity.tax != null ? Number(entity.tax) / 100 : null,
-      capturedAt:
-        entity.status === 'captured' || entity.captured
-          ? new Date()
-          : null,
+      capturedAt: entity.status === 'captured' || entity.captured ? new Date() : null,
       invoiceId: entity.invoice_id ? String(entity.invoice_id) : null,
       rawJson: entity,
     };
@@ -776,10 +701,7 @@ export class WebhookService implements IWebhookService {
     }
   }
 
-  private async handleInvoiceEvent(
-    eventName: string,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
+  private async handleInvoiceEvent(eventName: string, payload: Record<string, unknown>): Promise<void> {
     const entity = this.getEntity(payload, 'invoice');
     if (!entity?.id) return;
 
@@ -787,9 +709,7 @@ export class WebhookService implements IWebhookService {
     let subscriptionId: string = null;
 
     if (entity.subscription_id) {
-      const sub = await this.subscriptionsRepo.findByProviderSubscriptionId(
-        String(entity.subscription_id),
-      );
+      const sub = await this.subscriptionsRepo.findByProviderSubscriptionId(String(entity.subscription_id));
       if (sub) {
         userId = sub.userId;
         subscriptionId = sub.id!;
@@ -812,13 +732,11 @@ export class WebhookService implements IWebhookService {
       amount: Number(entity.amount ?? 0) / 100,
       currency: String(entity.currency ?? 'INR'),
       status: String(entity.status ?? eventName),
-      notes: notes,
+      notes,
       rawJson: entity,
     };
 
-    const existing = order.providerOrderId
-      ? await this.ordersRepo.findByProviderOrderId(order.providerOrderId)
-      : null;
+    const existing = order.providerOrderId ? await this.ordersRepo.findByProviderOrderId(order.providerOrderId) : null;
     if (existing) {
       // Keep complete latest payload — insert is idempotent via unique index; skip duplicate
       return;
@@ -862,9 +780,7 @@ export class WebhookService implements IWebhookService {
     let subscriptionId: string = null;
 
     if (entity.subscription_id) {
-      const sub = await this.subscriptionsRepo.findByProviderSubscriptionId(
-        String(entity.subscription_id),
-      );
+      const sub = await this.subscriptionsRepo.findByProviderSubscriptionId(String(entity.subscription_id));
       if (sub) {
         userId = userId || sub.userId;
         subscriptionId = sub.id!;
