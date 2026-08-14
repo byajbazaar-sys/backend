@@ -121,7 +121,10 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           },
           'Cloudflare product background removal completed',
         );
-        return generated;
+        const polished = await ensureTransparentProductPng(
+          Buffer.from(stripDataUrl(generated.base64), 'base64'),
+        );
+        return { base64: polished.toString('base64'), mimeType: 'image/png' };
       } catch (err) {
         lastError = err;
         const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;

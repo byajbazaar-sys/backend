@@ -346,7 +346,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     },
     {
       provide: PRODUCT_IMAGE_AI_SERVICE,
-      useExisting: SharpProductImageService,
+      useExisting: CloudflareTryOnService,
     },
     {
       provide: TRY_ON_AI_SERVICE,
