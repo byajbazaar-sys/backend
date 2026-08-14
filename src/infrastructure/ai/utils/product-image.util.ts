@@ -3,8 +3,12 @@ import sharp from 'sharp';
 const WHITE_THRESHOLD = 245;
 /** Max RGB distance treated as background (solid studio backdrops). */
 const HARD_BG_DISTANCE = 38;
-/** Soft feather beyond hard cutoff. */
+/** Soft feather beyond hard cutoff (final alpha cutout). */
 const SOFT_BG_DISTANCE = 80;
+/** Looser match when flattening coloured studio backdrops to white. */
+const FLATTEN_SOFT_BG_DISTANCE = 115;
+/** Max area (px) for isolated backdrop islands removed during white flatten. */
+const MAX_BACKDROP_SPECKLE_AREA = 64;
 
 interface Rgb {
   r: number;
@@ -22,6 +26,42 @@ function isNearWhite(pixel: Rgb): boolean {
 
 function isBackgroundLike(pixel: Rgb, bg: Rgb): boolean {
   return isNearWhite(pixel) || rgbDistance(pixel, bg) < SOFT_BG_DISTANCE;
+}
+
+function luminance(pixel: Rgb): number {
+  return 0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b;
+}
+
+function saturation(pixel: Rgb): number {
+  const max = Math.max(pixel.r, pixel.g, pixel.b);
+  const min = Math.min(pixel.r, pixel.g, pixel.b);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
+/** Keep gold/metal/plastic folds; exclude light studio backdrops. */
+function isClearlyProduct(pixel: Rgb, bg: Rgb): boolean {
+  if (isNearWhite(pixel)) return false;
+
+  const lum = luminance(pixel);
+  const sat = saturation(pixel);
+
+  if (lum < 92) return true;
+  if (sat >= 0.16 && lum >= 85 && lum <= 232 && rgbDistance(pixel, bg) >= 48) return true;
+
+  return false;
+}
+
+/** Non-white exterior studio backdrop (pink, grey, cream, shadows on backdrop). */
+function isFlattenBackdrop(pixel: Rgb, bg: Rgb): boolean {
+  if (isClearlyProduct(pixel, bg)) return false;
+  if (isNearWhite(pixel)) return true;
+  if (rgbDistance(pixel, bg) < FLATTEN_SOFT_BG_DISTANCE) return true;
+
+  const lum = luminance(pixel);
+  const sat = saturation(pixel);
+  if (lum >= 150 && sat < 0.42) return true;
+
+  return false;
 }
 
 function sampleBackgroundColor(data: Buffer, width: number, height: number): Rgb {
@@ -71,10 +111,16 @@ function sampleBackgroundColor(data: Buffer, width: number, height: number): Rgb
 }
 
 /**
- * Flood-fill from image borders through background-like pixels only.
+ * Flood-fill from image borders through backdrop-like pixels only.
  * Keeps enclosed studio-coloured regions inside filigree (not connected to the border).
  */
-function markExternalBackground(data: Buffer, width: number, height: number, bg: Rgb): Uint8Array {
+function markExternalBackdrop(
+  data: Buffer,
+  width: number,
+  height: number,
+  bg: Rgb,
+  isBackdrop: (pixel: Rgb, backdrop: Rgb) => boolean,
+): Uint8Array {
   const external = new Uint8Array(width * height);
   const visited = new Uint8Array(width * height);
   const queue: number[] = [];
@@ -87,7 +133,7 @@ function markExternalBackground(data: Buffer, width: number, height: number, bg:
     if (visited[i]) return;
     const o = i * 4;
     const pixel = { r: data[o], g: data[o + 1], b: data[o + 2] };
-    if (!isBackgroundLike(pixel, bg)) return;
+    if (!isBackdrop(pixel, bg)) return;
     visited[i] = 1;
     external[i] = 1;
     queue.push(i);
@@ -116,7 +162,158 @@ function markExternalBackground(data: Buffer, width: number, height: number, bg:
   return external;
 }
 
+function markExternalBackground(data: Buffer, width: number, height: number, bg: Rgb): Uint8Array {
+  return markExternalBackdrop(data, width, height, bg, isBackgroundLike);
+}
+
+function markExternalFlattenBackground(data: Buffer, width: number, height: number, bg: Rgb): Uint8Array {
+  return markExternalBackdrop(data, width, height, bg, isFlattenBackdrop);
+}
+
 const PURE_WHITE: Rgb = { r: 255, g: 255, b: 255 };
+
+function readPixel(data: Buffer, pixelIndex: number): Rgb {
+  const o = pixelIndex * 4;
+  return { r: data[o], g: data[o + 1], b: data[o + 2] };
+}
+
+function forcePixelWhite(data: Buffer, pixelIndex: number): void {
+  const o = pixelIndex * 4;
+  data[o] = 255;
+  data[o + 1] = 255;
+  data[o + 2] = 255;
+  data[o + 3] = 255;
+}
+
+function isWhiteish(pixel: Rgb): boolean {
+  return pixel.r >= 238 && pixel.g >= 238 && pixel.b >= 238;
+}
+
+function mergeExternalMasks(...masks: Uint8Array[]): Uint8Array {
+  const merged = new Uint8Array(masks[0].length);
+  for (const mask of masks) {
+    for (let i = 0; i < merged.length; i++) {
+      if (mask[i]) merged[i] = 1;
+    }
+  }
+  return merged;
+}
+
+/** Remove isolated dark/coloured specks sitting on an otherwise white backdrop. */
+function purgeBackdropSpeckles(data: Buffer, width: number, height: number, bg: Rgb): void {
+  const idx = (x: number, y: number) => y * width + x;
+  const total = width * height;
+
+  for (let i = 0; i < total; i++) {
+    if (luminance(readPixel(data, i)) >= 234) forcePixelWhite(data, i);
+  }
+
+  for (let pass = 0; pass < 6; pass++) {
+    const toWhite: number[] = [];
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = idx(x, y);
+        const p = readPixel(data, i);
+        if (isWhiteish(p) || isClearlyProduct(p, bg)) continue;
+
+        let whiteNeighbors = 0;
+        let lightNeighbors = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+            const np = readPixel(data, idx(nx, ny));
+            if (isWhiteish(np)) whiteNeighbors++;
+            if (luminance(np) >= 208) lightNeighbors++;
+          }
+        }
+
+        if (whiteNeighbors >= 6) toWhite.push(i);
+        else if (luminance(p) < 195 && lightNeighbors >= 7) toWhite.push(i);
+        else if (lightNeighbors >= 7 && luminance(p) >= 165) toWhite.push(i);
+      }
+    }
+
+    if (toWhite.length === 0) break;
+    for (const i of toWhite) forcePixelWhite(data, i);
+  }
+}
+
+/** Erase tiny non-product islands that sit on the flattened white backdrop. */
+function removeSmallBackdropIslands(data: Buffer, width: number, height: number, bg: Rgb): void {
+  const total = width * height;
+  const visited = new Uint8Array(total);
+  const idx = (x: number, y: number) => y * width + x;
+
+  for (let start = 0; start < total; start++) {
+    if (visited[start]) continue;
+
+    const startPixel = readPixel(data, start);
+    if (isWhiteish(startPixel) || isClearlyProduct(startPixel, bg)) {
+      visited[start] = 1;
+      continue;
+    }
+
+    const queue = [start];
+    const component: number[] = [];
+    visited[start] = 1;
+    let head = 0;
+    let touchesWhite = false;
+
+    while (head < queue.length) {
+      const i = queue[head++];
+      component.push(i);
+      const x = i % width;
+      const y = (i - x) / width;
+
+      for (const [dx, dy] of [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        const ni = idx(nx, ny);
+        if (visited[ni]) continue;
+
+        const np = readPixel(data, ni);
+        if (isWhiteish(np)) {
+          touchesWhite = true;
+          continue;
+        }
+        if (isClearlyProduct(np, bg)) {
+          visited[ni] = 1;
+          continue;
+        }
+
+        visited[ni] = 1;
+        queue.push(ni);
+      }
+    }
+
+    if (touchesWhite && component.length <= MAX_BACKDROP_SPECKLE_AREA) {
+      for (const i of component) forcePixelWhite(data, i);
+    }
+  }
+}
+
+function prepareFlattenedWhiteBackdrop(data: Buffer, width: number, height: number, bg: Rgb): void {
+  const external = mergeExternalMasks(
+    markExternalFlattenBackground(data, width, height, bg),
+    markExternalBackground(data, width, height, bg),
+  );
+
+  normalizeExternalToWhite(data, external);
+  expandExternalWhiteMask(data, width, height, external);
+  purgeBackdropSpeckles(data, width, height, bg);
+  removeSmallBackdropIslands(data, width, height, bg);
+  purgeBackdropSpeckles(data, width, height, bg);
+}
 
 /** Flatten detected exterior backdrop to #FFFFFF before alpha cutout. */
 function normalizeExternalToWhite(data: Buffer, external: Uint8Array): void {
@@ -202,9 +399,7 @@ export async function flattenExteriorBackgroundToWhite(buffer: Buffer): Promise<
 
   const { data, info } = await loadProductRaster(buffer);
   const bg = sampleBackgroundColor(data, info.width, info.height);
-  const external = markExternalBackground(data, info.width, info.height, bg);
-  normalizeExternalToWhite(data, external);
-  expandExternalWhiteMask(data, info.width, info.height, external);
+  prepareFlattenedWhiteBackdrop(data, info.width, info.height, bg);
 
   return sharp(data, {
     raw: { width: info.width, height: info.height, channels: 4 },
@@ -263,7 +458,10 @@ export async function removeSolidColorBackground(buffer: Buffer): Promise<Buffer
   const { data, info } = await loadProductRaster(buffer);
 
   const bg = sampleBackgroundColor(data, info.width, info.height);
-  let external = markExternalBackground(data, info.width, info.height, bg);
+  let external = mergeExternalMasks(
+    markExternalFlattenBackground(data, info.width, info.height, bg),
+    markExternalBackground(data, info.width, info.height, bg),
+  );
 
   // Pass 1: homogenize exterior backdrop to pure white (handles gradients/shadows).
   normalizeExternalToWhite(data, external);
@@ -271,6 +469,9 @@ export async function removeSolidColorBackground(buffer: Buffer): Promise<Buffer
   // Pass 2: expand mask through newly white pixels, then cut alpha.
   expandExternalWhiteMask(data, info.width, info.height, external);
   applyExternalTransparency(data, external);
+
+  purgeBackdropSpeckles(data, info.width, info.height, bg);
+  removeSmallBackdropIslands(data, info.width, info.height, bg);
 
   defringeHalos(data, info.width, info.height, bg);
 

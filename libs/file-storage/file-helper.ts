@@ -78,8 +78,8 @@ export class FileHelper {
   public isAllowedMime(mime: string): boolean {
     if (!mime) return false;
 
-    // If no whitelist defined → allow all
-    if (this.allowedMimeTypes?.length === 0) return true;
+    // If no whitelist defined (null/undefined) or empty list → allow all
+    if (!this.allowedMimeTypes?.length) return true;
 
     return this.allowedMimeTypes.includes(mime.toLowerCase());
   }
