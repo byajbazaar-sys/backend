@@ -5,6 +5,7 @@ import { GeneratedAiImage, IProductImageAiService, ProductImageInput } from '../
 import { stripDataUrl } from '../utils/image.util';
 import {
   ensureTransparentProductPng,
+  flattenExteriorBackgroundToWhite,
   removeSolidColorBackground,
   compressPngForApiPreview,
 } from '../utils/product-image.util';
@@ -18,20 +19,40 @@ export class SharpProductImageService implements IProductImageAiService {
     const started = Date.now();
 
     const cutout = await removeSolidColorBackground(input);
-    const polished = await ensureTransparentProductPng(cutout);
 
     this.logger.info(
       {
         provider: 'sharp',
         inputBytes: input.length,
-        outputBytes: polished.length,
+        outputBytes: cutout.length,
         durationMs: Date.now() - started,
       },
-      'Product background removed (solid-color segmentation)',
+      'Product white background removed (solid-color segmentation)',
     );
 
     return {
-      base64: polished.toString('base64'),
+      base64: cutout.toString('base64'),
+      mimeType: 'image/png',
+    };
+  }
+
+  async flattenProductBackgroundToWhite(image: ProductImageInput): Promise<GeneratedAiImage> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    const started = Date.now();
+    const flattened = await flattenExteriorBackgroundToWhite(input);
+
+    this.logger.info(
+      {
+        provider: 'sharp',
+        inputBytes: input.length,
+        outputBytes: flattened.length,
+        durationMs: Date.now() - started,
+      },
+      'Product exterior backdrop flattened to white',
+    );
+
+    return {
+      base64: flattened.toString('base64'),
       mimeType: 'image/png',
     };
   }

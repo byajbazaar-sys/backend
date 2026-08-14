@@ -136,6 +136,84 @@ function applyExternalTransparency(data: Buffer, external: Uint8Array): void {
   }
 }
 
+function expandExternalWhiteMask(
+  data: Buffer,
+  width: number,
+  height: number,
+  external: Uint8Array,
+): void {
+  const expanded = markExternalBackground(data, width, height, PURE_WHITE);
+  for (let i = 0; i < expanded.length; i++) {
+    if (expanded[i]) external[i] = 1;
+  }
+  normalizeExternalToWhite(data, external);
+}
+
+async function loadProductRaster(buffer: Buffer) {
+  return sharp(buffer)
+    .rotate()
+    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+}
+
+function bordersMostlyTransparent(data: Buffer, width: number, height: number): boolean {
+  let transparent = 0;
+  let samples = 0;
+  const alphaAt = (x: number, y: number) => data[(y * width + x) * 4 + 3];
+
+  for (let x = 0; x < width; x++) {
+    samples += 2;
+    if (alphaAt(x, 0) < 16) transparent++;
+    if (alphaAt(x, height - 1) < 16) transparent++;
+  }
+  for (let y = 0; y < height; y++) {
+    samples += 2;
+    if (alphaAt(0, y) < 16) transparent++;
+    if (alphaAt(width - 1, y) < 16) transparent++;
+  }
+
+  return samples > 0 && transparent / samples > 0.4;
+}
+
+/**
+ * Preview step: replace the exterior studio backdrop with pure white, keeping the product opaque.
+ * Already-cutout PNGs are composited onto white instead of re-segmenting.
+ */
+export async function flattenExteriorBackgroundToWhite(buffer: Buffer): Promise<Buffer> {
+  const meta = await sharp(buffer).metadata();
+  if (meta.hasAlpha) {
+    const sample = await sharp(buffer)
+      .rotate()
+      .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    if (bordersMostlyTransparent(sample.data, sample.info.width, sample.info.height)) {
+      return sharp(buffer)
+        .rotate()
+        .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+        .flatten({ background: '#ffffff' })
+        .png({ compressionLevel: 9, adaptiveFiltering: true })
+        .toBuffer();
+    }
+  }
+
+  const { data, info } = await loadProductRaster(buffer);
+  const bg = sampleBackgroundColor(data, info.width, info.height);
+  const external = markExternalBackground(data, info.width, info.height, bg);
+  normalizeExternalToWhite(data, external);
+  expandExternalWhiteMask(data, info.width, info.height, external);
+
+  return sharp(data, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .flatten({ background: '#ffffff' })
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
+}
+
 function defringeHalos(data: Buffer, width: number, height: number, bg: Rgb): void {
   const alphaCopy = Buffer.alloc(data.length / 4);
   for (let i = 0; i < data.length; i += 4) {
@@ -182,12 +260,7 @@ function defringeHalos(data: Buffer, width: number, height: number, bg: Rgb): vo
  * Uses border-connected flood fill so only exterior background is removed.
  */
 export async function removeSolidColorBackground(buffer: Buffer): Promise<Buffer> {
-  const { data, info } = await sharp(buffer)
-    .rotate()
-    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const { data, info } = await loadProductRaster(buffer);
 
   const bg = sampleBackgroundColor(data, info.width, info.height);
   let external = markExternalBackground(data, info.width, info.height, bg);
@@ -196,11 +269,7 @@ export async function removeSolidColorBackground(buffer: Buffer): Promise<Buffer
   normalizeExternalToWhite(data, external);
 
   // Pass 2: expand mask through newly white pixels, then cut alpha.
-  const expanded = markExternalBackground(data, info.width, info.height, PURE_WHITE);
-  for (let i = 0; i < expanded.length; i++) {
-    if (expanded[i]) external[i] = 1;
-  }
-  normalizeExternalToWhite(data, external);
+  expandExternalWhiteMask(data, info.width, info.height, external);
   applyExternalTransparency(data, external);
 
   defringeHalos(data, info.width, info.height, bg);
