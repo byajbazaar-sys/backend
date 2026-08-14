@@ -91,7 +91,8 @@ export class InventoryCatalogService implements IInventoryCatalogService {
     }
 
     const user = await this.usersRepo.findById(userId);
-    if (!user?.catalogSlug) {
+    if (!user) throw new NotFoundException('User not found');
+    if (isCatalogVisible && !user.catalogSlug) {
       throw new BadRequestException(
         'Your catalog URL is not set up yet. Please choose a unique business name before publishing items.',
       );

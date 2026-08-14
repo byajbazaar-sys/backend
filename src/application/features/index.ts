@@ -71,7 +71,6 @@ export const Controllers = [
   TryOnController,
   DepositsController,
   PublicCatalogController,
-  InventoryCatalogController,
 ];
 
 export const Services = [JwtService];
