@@ -15,7 +15,7 @@ export function buildProductBackgroundRemovalPrompt(): string {
     '- framing',
     '- perspective',
     '- metal color',
-    '- gemstones',
+    '- gemstones and diamonds (including bright white stones)',
     '- texture',
     '- reflections',
     '- scratches',
