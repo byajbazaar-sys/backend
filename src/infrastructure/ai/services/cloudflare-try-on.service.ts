@@ -18,7 +18,7 @@ import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '
 import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.prompts';
 import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
-import { compressPngForApiPreview, ensureTransparentProductPng } from '../utils/product-image.util';
+import { compressPngForApiPreview, ensureWhiteProductPng, hasWhiteStudioBackground, removeWhiteBackground } from '../utils/product-image.util';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
 interface CloudflareRunResponse {
@@ -121,10 +121,10 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           },
           'Cloudflare product background removal completed',
         );
-        const polished = await ensureTransparentProductPng(
+        const whiteBg = await ensureWhiteProductPng(
           Buffer.from(stripDataUrl(generated.base64), 'base64'),
         );
-        return { base64: polished.toString('base64'), mimeType: 'image/png' };
+        return { base64: whiteBg.toString('base64'), mimeType: 'image/png' };
       } catch (err) {
         lastError = err;
         const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
@@ -153,10 +153,18 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
   }
 
-  async polishTransparentPng(image: ProductImageInput): Promise<GeneratedAiImage> {
+  async stripWhiteBackground(image: ProductImageInput): Promise<GeneratedAiImage> {
     const input = Buffer.from(stripDataUrl(image.base64), 'base64');
-    const polished = await ensureTransparentProductPng(input);
-    return { base64: polished.toString('base64'), mimeType: 'image/png' };
+    const cutout = await removeWhiteBackground(input);
+    return { base64: cutout.toString('base64'), mimeType: 'image/png' };
+  }
+
+  async prepareTryOnStorageImage(image: ProductImageInput): Promise<GeneratedAiImage> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    const whiteBg = (await hasWhiteStudioBackground(input))
+      ? image
+      : await this.removeProductBackground(image);
+    return this.stripWhiteBackground(whiteBg);
   }
 
   async compressPngForPreview(image: ProductImageInput): Promise<GeneratedAiImage> {

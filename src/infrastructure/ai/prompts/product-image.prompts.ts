@@ -28,9 +28,9 @@ export function buildProductBackgroundRemovalPrompt(): string {
 
     'Only remove the background.',
 
-    'Replace it with a fully transparent background (alpha channel).',
+    'Replace it with a solid pure white background (#FFFFFF).',
 
-    'Output must be PNG with transparency — no solid white, grey, or coloured backdrop.',
+    'Output must be an opaque image on white — no transparency, no checkerboard, no grey, no coloured backdrop.',
 
     'A very subtle natural contact shadow directly beneath the product is allowed, but do not alter the existing lighting on the product.',
 

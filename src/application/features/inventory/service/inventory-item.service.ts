@@ -221,18 +221,14 @@ export class InventoryItemService implements IInventoryItemService {
     let fileExtension = normalized.fileExtension;
 
     try {
-      const aiGenerated = await this.productImageAi.removeProductBackground({
+      const stored = await this.productImageAi.prepareTryOnStorageImage({
         base64: normalized.buffer.toString('base64'),
         mimeType: normalized.mimetype,
       });
-      const polished = await this.productImageAi.polishTransparentPng({
-        base64: aiGenerated.base64,
-        mimeType: aiGenerated.mimeType,
-      });
-      bufferToStore = Buffer.from(polished.base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
+      bufferToStore = Buffer.from(stored.base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
       mimetype = 'image/png';
       fileExtension = 'png';
-      this.logger.info({ itemId: id }, 'Inventory image background removed for try-on');
+      this.logger.info({ itemId: id }, 'Inventory image white background stripped for try-on');
     } catch (err) {
       this.logger.warn({ err, itemId: id }, 'Inventory AI background removal failed; storing original image');
     }
@@ -308,18 +304,14 @@ export class InventoryItemService implements IInventoryItemService {
         base64: originalBase64,
         mimeType,
       });
-      const polished = await this.productImageAi.polishTransparentPng({
+      const compressed = await this.productImageAi.compressPngForPreview({
         base64: aiGenerated.base64,
         mimeType: aiGenerated.mimeType,
-      });
-      const compressed = await this.productImageAi.compressPngForPreview({
-        base64: polished.base64,
-        mimeType: polished.mimeType,
       });
       this.logger.info(
         {
           mimeType,
-          aiMimeType: polished.mimeType,
+          aiMimeType: aiGenerated.mimeType,
           previewBytes: Buffer.from(compressed.base64.replace(/^data:[^;]+;base64,/, ''), 'base64').length,
         },
         'Inventory AI image preview generated',
