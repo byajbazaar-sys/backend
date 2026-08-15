@@ -18,7 +18,11 @@ import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '
 import { buildProductBackgroundRemovalPrompt, buildProductTransparentStoragePrompt } from '../prompts/product-image.prompts';
 import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
-import { compressPngForApiPreview, ensureWhiteProductPng, finalizeTransparentProductPng } from '../utils/product-image.util';
+import {
+  compressImageForApiPreview,
+  ensureWhiteProductPng,
+  finalizeTransparentProductPng,
+} from '../utils/product-image.util';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
 interface CloudflareRunResponse {
@@ -102,8 +106,8 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
 
   async compressPngForPreview(image: ProductImageInput): Promise<GeneratedAiImage> {
     const input = Buffer.from(stripDataUrl(image.base64), 'base64');
-    const compressed = await compressPngForApiPreview(input);
-    return { base64: compressed.toString('base64'), mimeType: 'image/png' };
+    const compressed = await compressImageForApiPreview(input);
+    return { base64: compressed.toString('base64'), mimeType: 'image/jpeg' };
   }
 
   private async runProductBackgroundRemoval(

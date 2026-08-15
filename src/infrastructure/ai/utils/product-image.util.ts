@@ -141,9 +141,14 @@ export async function finalizeTransparentProductPng(buffer: Buffer): Promise<Buf
 }
 
 /** Keep API preview payloads under Lambda's 6MB response limit. */
-export async function compressPngForApiPreview(buffer: Buffer, maxDimension = 1024): Promise<Buffer> {
+export async function compressImageForApiPreview(buffer: Buffer, maxDimension = 1024): Promise<Buffer> {
   return sharp(buffer)
     .resize(maxDimension, maxDimension, { fit: 'inside', withoutEnlargement: true })
-    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .jpeg({ quality: 85, mozjpeg: true })
     .toBuffer();
+}
+
+/** @deprecated Use compressImageForApiPreview */
+export async function compressPngForApiPreview(buffer: Buffer, maxDimension = 1024): Promise<Buffer> {
+  return compressImageForApiPreview(buffer, maxDimension);
 }

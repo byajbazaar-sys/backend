@@ -34,6 +34,10 @@ import {
 } from './models';
 import { INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
 
+const INVENTORY_IMAGE_UPLOAD = {
+  limits: { fileSize: 10 * 1024 * 1024 },
+};
+
 @ApiTags('inventory-items')
 @ApiBearerAuth('user')
 @UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
@@ -100,7 +104,7 @@ export class InventoryItemsController {
     summary: 'Generate AI background-cleared preview without saving; returns original + AI images',
   })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FileInterceptor('image', INVENTORY_IMAGE_UPLOAD))
   async previewAiImage(@UploadedFile() image: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel> {
     const result = await this.itemService.previewAiImage(image);
     return plainToInstance(InventoryImageAiPreviewResponseModel, result, {
@@ -152,7 +156,7 @@ export class InventoryItemsController {
   @Patch(':id/image')
   @ApiOperation({ summary: 'Upload or remove inventory item image' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FileInterceptor('image', INVENTORY_IMAGE_UPLOAD))
   async uploadImage(
     @Param('id') id: string,
     @UploadedFile() image: Express.Multer.File,
