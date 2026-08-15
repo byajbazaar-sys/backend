@@ -104,6 +104,10 @@ export class InventoryCatalogService implements IInventoryCatalogService {
       isCatalogVisible,
     );
 
+    if (isCatalogVisible && updatedCount > 0 && user.catalogSlug && user.catalogEnabled === false) {
+      await this.usersRepo.update(userId, { catalogEnabled: true });
+    }
+
     this.logger.info({ userId, updatedCount, isCatalogVisible }, 'Catalog visibility bulk updated');
     return plainToInstance(BulkUpdateCatalogVisibilityResponseModel, { updatedCount }, {
       excludeExtraneousValues: true,

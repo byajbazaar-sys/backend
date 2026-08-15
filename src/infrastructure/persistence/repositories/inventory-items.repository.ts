@@ -209,7 +209,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
 
   async countCatalogVisible(createdBy: string): Promise<number> {
     return this.repo.count({
-      where: { createdBy, isCatalogVisible: true },
+      where: { createdBy, isCatalogVisible: true, status: 'AVAILABLE' },
     });
   }
 

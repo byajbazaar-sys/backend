@@ -13,6 +13,10 @@ export const INVENTORY_ITEM_SERVICE = 'INVENTORY_ITEM_SERVICE';
 export interface IInventoryItemService {
   create(data: CreateInventoryItemRequestModel, userId: string): Promise<InventoryItem>;
   getAll(userId: string, query: ListInventoryItemsQueryModel): Promise<Paged<InventoryItem>>;
+  getLiveCatalogItems(
+    userId: string,
+    query?: Pick<ListInventoryItemsQueryModel, 'pageNumber' | 'pageSize' | 'search'>,
+  ): Promise<Paged<InventoryItem>>;
   getById(id: string, userId: string): Promise<InventoryItem>;
   getByBarcode(barcode: string, userId: string): Promise<InventoryItem>;
   getSalesHistory(id: string, userId: string): Promise<InventoryItemSale[]>;

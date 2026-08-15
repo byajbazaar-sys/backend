@@ -18,9 +18,12 @@ import {
   BulkUpdateCatalogVisibilityRequestModel,
   BulkUpdateCatalogVisibilityResponseModel,
   InventoryCatalogSummaryResponseModel,
+  InventoryItemResponseModel,
+  InventoryItemsPagedResponseModel,
   UpdateCatalogSettingsRequestModel,
 } from './models';
 import { INVENTORY_CATALOG_SERVICE, IInventoryCatalogService } from './service/i-inventory-catalog.service';
+import { INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
 
 @ApiTags('inventory-catalog')
 @ApiBearerAuth('user')
@@ -29,6 +32,7 @@ import { INVENTORY_CATALOG_SERVICE, IInventoryCatalogService } from './service/i
 export class InventoryCatalogController {
   constructor(
     @Inject(INVENTORY_CATALOG_SERVICE) private readonly catalogService: IInventoryCatalogService,
+    @Inject(INVENTORY_ITEM_SERVICE) private readonly itemService: IInventoryItemService,
   ) {}
 
   @Get('summary')
@@ -36,6 +40,23 @@ export class InventoryCatalogController {
   async getSummary(@Identity() identity: IIdentity): Promise<InventoryCatalogSummaryResponseModel> {
     const summary = await this.catalogService.getSummary(identity.userId);
     return plainToInstance(InventoryCatalogSummaryResponseModel, summary, { excludeExtraneousValues: true });
+  }
+
+  @Get('items')
+  @ApiOperation({ summary: 'List inventory items published to the public catalog' })
+  async listPublishedItems(@Identity() identity: IIdentity): Promise<InventoryItemsPagedResponseModel> {
+    const paged = await this.itemService.getLiveCatalogItems(identity.userId, {
+      pageNumber: 0,
+      pageSize: 100,
+    });
+    return plainToInstance(
+      InventoryItemsPagedResponseModel,
+      {
+        ...paged,
+        items: plainToInstance(InventoryItemResponseModel, paged.items, { excludeExtraneousValues: true }),
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Patch('settings')

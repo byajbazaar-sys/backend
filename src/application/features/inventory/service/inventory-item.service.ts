@@ -136,6 +136,19 @@ export class InventoryItemService implements IInventoryItemService {
     return { ...paged, items };
   }
 
+  async getLiveCatalogItems(
+    userId: string,
+    query: Pick<ListInventoryItemsQueryModel, 'pageNumber' | 'pageSize' | 'search'> = {},
+  ): Promise<Paged<InventoryItem>> {
+    const paged = await this.itemsRepo.findPublicCatalog(userId, {
+      pageNumber: query.pageNumber ?? 0,
+      pageSize: query.pageSize ?? 100,
+      search: query.search,
+    });
+    const items = await Promise.all(paged.items.map((item) => this.enrichItem(item)));
+    return { ...paged, items };
+  }
+
   async getById(id: string, userId: string): Promise<InventoryItem> {
     const item = await this.itemsRepo.findById(id);
     if (!item) throw new NotFoundException('Inventory item not found');
@@ -182,6 +195,9 @@ export class InventoryItemService implements IInventoryItemService {
     }
     if (patch.stockQuantity === 0) {
       patch.status = EInventoryItemStatus.Sold;
+    }
+    if (patch.status === EInventoryItemStatus.Sold || patch.stockQuantity === 0) {
+      patch.isCatalogVisible = false;
     }
     const updated = await this.itemsRepo.update(id, patch);
     return this.enrichItem(updated);

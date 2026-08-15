@@ -110,6 +110,7 @@ export class PublicCatalogService implements IPublicCatalogService {
         phoneNumber: user.phoneNumber,
         catalogEnabled,
         catalogActive,
+        tryOnBackgroundColor: user.tryOnBackgroundColor,
         catalog: {
           items: publicItems,
           pageNumber: paged.page,

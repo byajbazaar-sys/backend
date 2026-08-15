@@ -56,6 +56,10 @@ export class PublicCatalogResponseModel {
   catalogActive: boolean;
 
   @Expose()
+  @ApiPropertyOptional({ example: '#1a1520', description: 'Jewellery image backdrop colour for catalog thumbnails' })
+  tryOnBackgroundColor?: string;
+
+  @Expose()
   @Type(() => PublicCatalogPagedItemsModel)
   @ApiProperty({ type: PublicCatalogPagedItemsModel })
   catalog: PublicCatalogPagedItemsModel;
