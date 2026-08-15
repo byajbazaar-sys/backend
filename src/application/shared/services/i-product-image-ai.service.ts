@@ -5,17 +5,17 @@ export const PRODUCT_IMAGE_AI_SERVICE = 'PRODUCT_IMAGE_AI_SERVICE';
 
 export interface IProductImageAiService {
   /**
-   * AI step: remove studio backdrop and return product on solid white (#FFFFFF).
+   * Preview step: remove studio backdrop and return product on solid white (#FFFFFF).
    */
   removeProductBackground(image: ProductImageInput): Promise<GeneratedAiImage>;
 
   /**
-   * Save step: strip border-connected white backdrop for transparent try-on storage.
+   * Save step: AI transparent cutout for Magic Try-On storage (preserves edge quality).
    */
-  stripWhiteBackground(image: ProductImageInput): Promise<GeneratedAiImage>;
+  removeProductBackgroundForStorage(image: ProductImageInput): Promise<GeneratedAiImage>;
 
   /**
-   * Save step: use white-backdrop preview as-is, or run AI first when the upload is still the original photo.
+   * Save step: runs AI transparent cutout on the uploaded image.
    */
   prepareTryOnStorageImage(image: ProductImageInput): Promise<GeneratedAiImage>;
 

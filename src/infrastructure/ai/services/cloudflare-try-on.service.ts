@@ -15,10 +15,10 @@ import { CloudflareTryOnOptions, type CloudflareCredential } from '../cloudflare
 import { BedrockService } from './bedrock.service';
 import { GeneratedAiImage, IProductImageAiService, ITryOnAiService, ProductImageInput } from '../../../application';
 import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
-import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.prompts';
+import { buildProductBackgroundRemovalPrompt, buildProductTransparentStoragePrompt } from '../prompts/product-image.prompts';
 import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
-import { compressPngForApiPreview, ensureWhiteProductPng, hasWhiteStudioBackground, removeWhiteBackground } from '../utils/product-image.util';
+import { compressPngForApiPreview, ensureWhiteProductPng, finalizeTransparentProductPng } from '../utils/product-image.util';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
 interface CloudflareRunResponse {
@@ -79,9 +79,41 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
   }
 
   async removeProductBackground(image: ProductImageInput): Promise<GeneratedAiImage> {
+    return this.runProductBackgroundRemoval(
+      image,
+      buildProductBackgroundRemovalPrompt(),
+      ensureWhiteProductPng,
+      'white preview',
+    );
+  }
+
+  async removeProductBackgroundForStorage(image: ProductImageInput): Promise<GeneratedAiImage> {
+    return this.runProductBackgroundRemoval(
+      image,
+      buildProductTransparentStoragePrompt(),
+      finalizeTransparentProductPng,
+      'transparent storage',
+    );
+  }
+
+  async prepareTryOnStorageImage(image: ProductImageInput): Promise<GeneratedAiImage> {
+    return this.removeProductBackgroundForStorage(image);
+  }
+
+  async compressPngForPreview(image: ProductImageInput): Promise<GeneratedAiImage> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    const compressed = await compressPngForApiPreview(input);
+    return { base64: compressed.toString('base64'), mimeType: 'image/png' };
+  }
+
+  private async runProductBackgroundRemoval(
+    image: ProductImageInput,
+    prompt: string,
+    postProcess: (buffer: Buffer) => Promise<Buffer>,
+    purpose: 'white preview' | 'transparent storage',
+  ): Promise<GeneratedAiImage> {
     this.assertConfigured();
     const modelId = CLOUDFLARE_TRYON_MODEL_FAST;
-    const prompt = buildProductBackgroundRemovalPrompt();
     const inputImage = await this.resizeProductForCloudflare({
       base64: image.base64,
       mimeType: image.mimeType || 'image/jpeg',
@@ -91,7 +123,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       {
         provider: 'cloudflare',
         model: modelId,
-        modelKey: 'klein-4b',
+        purpose,
         mimeType: image.mimeType,
         credentialCount: this.options.credentials.length,
       },
@@ -111,20 +143,19 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           Math.min(this.options.timeoutMs, 90_000),
           modelId,
         );
+        const processed = await postProcess(Buffer.from(stripDataUrl(generated.base64), 'base64'));
         this.logger.info(
           {
             provider: 'cloudflare',
             model: modelId,
+            purpose,
             attempt,
             accountId: credential.accountId,
             durationMs: Date.now() - started,
           },
           'Cloudflare product background removal completed',
         );
-        const whiteBg = await ensureWhiteProductPng(
-          Buffer.from(stripDataUrl(generated.base64), 'base64'),
-        );
-        return { base64: whiteBg.toString('base64'), mimeType: 'image/png' };
+        return { base64: processed.toString('base64'), mimeType: 'image/png' };
       } catch (err) {
         lastError = err;
         const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
@@ -133,6 +164,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           {
             provider: 'cloudflare',
             model: modelId,
+            purpose,
             attempt,
             maxAttempts,
             status,
@@ -151,26 +183,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     }
 
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
-  }
-
-  async stripWhiteBackground(image: ProductImageInput): Promise<GeneratedAiImage> {
-    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
-    const cutout = await removeWhiteBackground(input);
-    return { base64: cutout.toString('base64'), mimeType: 'image/png' };
-  }
-
-  async prepareTryOnStorageImage(image: ProductImageInput): Promise<GeneratedAiImage> {
-    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
-    const whiteBg = (await hasWhiteStudioBackground(input))
-      ? image
-      : await this.removeProductBackground(image);
-    return this.stripWhiteBackground(whiteBg);
-  }
-
-  async compressPngForPreview(image: ProductImageInput): Promise<GeneratedAiImage> {
-    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
-    const compressed = await compressPngForApiPreview(input);
-    return { base64: compressed.toString('base64'), mimeType: 'image/png' };
   }
 
   private async resizeProductForCloudflare(image: AiImageInput): Promise<Buffer> {

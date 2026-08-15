@@ -229,7 +229,7 @@ export class InventoryItemService implements IInventoryItemService {
       bufferToStore = Buffer.from(stored.base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
       mimetype = 'image/png';
       fileExtension = 'png';
-      this.logger.info({ itemId: id }, 'Inventory image white background stripped for try-on');
+      this.logger.info({ itemId: id }, 'Inventory image AI transparent cutout stored for try-on');
     } catch (err) {
       this.logger.warn({ err, itemId: id }, 'Inventory AI background removal failed; storing original image');
     }
