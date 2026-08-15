@@ -20,7 +20,10 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
   ) {}
 
   private buildQuery(
-    filter: Pick<InventoryItemsFilterOptions, 'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType'>,
+    filter: Pick<
+      InventoryItemsFilterOptions,
+      'createdBy' | 'search' | 'categoryId' | 'status' | 'metalType' | 'isCatalogVisible'
+    >,
   ) {
     const qb = this.repo
       .createQueryBuilder('item')
@@ -41,6 +44,11 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     }
     if (filter.metalType) {
       qb.andWhere('item.metal_type = :metalType', { metalType: filter.metalType });
+    }
+    if (filter.isCatalogVisible !== undefined) {
+      qb.andWhere('item.is_catalog_visible = :isCatalogVisible', {
+        isCatalogVisible: filter.isCatalogVisible,
+      });
     }
     return qb;
   }

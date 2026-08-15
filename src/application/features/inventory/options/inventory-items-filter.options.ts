@@ -19,6 +19,9 @@ export class InventoryItemsFilterOptions {
   metalType?: string;
 
   @Expose()
+  isCatalogVisible?: boolean;
+
+  @Expose()
   sortOrder?: EInventoryItemSortOrder;
 
   @Expose()

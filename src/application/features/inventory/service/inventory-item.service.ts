@@ -123,6 +123,7 @@ export class InventoryItemService implements IInventoryItemService {
       categoryId: query.categoryId,
       status: query.status,
       metalType: query.metalType,
+      isCatalogVisible: query.isCatalogVisible,
       pageNumber: query.pageNumber,
       pageSize: query.pageSize,
       sortOrder: query.sortOrder,
