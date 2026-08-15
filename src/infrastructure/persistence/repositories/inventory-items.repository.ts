@@ -5,6 +5,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import {
+  EInventoryItemStatus,
   IInventoryItemsRepository,
   InventoryItem,
   InventoryItemsFilterOptions,
@@ -209,7 +210,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
 
   async countCatalogVisible(createdBy: string): Promise<number> {
     return this.repo.count({
-      where: { createdBy, isCatalogVisible: true, status: 'AVAILABLE' },
+      where: { createdBy, isCatalogVisible: true, status: EInventoryItemStatus.Available },
     });
   }
 
