@@ -132,12 +132,12 @@ export async function ensureWhiteProductPng(buffer: Buffer): Promise<Buffer> {
 }
 
 /**
- * Remove exterior white backdrop for try-on storage (save step).
- * Only border-connected near-white pixels become transparent.
+ * Remove exterior white/grey backdrop for try-on storage (save step).
+ * Strips border-connected white and neutral light-grey pixels (e.g. AI contact shadows).
  */
 export async function removeWhiteBackground(buffer: Buffer): Promise<Buffer> {
   const { data, info } = await loadProductRaster(buffer);
-  const exterior = markExteriorPixels(data, info.width, info.height, isWhitePixel);
+  const exterior = markExteriorPixels(data, info.width, info.height, isBackdropCandidate);
 
   for (let i = 0; i < exterior.length; i++) {
     if (exterior[i]) data[i * 4 + 3] = 0;

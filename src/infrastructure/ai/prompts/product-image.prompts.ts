@@ -32,7 +32,11 @@ export function buildProductBackgroundRemovalPrompt(): string {
 
     'Output must be an opaque image on white — no transparency, no checkerboard, no grey, no coloured backdrop.',
 
-    'A very subtle natural contact shadow directly beneath the product is allowed, but do not alter the existing lighting on the product.',
+    'Do NOT add any shadows, contact shadows, drop shadows, ground shadows, or grey halos on or around the product.',
+
+    'The white background must be completely flat and uniform (#FFFFFF) with no gradients, vignettes, or shading.',
+
+    'Remove existing background shadows; do not introduce new ones.',
 
     'The output should look identical to the input except for the background.',
 
