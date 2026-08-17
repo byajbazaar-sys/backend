@@ -19,6 +19,9 @@ import {
   FileStorageOptions,
   DUES_REPOSITORY,
   IDuesRepository,
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  ICacheService,
 } from '../../../shared';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans/service/i-loan-items.repository';
 import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
@@ -32,6 +35,7 @@ export class CustomerService implements ICustomerService {
     @Inject(LOANS_REPOSITORY) private readonly loansRepo: ILoansRepository,
     @Inject(LOAN_ITEMS_REPOSITORY) private readonly loanItemsRepo: ILoanItemsRepository,
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     protected readonly fileStorageOptions: FileStorageOptions,
     @InjectPinoLogger(CustomerService.name) private readonly logger: PinoLogger,
   ) {}
@@ -106,6 +110,7 @@ export class CustomerService implements ICustomerService {
 
       const createdCustomer = await this.customersRepo.create(body);
       this.logger.info({ customerId: createdCustomer.id }, 'Customer created successfully');
+      await this.invalidateLoanStatsCache(body.createdBy);
       return this.enrichCustomerSignedUrls(createdCustomer);
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof ConflictException) {
@@ -339,6 +344,7 @@ export class CustomerService implements ICustomerService {
         { customerId: id, deletedLoans: customerLoans.length },
         'Customer and all related data deleted successfully',
       );
+      await this.invalidateLoanStatsCache(createdBy);
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;
@@ -346,5 +352,9 @@ export class CustomerService implements ICustomerService {
       this.logger.error({ err, customerId: id, createdBy }, 'Error deleting customer');
       throw err;
     }
+  }
+
+  private async invalidateLoanStatsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.LOAN_STATS, userId);
   }
 }
