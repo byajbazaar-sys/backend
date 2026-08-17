@@ -8,7 +8,7 @@ This directory contains the Serverless Framework configuration files organized b
 serverless/
 ├── functions.yml   # Lambda function definitions (API + cron)
 ├── providers.yml   # AWS provider configuration
-├── resources.yml  # RDS and other AWS resources
+├── resources.yml  # Step Functions and other AWS resources
 └── README.md
 ```
 
@@ -94,11 +94,9 @@ myNewCron:
 3. **Register** it in `src/infrastructure/cron/index.ts` and wire routing in `CronService.runAsync(job)`
 4. **Pass `detail.job`** in the scheduled function `input` and read it in `src/lambda-handlers/cron.ts` via `getJobFromEvent`
 
-## RDS (PostgreSQL) Deployment
+## Database (Neon / external PostgreSQL)
 
-The `resources.yml` stack creates a **VPC**, two **public subnets** (two AZs), routes, and **RDS**. It writes the VPC ID and comma-separated subnet IDs to **SSM** (`/byajbazaar/{stage}/vpc-id`, `/byajbazaar/{stage}/subnet-ids`). Security groups and the **DB subnet group** use `!Ref` to the VPC/subnets in-template (so the first deploy works without pre-existing SSM). SSM is still updated for tooling and anything that reads Parameter Store outside this stack.
-
-> **Note:** RDS Query Editor requires Aurora. This uses standard RDS PostgreSQL (free tier compatible). For Query Editor, use pgAdmin, DBeaver, or an SSH tunnel to connect.
+Lambda reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, and `DB_NAME` from `.env.{stage}` via `serverless-dotenv-plugin`. No RDS is provisioned by this stack.
 
 **Deploy** (builds, deploys, then runs migrations + seeds):
 
@@ -108,10 +106,15 @@ yarn sls:deploy:dev
 
 **Post-deploy Lambda:** The `runPostDeploy` function runs migrations and seeds, invoked automatically after each deploy. Manual: `serverless invoke -f runPostDeploy --stage dev`
 
-**SSM parameters:** `/byajbazaar/{stage}/vpc-id`, `/byajbazaar/{stage}/subnet-ids`  
-**Env vars:** `DB_MASTER_USERNAME` (default: postgres), `DB_MASTER_PASSWORD`, `DB_NAME` (default: byajbazaar_db)
+Set Neon connection details in `.env.dev` / `.env.production`:
 
-To use an external database, remove `resources` from `serverless.yml` and set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` in `.env`.
+```env
+DB_HOST=ep-xxx-pooler.region.aws.neon.tech
+DB_PORT=5432
+DB_NAME=neondb
+DB_USER=neondb_owner
+DB_PASS=your-neon-password
+```
 
 ## Environment Variables
 
@@ -124,7 +127,7 @@ Example:
 
 ```yaml
 environment:
-  DB_HOST: !Ref RdsInstance
+  DB_HOST: ${env:DB_HOST}
   JWT_SECRET: ${ssm:/crowdsay/${self:provider.stage}/jwt/secret~true}
 ```
 
@@ -136,10 +139,3 @@ environment:
 4. **Environment-specific configs**: Use stages to manage different environments
 5. **Resource organization**: Keep related resources together in the same file
 
-# Get default VPC ID
-
-aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query 'Vpcs[0].VpcId' --output text
-
-# Get subnet IDs (replace vpc-xxx with your VPC ID)
-
-aws ec2 describe-subnets --filters "Name=vpc-id,Values=vpc-0896b04d21805e1b5" --query 'Subnets[*].SubnetId' --output text | tr '\t' ','

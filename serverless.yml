@@ -11,10 +11,6 @@ plugins:
   - serverless-plugin-include-dependencies
 
 custom:
-  # Populated by CloudFormation from created VPC/subnets (see resources.yml)
-  ssmVpcParams:
-    vpcId: /byajbazaar/${sls:stage}/vpc-id
-    subnetIds: /byajbazaar/${sls:stage}/subnet-ids
   # useDotenv + serverless-dotenv-plugin: file must match stage (.env.{stage})
   dotenvPathByStage:
     production: .env.production
@@ -22,12 +18,7 @@ custom:
     dev: .env.dev
   dotenv:
     path: ${self:custom.dotenvPathByStage.${sls:stage}}
-        # Keep RDS connection from CloudFormation (!GetAtt), not .env
-    # exclude:
-    #   - DB_HOST
-    #   - DB_PORT
-    # DB_HOST/DB_PORT must come from .env for serverless-offline (!GetAtt is unresolved locally).
-    # When set in .env, dotenv overrides provider.environment and wins over CloudFormation refs.
+    # DB_* vars come from .env.{stage} (Neon / external Postgres).
   serverless-offline:
     httpPort: 3003
     lambdaPort: 3002

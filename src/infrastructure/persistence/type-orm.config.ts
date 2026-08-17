@@ -25,7 +25,7 @@ export const generateDataSourceOptions = (options?: IDbOptions): DataSourceOptio
     logging: true,
     entities: [...Entities],
     migrations: [__dirname + '/migrations/*{.ts,.js}'],
-    // RDS requires SSL; local dev typically does not
+    // Remote Postgres (e.g. Neon) requires SSL; local dev typically does not
     ssl: isLocalDb ? false : { rejectUnauthorized: false },
   };
   return dataSource;

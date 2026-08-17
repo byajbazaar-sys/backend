@@ -5,25 +5,15 @@ region: ${opt:region, 'ap-south-1'}
 memorySize: 512
 timeout: 30
 logRetentionInDays: 30
-# Lambda must be in the same VPC as RDS to reach private RDS (PubliclyAccessible: false)
-
-# vpc is not needed because the lambda is in the same VPC as the RDS instance
-# vpc:
-#   securityGroupIds:
-#     - !Ref LambdaSecurityGroup
-#   subnetIds:
-#     - !Ref PublicSubnet1
-#     - !Ref PublicSubnet2
 environment:
   NODE_ENV: ${self:provider.stage}
   NO_COLOR: 'true'
   AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
-  # !Ref RDS returns the instance id, not the hostname — use Endpoint for clients
-  DB_HOST: !GetAtt RdsInstance.Endpoint.Address
-  DB_PORT: !GetAtt RdsInstance.Endpoint.Port
+  DB_HOST: ${env:DB_HOST, ''}
+  DB_PORT: ${env:DB_PORT, '5432'}
   DB_NAME: ${env:DB_NAME, 'byajbazaar_db'}
-  DB_USER: ${env:DB_MASTER_USERNAME, 'postgres'}
-  DB_PASS: ${env:DB_MASTER_PASSWORD}
+  DB_USER: ${env:DB_USER, 'postgres'}
+  DB_PASS: ${env:DB_PASS, ''}
   AI_PROVIDER: ${env:AI_PROVIDER, 'bedrock'}
   GEMINI_API_KEYS: ${env:GEMINI_API_KEYS, ''}
   BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'global.amazon.nova-2-lite-v1:0'}
