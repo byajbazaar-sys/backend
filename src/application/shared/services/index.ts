@@ -1,5 +1,4 @@
 export * from './i-users-file.storage';
-export * from './i-lambda.service';
 export * from './i-email.service';
 export * from './i-google-oauth.service';
 export * from './i-websocket-message.service';

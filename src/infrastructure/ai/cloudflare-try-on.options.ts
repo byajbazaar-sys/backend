@@ -31,7 +31,6 @@ export class CloudflareTryOnOptions {
     public modelId = '@cf/black-forest-labs/flux-2-klein-9b',
     public timeoutMs = 120_000,
     public maxRetries = 2,
-    public guidance = 7.5,
   ) {}
 
   get isConfigured(): boolean {

@@ -6,7 +6,6 @@ import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 import { AIOptions, AivotTryOnOptions, CloudflareTryOnOptions } from './ai';
 import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
-import { LambdaOptions, LambdaService } from './lambda';
 import {
   CUSTOMERS_REPOSITORY,
   DUES_REPOSITORY,
@@ -15,7 +14,6 @@ import {
   GOOGLE_OAUTH_SERVICE,
   GoogleOAuthOptions,
   ITEMS_REPOSITORY,
-  LAMBDA_SERVICE,
   LOAN_ITEMS_REPOSITORY,
   LOANS_REPOSITORY,
   NOTIFICATIONS_REPOSITORY,
@@ -264,16 +262,6 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
         ),
     },
     {
-      provide: LambdaOptions,
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) =>
-        new LambdaOptions(
-          configService.get('lambda').region,
-          configService.get('lambda').accessKeyId,
-          configService.get('lambda').secretAccessKey,
-        ),
-    },
-    {
       provide: AIOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('ai'),
@@ -306,10 +294,6 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     {
       provide: USERS_FILE_STORAGE,
       useClass: process.env.MOCK_STORAGE ? FileStorageMock : UsersFileStorage,
-    },
-    {
-      provide: LAMBDA_SERVICE,
-      useClass: LambdaService,
     },
     CloudflareTryOnService,
     AivotService,
@@ -374,7 +358,6 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     ITEMS_REPOSITORY,
     AES_ENCRYPT_SERVICE,
     USERS_FILE_STORAGE,
-    LAMBDA_SERVICE,
     TRY_ON_AI_SERVICE,
     TRY_ON_ORCHESTRATOR,
     PRODUCT_IMAGE_AI_SERVICE,

@@ -37,12 +37,10 @@
     "verify:redis": "ts-node -r tsconfig-paths/register -P ./tsconfig.json ./scripts/verify-redis.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.69.0",
     "@aws-sdk/client-apigatewaymanagementapi": "^3.932.0",
     "@aws-sdk/client-lambda": "^3.932.0",
     "@aws-sdk/client-s3": "^3.922.0",
     "@aws-sdk/s3-request-presigner": "^3.922.0",
-    "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
@@ -66,10 +64,8 @@
     "file-type": "^16.5.4",
     "google-auth-library": "^10.6.1",
     "heic-convert": "^2.1.0",
-    "jwks-rsa": "^3.2.0",
     "mjml": "^4.15.3",
     "nestjs-pino": "^4.0.0",
-    "openai": "^6.9.0",
     "papaparse": "^5.5.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

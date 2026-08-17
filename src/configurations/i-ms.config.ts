@@ -5,7 +5,6 @@ import { IApiOptions } from './i-api.options';
 import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions } from '../application';
 import {
   AESEncryptOptions,
-  LambdaOptions,
   AIOptions,
   AivotTryOnOptions,
   CloudflareTryOnOptions,
@@ -19,7 +18,6 @@ export interface IMsConfig {
   database: IDbOptions;
   fileStorage: FileStorageOptions;
   aes: AESEncryptOptions;
-  lambda: LambdaOptions;
   ai: AIOptions;
   aivotTryOn: AivotTryOnOptions;
   cloudflareTryOn: CloudflareTryOnOptions;

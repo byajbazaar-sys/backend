@@ -5,7 +5,6 @@ import { IMsConfig } from './i-ms.config';
 import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions } from '../application';
 import {
   AESEncryptOptions,
-  LambdaOptions,
   AIOptions,
   AivotTryOnOptions,
   CloudflareTryOnOptions,
@@ -54,7 +53,6 @@ function resolveRedisOptions(): RedisOptions | undefined {
     url,
     Number(process.env.REDIS_MAX_RECONNECTION_ATTEMPTS ?? 10),
     Number(process.env.REDIS_RECONNECTION_DELAY_MS ?? 5000),
-    process.env.REDIS_CONNECTION_NAME ?? 'byajbazaar-backend',
   );
 }
 
@@ -85,11 +83,6 @@ export const configFactory = (): IMsConfig => ({
     process.env.AES_KEY ?? '9/nQFoPsXm5iw8c1fOto/CgbZj6PmYevwdH0+Yc45Xw=',
     process.env.AES_ALGORITHM ?? 'aes-256-cbc',
   ),
-  lambda: new LambdaOptions(
-    process.env.LAMBDA_AWS_REGION ?? '',
-    process.env.LAMBDA_AWS_ACCESS_KEY_ID ?? '',
-    process.env.LAMBDA_AWS_SECRET_ACCESS_KEY ?? '',
-  ),
   ai: new AIOptions(resolveTryOnProvider()),
   aivotTryOn: new AivotTryOnOptions(
     process.env.TRYON_API_BASE_URL?.trim() || '',
@@ -101,7 +94,6 @@ export const configFactory = (): IMsConfig => ({
     process.env.CLOUDFLARE_TRYON_MODEL?.trim() || CLOUDFLARE_TRYON_MODEL,
     Number(process.env.CLOUDFLARE_TRYON_TIMEOUT_MS) || CLOUDFLARE_TRYON_TIMEOUT_MS,
     Number(process.env.CLOUDFLARE_TRYON_MAX_RETRIES) || CLOUDFLARE_TRYON_MAX_RETRIES,
-    Number(process.env.CLOUDFLARE_TRYON_GUIDANCE) || 7.5,
   ),
   resend: new ResendOptions(
     process.env.RESEND_API_KEY ?? '',

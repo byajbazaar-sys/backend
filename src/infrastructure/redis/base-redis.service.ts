@@ -118,7 +118,6 @@ export abstract class BaseRedisService implements OnApplicationBootstrap, IRedis
   private createClient(): void {
     this.redisClient = createClient({
       url: this.options.url,
-      name: this.options.connectionName,
       socket: {
         connectTimeout: this.options.reconnectionDelayInMilliseconds,
         reconnectStrategy: false,
