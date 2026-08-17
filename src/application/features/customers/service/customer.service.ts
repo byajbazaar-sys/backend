@@ -21,7 +21,9 @@ import {
   IDuesRepository,
   CACHE_NAMESPACE,
   CACHE_SERVICE,
+  DASHBOARD_CACHE_TTL_SECONDS,
   ICacheService,
+  queryCacheParts,
 } from '../../../shared';
 import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans/service/i-loan-items.repository';
 import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
@@ -111,6 +113,7 @@ export class CustomerService implements ICustomerService {
       const createdCustomer = await this.customersRepo.create(body);
       this.logger.info({ customerId: createdCustomer.id }, 'Customer created successfully');
       await this.invalidateLoanStatsCache(body.createdBy);
+      await this.invalidateCustomersCache(body.createdBy);
       return this.enrichCustomerSignedUrls(createdCustomer);
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof ConflictException) {
@@ -143,7 +146,19 @@ export class CustomerService implements ICustomerService {
   async getCustomers(params: CustomersFilterOptions): Promise<Paged<Customer>> {
     try {
       this.logger.debug({ createdBy: params.createdBy }, 'Getting customers');
-      const result = await this.customersRepo.listCustomers(params);
+      const result = await this.cache.getOrLoadVersioned(
+        CACHE_NAMESPACE.CUSTOMERS,
+        params.createdBy,
+        queryCacheParts('list', {
+          name: params.name,
+          pageNumber: params.pageNumber,
+          pageSize: params.pageSize,
+          sortOrder: params.sortOrder,
+          sortField: params.sortField,
+        }),
+        DASHBOARD_CACHE_TTL_SECONDS,
+        () => this.customersRepo.listCustomers(params),
+      );
       const items = await Promise.all(result.items.map((c) => this.enrichCustomerSignedUrls(c)));
       return { ...result, items };
     } catch (err) {
@@ -270,6 +285,7 @@ export class CustomerService implements ICustomerService {
       }
 
       this.logger.info({ customerId: id }, 'Customer updated successfully');
+      await this.invalidateCustomersCache(body.createdBy);
       return this.enrichCustomerSignedUrls(updatedCustomer);
     } catch (err) {
       if (
@@ -345,6 +361,8 @@ export class CustomerService implements ICustomerService {
         'Customer and all related data deleted successfully',
       );
       await this.invalidateLoanStatsCache(createdBy);
+      await this.invalidateCustomersCache(createdBy);
+      await this.invalidateTransactionsCache(createdBy);
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;
@@ -356,5 +374,13 @@ export class CustomerService implements ICustomerService {
 
   private async invalidateLoanStatsCache(userId: string): Promise<void> {
     await this.cache.bumpUserCache(CACHE_NAMESPACE.LOAN_STATS, userId);
+  }
+
+  private async invalidateCustomersCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.CUSTOMERS, userId);
+  }
+
+  private async invalidateTransactionsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.TRANSACTIONS, userId);
   }
 }

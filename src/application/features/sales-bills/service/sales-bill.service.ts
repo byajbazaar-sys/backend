@@ -10,7 +10,7 @@ import { Paged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { BulkDeleteResult, CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
+import { BulkDeleteResult, CACHE_NAMESPACE, CACHE_SERVICE, DASHBOARD_CACHE_TTL_SECONDS, ICacheService, queryCacheParts, salesAnalyticsCacheParts } from '../../../shared';
 
 import { EInventoryItemStatus } from '../../inventory/enums';
 import {
@@ -100,6 +100,22 @@ export class SalesBillService implements ISalesBillService {
       pageNumber: query.pageNumber,
       pageSize: query.pageSize,
     };
+  }
+
+  private salesBillListCacheParts(query: ListSalesBillsQueryModel, customerId?: string): string[] {
+    return queryCacheParts(customerId ? 'list-by-customer' : 'list', {
+      customerId,
+      search: query.search,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+      paymentMode: query.paymentMode,
+      status: query.status,
+      documentType: query.documentType,
+      sortField: query.sortField ?? ESalesBillSortField.CreatedAt,
+      sortOrder: query.sortOrder ?? ESalesBillSortOrder.Desc,
+      pageNumber: query.pageNumber,
+      pageSize: query.pageSize,
+    });
   }
 
   private async resolveInventoryStockDeductions(
@@ -334,6 +350,7 @@ export class SalesBillService implements ISalesBillService {
     if (stockDeductions.length > 0) {
       await this.invalidateInventoryReportsCache(userId);
     }
+    await this.invalidateSalesBillsCache(userId);
     return created;
   }
 
@@ -345,7 +362,13 @@ export class SalesBillService implements ISalesBillService {
   }
 
   async list(userId: string, query: ListSalesBillsQueryModel): Promise<Paged<SalesBill>> {
-    return this.billsRepo.findAll(this.mapListQuery(userId, query));
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.SALES_BILLS,
+      userId,
+      this.salesBillListCacheParts(query),
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.billsRepo.findAll(this.mapListQuery(userId, query)),
+    );
   }
 
   async exportGstCsv(userId: string, query: ListSalesBillsQueryModel): Promise<GstCsvExportResult> {
@@ -362,10 +385,17 @@ export class SalesBillService implements ISalesBillService {
   }
 
   async listByCustomer(customerId: string, userId: string, query: ListSalesBillsQueryModel): Promise<Paged<SalesBill>> {
-    return this.billsRepo.findByCustomerId(customerId, {
-      ...this.mapListQuery(userId, query),
-      customerId,
-    });
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.SALES_BILLS,
+      userId,
+      this.salesBillListCacheParts(query, customerId),
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () =>
+        this.billsRepo.findByCustomerId(customerId, {
+          ...this.mapListQuery(userId, query),
+          customerId,
+        }),
+    );
   }
 
   async getAnalytics(
@@ -375,6 +405,8 @@ export class SalesBillService implements ISalesBillService {
     documentType?: string,
   ): Promise<SalesAnalytics> {
     const params: SalesAnalyticsFilterOptions = { createdBy: userId };
+    let cacheFrom: string;
+    let cacheTo: string;
 
     if (!dateFrom && !dateTo) {
       const end = new Date();
@@ -382,16 +414,34 @@ export class SalesBillService implements ISalesBillService {
       start.setDate(start.getDate() - 30);
       params.dateFrom = start;
       params.dateTo = end;
+      cacheFrom = start.toISOString().slice(0, 10);
+      cacheTo = end.toISOString().slice(0, 10);
     } else {
-      if (dateFrom) params.dateFrom = new Date(dateFrom);
-      if (dateTo) params.dateTo = new Date(dateTo);
+      if (dateFrom) {
+        params.dateFrom = new Date(dateFrom);
+        cacheFrom = dateFrom;
+      } else {
+        cacheFrom = 'open';
+      }
+      if (dateTo) {
+        params.dateTo = new Date(dateTo);
+        cacheTo = dateTo;
+      } else {
+        cacheTo = 'open';
+      }
     }
 
     if (documentType && Object.values(EDocumentType).includes(documentType as EDocumentType)) {
       params.documentType = documentType as EDocumentType;
     }
 
-    return this.billsRepo.getAnalytics(params);
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.SALES_BILLS,
+      userId,
+      salesAnalyticsCacheParts(cacheFrom, cacheTo, documentType),
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.billsRepo.getAnalytics(params),
+    );
   }
 
   async convertToNormalBill(id: string, userId: string): Promise<SalesBill> {
@@ -423,6 +473,7 @@ export class SalesBillService implements ISalesBillService {
       'Informal bill converted to normal bill',
     );
 
+    await this.invalidateSalesBillsCache(userId);
     return updated;
   }
 
@@ -529,6 +580,7 @@ export class SalesBillService implements ISalesBillService {
 
     this.logger.info({ billId: id, billNumber: updated.billNumber }, 'Sales bill updated');
     await this.invalidateInventoryReportsCache(userId);
+    await this.invalidateSalesBillsCache(userId);
     return updated;
   }
 
@@ -540,6 +592,7 @@ export class SalesBillService implements ISalesBillService {
     if (restoreStock) {
       await this.invalidateInventoryReportsCache(userId);
     }
+    await this.invalidateSalesBillsCache(userId);
   }
 
   async bulkDelete(ids: string[], userId: string): Promise<BulkDeleteResult> {
@@ -558,5 +611,9 @@ export class SalesBillService implements ISalesBillService {
 
   private async invalidateInventoryReportsCache(userId: string): Promise<void> {
     await this.cache.bumpUserCache(CACHE_NAMESPACE.INVENTORY_REPORTS, userId);
+  }
+
+  private async invalidateSalesBillsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.SALES_BILLS, userId);
   }
 }

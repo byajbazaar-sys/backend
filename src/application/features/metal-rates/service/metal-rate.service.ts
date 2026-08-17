@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { BulkDeleteResult, CACHE_SERVICE, ICacheService } from '../../../shared';
+import { BulkDeleteResult, CACHE_NAMESPACE, CACHE_SERVICE, ICacheService, queryCacheParts } from '../../../shared';
 
 import { EMetalType } from '../../inventory/enums';
 import {
@@ -87,7 +87,7 @@ export class MetalRateService implements IMetalRateService {
       createdBy: userId,
     });
 
-    await this.invalidateCurrentRatesCache(userId);
+    await this.invalidateMetalRatesCache(userId);
     this.logger.info({ userId, metalType: data.metalType, purity, rate: data.rate }, 'Metal rate recorded');
     return created;
   }
@@ -95,8 +95,16 @@ export class MetalRateService implements IMetalRateService {
   async listHistory(userId: string, query: ListMetalRatesQueryModel) {
     const page = query.pageNumber ?? 0;
     const pageSize = query.pageSize ?? 20;
-    const { items, totalCount } = await this.ratesRepo.findHistory(userId, page, pageSize);
-    return { items, totalCount, page, pageSize };
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.METAL_RATES,
+      userId,
+      queryCacheParts('history', { pageNumber: page, pageSize }),
+      METAL_RATE_CURRENT_CACHE_TTL_SECONDS,
+      async () => {
+        const { items, totalCount } = await this.ratesRepo.findHistory(userId, page, pageSize);
+        return { items, totalCount, page, pageSize };
+      },
+    );
   }
 
   async deleteEntry(id: string, userId: string): Promise<void> {
@@ -104,7 +112,7 @@ export class MetalRateService implements IMetalRateService {
     if (!entry) throw new NotFoundException('Rate entry not found');
     if (entry.createdBy !== userId) throw new ForbiddenException('Access denied');
     await this.ratesRepo.deleteById(id);
-    await this.invalidateCurrentRatesCache(userId);
+    await this.invalidateMetalRatesCache(userId);
     this.logger.info({ userId, entryId: id }, 'Metal rate history entry deleted');
   }
 
@@ -123,6 +131,20 @@ export class MetalRateService implements IMetalRateService {
   }
 
   async getChart(userId: string, startDate?: string, endDate?: string): Promise<MetalRateChartPointModel[]> {
+    const range = this.resolveChartRange(startDate, endDate);
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.METAL_RATES,
+      userId,
+      queryCacheParts('chart', { startDate: range.cacheStart, endDate: range.cacheEnd }),
+      METAL_RATE_CURRENT_CACHE_TTL_SECONDS,
+      () => this.loadChart(userId, range.start, range.end),
+    );
+  }
+
+  private resolveChartRange(
+    startDate?: string,
+    endDate?: string,
+  ): { cacheStart: string; cacheEnd: string; start?: string; end?: string } {
     const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : new Date();
     const start = startDate
       ? new Date(`${startDate}T00:00:00.000Z`)
@@ -135,6 +157,18 @@ export class MetalRateService implements IMetalRateService {
       throw new BadRequestException('startDate must be before endDate');
     }
 
+    return {
+      cacheStart: start.toISOString().slice(0, 10),
+      cacheEnd: end.toISOString().slice(0, 10),
+      start: startDate,
+      end: endDate,
+    };
+  }
+
+  private async loadChart(userId: string, startDate?: string, endDate?: string): Promise<MetalRateChartPointModel[]> {
+    const range = this.resolveChartRange(startDate, endDate);
+    const start = new Date(`${range.cacheStart}T00:00:00.000Z`);
+    const end = new Date(`${range.cacheEnd}T23:59:59.999Z`);
     const entries = await this.ratesRepo.findForChart(userId, start, end);
     const points = this.buildChartPoints(entries);
     return plainToInstance(MetalRateChartPointModel, points, { excludeExtraneousValues: true });
@@ -177,7 +211,8 @@ export class MetalRateService implements IMetalRateService {
     return result;
   }
 
-  private async invalidateCurrentRatesCache(userId: string): Promise<void> {
+  private async invalidateMetalRatesCache(userId: string): Promise<void> {
     await this.cache.invalidate(metalRateCurrentCacheKey(userId));
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.METAL_RATES, userId);
   }
 }

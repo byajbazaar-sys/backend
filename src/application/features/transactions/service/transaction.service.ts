@@ -32,7 +32,9 @@ import {
   UNIT_OF_WORK,
   CACHE_NAMESPACE,
   CACHE_SERVICE,
+  DASHBOARD_CACHE_TTL_SECONDS,
   ICacheService,
+  queryCacheParts,
 } from '../../../shared';
 import {
   LOANS_REPOSITORY,
@@ -435,8 +437,19 @@ export class TransactionService implements ITransactionService {
   async getTransactions(params: TransactionsFilterOptions): Promise<Paged<Transaction>> {
     try {
       this.logger.debug({ createdBy: params.createdBy }, 'Getting transactions');
-      const result = await this.transactionsRepo.listTransactions(params);
-      return result;
+      return this.cache.getOrLoadVersioned(
+        CACHE_NAMESPACE.TRANSACTIONS,
+        params.createdBy,
+        queryCacheParts('list', {
+          loanId: params.loanId,
+          pageNumber: params.pageNumber,
+          pageSize: params.pageSize,
+          sortOrder: params.sortOrder,
+          sortField: params.sortField,
+        }),
+        DASHBOARD_CACHE_TTL_SECONDS,
+        () => this.transactionsRepo.listTransactions(params),
+      );
     } catch (err) {
       this.logger.error({ err, params }, 'Error getting transactions');
       throw err;
@@ -878,6 +891,9 @@ export class TransactionService implements ITransactionService {
 
   private async invalidateLoanStatsCache(userId?: string): Promise<void> {
     if (!userId) return;
-    await this.cache.bumpUserCache(CACHE_NAMESPACE.LOAN_STATS, userId);
+    await Promise.all([
+      this.cache.bumpUserCache(CACHE_NAMESPACE.LOAN_STATS, userId),
+      this.cache.bumpUserCache(CACHE_NAMESPACE.TRANSACTIONS, userId),
+    ]);
   }
 }

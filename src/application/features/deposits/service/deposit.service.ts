@@ -17,12 +17,14 @@ import { DepositsDownloadFilterOptions, DepositsFilterOptions } from '../options
 import { DepositStats } from './deposit-stats';
 import { IDepositService } from './i-deposit.service';
 import { DEPOSITS_REPOSITORY, IDepositsRepository } from './i-deposits.repository';
+import { CACHE_NAMESPACE, CACHE_SERVICE, DASHBOARD_CACHE_TTL_SECONDS, ICacheService, queryCacheParts } from '../../../shared';
 
 @Injectable()
 export class DepositService implements IDepositService {
   constructor(
     @Inject(DEPOSITS_REPOSITORY) private readonly depositsRepo: IDepositsRepository,
     @Inject(CUSTOMERS_REPOSITORY) private readonly customersRepo: ICustomersRepository,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(DepositService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -31,7 +33,7 @@ export class DepositService implements IDepositService {
     if (!customer) throw new NotFoundException('Customer not found');
 
     const depositNumber = await this.depositsRepo.getNextDepositNumber(createdBy);
-    return this.depositsRepo.createAccount({
+    const account = await this.depositsRepo.createAccount({
       depositNumber,
       customerId,
       createdBy,
@@ -41,10 +43,26 @@ export class DepositService implements IDepositService {
       totalDeposited: 0,
       status: EDepositStatus.ACTIVE,
     });
+    await this.invalidateDepositsCache(createdBy);
+    return account;
   }
 
   async findAll(options: DepositsFilterOptions): Promise<Paged<DepositAccount>> {
-    return this.depositsRepo.list(options);
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.DEPOSITS,
+      options.createdBy,
+      queryCacheParts('list', {
+        page: options.page,
+        limit: options.limit,
+        status: options.status,
+        search: options.search,
+        sortOrder: options.sortOrder,
+        sortField: options.sortField,
+        customerId: options.customerId,
+      }),
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.depositsRepo.list(options),
+    );
   }
 
   async findOne(id: string, createdBy: string): Promise<DepositAccount> {
@@ -55,7 +73,13 @@ export class DepositService implements IDepositService {
   }
 
   async getStats(createdBy: string): Promise<DepositStats> {
-    return this.depositsRepo.getStats(createdBy);
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.DEPOSITS,
+      createdBy,
+      ['stats'],
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.depositsRepo.getStats(createdBy),
+    );
   }
 
   async getRecentTransactions(createdBy: string): Promise<DepositTransaction[]> {
@@ -96,6 +120,7 @@ export class DepositService implements IDepositService {
     });
 
     this.logger.info({ depositId: id, amount, createdBy }, 'Deposit added');
+    await this.invalidateDepositsCache(createdBy);
     return this.findOne(updated.id, createdBy);
   }
 
@@ -126,6 +151,7 @@ export class DepositService implements IDepositService {
     });
 
     this.logger.info({ depositId: id, amount, salesBillId: data.salesBillId, createdBy }, 'Deposit adjusted');
+    await this.invalidateDepositsCache(createdBy);
     return this.findOne(id, createdBy);
   }
 
@@ -165,6 +191,7 @@ export class DepositService implements IDepositService {
     });
 
     this.logger.info({ depositId: id, amount, createdBy }, 'Deposit refunded');
+    await this.invalidateDepositsCache(createdBy);
     return this.findOne(id, createdBy);
   }
 
@@ -225,6 +252,7 @@ export class DepositService implements IDepositService {
     const deleted = await this.depositsRepo.deleteAccount(id, createdBy);
     if (!deleted) throw new NotFoundException('Deposit account not found');
     this.logger.info({ depositId: id, createdBy }, 'Deposit account deleted');
+    await this.invalidateDepositsCache(createdBy);
   }
 
   private async requireAccount(id: string, createdBy: string): Promise<DepositAccount> {
@@ -252,5 +280,9 @@ export class DepositService implements IDepositService {
   private async generateReceiptNumber(createdBy: string, transactionId: string): Promise<string> {
     const suffix = transactionId.replace(/-/g, '').slice(0, 8).toUpperCase();
     return `RCP-${new Date().getFullYear()}-${suffix}`;
+  }
+
+  private async invalidateDepositsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.DEPOSITS, userId);
   }
 }

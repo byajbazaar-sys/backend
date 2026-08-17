@@ -173,25 +173,56 @@ export class InventoryReportService implements IInventoryReportService {
   }
 
   async getCurrentInventory(userId: string): Promise<InventoryItem[]> {
-    return this.itemsRepo.findAllForReport({
-      createdBy: userId,
-      status: EInventoryItemStatus.Available,
-    });
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.INVENTORY_REPORTS,
+      userId,
+      ['current'],
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () =>
+        this.itemsRepo.findAllForReport({
+          createdBy: userId,
+          status: EInventoryItemStatus.Available,
+        }),
+    );
   }
 
   async getValuationReport(userId: string): Promise<InventoryItem[]> {
-    return this.itemsRepo.findAllForReport({ createdBy: userId });
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.INVENTORY_REPORTS,
+      userId,
+      ['valuation'],
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.itemsRepo.findAllForReport({ createdBy: userId }),
+    );
   }
 
   async getCategoryWiseReport(userId: string) {
-    return this.itemsRepo.countByCategory(userId);
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.INVENTORY_REPORTS,
+      userId,
+      ['category-wise'],
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.itemsRepo.countByCategory(userId),
+    );
   }
 
   async getLowStockReport(userId: string, threshold = 1): Promise<InventoryItem[]> {
-    return this.itemsRepo.countLowStock(userId, threshold);
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.INVENTORY_REPORTS,
+      userId,
+      ['low-stock', String(threshold)],
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.itemsRepo.countLowStock(userId, threshold),
+    );
   }
 
   async getBarcodeReport(userId: string): Promise<InventoryItem[]> {
-    return this.itemsRepo.findAllForReport({ createdBy: userId });
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.INVENTORY_REPORTS,
+      userId,
+      ['barcode'],
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.itemsRepo.findAllForReport({ createdBy: userId }),
+    );
   }
 }

@@ -34,6 +34,7 @@ import {
   DASHBOARD_CACHE_TTL_SECONDS,
   ICacheService,
   loanStatsCacheParts,
+  queryCacheParts,
 } from '../../../shared';
 import {
   EInterestCalculationMethod,
@@ -417,12 +418,22 @@ export class LoanService implements ILoanService {
 
   async getLoans(params: LoansFilterOptions): Promise<LoanExtended> {
     try {
-      // Default to open loans if status not specified
-      if (!params.status) {
-        params.status = ELoanStatus.OPEN;
-      }
-      this.logger.debug({ createdBy: params.createdBy, status: params.status }, 'Getting loans');
-      return this.loansRepo.listLoans(params);
+      const status = params.status ?? ELoanStatus.OPEN;
+      this.logger.debug({ createdBy: params.createdBy, status }, 'Getting loans');
+      return this.cache.getOrLoadVersioned(
+        CACHE_NAMESPACE.LOAN_STATS,
+        params.createdBy,
+        queryCacheParts('list', {
+          status,
+          customerId: params.customerId,
+          pageNumber: params.pageNumber,
+          pageSize: params.pageSize,
+          sortOrder: params.sortOrder,
+          sortField: params.sortField,
+        }),
+        DASHBOARD_CACHE_TTL_SECONDS,
+        () => this.loansRepo.listLoans({ ...params, status }),
+      );
     } catch (err) {
       this.logger.error({ err, params }, 'Error getting loans');
       throw err;
@@ -1249,7 +1260,7 @@ export class LoanService implements ILoanService {
       await this.loanItemsRepo.deleteByLoanId(id);
       await this.loansRepo.delete(id, createdBy);
       this.logger.info({ loanId: id }, 'Loan deleted successfully');
-      await this.invalidateLoanStatsCache(createdBy);
+      await this.invalidateLoanDeletionCaches(createdBy);
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;
@@ -1412,5 +1423,12 @@ export class LoanService implements ILoanService {
   private async invalidateLoanStatsCache(userId?: string): Promise<void> {
     if (!userId) return;
     await this.cache.bumpUserCache(CACHE_NAMESPACE.LOAN_STATS, userId);
+  }
+
+  private async invalidateLoanDeletionCaches(userId: string): Promise<void> {
+    await Promise.all([
+      this.cache.bumpUserCache(CACHE_NAMESPACE.LOAN_STATS, userId),
+      this.cache.bumpUserCache(CACHE_NAMESPACE.TRANSACTIONS, userId),
+    ]);
   }
 }
