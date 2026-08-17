@@ -15,6 +15,7 @@ import {
   LoansDownloadFilterOptions,
   LoanStats,
   LoanStatsFilterOptions,
+  OpenLoanMaturityRef,
 } from '../../../application';
 import { Due, EDueType } from '../../../application/shared';
 import { DueEntity } from '../entities/due.entity';
@@ -393,7 +394,7 @@ export class LoansRepository implements ILoansRepository {
     await this.loanRepo.delete({ customerId, createdBy });
   }
 
-  async findOpenLoanIdsPastMaturity(): Promise<{ id: string; createdBy: string }[]> {
+  async findOpenLoanIdsPastMaturity(): Promise<OpenLoanMaturityRef[]> {
     const rows = await this.loanRepo
       .createQueryBuilder('loan')
       .select(['loan.id', 'loan.createdBy'])
@@ -412,6 +413,6 @@ export class LoansRepository implements ILoansRepository {
       )
       .getMany();
 
-    return rows.map((r) => ({ id: r.id, createdBy: r.createdBy }));
+    return rows.map((r) => plainToInstance(OpenLoanMaturityRef, { id: r.id, createdBy: r.createdBy }, { excludeExtraneousValues: true }));
   }
 }

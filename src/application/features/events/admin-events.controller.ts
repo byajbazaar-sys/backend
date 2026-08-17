@@ -25,6 +25,7 @@ import {
   CreateJewelleryEventRequestModel,
   JewelleryEventResponseModel,
   JewelleryEventsPagedResponseModel,
+  JewelleryEventSyncStatesResponseModel,
   ListJewelleryEventsQueryModel,
   UpdateJewelleryEventRequestModel,
 } from './models';
@@ -100,14 +101,16 @@ export class AdminEventsController {
   @UseGuards(ThrottlerGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Internal: sync jewellery events via Gemini (protected by secret)' })
+  @ApiOkResponse({ type: JewelleryEventSyncStatesResponseModel })
   async sync(
     @Headers('x-events-sync-secret') secret: string,
     @Body() body?: { states?: string[] },
-  ): Promise<{ states: string[]; upserted: number }> {
+  ): Promise<JewelleryEventSyncStatesResponseModel> {
     const expected = process.env.EVENTS_SYNC_SECRET;
     if (!expected || secret !== expected) {
       throw new UnauthorizedException('Invalid sync secret');
     }
-    return this.eventsService.syncStates(body?.states ?? [...JEWELLERY_EVENT_SYNC_STATES]);
+    const result = await this.eventsService.syncStates(body?.states ?? [...JEWELLERY_EVENT_SYNC_STATES]);
+    return plainToInstance(JewelleryEventSyncStatesResponseModel, result, { excludeExtraneousValues: true });
   }
 }

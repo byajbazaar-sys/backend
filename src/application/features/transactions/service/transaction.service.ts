@@ -30,6 +30,9 @@ import {
   TRANSACTION_LOGS_REPOSITORY,
   IUnitOfWork,
   UNIT_OF_WORK,
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  ICacheService,
 } from '../../../shared';
 import {
   LOANS_REPOSITORY,
@@ -53,6 +56,7 @@ export class TransactionService implements ITransactionService {
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
     @Inject(LOAN_SERVICE) private readonly loanService: ILoanService,
     @Inject(UNIT_OF_WORK) private readonly unitOfWork: IUnitOfWork,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     private readonly replayService: LoanReplayService,
     @InjectPinoLogger(TransactionService.name) private readonly logger: PinoLogger,
   ) {}
@@ -181,6 +185,7 @@ export class TransactionService implements ITransactionService {
       });
 
       this.logger.info({ transactionId: transaction.id, loanId: loan.id }, 'Transaction created successfully');
+      await this.invalidateLoanStatsCache(data.createdBy);
       return transaction;
     } catch (err) {
       if (
@@ -275,6 +280,7 @@ export class TransactionService implements ITransactionService {
       current = updated;
     }
 
+    await this.invalidateLoanStatsCache(createdBy);
     return current;
   }
 
@@ -476,6 +482,7 @@ export class TransactionService implements ITransactionService {
         await this.rollbackTransactionEffects(existing, loan, createdBy);
         await this.transactionsRepo.delete(id);
         this.logger.info({ transactionId: id, loanId: existing.loanId }, 'Transaction deleted with rollback');
+        await this.invalidateLoanStatsCache(createdBy);
         return;
       }
 
@@ -501,6 +508,7 @@ export class TransactionService implements ITransactionService {
         { transactionId: id, loanId: existing.loanId },
         'Earlier transaction deleted by replaying loan history',
       );
+      await this.invalidateLoanStatsCache(createdBy);
     } catch (err) {
       if (
         err instanceof NotFoundException ||
@@ -866,5 +874,10 @@ export class TransactionService implements ITransactionService {
 
   private async recordLog(input: CreateTransactionLogInput): Promise<void> {
     await this.transactionLogsRepo.create(input);
+  }
+
+  private async invalidateLoanStatsCache(userId?: string): Promise<void> {
+    if (!userId) return;
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.LOAN_STATS, userId);
   }
 }

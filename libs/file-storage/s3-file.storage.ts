@@ -37,6 +37,8 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
         secretAccessKey: storageOptions.secretAccessKey,
       },
       region: storageOptions.region,
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
       ...(storageOptions.endpoint ? { endpoint: storageOptions.endpoint, forcePathStyle: true } : {}),
     });
     this.helper = new FileHelper(allowedMimeTypes);

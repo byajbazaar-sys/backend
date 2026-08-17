@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Expose } from 'class-transformer';
 import { ArrayMinSize, IsArray, IsUUID } from 'class-validator';
 
 export class BulkDeleteInventoryItemsRequestModel {
@@ -8,10 +7,4 @@ export class BulkDeleteInventoryItemsRequestModel {
   @ArrayMinSize(1)
   @IsUUID('4', { each: true })
   ids: string[];
-}
-
-export class BulkDeleteInventoryItemsResponseModel {
-  @Expose()
-  @ApiProperty()
-  deletedCount: number;
 }

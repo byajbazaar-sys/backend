@@ -9,6 +9,7 @@ import {
   JewelleryEvent,
   JewelleryEventDuplicateQuery,
   JewelleryEventRelatedQuery,
+  JewelleryEventSlugRef,
 } from '../../../application/features/events/domain';
 import { JewelleryEventUpdatePatch } from '../../../application/features/events/models';
 import { IJewelleryEventsRepository } from '../../../application/features/events/service/i-jewellery-events.repository';
@@ -162,12 +163,12 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
     return this.create(data);
   }
 
-  async listActiveSlugs(): Promise<{ slug: string; updatedAt: Date }[]> {
+  async listActiveSlugs(): Promise<JewelleryEventSlugRef[]> {
     const rows = await this.eventRepo.find({
       where: { status: EJewelleryEventStatus.ACTIVE },
       select: ['slug', 'updatedAt'],
       order: { updatedAt: 'DESC' },
     });
-    return rows.map((r) => ({ slug: r.slug, updatedAt: r.updatedAt }));
+    return rows.map((r) => plainToInstance(JewelleryEventSlugRef, { slug: r.slug, updatedAt: r.updatedAt }, { excludeExtraneousValues: true }));
   }
 }

@@ -6,3 +6,4 @@ export * from './sales-top-item';
 export * from './sales-metal-breakdown';
 export * from './sales-payment-breakdown';
 export * from './sales-document-type-breakdown';
+export * from './gst-csv-export-result';

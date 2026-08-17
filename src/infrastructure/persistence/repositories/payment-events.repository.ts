@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { QueryDeepPartialEntity, Repository } from 'typeorm';
 
-import { IPaymentEventsRepository, PaymentEvent, PaymentEventLinksData } from '../../../application';
+import { IPaymentEventsRepository, PaymentEvent, PaymentEventLinksData, PaymentEventInsertResult } from '../../../application';
 import { PaymentEventEntity } from '../entities/payment-event.entity';
 
 @Injectable()
@@ -33,7 +33,7 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
     return this.mapEntity(created);
   }
 
-  async insertOrGet(data: PaymentEvent): Promise<{ event: PaymentEvent; created: boolean }> {
+  async insertOrGet(data: PaymentEvent): Promise<PaymentEventInsertResult> {
     const insertResult = await this.paymentEventRepo
       .createQueryBuilder()
       .insert()
@@ -55,14 +55,18 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
 
     const inserted = insertResult.raw?.[0] as PaymentEventEntity;
     if (inserted) {
-      return { event: this.mapEntity(inserted), created: true };
+      return plainToInstance(
+        PaymentEventInsertResult,
+        { event: this.mapEntity(inserted), created: true },
+        { excludeExtraneousValues: true },
+      );
     }
 
     const existing = await this.findByProviderAndEventId(data.provider, data.eventId);
     if (!existing) {
       throw new Error(`Payment event ${data.provider}/${data.eventId} missing after conflict`);
     }
-    return { event: existing, created: false };
+    return plainToInstance(PaymentEventInsertResult, { event: existing, created: false }, { excludeExtraneousValues: true });
   }
 
   async findByProviderAndEventId(provider: string, eventId: string): Promise<PaymentEvent> {

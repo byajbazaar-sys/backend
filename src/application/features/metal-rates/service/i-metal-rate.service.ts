@@ -1,6 +1,9 @@
+import { Paged } from '@shared-libs';
+
+import { BulkDeleteResult } from '../../../shared';
 import { MetalRate } from '../domain';
 import { CreateMetalRateRequestModel, ListMetalRatesQueryModel } from '../models';
-import { CurrentMetalRatesResponseModel, MetalRateChartPointModel } from '../models/metal-rate-response.model';
+import { CurrentMetalRatesResponseModel, MetalRateChartPointModel } from '../models';
 
 export const METAL_RATE_SERVICE = 'METAL_RATE_SERVICE';
 
@@ -17,6 +20,6 @@ export interface IMetalRateService {
     pageSize: number;
   }>;
   deleteEntry(id: string, userId: string): Promise<void>;
-  bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }>;
+  bulkDelete(ids: string[], userId: string): Promise<BulkDeleteResult>;
   getChart(userId: string, startDate?: string, endDate?: string): Promise<MetalRateChartPointModel[]>;
 }

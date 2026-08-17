@@ -1,10 +1,10 @@
-import { BarcodeScannedPayload } from '../domain';
+import { BarcodeScannedPayload, WebSocketConnectResult } from '../domain';
 import { EDeviceType } from '../enums';
 
 export const WEBSOCKET_HANDLER_SERVICE = 'WEBSOCKET_HANDLER_SERVICE';
 
 export interface IWebSocketHandlerService {
-  handleConnect(connectionId: string, token: string, deviceType?: EDeviceType): Promise<{ statusCode: number }>;
+  handleConnect(connectionId: string, token: string, deviceType?: EDeviceType): Promise<WebSocketConnectResult>;
   handleDisconnect(connectionId: string): Promise<void>;
   handleCreateSession(
     connectionId: string,

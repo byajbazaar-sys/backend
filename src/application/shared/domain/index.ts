@@ -4,3 +4,4 @@ export * from './send-email';
 export * from './google-token-response';
 export * from './google-user-info';
 export * from './due';
+export * from './bulk-delete-result';

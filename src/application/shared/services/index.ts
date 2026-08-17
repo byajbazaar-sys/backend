@@ -16,3 +16,5 @@ export * from './try-on-provider-route';
 export * from './i-try-on-orchestrator.service';
 export * from './product-image-input';
 export * from './i-product-image-ai.service';
+export * from './i-redis.service';
+export * from './i-cache.service';

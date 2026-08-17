@@ -29,6 +29,11 @@ import {
   TRANSACTIONS_REPOSITORY,
   IUnitOfWork,
   UNIT_OF_WORK,
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  DASHBOARD_CACHE_TTL_SECONDS,
+  ICacheService,
+  loanStatsCacheParts,
 } from '../../../shared';
 import {
   EInterestCalculationMethod,
@@ -51,6 +56,7 @@ export class LoanService implements ILoanService {
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
     @Inject(ITEMS_REPOSITORY) private readonly itemsRepo: IItemsRepository,
     @Inject(UNIT_OF_WORK) private readonly unitOfWork: IUnitOfWork,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(LoanService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -196,6 +202,7 @@ export class LoanService implements ILoanService {
       this.logger.info({ loanId: loan.id }, 'Loan created successfully with dues');
       await this.enrichLoanItemsWithImageUrls(data.loanItems);
       await this.enrichLoanWithVoucherSignatureUrls(loan);
+      await this.invalidateLoanStatsCache(loan.createdBy);
       return { ...loan, loanItems: data.loanItems };
     } catch (err) {
       this.logger.error({ err, customerId: data.customerId }, 'Error creating loan');
@@ -492,6 +499,7 @@ export class LoanService implements ILoanService {
         { loanId: id, oldStatus: existingLoan.status, newStatus: status },
         'Loan status updated successfully',
       );
+      await this.invalidateLoanStatsCache(createdBy);
       return updatedLoan;
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof BadRequestException) {
@@ -834,10 +842,25 @@ export class LoanService implements ILoanService {
   async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
     try {
       this.logger.debug({ userId, filterOptions }, 'Getting loan stats');
-      filterOptions.startDate.setHours(0, 0, 0, 0);
-      filterOptions.endDate.setHours(23, 59, 59, 999);
-      const stats = await this.loansRepo.getStats(userId, filterOptions);
-      return stats;
+      const startDate = new Date(filterOptions.startDate);
+      const endDate = new Date(filterOptions.endDate);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+
+      return this.cache.getOrLoadVersioned(
+        CACHE_NAMESPACE.LOAN_STATS,
+        userId,
+        loanStatsCacheParts(startDate, endDate, filterOptions.itemId),
+        DASHBOARD_CACHE_TTL_SECONDS,
+        async () => {
+          const statsFilter = {
+            ...filterOptions,
+            startDate,
+            endDate,
+          };
+          return this.loansRepo.getStats(userId, statsFilter);
+        },
+      );
     } catch (err) {
       this.logger.error({ err, userId, filterOptions }, 'Error getting loan stats');
       throw err;
@@ -1009,6 +1032,7 @@ export class LoanService implements ILoanService {
         const updatedLoan = await this.loansRepo.update(id, finalLoanData);
         await this.rebaselineLoan(updatedLoan);
         this.logger.info({ loanId: id }, 'Loan updated successfully');
+        await this.invalidateLoanStatsCache(updateData.createdBy);
         return updatedLoan;
       }
 
@@ -1115,6 +1139,7 @@ export class LoanService implements ILoanService {
         { loanId: id, totalDuePeriods, remainingDuePeriods, paidDuesCount, unpaidDues: unpaidDues.length },
         'Loan updated and unpaid dues regenerated successfully',
       );
+      await this.invalidateLoanStatsCache(updateData.createdBy);
       return updatedLoan;
     } catch (err) {
       if (
@@ -1223,6 +1248,7 @@ export class LoanService implements ILoanService {
       await this.loanItemsRepo.deleteByLoanId(id);
       await this.loansRepo.delete(id, createdBy);
       this.logger.info({ loanId: id }, 'Loan deleted successfully');
+      await this.invalidateLoanStatsCache(createdBy);
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;
@@ -1380,5 +1406,10 @@ export class LoanService implements ILoanService {
       due.interestAmount = Number(Number(due.interestAmount).toFixed(2));
       due.dueAmount = Number((due.principalAmount + due.interestAmount).toFixed(2));
     }
+  }
+
+  private async invalidateLoanStatsCache(userId?: string): Promise<void> {
+    if (!userId) return;
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.LOAN_STATS, userId);
   }
 }

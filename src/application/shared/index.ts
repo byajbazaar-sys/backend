@@ -1,4 +1,5 @@
 export * from './services';
+export * from './cache';
 export * from './options';
 export * from './enums';
 export * from './repository';

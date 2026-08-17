@@ -14,3 +14,5 @@ export * from './razorpay-subscription-notify-info';
 export * from './razorpay-create-subscription-data';
 export * from './razorpay-create-refund-data';
 export * from './subscription-user-profile-data';
+export * from './webhook-ack-result';
+export * from './payment-event-insert-result';

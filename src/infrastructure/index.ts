@@ -10,3 +10,4 @@ export * from './ses';
 export * from './resend';
 export * from './cron';
 export * from './google-oauth';
+export * from './redis';

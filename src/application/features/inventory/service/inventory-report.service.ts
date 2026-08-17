@@ -2,12 +2,16 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { InventoryAnalytics, InventoryDashboardStats, InventoryItem } from '../domain';
 import { EInventoryItemStatus, EMetalType } from '../enums';
+import { CACHE_NAMESPACE, CACHE_SERVICE, DASHBOARD_CACHE_TTL_SECONDS, ICacheService } from '../../../shared';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import { IInventoryReportService } from './i-inventory-report.service';
 
 @Injectable()
 export class InventoryReportService implements IInventoryReportService {
-  constructor(@Inject(INVENTORY_ITEMS_REPOSITORY) private readonly itemsRepo: IInventoryItemsRepository) {}
+  constructor(
+    @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly itemsRepo: IInventoryItemsRepository,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+  ) {}
 
   async getDashboardStats(userId: string): Promise<InventoryDashboardStats> {
     const analytics = await this.getAnalytics(userId);
@@ -21,6 +25,16 @@ export class InventoryReportService implements IInventoryReportService {
   }
 
   async getAnalytics(userId: string): Promise<InventoryAnalytics> {
+    return this.cache.getOrLoadVersioned(
+      CACHE_NAMESPACE.INVENTORY_REPORTS,
+      userId,
+      ['analytics'],
+      DASHBOARD_CACHE_TTL_SECONDS,
+      () => this.loadAnalytics(userId),
+    );
+  }
+
+  private async loadAnalytics(userId: string): Promise<InventoryAnalytics> {
     const all = await this.itemsRepo.findAllForReport({ createdBy: userId });
     const categoryBreakdown = await this.itemsRepo.countByCategory(userId);
     const lowStockRaw = await this.itemsRepo.countLowStock(userId, 1);

@@ -15,6 +15,7 @@ import {
   SendGridOptions,
   SesOptions,
   ResendOptions,
+  RedisOptions,
   type TryOnAiProvider,
   AIVOT_TRYON_TIMEOUT_MS,
   AIVOT_TRYON_MAX_RETRIES,
@@ -49,23 +50,48 @@ function resolveTryOnProvider(): TryOnAiProvider {
   return process.env.AI_PROVIDER === 'gemini' ? 'gemini' : 'bedrock';
 }
 
-function resolveS3KeyPrefix(): string {
+function resolveS3KeyPrefix(): string | undefined {
+  const explicit = process.env.S3_KEY_PREFIX?.trim();
+  if (explicit !== undefined && explicit !== '') {
+    // Use "-" to force no prefix (e.g. B2 bucket with keys at bucket root).
+    if (explicit === '-') {
+      return undefined;
+    }
+    return explicit.replace(/^\/+|\/+$/g, '');
+  }
+  // Dedicated S3-compatible buckets (e.g. Backblaze B2) use keys at bucket root.
+  if (process.env.S3_ENDPOINT?.trim()) {
+    return undefined;
+  }
   const env = (process.env.NODE_ENV || '').toLowerCase().trim();
-  // Local + deployed develop stages use a `dev/` folder; production has no prefix.
+  // Shared AWS bucket: local + deployed develop stages use a `dev/` folder.
   if (env === 'development' || env === 'dev') {
     return 'dev';
   }
   return undefined;
 }
 
+function resolveRedisOptions(): RedisOptions | undefined {
+  const url = process.env.REDIS_URL?.trim();
+  if (!url) {
+    return undefined;
+  }
+  return new RedisOptions(
+    url,
+    Number(process.env.REDIS_MAX_RECONNECTION_ATTEMPTS ?? 10),
+    Number(process.env.REDIS_RECONNECTION_DELAY_MS ?? 5000),
+    process.env.REDIS_CONNECTION_NAME ?? 'byajbazaar-backend',
+  );
+}
+
 function resolveFileStorageOptions(): FileStorageOptions {
-  const r2Endpoint = process.env.CLOUDFLARE_R2_ENDPOINT?.trim();
+  const endpoint = process.env.S3_ENDPOINT?.trim() || undefined;
   return new FileStorageOptions(
-    r2Endpoint ? process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || '' : process.env?.S3_AWS_ACCESS_KEY_ID || '',
-    r2Endpoint ? process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || '' : process.env?.S3_AWS_SECRET_ACCESS_KEY || '',
-    r2Endpoint ? process.env.CLOUDFLARE_R2_BUCKET || '' : (process.env?.S3_BUCKET_NAME ?? 'jobs-file-storage'),
-    r2Endpoint ? 'auto' : (process.env?.S3_BUCKET_REGION ?? 'ap-south-1'),
-    r2Endpoint,
+    process.env.S3_AWS_ACCESS_KEY_ID || '',
+    process.env.S3_AWS_SECRET_ACCESS_KEY || '',
+    process.env.S3_BUCKET_NAME ?? 'jobs-file-storage',
+    process.env.S3_BUCKET_REGION ?? 'ap-south-1',
+    endpoint,
     resolveS3KeyPrefix(),
   );
 }
@@ -168,4 +194,5 @@ export const configFactory = (): IMsConfig => ({
     'INR',
     Number(process.env.DEFAULT_TRIAL_DAYS ?? 7),
   ),
+  redis: resolveRedisOptions(),
 });

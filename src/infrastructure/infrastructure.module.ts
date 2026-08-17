@@ -49,6 +49,8 @@ import {
   TRY_ON_AI_SERVICE,
   TRY_ON_ORCHESTRATOR,
   PRODUCT_IMAGE_AI_SERVICE,
+  REDIS_SERVICE,
+  CACHE_SERVICE,
   UNIT_OF_WORK,
 } from '../application';
 import { TwilioOptions, TwilioService } from './sms';
@@ -102,6 +104,7 @@ import Seeds from './persistence/seeds';
 import { generateDataSourceOptions } from './persistence/type-orm.config';
 import { FileStorageMock, UsersFileStorage } from './s3';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
+import { RedisOptions, RedisService, RedisCacheService } from './redis';
 
 @Global()
 @Module({
@@ -267,6 +270,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
           configService.get('fileStorage').bucket,
           configService.get('fileStorage').region,
           configService.get('fileStorage').endpoint,
+          configService.get('fileStorage').keyPrefix,
         ),
     },
     {
@@ -404,6 +408,21 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       provide: GOOGLE_OAUTH_SERVICE,
       useClass: GoogleOAuthService,
     },
+    {
+      provide: RedisOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('redis'),
+    },
+    RedisService,
+    {
+      provide: REDIS_SERVICE,
+      useExisting: RedisService,
+    },
+    RedisCacheService,
+    {
+      provide: CACHE_SERVICE,
+      useExisting: RedisCacheService,
+    },
   ],
   exports: [
     UNIT_OF_WORK,
@@ -447,6 +466,9 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     TRANSACTION_LOGS_REPOSITORY,
     EMAIL_SERVICE,
     GOOGLE_OAUTH_SERVICE,
+    REDIS_SERVICE,
+    CACHE_SERVICE,
+    RedisOptions,
     FileStorageOptions,
     WebAppOptions,
     GoogleOAuthOptions,
@@ -455,4 +477,4 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     ...CronServices,
   ],
 })
-export class InfrastructureModule {}
+export class InfrastructureModule { }

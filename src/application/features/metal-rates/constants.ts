@@ -35,3 +35,10 @@ export function isAllowedRatePurity(metalType: EMetalType, purity: string): bool
   }
   return false;
 }
+
+/** Short TTL — rates are invalidated immediately on write. */
+export const METAL_RATE_CURRENT_CACHE_TTL_SECONDS = 120;
+
+export function metalRateCurrentCacheKey(userId: string): string {
+  return `metal-rates:current:${userId}`;
+}

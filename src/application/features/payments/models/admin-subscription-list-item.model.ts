@@ -44,25 +44,3 @@ export class AdminSubscriptionListItemModel {
   @ApiProperty()
   createdAt!: Date;
 }
-
-export class AdminSubscriptionsPagedResponseModel {
-  @Expose()
-  @ApiProperty({ type: [AdminSubscriptionListItemModel] })
-  items!: AdminSubscriptionListItemModel[];
-
-  @Expose()
-  @ApiProperty()
-  page!: number;
-
-  @Expose()
-  @ApiProperty()
-  perPage!: number;
-
-  @Expose()
-  @ApiProperty()
-  totalCount!: number;
-
-  @Expose()
-  @ApiProperty()
-  totalPages!: number;
-}

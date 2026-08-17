@@ -169,5 +169,3 @@ export class CreateJewelleryEventRequestModel {
   @IsString()
   seoDescription?: string;
 }
-
-export class UpdateJewelleryEventRequestModel extends CreateJewelleryEventRequestModel {}

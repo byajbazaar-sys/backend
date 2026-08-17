@@ -4,3 +4,4 @@ export * from './loan-item';
 export * from './loan-stats';
 export * from './loan-extended';
 export * from './loan-baseline-data';
+export * from './open-loan-maturity-ref';

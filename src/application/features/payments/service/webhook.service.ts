@@ -1,8 +1,9 @@
 import { Inject, Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { SUBSCRIPTION_PROVIDER_RAZORPAY } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { ESubscriptionStatus, Payment, PaymentEvent, PaymentOrder, PaymentEventLinksData } from '../domain';
+import { ESubscriptionStatus, Payment, PaymentEvent, PaymentOrder, PaymentEventLinksData, WebhookAckResult } from '../domain';
 import { COUPON_SERVICE, ICouponService } from './i-coupon.service';
 import { IPaymentEventsRepository, PAYMENT_EVENTS_REPOSITORY } from './i-payment-events.repository';
 import { IPaymentOrdersRepository, PAYMENT_ORDERS_REPOSITORY } from './i-payment-orders.repository';
@@ -28,7 +29,7 @@ export class WebhookService implements IWebhookService {
     @InjectPinoLogger(WebhookService.name) private readonly logger: PinoLogger,
   ) {}
 
-  async handleWebhook(rawBody: string, signature: string): Promise<{ received: boolean; duplicate?: boolean }> {
+  async handleWebhook(rawBody: string, signature: string): Promise<WebhookAckResult> {
     if (!signature) {
       this.logger.warn('Missing x-razorpay-signature header');
       throw new UnauthorizedException('Missing webhook signature');
@@ -59,7 +60,7 @@ export class WebhookService implements IWebhookService {
           this.logger.error({ err, eventName, eventId }, 'Failed to relink processed webhook event');
         }
       }
-      return { received: true, duplicate: true };
+      return this.ackWebhook(true, true);
     }
 
     let eventRow: PaymentEvent;
@@ -83,11 +84,11 @@ export class WebhookService implements IWebhookService {
     }
 
     if (eventRow.processed) {
-      return { received: true, duplicate: true };
+      return this.ackWebhook(true, true);
     }
 
     if (!shouldProcess) {
-      return { received: true, duplicate: true };
+      return this.ackWebhook(true, true);
     }
 
     try {
@@ -99,7 +100,11 @@ export class WebhookService implements IWebhookService {
       throw err;
     }
 
-    return { received: true, duplicate: false };
+    return this.ackWebhook(true, false);
+  }
+
+  private ackWebhook(received: boolean, duplicate?: boolean): WebhookAckResult {
+    return plainToInstance(WebhookAckResult, { received, duplicate }, { excludeExtraneousValues: true });
   }
 
   private eventNeedsRelinking(event: PaymentEvent): boolean {

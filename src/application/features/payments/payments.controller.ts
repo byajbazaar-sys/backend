@@ -27,6 +27,7 @@ import {
   CreateSubscriptionResponseModel,
   PaymentResponseModel,
   SubscriptionStatusResponseModel,
+  WebhookAckResponseModel,
 } from './models';
 import { USERS_REPOSITORY, IUsersRepository } from '../users';
 import { IPaymentsService, PAYMENTS_SERVICE } from './service/i-payments.service';
@@ -113,15 +114,17 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Razorpay webhook receiver (signature verified)' })
   @ApiHeader({ name: 'x-razorpay-signature', required: true })
+  @ApiOkResponse({ type: WebhookAckResponseModel })
   async webhook(
     @Req() req: Request & { rawBody?: Buffer },
     @Headers('x-razorpay-signature') signature: string,
-  ): Promise<{ received: boolean; duplicate?: boolean }> {
+  ): Promise<WebhookAckResponseModel> {
     const rawBody =
       req.rawBody?.toString('utf8') || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}));
 
     try {
-      return await this.webhookService.handleWebhook(rawBody, signature);
+      const result = await this.webhookService.handleWebhook(rawBody, signature);
+      return plainToInstance(WebhookAckResponseModel, result, { excludeExtraneousValues: true });
     } catch (err) {
       this.logger.error({ err }, 'Webhook endpoint failure');
       throw err;

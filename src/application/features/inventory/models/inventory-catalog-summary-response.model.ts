@@ -1,13 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMinSize, IsArray, IsBoolean, IsOptional, IsUUID } from 'class-validator';
 import { Expose } from 'class-transformer';
-
-export class UpdateCatalogSettingsRequestModel {
-  @ApiPropertyOptional({ description: 'Enable or disable the public catalog' })
-  @IsOptional()
-  @IsBoolean()
-  catalogEnabled?: boolean;
-}
 
 export class InventoryCatalogSummaryResponseModel {
   @Expose()
@@ -37,22 +29,4 @@ export class InventoryCatalogSummaryResponseModel {
   @Expose()
   @ApiPropertyOptional()
   slugConflict?: boolean;
-}
-
-export class BulkUpdateCatalogVisibilityRequestModel {
-  @ApiProperty({ type: [String] })
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsUUID('4', { each: true })
-  ids: string[];
-
-  @ApiProperty({ example: true })
-  @IsBoolean()
-  isCatalogVisible: boolean;
-}
-
-export class BulkUpdateCatalogVisibilityResponseModel {
-  @Expose()
-  @ApiProperty()
-  updatedCount: number;
 }

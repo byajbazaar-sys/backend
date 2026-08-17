@@ -1,39 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 
-import { AdminSubscriptionListItemModel } from './admin-subscription-response.model';
+import { AdminSubscriptionListItemModel } from './admin-subscription-list-item.model';
 import { PaymentResponseModel } from './payment-response.model';
 import { RefundResponseModel } from './refund-response.model';
-
-export class WebhookEventSummaryModel {
-  @Expose()
-  @ApiProperty()
-  id!: string;
-
-  @Expose()
-  @ApiProperty()
-  eventName!: string;
-
-  @Expose()
-  @ApiProperty()
-  processed!: boolean;
-
-  @Expose()
-  @ApiProperty()
-  createdAt!: Date;
-
-  @Expose()
-  @ApiPropertyOptional({ nullable: true })
-  userId?: string;
-
-  @Expose()
-  @ApiPropertyOptional({ nullable: true })
-  paymentId?: string;
-
-  @Expose()
-  @ApiPropertyOptional({ nullable: true })
-  paymentOrderId?: string;
-}
+import { WebhookEventSummaryModel } from './webhook-event-summary.model';
 
 export class AdminSubscriptionDetailResponseModel extends AdminSubscriptionListItemModel {
   @Expose()

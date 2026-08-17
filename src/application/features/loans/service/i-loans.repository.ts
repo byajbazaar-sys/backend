@@ -1,5 +1,5 @@
 import { Due, EDueType } from '../../../shared';
-import { Loan, LoanExtended, LoanStats, LoanBaselineData } from '../domain';
+import { Loan, LoanExtended, LoanStats, LoanBaselineData, OpenLoanMaturityRef } from '../domain';
 import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 
 export const LOANS_REPOSITORY = 'LOANS_REPOSITORY';
@@ -35,5 +35,5 @@ export interface ILoansRepository {
   delete(id: string, createdBy: string): Promise<void>;
   deleteByCustomerId(customerId: string, createdBy: string): Promise<void>;
   getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats>;
-  findOpenLoanIdsPastMaturity(): Promise<{ id: string; createdBy: string }[]>;
+  findOpenLoanIdsPastMaturity(): Promise<OpenLoanMaturityRef[]>;
 }

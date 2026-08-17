@@ -1,7 +1,7 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { IIdentity, UsersAuthOptions } from '@shared-libs';
-import { instanceToPlain } from 'class-transformer';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { POS_SESSION_SERVICE, IPosSessionService } from './i-pos-session.service';
@@ -18,6 +18,7 @@ import {
   INVENTORY_ITEMS_REPOSITORY,
 } from '../../inventory/service/i-inventory-items.repository';
 import { EDeviceType } from '../enums';
+import { WebSocketConnectResult } from '../domain';
 import { IWebSocketHandlerService } from './i-websocket-handler.service';
 
 @Injectable()
@@ -72,7 +73,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     connectionId: string,
     token: string,
     deviceType: EDeviceType = EDeviceType.Desktop,
-  ): Promise<{ statusCode: number }> {
+  ): Promise<WebSocketConnectResult> {
     try {
       const resolvedDevice = deviceType === EDeviceType.Mobile ? EDeviceType.Mobile : EDeviceType.Desktop;
       const userId =
@@ -86,7 +87,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
         deviceType: resolvedDevice,
       });
       this.logger.info({ connectionId, userId, deviceType: resolvedDevice }, 'WebSocket connected');
-      return { statusCode: 200 };
+      return plainToInstance(WebSocketConnectResult, { statusCode: 200 }, { excludeExtraneousValues: true });
     } catch (err) {
       this.logger.warn(
         {

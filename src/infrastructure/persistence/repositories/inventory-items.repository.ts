@@ -10,6 +10,7 @@ import {
   InventoryItem,
   InventoryItemsFilterOptions,
   InventoryItemUpdatePatch,
+  InventoryCategoryBreakdown,
 } from '../../../application';
 import { InventoryItemEntity } from '../entities/inventory-item.entity';
 
@@ -171,9 +172,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     await this.repo.delete(id);
   }
 
-  async countByCategory(
-    createdBy: string,
-  ): Promise<{ categoryId: string; categoryName: string; count: number; totalValue: number }[]> {
+  async countByCategory(createdBy: string): Promise<InventoryCategoryBreakdown[]> {
     const rows = await this.repo
       .createQueryBuilder('item')
       .leftJoin('item.category', 'category')
@@ -186,12 +185,18 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
       .addGroupBy('category.name')
       .getRawMany();
 
-    return rows.map((r) => ({
-      categoryId: r.categoryId,
-      categoryName: r.categoryName,
-      count: parseInt(r.count, 10),
-      totalValue: parseFloat(r.totalValue),
-    }));
+    return rows.map((r) =>
+      plainToInstance(
+        InventoryCategoryBreakdown,
+        {
+          categoryId: r.categoryId,
+          categoryName: r.categoryName,
+          count: parseInt(r.count, 10),
+          totalValue: parseFloat(r.totalValue),
+        },
+        { excludeExtraneousValues: true },
+      ),
+    );
   }
 
   async countLowStock(createdBy: string, threshold: number): Promise<InventoryItem[]> {

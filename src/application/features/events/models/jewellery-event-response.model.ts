@@ -112,29 +112,3 @@ export class JewelleryEventResponseModel {
   @Type(() => Date)
   updatedAt?: Date;
 }
-
-export class JewelleryEventsPagedResponseModel {
-  @Expose()
-  @ApiProperty({ type: [JewelleryEventResponseModel] })
-  @Type(() => JewelleryEventResponseModel)
-  items!: JewelleryEventResponseModel[];
-
-  @Expose()
-  @ApiProperty()
-  page!: number;
-
-  @Expose()
-  @ApiProperty()
-  perPage!: number;
-
-  @Expose()
-  @ApiProperty()
-  totalCount!: number;
-}
-
-export class JewelleryEventDetailResponseModel extends JewelleryEventResponseModel {
-  @Expose()
-  @ApiPropertyOptional({ type: [JewelleryEventResponseModel] })
-  @Type(() => JewelleryEventResponseModel)
-  relatedEvents?: JewelleryEventResponseModel[];
-}

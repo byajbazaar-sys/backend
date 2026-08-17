@@ -14,6 +14,7 @@ import {
   SendGridOptions,
   SesOptions,
   ResendOptions,
+  RedisOptions,
 } from '../infrastructure';
 
 export interface IMsConfig {
@@ -34,5 +35,6 @@ export interface IMsConfig {
   webApp: WebAppOptions;
   googleOAuth: GoogleOAuthOptions;
   razorpay: RazorpayOptions;
+  redis?: RedisOptions;
   logger: Params;
 }

@@ -2,8 +2,17 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
+import { BulkDeleteResult, CACHE_SERVICE, ICacheService } from '../../../shared';
+
 import { EMetalType } from '../../inventory/enums';
-import { CURRENT_RATE_KEYS, CurrentRateKey, isAllowedRatePurity, purityToCurrentKey } from '../constants';
+import {
+  CURRENT_RATE_KEYS,
+  CurrentRateKey,
+  isAllowedRatePurity,
+  METAL_RATE_CURRENT_CACHE_TTL_SECONDS,
+  metalRateCurrentCacheKey,
+  purityToCurrentKey,
+} from '../constants';
 import { MetalRate } from '../domain';
 import {
   CreateMetalRateRequestModel,
@@ -18,10 +27,21 @@ import { IMetalRatesRepository, METAL_RATES_REPOSITORY } from './i-metal-rates.r
 export class MetalRateService implements IMetalRateService {
   constructor(
     @Inject(METAL_RATES_REPOSITORY) private readonly ratesRepo: IMetalRatesRepository,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(MetalRateService.name) private readonly logger: PinoLogger,
   ) {}
 
   async getCurrent(userId: string): Promise<CurrentMetalRatesResponseModel> {
+    const response = await this.cache.getOrLoad(
+      metalRateCurrentCacheKey(userId),
+      METAL_RATE_CURRENT_CACHE_TTL_SECONDS,
+      () => this.loadCurrentRates(userId),
+    );
+
+    return plainToInstance(CurrentMetalRatesResponseModel, response, { excludeExtraneousValues: true });
+  }
+
+  private async loadCurrentRates(userId: string): Promise<Record<string, number | string>> {
     const latest = await this.ratesRepo.findCurrentRates(userId);
     const response: Record<string, number | string> = {
       gold24: null,
@@ -45,7 +65,7 @@ export class MetalRateService implements IMetalRateService {
       response[`${key}UpdatedAt`] = entry.createdAt?.toISOString() ?? null;
     }
 
-    return plainToInstance(CurrentMetalRatesResponseModel, response, { excludeExtraneousValues: true });
+    return response;
   }
 
   async create(data: CreateMetalRateRequestModel, userId: string): Promise<MetalRate> {
@@ -67,6 +87,7 @@ export class MetalRateService implements IMetalRateService {
       createdBy: userId,
     });
 
+    await this.invalidateCurrentRatesCache(userId);
     this.logger.info({ userId, metalType: data.metalType, purity, rate: data.rate }, 'Metal rate recorded');
     return created;
   }
@@ -83,10 +104,11 @@ export class MetalRateService implements IMetalRateService {
     if (!entry) throw new NotFoundException('Rate entry not found');
     if (entry.createdBy !== userId) throw new ForbiddenException('Access denied');
     await this.ratesRepo.deleteById(id);
+    await this.invalidateCurrentRatesCache(userId);
     this.logger.info({ userId, entryId: id }, 'Metal rate history entry deleted');
   }
 
-  async bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }> {
+  async bulkDelete(ids: string[], userId: string): Promise<BulkDeleteResult> {
     const uniqueIds = [...new Set(ids)];
     if (!uniqueIds.length) {
       throw new BadRequestException('No rate entry ids provided');
@@ -97,7 +119,7 @@ export class MetalRateService implements IMetalRateService {
     }
 
     this.logger.info({ count: uniqueIds.length, userId }, 'Metal rate entries bulk deleted');
-    return { deletedCount: uniqueIds.length };
+    return plainToInstance(BulkDeleteResult, { deletedCount: uniqueIds.length }, { excludeExtraneousValues: true });
   }
 
   async getChart(userId: string, startDate?: string, endDate?: string): Promise<MetalRateChartPointModel[]> {
@@ -153,5 +175,9 @@ export class MetalRateService implements IMetalRateService {
     }
 
     return result;
+  }
+
+  private async invalidateCurrentRatesCache(userId: string): Promise<void> {
+    await this.cache.invalidate(metalRateCurrentCacheKey(userId));
   }
 }

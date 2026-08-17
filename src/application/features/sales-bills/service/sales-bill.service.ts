@@ -7,7 +7,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Paged } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { BulkDeleteResult, CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
 
 import { EInventoryItemStatus } from '../../inventory/enums';
 import {
@@ -18,7 +21,7 @@ import {
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
 } from '../../inventory/service/i-inventory-items.repository';
-import { SalesBill, SalesBillLineItem, SalesAnalytics } from '../domain';
+import { SalesBill, SalesBillLineItem, SalesAnalytics, GstCsvExportResult } from '../domain';
 import {
   EBillStatus,
   EPaymentMode,
@@ -55,6 +58,7 @@ export class SalesBillService implements ISalesBillService {
     @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly inventoryItemsRepo: IInventoryItemsRepository,
     @Inject(INVENTORY_CATEGORIES_REPOSITORY)
     private readonly categoriesRepo: IInventoryCategoriesRepository,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(SalesBillService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -327,6 +331,9 @@ export class SalesBillService implements ISalesBillService {
       },
       'Sales bill created',
     );
+    if (stockDeductions.length > 0) {
+      await this.invalidateInventoryReportsCache(userId);
+    }
     return created;
   }
 
@@ -341,13 +348,17 @@ export class SalesBillService implements ISalesBillService {
     return this.billsRepo.findAll(this.mapListQuery(userId, query));
   }
 
-  async exportGstCsv(userId: string, query: ListSalesBillsQueryModel): Promise<{ buffer: Buffer; filename: string }> {
+  async exportGstCsv(userId: string, query: ListSalesBillsQueryModel): Promise<GstCsvExportResult> {
     const filter = this.mapListQuery(userId, query);
     const { pageNumber: _pageNumber, pageSize: _pageSize, ...exportFilter } = filter;
     const bills = await this.billsRepo.findAllForExport(exportFilter);
     const csv = toGstExportCsv(bills);
     const filename = `GST_Export_${new Date().toISOString().slice(0, 10)}.csv`;
-    return { buffer: Buffer.from(csv, 'utf-8'), filename };
+    return plainToInstance(
+      GstCsvExportResult,
+      { buffer: Buffer.from(csv, 'utf-8'), filename },
+      { excludeExtraneousValues: true },
+    );
   }
 
   async listByCustomer(customerId: string, userId: string, query: ListSalesBillsQueryModel): Promise<Paged<SalesBill>> {
@@ -517,6 +528,7 @@ export class SalesBillService implements ISalesBillService {
     const updated = await this.billsRepo.updateBill(id, patch, lineUpdates);
 
     this.logger.info({ billId: id, billNumber: updated.billNumber }, 'Sales bill updated');
+    await this.invalidateInventoryReportsCache(userId);
     return updated;
   }
 
@@ -525,9 +537,12 @@ export class SalesBillService implements ISalesBillService {
     const restoreStock = bill.status === EBillStatus.Completed;
     await this.billsRepo.deleteBill(id, restoreStock);
     this.logger.info({ billId: id, billNumber: bill.billNumber, restoreStock }, 'Sales bill deleted');
+    if (restoreStock) {
+      await this.invalidateInventoryReportsCache(userId);
+    }
   }
 
-  async bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }> {
+  async bulkDelete(ids: string[], userId: string): Promise<BulkDeleteResult> {
     const uniqueIds = [...new Set(ids)];
     if (!uniqueIds.length) {
       throw new BadRequestException('No bill ids provided');
@@ -538,6 +553,10 @@ export class SalesBillService implements ISalesBillService {
     }
 
     this.logger.info({ count: uniqueIds.length, userId }, 'Sales bills bulk deleted');
-    return { deletedCount: uniqueIds.length };
+    return plainToInstance(BulkDeleteResult, { deletedCount: uniqueIds.length }, { excludeExtraneousValues: true });
+  }
+
+  private async invalidateInventoryReportsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.INVENTORY_REPORTS, userId);
   }
 }

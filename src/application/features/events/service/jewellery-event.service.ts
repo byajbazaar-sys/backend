@@ -10,6 +10,10 @@ import {
   JewelleryEvent,
   JewelleryEventDuplicateQuery,
   JewelleryEventRelatedQuery,
+  JewelleryEventDetailResult,
+  JewelleryEventUpsertResult,
+  JewelleryEventSyncStatesResult,
+  JewelleryEventSlugRef,
 } from '../domain';
 import {
   CreateJewelleryEventRequestModel,
@@ -141,7 +145,7 @@ export class JewelleryEventService implements IJewelleryEventService {
     });
   }
 
-  async getBySlug(slug: string): Promise<{ event: JewelleryEvent; related: JewelleryEvent[] }> {
+  async getBySlug(slug: string): Promise<JewelleryEventDetailResult> {
     const event = await this.eventsRepo.findBySlug(slug);
     if (!event || event.status !== EJewelleryEventStatus.ACTIVE) {
       throw new NotFoundException('Event not found');
@@ -154,7 +158,7 @@ export class JewelleryEventService implements IJewelleryEventService {
         limit: 6,
       }),
     );
-    return { event, related };
+    return plainToInstance(JewelleryEventDetailResult, { event, related }, { excludeExtraneousValues: true });
   }
 
   async listAdmin(query: ListJewelleryEventsQueryModel): Promise<Paged<JewelleryEvent>> {
@@ -259,7 +263,7 @@ export class JewelleryEventService implements IJewelleryEventService {
     return [...known, ...enriched];
   }
 
-  async mergeAndUpsert(events: DiscoveredEvent[]): Promise<{ upserted: number }> {
+  async mergeAndUpsert(events: DiscoveredEvent[]): Promise<JewelleryEventUpsertResult> {
     const map = new Map<string, DiscoveredEvent>();
     for (const event of events) {
       if (!event?.name?.trim()) continue;
@@ -288,10 +292,10 @@ export class JewelleryEventService implements IJewelleryEventService {
     }
 
     this.logger.info({ upserted }, 'Merged jewellery events');
-    return { upserted };
+    return plainToInstance(JewelleryEventUpsertResult, { upserted }, { excludeExtraneousValues: true });
   }
 
-  async syncStates(states?: string[]): Promise<{ states: string[]; upserted: number }> {
+  async syncStates(states?: string[]): Promise<JewelleryEventSyncStatesResult> {
     const targetStates = (states?.length ? states : [...JEWELLERY_EVENT_SYNC_STATES]).map((s) => s.trim());
     const all: DiscoveredEvent[] = [];
     for (const state of targetStates) {
@@ -303,10 +307,15 @@ export class JewelleryEventService implements IJewelleryEventService {
       }
     }
     const result = await this.mergeAndUpsert(all);
-    return { states: targetStates, upserted: result.upserted };
+    return plainToInstance(
+      JewelleryEventSyncStatesResult,
+      { states: targetStates, upserted: result.upserted },
+      { excludeExtraneousValues: true },
+    );
   }
 
-  async listActiveSlugs(): Promise<{ slug: string; updatedAt: Date }[]> {
-    return this.eventsRepo.listActiveSlugs();
+  async listActiveSlugs(): Promise<JewelleryEventSlugRef[]> {
+    const rows = await this.eventsRepo.listActiveSlugs();
+    return rows.map((row) => plainToInstance(JewelleryEventSlugRef, row, { excludeExtraneousValues: true }));
   }
 }

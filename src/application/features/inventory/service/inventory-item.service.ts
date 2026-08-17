@@ -17,6 +17,10 @@ import {
   USERS_FILE_STORAGE,
   IProductImageAiService,
   PRODUCT_IMAGE_AI_SERVICE,
+  BulkDeleteResult,
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  ICacheService,
 } from '../../../shared';
 import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from '../../sales-bills/service/i-sales-bills.repository';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
@@ -44,6 +48,7 @@ export class InventoryItemService implements IInventoryItemService {
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(SALES_BILLS_REPOSITORY) private readonly salesBillsRepo: ISalesBillsRepository,
     @Inject(PRODUCT_IMAGE_AI_SERVICE) private readonly productImageAi: IProductImageAiService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(InventoryItemService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -110,9 +115,11 @@ export class InventoryItemService implements IInventoryItemService {
       const qrValue = this.barcodeService.buildInventoryQrPayload(created.id, created.sku);
       const withQr = await this.itemsRepo.update(created.id, { qrValue });
       this.logger.info({ itemId: withQr.id, sku }, 'Inventory item created');
+      await this.invalidateInventoryReportsCache(userId);
       return this.enrichItem(withQr);
     }
     this.logger.info({ itemId: created.id, sku }, 'Inventory item created');
+    await this.invalidateInventoryReportsCache(userId);
     return this.enrichItem(created);
   }
 
@@ -200,6 +207,7 @@ export class InventoryItemService implements IInventoryItemService {
       patch.isCatalogVisible = false;
     }
     const updated = await this.itemsRepo.update(id, patch);
+    await this.invalidateInventoryReportsCache(userId);
     return this.enrichItem(updated);
   }
 
@@ -360,9 +368,10 @@ export class InventoryItemService implements IInventoryItemService {
       }
     }
     await this.itemsRepo.delete(id);
+    await this.invalidateInventoryReportsCache(userId);
   }
 
-  async bulkDelete(ids: string[], userId: string): Promise<{ deletedCount: number }> {
+  async bulkDelete(ids: string[], userId: string): Promise<BulkDeleteResult> {
     const uniqueIds = [...new Set(ids)];
     if (!uniqueIds.length) {
       throw new BadRequestException('No item ids provided');
@@ -373,6 +382,10 @@ export class InventoryItemService implements IInventoryItemService {
     }
 
     this.logger.info({ count: uniqueIds.length, userId }, 'Inventory items bulk deleted');
-    return { deletedCount: uniqueIds.length };
+    return plainToInstance(BulkDeleteResult, { deletedCount: uniqueIds.length }, { excludeExtraneousValues: true });
+  }
+
+  private async invalidateInventoryReportsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.INVENTORY_REPORTS, userId);
   }
 }

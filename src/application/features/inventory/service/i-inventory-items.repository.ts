@@ -1,6 +1,6 @@
 import { Paged } from '@shared-libs';
 
-import { InventoryItem } from '../domain';
+import { InventoryItem, InventoryCategoryBreakdown } from '../domain';
 import { InventoryItemUpdatePatch } from '../models';
 import { InventoryItemsFilterOptions } from '../options';
 
@@ -19,9 +19,7 @@ export interface IInventoryItemsRepository {
   getNextSkuSequence(skuPrefix: string, createdBy: string): Promise<number>;
   update(id: string, data: InventoryItemUpdatePatch): Promise<InventoryItem>;
   delete(id: string): Promise<void>;
-  countByCategory(
-    createdBy: string,
-  ): Promise<{ categoryId: string; categoryName: string; count: number; totalValue: number }[]>;
+  countByCategory(createdBy: string): Promise<InventoryCategoryBreakdown[]>;
   countLowStock(createdBy: string, threshold: number): Promise<InventoryItem[]>;
   countCatalogVisible(createdBy: string): Promise<number>;
   findPublicCatalog(

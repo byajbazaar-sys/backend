@@ -8,14 +8,24 @@ import { User } from '../domain';
 import { UserUpdatePatch } from '../models';
 import { IUsersRepository, USERS_REPOSITORY } from './i-users.repository';
 import { IUsersService } from './i-users.service';
-import { USERS_FILE_STORAGE, IUsersFileStorage } from '../../../shared';
+import {
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  ICacheService,
+  IUsersFileStorage,
+  USERS_FILE_STORAGE,
+  USER_DETAILS_CACHE_TTL_SECONDS,
+} from '../../../shared';
 import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../utils/catalog-slug.helper';
+
+type CachedUser = User & { profilePhotoUrl?: string; shopLogoUrl?: string };
 
 @Injectable()
 export class UsersService implements IUsersService {
   constructor(
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(USERS_FILE_STORAGE) private readonly usersFileStorage: IUsersFileStorage,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(UsersService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -24,7 +34,7 @@ export class UsersService implements IUsersService {
     return this.usersFileStorage.getUrlAsync(ref);
   }
 
-  private async withAssetUrls(user: User): Promise<User> {
+  private async withAssetUrls(user: User): Promise<CachedUser> {
     const [profilePhotoUrl, shopLogoUrl] = await Promise.all([
       this.resolvePhotoUrl(user.profilePhotoRef),
       this.resolvePhotoUrl(user.shopLogoRef),
@@ -35,16 +45,43 @@ export class UsersService implements IUsersService {
       shopLogoUrl,
       profilePhotoRef: profilePhotoUrl ?? user.profilePhotoRef,
       shopLogoRef: shopLogoUrl ?? user.shopLogoRef,
-    } as User;
+    };
+  }
+
+  private toCachedUser(user: CachedUser): CachedUser {
+    const {
+      password: _password,
+      resetPasswordToken: _resetPasswordToken,
+      resetPasswordExpires: _resetPasswordExpires,
+      emailVerificationToken: _emailVerificationToken,
+      emailVerificationExpires: _emailVerificationExpires,
+      profilePhoto: _profilePhoto,
+      profilePhotoContentType: _profilePhotoContentType,
+      profilePhotoFileName: _profilePhotoFileName,
+      shopLogo: _shopLogo,
+      shopLogoContentType: _shopLogoContentType,
+      shopLogoFileName: _shopLogoFileName,
+      googleId: _googleId,
+      ...safe
+    } = user;
+    return safe as CachedUser;
   }
 
   async findOne(id: string): Promise<User> {
     try {
-      const user = await this.usersRepo.findById(id);
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
-      return this.withAssetUrls(user);
+      return await this.cache.getOrLoadVersioned(
+        CACHE_NAMESPACE.USER_DETAILS,
+        id,
+        ['profile'],
+        USER_DETAILS_CACHE_TTL_SECONDS,
+        async () => {
+          const user = await this.usersRepo.findById(id);
+          if (!user) {
+            throw new NotFoundException('User not found');
+          }
+          return this.toCachedUser(await this.withAssetUrls(user));
+        },
+      );
     } catch (err) {
       if (err instanceof NotFoundException) {
         throw err;
@@ -171,6 +208,7 @@ export class UsersService implements IUsersService {
       }
 
       this.logger.info({ userId: id }, 'User updated successfully');
+      await this.invalidateUserDetailsCache(id);
       return this.withAssetUrls(updatedUser);
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof BadRequestException || err instanceof ConflictException) {
@@ -191,6 +229,11 @@ export class UsersService implements IUsersService {
     }
 
     await this.usersRepo.softDelete(id);
+    await this.invalidateUserDetailsCache(id);
     this.logger.info({ userId: id }, 'User soft-deleted');
+  }
+
+  private async invalidateUserDetailsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.USER_DETAILS, userId);
   }
 }
