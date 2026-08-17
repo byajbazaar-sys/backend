@@ -232,6 +232,7 @@ export class InventoryItemService implements IInventoryItemService {
         }
       }
       const updated = await this.itemsRepo.update(id, { imageUrls: [] });
+      await this.invalidateInventoryReportsCache(userId);
       return this.enrichItem(updated);
     }
 
@@ -272,6 +273,7 @@ export class InventoryItemService implements IInventoryItemService {
     const storageKey = await this.fileStorage.writeAsync(proposedKey, bufferToStore, mimetype);
     const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] });
     this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
+    await this.invalidateInventoryReportsCache(userId);
     return this.enrichItem(updated);
   }
 

@@ -719,6 +719,7 @@ export class LoanService implements ILoanService {
 
       this.logger.info({ loanId, itemId }, 'Loan item updated successfully');
       await this.enrichLoanItemsWithImageUrls([updatedLoanItem]);
+      await this.invalidateLoanStatsCache(createdBy);
       return updatedLoanItem;
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof BadRequestException) {

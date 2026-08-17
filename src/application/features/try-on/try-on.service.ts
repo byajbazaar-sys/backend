@@ -294,8 +294,10 @@ export class TryOnService implements ITryOnService {
     if (record?.userId !== userId) {
       throw new NotFoundException('Try-on job not found');
     }
-    if (record.status === 'COMPLETED' || record.status === 'FAILED') {
-      void this.deleteJobMeta(userId, jobId);
+    if (record.status === 'COMPLETED') {
+      await this.deleteJobMeta(userId, jobId);
+    } else if (record.status === 'FAILED') {
+      await this.deleteJobMeta(userId, jobId);
     }
     return record;
   }

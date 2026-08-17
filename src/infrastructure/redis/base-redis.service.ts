@@ -3,7 +3,6 @@ import { PinoLogger } from 'nestjs-pino';
 import { createClient, RedisClientType } from 'redis';
 
 import { IRedisService } from '../../application/shared/services/i-redis.service';
-import { RedisException } from './exceptions';
 import { IRedisOptions } from './options';
 
 function toJson(value: unknown): string {
@@ -69,8 +68,8 @@ export abstract class BaseRedisService implements OnApplicationBootstrap, IRedis
       const result = await this.redisClient.get(resolvedKey);
       return fromJson<T>(result as string);
     } catch (ex) {
-      this.logger.error(ex);
-      throw new RedisException(ex);
+      this.logger.warn({ key, error: ex }, 'Redis set failed — continuing without cache');
+      return value;
     }
   }
 
@@ -83,8 +82,8 @@ export abstract class BaseRedisService implements OnApplicationBootstrap, IRedis
       const value = await this.redisClient.get(key);
       return !isNilOrEmpty(value) ? fromJson<T>(value as string) : null;
     } catch (ex) {
-      this.logger.error(ex);
-      throw new RedisException(ex);
+      this.logger.warn({ key, error: ex }, 'Redis get failed — treating as cache miss');
+      return null;
     }
   }
 
@@ -97,8 +96,8 @@ export abstract class BaseRedisService implements OnApplicationBootstrap, IRedis
       await this.redisClient.del(key);
       return true;
     } catch (ex) {
-      this.logger.error(ex);
-      throw new RedisException(ex);
+      this.logger.warn({ key, error: ex }, 'Redis delete failed — continuing without cache eviction');
+      return false;
     }
   }
 
@@ -110,8 +109,8 @@ export abstract class BaseRedisService implements OnApplicationBootstrap, IRedis
     try {
       return await this.redisClient.ttl(key);
     } catch (ex) {
-      this.logger.error(ex);
-      throw new RedisException(ex);
+      this.logger.warn({ key, error: ex }, 'Redis TTL lookup failed');
+      return -2;
     }
   }
 

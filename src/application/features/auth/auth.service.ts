@@ -37,6 +37,9 @@ import {
   IGoogleOAuthService,
   GOOGLE_OAUTH_SERVICE,
   GoogleUserInfo,
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  ICacheService,
 } from '../../shared';
 import { EMAIL_TEMPLATE_SERVICE, IEmailTemplateService } from '../notifications';
 import { IPaymentsService, PAYMENTS_SERVICE } from '../payments/service/i-payments.service';
@@ -72,6 +75,7 @@ export class AuthService implements IAuthService {
     @Inject(EMAIL_SERVICE) private readonly emailService: IEmailService,
     @Inject(EMAIL_TEMPLATE_SERVICE) private readonly emailTemplateService: IEmailTemplateService,
     @Optional() @Inject(PAYMENTS_SERVICE) private readonly paymentsService: IPaymentsService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -153,6 +157,7 @@ export class AuthService implements IAuthService {
       const now = new Date();
       const wasFirstLogin = resolvedUser.isFirstLogin === true;
       await this.usersRepo.update(resolvedUser.id, { lastLoginAt: now, isFirstLogin: false });
+      await this.invalidateUserDetailsCache(resolvedUser.id);
 
       const identity: IIdentity = {
         userId: resolvedUser.id,
@@ -389,6 +394,7 @@ export class AuthService implements IAuthService {
         emailVerificationExpires: null,
         isFirstLogin: false,
       });
+      await this.invalidateUserDetailsCache(resolvedUser.id);
 
       const updatedUser: ResolvedUser = {
         ...resolvedUser,
@@ -470,6 +476,7 @@ export class AuthService implements IAuthService {
             isEmailVerified: true, // Google emails are verified
             emailVerifiedAt: linkedUser.emailVerifiedAt || now,
           });
+          await this.invalidateUserDetailsCache(linkedUser.id);
 
           // Refresh user data
           user = await this.usersRepo.findById(linkedUser.id);
@@ -510,6 +517,7 @@ export class AuthService implements IAuthService {
         lastLoginAt: now,
         isFirstLogin: false,
       });
+      await this.invalidateUserDetailsCache(resolvedUser.id);
       user = await this.usersRepo.findById(resolvedUser.id);
       if (!user) {
         throw new BadRequestException('Failed to load user after Google sign-in');
@@ -585,5 +593,9 @@ export class AuthService implements IAuthService {
       expiresIn: expiresIn as any,
       algorithm: this.options.algorithm,
     });
+  }
+
+  private async invalidateUserDetailsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.USER_DETAILS, userId);
   }
 }

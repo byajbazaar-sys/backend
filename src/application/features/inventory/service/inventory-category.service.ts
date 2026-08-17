@@ -14,6 +14,7 @@ import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inven
 import { InventoryCategory } from '../domain';
 import { CreateInventoryCategoryRequestModel, UpdateInventoryCategoryRequestModel } from '../models';
 import { IInventoryCategoryService } from './i-inventory-category.service';
+import { CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
 
 @Injectable()
 export class InventoryCategoryService implements IInventoryCategoryService {
@@ -22,6 +23,7 @@ export class InventoryCategoryService implements IInventoryCategoryService {
     private readonly categoriesRepo: IInventoryCategoriesRepository,
     @Inject(INVENTORY_ITEMS_REPOSITORY)
     private readonly itemsRepo: IInventoryItemsRepository,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(InventoryCategoryService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -30,7 +32,9 @@ export class InventoryCategoryService implements IInventoryCategoryService {
     if (existing) {
       throw new ConflictException(`Category with name ${data.name} already exists`);
     }
-    return this.categoriesRepo.create({ ...data, createdBy: userId });
+    const created = await this.categoriesRepo.create({ ...data, createdBy: userId });
+    await this.invalidateInventoryReportsCache(userId);
+    return created;
   }
 
   async getAll(userId: string): Promise<InventoryCategory[]> {
@@ -55,7 +59,9 @@ export class InventoryCategoryService implements IInventoryCategoryService {
       const existing = await this.categoriesRepo.findByName(data.name, userId);
       if (existing) throw new ConflictException(`Category with name ${data.name} already exists`);
     }
-    return this.categoriesRepo.update(id, data);
+    const updated = await this.categoriesRepo.update(id, data);
+    await this.invalidateInventoryReportsCache(userId);
+    return updated;
   }
 
   async delete(id: string, userId: string): Promise<void> {
@@ -73,5 +79,10 @@ export class InventoryCategoryService implements IInventoryCategoryService {
       throw new BadRequestException('Cannot delete category with associated inventory items');
     }
     await this.categoriesRepo.delete(id);
+    await this.invalidateInventoryReportsCache(userId);
+  }
+
+  private async invalidateInventoryReportsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.INVENTORY_REPORTS, userId);
   }
 }

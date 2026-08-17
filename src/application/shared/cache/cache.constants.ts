@@ -4,11 +4,13 @@ export const CACHE_NAMESPACE = {
   USER_DETAILS: 'user-details',
 } as const;
 
-/** Short TTL; version bumps invalidate immediately on writes. */
-export const DASHBOARD_CACHE_TTL_SECONDS = 120;
+/** Default cache TTL (1 day). Version bumps invalidate immediately on writes. */
+export const CACHE_TTL_SECONDS = 86_400;
 
-/** User profile + signed asset URLs (S3 presign is 7d; keep cache short). */
-export const USER_DETAILS_CACHE_TTL_SECONDS = 120;
+export const DASHBOARD_CACHE_TTL_SECONDS = CACHE_TTL_SECONDS;
+
+/** User profile + signed asset URLs (S3 presign is 7d; cache TTL is shorter). */
+export const USER_DETAILS_CACHE_TTL_SECONDS = CACHE_TTL_SECONDS;
 
 function cacheVersionKey(namespace: string, userId: string): string {
   return `cache:version:${namespace}:${userId}`;

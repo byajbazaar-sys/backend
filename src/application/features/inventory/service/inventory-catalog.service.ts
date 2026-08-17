@@ -11,12 +11,14 @@ import {
 import { IInventoryCatalogService } from './i-inventory-catalog.service';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
+import { CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
 
 @Injectable()
 export class InventoryCatalogService implements IInventoryCatalogService {
   constructor(
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(INVENTORY_ITEMS_REPOSITORY) private readonly itemsRepo: IInventoryItemsRepository,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(InventoryCatalogService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -74,6 +76,7 @@ export class InventoryCatalogService implements IInventoryCatalogService {
 
     if (body.catalogEnabled !== undefined) {
       await this.usersRepo.update(userId, { catalogEnabled: body.catalogEnabled });
+      await this.invalidateUserDetailsCache(userId);
     }
 
     this.logger.info({ userId, catalogEnabled: body.catalogEnabled }, 'Catalog settings updated');
@@ -106,11 +109,16 @@ export class InventoryCatalogService implements IInventoryCatalogService {
 
     if (isCatalogVisible && updatedCount > 0 && user.catalogSlug && user.catalogEnabled === false) {
       await this.usersRepo.update(userId, { catalogEnabled: true });
+      await this.invalidateUserDetailsCache(userId);
     }
 
     this.logger.info({ userId, updatedCount, isCatalogVisible }, 'Catalog visibility bulk updated');
     return plainToInstance(BulkUpdateCatalogVisibilityResponseModel, { updatedCount }, {
       excludeExtraneousValues: true,
     });
+  }
+
+  private async invalidateUserDetailsCache(userId: string): Promise<void> {
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.USER_DETAILS, userId);
   }
 }

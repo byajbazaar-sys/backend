@@ -23,7 +23,7 @@ import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
 import { ISubscriptionAdminService } from './i-subscription-admin.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { REFUND_SERVICE, RefundService } from './refund.service';
-import { RazorpayOptions } from '../../../shared';
+import { RazorpayOptions, CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { isPaymentRefundable, remainingRefundableAmount } from '../utils/refund.util';
 import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
@@ -40,6 +40,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(REFUNDS_REPOSITORY) private readonly refundsRepo: IRefundsRepository,
     @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     private readonly razorpayOptions: RazorpayOptions,
   ) {}
 
@@ -202,6 +203,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     }
 
     await this.usersRepo.update(user.id, { trialEndsAt: newTrialEndsAt });
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.USER_DETAILS, user.id);
     const userRow = await this.loadUserRow(sub.userId);
     return this.toDetail(sub, null, userRow);
   }
