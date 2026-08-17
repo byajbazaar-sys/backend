@@ -47,15 +47,10 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
   public abstract get isPublic(): boolean;
 
   /**
-   * Applies configured key prefix (e.g. `dev/`) without double-prefixing.
-   * Production leaves keys unchanged.
+   * Normalizes object keys (strips leading slashes).
    */
   protected resolveKey(path: string): string {
-    const raw = (path || '').replace(/^\/+/, '');
-    const prefix = (this.storageOptions.keyPrefix || '').replace(/^\/+|\/+$/g, '');
-    if (!prefix || !raw) return raw;
-    if (raw === prefix || raw.startsWith(`${prefix}/`)) return raw;
-    return `${prefix}/${raw}`;
+    return (path || '').replace(/^\/+/, '');
   }
 
   public async existsAsync(path: string): Promise<boolean> {

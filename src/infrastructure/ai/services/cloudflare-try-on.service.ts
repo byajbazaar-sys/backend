@@ -12,11 +12,10 @@ import {
   resolveCloudflareTryOnModelId,
 } from '../ai.constants';
 import { CloudflareTryOnOptions, type CloudflareCredential } from '../cloudflare-try-on.options';
-import { BedrockService } from './bedrock.service';
 import { GeneratedAiImage, IProductImageAiService, ITryOnAiService, ProductImageInput } from '../../../application';
 import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
 import { buildProductBackgroundRemovalPrompt, buildProductTransparentStoragePrompt } from '../prompts/product-image.prompts';
-import { buildFullTryOnPrompt } from '../prompts/try-on.prompts';
+import { buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts/try-on.prompts';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 import {
   compressImageForApiPreview,
@@ -40,7 +39,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
 
   constructor(
     private readonly options: CloudflareTryOnOptions,
-    private readonly bedrock: BedrockService,
     @InjectPinoLogger(CloudflareTryOnService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -79,7 +77,65 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
   }
 
   async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {
-    return this.bedrock.recolorOutfit(request);
+    this.assertConfigured();
+    const prompt = buildOutfitRecolorPrompt(request.color);
+    const inputImage = await this.resizeForCloudflare(request.image);
+    const modelId = resolveCloudflareTryOnModelId(undefined, this.options.modelId);
+    const credentialCount = this.options.credentials.length;
+    const maxAttempts = credentialCount * Math.max(1, this.options.maxRetries + 1);
+    let lastError: unknown;
+
+    this.logger.info(
+      { provider: 'cloudflare', model: modelId, color: request.color, credentialCount },
+      'Cloudflare outfit recolor started',
+    );
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const credential = this.getCredential();
+      const started = Date.now();
+      try {
+        const image = await withTimeout(
+          this.invokeWorkersAi(prompt, [inputImage], credential, modelId),
+          this.options.timeoutMs,
+          modelId,
+        );
+        this.logger.info(
+          {
+            provider: 'cloudflare',
+            model: modelId,
+            attempt,
+            accountId: credential.accountId,
+            durationMs: Date.now() - started,
+          },
+          'Cloudflare outfit recolor completed',
+        );
+        return image;
+      } catch (err) {
+        lastError = err;
+        const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
+        const willRotate = this.shouldRotateToken(err, status);
+        this.logger.warn(
+          {
+            provider: 'cloudflare',
+            model: modelId,
+            attempt,
+            maxAttempts,
+            status,
+            accountId: credential.accountId,
+            failureReason: this.errorMessage(err),
+          },
+          'Cloudflare outfit recolor attempt failed',
+        );
+        if (willRotate) {
+          this.rotateApiToken();
+        }
+        if (attempt < maxAttempts) {
+          await this.delay(1_500 * attempt);
+        }
+      }
+    }
+
+    throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
   }
 
   async removeProductBackground(image: ProductImageInput): Promise<GeneratedAiImage> {

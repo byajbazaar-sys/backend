@@ -204,11 +204,6 @@ export function buildOutfitTryOnPrompt(opts: {
   ].join('\n');
 }
 
-/** @deprecated Use buildTryOnImageMapPrompt — kept for backwards compatibility */
-export function buildReplicateImageMapPrompt(basePrompt: string, _jewelleryItems: AiImageInput[]): string {
-  return basePrompt;
-}
-
 export function buildFullTryOnPrompt(
   mode: 'jewellery' | 'outfit',
   request: {

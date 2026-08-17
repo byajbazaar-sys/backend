@@ -14,10 +14,6 @@ environment:
   DB_NAME: ${env:DB_NAME, 'byajbazaar_db'}
   DB_USER: ${env:DB_USER, 'postgres'}
   DB_PASS: ${env:DB_PASS, ''}
-  AI_PROVIDER: ${env:AI_PROVIDER, 'bedrock'}
-  GEMINI_API_KEYS: ${env:GEMINI_API_KEYS, ''}
-  BEDROCK_MODEL_ID: ${env:BEDROCK_MODEL_ID, 'global.amazon.nova-2-lite-v1:0'}
-  BEDROCK_AWS_REGION: ${env:BEDROCK_AWS_REGION, 'ap-south-1'}
   TRY_ON_PROVIDER: ${env:TRY_ON_PROVIDER, ''}
   TRYON_API_BASE_URL: ${env:TRYON_API_BASE_URL, ''}
   TRYON_API_TIMEOUT_MS: ${env:TRYON_API_TIMEOUT_MS, '90000'}
@@ -33,7 +29,6 @@ environment:
   S3_BUCKET_NAME: ${env:S3_BUCKET_NAME, ''}
   S3_BUCKET_REGION: ${env:S3_BUCKET_REGION, 'ap-south-1'}
   S3_ENDPOINT: ${env:S3_ENDPOINT, ''}
-  S3_KEY_PREFIX: ${env:S3_KEY_PREFIX, ''}
   TRY_ON_INLINE: ${env:TRY_ON_INLINE, 'false'}
   # Literal / env only — Ref/GetAtt here creates a circular dependency with WebsocketsApi.
   TRY_ON_LAMBDA_NAME: ${self:service}-${sls:stage}-jewelleryTryOn
@@ -83,11 +78,6 @@ iam:
           - execute-api:ManageConnections
         Resource:
           - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${sls:stage}/POST/@connections/*
-      - Effect: Allow
-        Action:
-          - bedrock:InvokeModel
-          - bedrock:InvokeModelWithResponseStream
-        Resource: '*'
       - Effect: Allow
         Action:
           - s3:GetObject

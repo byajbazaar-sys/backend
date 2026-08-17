@@ -7,7 +7,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { ITryOnAiService, GeneratedAiImage } from '../../../application';
 import { AIVOT_TRYON_GENERATE_PATH, AIVOT_TRYON_MIME } from '../ai.constants';
 import { AivotTryOnOptions } from '../aivot-try-on.options';
-import { BedrockService } from './bedrock.service';
+import { CloudflareTryOnService } from './cloudflare-try-on.service';
 import { isTransientTryOnStatus, mapAivotHttpError } from '../exceptions/aivot-try-on.errors';
 import type { JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
 import { stripDataUrl } from '../utils/image.util';
@@ -30,7 +30,7 @@ export class AivotService implements ITryOnAiService {
 
   constructor(
     private readonly options: AivotTryOnOptions,
-    private readonly bedrock: BedrockService,
+    private readonly cloudflare: CloudflareTryOnService,
     @InjectPinoLogger(AivotService.name) private readonly logger: PinoLogger,
   ) {
     this.http = axios.create({
@@ -71,7 +71,7 @@ export class AivotService implements ITryOnAiService {
   }
 
   async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {
-    return this.bedrock.recolorOutfit(request);
+    return this.cloudflare.recolorOutfit(request);
   }
 
   private mapVariation(variations?: number): '1' | '2' | 'both' {

@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 
-import { AIOptions, AivotTryOnOptions, ReplicateTryOnOptions, CloudflareTryOnOptions } from './ai';
+import { AIOptions, AivotTryOnOptions, CloudflareTryOnOptions } from './ai';
 import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
 import { LambdaOptions, LambdaService } from './lambda';
@@ -22,7 +22,6 @@ import {
   SUPPORT_REQUESTS_REPOSITORY,
   TRANSACTIONS_REPOSITORY,
   TRANSACTION_LOGS_REPOSITORY,
-  TWILIO_SERVICE,
   USERS_FILE_STORAGE,
   USERS_REPOSITORY,
   INVENTORY_CATEGORIES_REPOSITORY,
@@ -52,16 +51,9 @@ import {
   CACHE_SERVICE,
   UNIT_OF_WORK,
 } from '../application';
-import { TwilioOptions, TwilioService } from './sms';
-import { SendGridOptions, SendGridService } from './send-grid';
-import { SesOptions, SesService } from './ses';
 import { ResendOptions, ResendService } from './resend';
-import { resolveEmailServiceProvider } from './email/resolve-email-service';
 import { WebAppOptions } from '../application';
 import { AivotService } from './ai/services/aivot.service';
-import { BedrockService } from './ai/services/bedrock.service';
-import { GeminiService } from './ai/services/gemini.service';
-import { ReplicateTryOnService } from './ai/services/replicate.service';
 import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.service';
 import CronServices from './cron';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
@@ -269,7 +261,6 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
           configService.get('fileStorage').bucket,
           configService.get('fileStorage').region,
           configService.get('fileStorage').endpoint,
-          configService.get('fileStorage').keyPrefix,
         ),
     },
     {
@@ -293,24 +284,9 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
       useFactory: (configService: ConfigService) => configService.get('aivotTryOn'),
     },
     {
-      provide: ReplicateTryOnOptions,
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => configService.get('replicateTryOn'),
-    },
-    {
       provide: CloudflareTryOnOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('cloudflareTryOn'),
-    },
-    {
-      provide: TwilioOptions,
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) =>
-        new TwilioOptions(
-          configService.get('twilio').accountSid,
-          configService.get('twilio').authToken,
-          configService.get('twilio').phoneNumber,
-        ),
     },
     {
       provide: GoogleOAuthOptions,
@@ -335,11 +311,8 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
       provide: LAMBDA_SERVICE,
       useClass: LambdaService,
     },
-    GeminiService,
-    BedrockService,
-    AivotService,
-    ReplicateTryOnService,
     CloudflareTryOnService,
+    AivotService,
     TryOnOrchestratorService,
     {
       provide: TRY_ON_ORCHESTRATOR,
@@ -351,42 +324,17 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     },
     {
       provide: TRY_ON_AI_SERVICE,
-      inject: [AIOptions, GeminiService, BedrockService, AivotService, ReplicateTryOnService, CloudflareTryOnService],
-      useFactory: (
-        options: AIOptions,
-        gemini: GeminiService,
-        bedrock: BedrockService,
-        aivot: AivotService,
-        replicate: ReplicateTryOnService,
-        cloudflare: CloudflareTryOnService,
-      ) => {
+      inject: [AIOptions, AivotService, CloudflareTryOnService],
+      useFactory: (options: AIOptions, aivot: AivotService, cloudflare: CloudflareTryOnService) => {
         if (options.tryOnProvider === 'aivot') return aivot;
-        if (options.tryOnProvider === 'replicate') return replicate;
-        if (options.tryOnProvider === 'cloudflare') return cloudflare;
-        if (options.tryOnProvider === 'gemini' || options.provider === 'gemini') return gemini;
-        return bedrock;
+        return cloudflare;
       },
-    },
-    {
-      provide: TWILIO_SERVICE,
-      useClass: TwilioService,
-    },
-    {
-      provide: SendGridOptions,
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => configService.get('sendGrid'),
-    },
-    {
-      provide: SesOptions,
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => configService.get('ses'),
     },
     {
       provide: ResendOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('resend'),
     },
-    SesService,
     ResendService,
     {
       provide: WebAppOptions,
@@ -395,7 +343,7 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     },
     {
       provide: EMAIL_SERVICE,
-      useClass: resolveEmailServiceProvider(),
+      useExisting: ResendService,
     },
     {
       provide: GOOGLE_OAUTH_SERVICE,
@@ -430,7 +378,6 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     TRY_ON_AI_SERVICE,
     TRY_ON_ORCHESTRATOR,
     PRODUCT_IMAGE_AI_SERVICE,
-    TWILIO_SERVICE,
     TRANSACTIONS_REPOSITORY,
     DUES_REPOSITORY,
     NOTIFICATIONS_REPOSITORY,

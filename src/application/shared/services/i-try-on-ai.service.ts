@@ -9,7 +9,7 @@ export interface ITryOnAiService {
   recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage>;
   /**
    * Generate all requested variations in one call when the provider supports it.
-   * Optional for backwards compatibility with Gemini/Bedrock single-image providers.
+   * Optional for backwards compatibility with single-image providers.
    */
   generateTryOnImages?(request: JewelleryTryOnRequest, mode: 'jewellery' | 'outfit'): Promise<GeneratedAiImage[]>;
 }

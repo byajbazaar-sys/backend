@@ -8,20 +8,13 @@ import {
   LambdaOptions,
   AIOptions,
   AivotTryOnOptions,
-  ReplicateTryOnOptions,
   CloudflareTryOnOptions,
   parseCloudflareCredentials,
-  TwilioOptions,
-  SendGridOptions,
-  SesOptions,
   ResendOptions,
   RedisOptions,
   type TryOnAiProvider,
   AIVOT_TRYON_TIMEOUT_MS,
   AIVOT_TRYON_MAX_RETRIES,
-  REPLICATE_TRYON_MODEL,
-  REPLICATE_TRYON_TIMEOUT_MS,
-  REPLICATE_TRYON_MAX_RETRIES,
   CLOUDFLARE_TRYON_MODEL,
   CLOUDFLARE_TRYON_TIMEOUT_MS,
   CLOUDFLARE_TRYON_MAX_RETRIES,
@@ -29,13 +22,7 @@ import {
 
 function resolveTryOnProvider(): TryOnAiProvider {
   const explicit = (process.env.TRY_ON_PROVIDER || '').trim().toLowerCase();
-  if (
-    explicit === 'aivot' ||
-    explicit === 'gemini' ||
-    explicit === 'bedrock' ||
-    explicit === 'replicate' ||
-    explicit === 'cloudflare'
-  ) {
+  if (explicit === 'aivot' || explicit === 'cloudflare') {
     return explicit;
   }
   if (process.env.TRYON_API_BASE_URL?.trim()) {
@@ -44,31 +31,18 @@ function resolveTryOnProvider(): TryOnAiProvider {
   if (process.env.CLOUDFLARE_ACCOUNT_ID?.trim() && process.env.CLOUDFLARE_API_TOKEN?.trim()) {
     return 'cloudflare';
   }
-  if (process.env.REPLICATE_API_TOKEN?.trim()) {
-    return 'replicate';
-  }
-  return process.env.AI_PROVIDER === 'gemini' ? 'gemini' : 'bedrock';
+  return 'cloudflare';
 }
 
-function resolveS3KeyPrefix(): string | undefined {
-  const explicit = process.env.S3_KEY_PREFIX?.trim();
-  if (explicit !== undefined && explicit !== '') {
-    // Use "-" to force no prefix (e.g. B2 bucket with keys at bucket root).
-    if (explicit === '-') {
-      return undefined;
-    }
-    return explicit.replace(/^\/+|\/+$/g, '');
-  }
-  // Dedicated S3-compatible buckets (e.g. Backblaze B2) use keys at bucket root.
-  if (process.env.S3_ENDPOINT?.trim()) {
-    return undefined;
-  }
-  const env = (process.env.NODE_ENV || '').toLowerCase().trim();
-  // Shared AWS bucket: local + deployed develop stages use a `dev/` folder.
-  if (env === 'development' || env === 'dev') {
-    return 'dev';
-  }
-  return undefined;
+function resolveFileStorageOptions(): FileStorageOptions {
+  const endpoint = process.env.S3_ENDPOINT?.trim() || undefined;
+  return new FileStorageOptions(
+    process.env.S3_AWS_ACCESS_KEY_ID || '',
+    process.env.S3_AWS_SECRET_ACCESS_KEY || '',
+    process.env.S3_BUCKET_NAME ?? 'jobs-file-storage',
+    process.env.S3_BUCKET_REGION ?? 'ap-south-1',
+    endpoint,
+  );
 }
 
 function resolveRedisOptions(): RedisOptions | undefined {
@@ -81,18 +55,6 @@ function resolveRedisOptions(): RedisOptions | undefined {
     Number(process.env.REDIS_MAX_RECONNECTION_ATTEMPTS ?? 10),
     Number(process.env.REDIS_RECONNECTION_DELAY_MS ?? 5000),
     process.env.REDIS_CONNECTION_NAME ?? 'byajbazaar-backend',
-  );
-}
-
-function resolveFileStorageOptions(): FileStorageOptions {
-  const endpoint = process.env.S3_ENDPOINT?.trim() || undefined;
-  return new FileStorageOptions(
-    process.env.S3_AWS_ACCESS_KEY_ID || '',
-    process.env.S3_AWS_SECRET_ACCESS_KEY || '',
-    process.env.S3_BUCKET_NAME ?? 'jobs-file-storage',
-    process.env.S3_BUCKET_REGION ?? 'ap-south-1',
-    endpoint,
-    resolveS3KeyPrefix(),
   );
 }
 
@@ -128,29 +90,11 @@ export const configFactory = (): IMsConfig => ({
     process.env.LAMBDA_AWS_ACCESS_KEY_ID ?? '',
     process.env.LAMBDA_AWS_SECRET_ACCESS_KEY ?? '',
   ),
-  ai: new AIOptions(
-    process.env.AI_OPENAI_API_KEY ?? '',
-    process.env.AI_GEMINI_API_KEY ?? '',
-    process.env.AI_CLAUDE_API_KEY ?? '',
-    process.env.AI_PROVIDER === 'gemini' ? 'gemini' : 'bedrock',
-    (process.env.GEMINI_API_KEYS || process.env.AI_GEMINI_API_KEY || '')
-      .split(',')
-      .map((k) => k.trim())
-      .filter(Boolean),
-    process.env.BEDROCK_AWS_REGION || process.env.AWS_REGION || 'ap-south-1',
-    process.env.BEDROCK_MODEL_ID || 'global.amazon.nova-2-lite-v1:0',
-    resolveTryOnProvider(),
-  ),
+  ai: new AIOptions(resolveTryOnProvider()),
   aivotTryOn: new AivotTryOnOptions(
     process.env.TRYON_API_BASE_URL?.trim() || '',
     Number(process.env.TRYON_API_TIMEOUT_MS) || AIVOT_TRYON_TIMEOUT_MS,
     Number(process.env.TRYON_API_MAX_RETRIES) || AIVOT_TRYON_MAX_RETRIES,
-  ),
-  replicateTryOn: new ReplicateTryOnOptions(
-    process.env.REPLICATE_API_TOKEN?.trim() || '',
-    process.env.REPLICATE_TRYON_MODEL?.trim() || REPLICATE_TRYON_MODEL,
-    Number(process.env.REPLICATE_TRYON_TIMEOUT_MS) || REPLICATE_TRYON_TIMEOUT_MS,
-    Number(process.env.REPLICATE_TRYON_MAX_RETRIES) || REPLICATE_TRYON_MAX_RETRIES,
   ),
   cloudflareTryOn: new CloudflareTryOnOptions(
     parseCloudflareCredentials(process.env.CLOUDFLARE_ACCOUNT_ID || '', process.env.CLOUDFLARE_API_TOKEN || ''),
@@ -158,23 +102,6 @@ export const configFactory = (): IMsConfig => ({
     Number(process.env.CLOUDFLARE_TRYON_TIMEOUT_MS) || CLOUDFLARE_TRYON_TIMEOUT_MS,
     Number(process.env.CLOUDFLARE_TRYON_MAX_RETRIES) || CLOUDFLARE_TRYON_MAX_RETRIES,
     Number(process.env.CLOUDFLARE_TRYON_GUIDANCE) || 7.5,
-  ),
-  twilio: new TwilioOptions(
-    process.env.TWILIO_ACCOUNT_SID ?? '',
-    process.env.TWILIO_AUTH_TOKEN ?? '',
-    process.env.TWILIO_PHONE_NUMBER ?? '',
-  ),
-  sendGrid: new SendGridOptions(
-    process.env.SENDGRID_API_KEY ?? '',
-    process.env.SENDGRID_SENDER ?? '',
-    process.env.SENDGRID_SENDER_NAME ?? '',
-  ),
-  ses: new SesOptions(
-    process.env.SES_AWS_REGION ?? process.env.S3_BUCKET_REGION ?? 'ap-south-1',
-    process.env.SES_AWS_ACCESS_KEY_ID ?? process.env.S3_AWS_ACCESS_KEY_ID ?? '',
-    process.env.SES_AWS_SECRET_ACCESS_KEY ?? process.env.S3_AWS_SECRET_ACCESS_KEY ?? '',
-    process.env.SES_SENDER ?? '',
-    process.env.SES_SENDER_NAME ?? '',
   ),
   resend: new ResendOptions(
     process.env.RESEND_API_KEY ?? '',

@@ -8,11 +8,7 @@ import {
   LambdaOptions,
   AIOptions,
   AivotTryOnOptions,
-  ReplicateTryOnOptions,
   CloudflareTryOnOptions,
-  TwilioOptions,
-  SendGridOptions,
-  SesOptions,
   ResendOptions,
   RedisOptions,
 } from '../infrastructure';
@@ -26,11 +22,7 @@ export interface IMsConfig {
   lambda: LambdaOptions;
   ai: AIOptions;
   aivotTryOn: AivotTryOnOptions;
-  replicateTryOn: ReplicateTryOnOptions;
   cloudflareTryOn: CloudflareTryOnOptions;
-  twilio: TwilioOptions;
-  sendGrid: SendGridOptions;
-  ses: SesOptions;
   resend: ResendOptions;
   webApp: WebAppOptions;
   googleOAuth: GoogleOAuthOptions;

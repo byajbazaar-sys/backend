@@ -23,7 +23,7 @@ export class NotificationResponseModel {
   status: string;
 
   @Expose()
-  @ApiPropertyOptional({ description: 'External provider ID (e.g. SendGrid message ID)' })
+  @ApiPropertyOptional({ description: 'External provider ID (e.g. Resend message ID)' })
   externalId?: string;
 
   @Expose()

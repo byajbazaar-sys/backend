@@ -16,7 +16,7 @@ async function bootstrap() {
 
 /**
  * Long-running jewellery try-on worker (async invoke from API).
- * Timeout should be >= 120s — Gemini image gen often exceeds API Gateway 29s.
+ * Timeout should be >= 120s — image generation often exceeds API Gateway 29s.
  */
 export const handler: Handler = async (event: unknown, context: Context) => {
   context.callbackWaitsForEmptyEventLoop = false;

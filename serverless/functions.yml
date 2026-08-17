@@ -124,6 +124,6 @@ wsDefault:
 
 jewelleryTryOn:
   handler: dist/src/lambda-handlers/jewellery-try-on.handler
-  description: 'Async Gemini jewellery / outfit virtual try-on worker (long timeout)'
+  description: 'Async jewellery / outfit virtual try-on worker (long timeout)'
   timeout: 180
   memorySize: 2048
