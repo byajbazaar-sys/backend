@@ -9,7 +9,6 @@ import {
   JewelleryEvent,
   JewelleryEventDuplicateQuery,
   JewelleryEventRelatedQuery,
-  JewelleryEventSlugRef,
 } from '../../../application/features/events/domain';
 import { JewelleryEventUpdatePatch } from '../../../application/features/events/models';
 import { IJewelleryEventsRepository } from '../../../application/features/events/service/i-jewellery-events.repository';
@@ -146,29 +145,5 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
     qb.orderBy('e.start_date', 'ASC', 'NULLS LAST').take(params.limit ?? 6);
     const rows = await qb.getMany();
     return rows.map((r) => this.map(r));
-  }
-
-  async upsertBySlug(data: JewelleryEvent): Promise<JewelleryEvent> {
-    const existing = await this.findBySlug(data.slug);
-    if (existing?.id) {
-      return this.update(existing.id, {
-        ...data,
-        // Keep manual feature/status if already set by admin unless Gemini provides richer content
-        isFeatured: existing.isFeatured,
-        status: existing.status,
-        seoTitle: data.seoTitle ?? existing.seoTitle,
-        seoDescription: data.seoDescription ?? existing.seoDescription,
-      });
-    }
-    return this.create(data);
-  }
-
-  async listActiveSlugs(): Promise<JewelleryEventSlugRef[]> {
-    const rows = await this.eventRepo.find({
-      where: { status: EJewelleryEventStatus.ACTIVE },
-      select: ['slug', 'updatedAt'],
-      order: { updatedAt: 'DESC' },
-    });
-    return rows.map((r) => plainToInstance(JewelleryEventSlugRef, { slug: r.slug, updatedAt: r.updatedAt }, { excludeExtraneousValues: true }));
   }
 }

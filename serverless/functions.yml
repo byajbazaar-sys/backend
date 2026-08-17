@@ -122,18 +122,6 @@ wsDefault:
     - websocket:
         route: $default
 
-eventsFetchState:
-  handler: dist/src/lambda-handlers/events-fetch-state.handler
-  description: 'Fetch upcoming jewellery events for one Indian state via Gemini (Step Functions Map worker)'
-  timeout: 300
-  memorySize: 1024
-
-eventsMerge:
-  handler: dist/src/lambda-handlers/events-merge.handler
-  description: 'Merge state jewellery-event results and upsert into database (Step Functions)'
-  timeout: 300
-  memorySize: 1024
-
 jewelleryTryOn:
   handler: dist/src/lambda-handlers/jewellery-try-on.handler
   description: 'Async Gemini jewellery / outfit virtual try-on worker (long timeout)'

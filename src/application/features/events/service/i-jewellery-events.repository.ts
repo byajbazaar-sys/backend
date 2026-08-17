@@ -1,6 +1,6 @@
 import { Paged } from '@shared-libs';
 
-import { JewelleryEvent, JewelleryEventDuplicateQuery, JewelleryEventRelatedQuery, JewelleryEventSlugRef } from '../domain';
+import { JewelleryEvent, JewelleryEventDuplicateQuery, JewelleryEventRelatedQuery } from '../domain';
 import { JewelleryEventUpdatePatch } from '../models';
 import { JewelleryEventsFilter } from './jewellery-events-filter';
 
@@ -15,6 +15,4 @@ export interface IJewelleryEventsRepository {
   findDuplicate(params: JewelleryEventDuplicateQuery): Promise<JewelleryEvent>;
   list(filter: JewelleryEventsFilter): Promise<Paged<JewelleryEvent>>;
   findRelated(params: JewelleryEventRelatedQuery): Promise<JewelleryEvent[]>;
-  upsertBySlug(data: JewelleryEvent): Promise<JewelleryEvent>;
-  listActiveSlugs(): Promise<JewelleryEventSlugRef[]>;
 }

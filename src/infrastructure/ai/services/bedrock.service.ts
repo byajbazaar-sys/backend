@@ -2,24 +2,16 @@ import { BedrockRuntimeClient, ConverseCommand, type ContentBlock } from '@aws-s
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import type {
-  DiscoveredEvent,
-  DiscoveredEventsPayload,
-  GeneratedAiImage,
-  IEventsDiscoveryService,
-  ITryOnAiService,
-} from '../../../application';
+import type { GeneratedAiImage, ITryOnAiService } from '../../../application';
 import { GEMINI_TRYON_TIMEOUT_MS, resolveBedrockModelId } from '../ai.constants';
 import { AIOptions } from '../ai.options';
 import type { JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
-import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
 import { buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts/try-on.prompts';
-import { extractJsonObject } from '../utils/ai-response.util';
 import { mimeToImageFormat, stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
 @Injectable()
-export class BedrockService implements ITryOnAiService, IEventsDiscoveryService {
+export class BedrockService implements ITryOnAiService {
   private readonly client: BedrockRuntimeClient;
   private readonly modelId: string;
 
@@ -108,50 +100,5 @@ export class BedrockService implements ITryOnAiService, IEventsDiscoveryService 
     const text = outputBlocks.map((b) => b.text ?? '').join('');
     this.logger.warn({ textPreview: text.slice(0, 200) }, 'Bedrock returned no image block');
     throw new Error('No image returned from Bedrock Nova model');
-  }
-
-  // --- Events discovery ---
-
-  async fetchBasicEventsForState(state: string): Promise<DiscoveredEvent[]> {
-    const payload = await this.callEventsPrompt(buildBasicEventsPrompt(state));
-    return payload.events.filter((e) => (e.name ?? '').trim().length > 0);
-  }
-
-  async enrichEvents(events: DiscoveredEvent[]): Promise<DiscoveredEvent[]> {
-    if (!events.length) return [];
-    const payload = await this.callEventsPrompt(buildEnrichEventsPrompt(events));
-    const detailMap = new Map<string, DiscoveredEvent>();
-    for (const e of payload.events) {
-      if (e.name) detailMap.set(e.name, e);
-    }
-    return events.map((event) => ({
-      ...event,
-      ...(detailMap.get(event.name ?? '') || {}),
-    }));
-  }
-
-  private async callEventsPrompt(prompt: string): Promise<DiscoveredEventsPayload> {
-    try {
-      const text = await this.converseText(prompt, 4096);
-      const parsed = JSON.parse(extractJsonObject(text, 'Bedrock')) as DiscoveredEventsPayload;
-      return { events: Array.isArray(parsed.events) ? parsed.events : [] };
-    } catch (err) {
-      this.logger.warn({ err }, 'Bedrock events call failed');
-      throw err instanceof Error ? err : new Error(String(err));
-    }
-  }
-
-  private async converseText(prompt: string, maxTokens = 4096): Promise<string> {
-    const response = await this.client.send(
-      new ConverseCommand({
-        modelId: this.modelId,
-        messages: [{ role: 'user', content: [{ text: prompt }] }],
-        inferenceConfig: { maxTokens },
-      }),
-    );
-    return (response.output?.message?.content ?? [])
-      .map((b) => b.text ?? '')
-      .join('')
-      .trim();
   }
 }

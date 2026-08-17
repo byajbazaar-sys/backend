@@ -1,13 +1,6 @@
 import { Paged } from '@shared-libs';
 
-import { DiscoveredEvent } from '../../../shared';
-import {
-  JewelleryEvent,
-  JewelleryEventDetailResult,
-  JewelleryEventSlugRef,
-  JewelleryEventSyncStatesResult,
-  JewelleryEventUpsertResult,
-} from '../domain';
+import { JewelleryEvent, JewelleryEventDetailResult } from '../domain';
 import {
   CreateJewelleryEventRequestModel,
   ListJewelleryEventsQueryModel,
@@ -23,8 +16,4 @@ export interface IJewelleryEventService {
   create(body: CreateJewelleryEventRequestModel): Promise<JewelleryEvent>;
   update(id: string, body: UpdateJewelleryEventRequestModel): Promise<JewelleryEvent>;
   delete(id: string): Promise<void>;
-  fetchStateEvents(state: string): Promise<DiscoveredEvent[]>;
-  mergeAndUpsert(events: DiscoveredEvent[]): Promise<JewelleryEventUpsertResult>;
-  syncStates(states?: string[]): Promise<JewelleryEventSyncStatesResult>;
-  listActiveSlugs(): Promise<JewelleryEventSlugRef[]>;
 }

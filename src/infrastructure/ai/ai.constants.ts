@@ -12,9 +12,6 @@ export function resolveBedrockModelId(modelId: string): string {
   return modelId;
 }
 
-/** Gemini model for jewellery-events discovery. */
-export const GEMINI_EVENTS_MODEL = 'gemini-2.5-flash';
-
 /** Primary Gemini model for virtual try-on image generation. */
 export const GEMINI_TRYON_MODEL = 'gemini-3-pro-image-preview';
 

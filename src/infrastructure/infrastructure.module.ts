@@ -45,7 +45,6 @@ import {
   TRY_ON_ASSETS_REPOSITORY,
   DEPOSITS_REPOSITORY,
   RazorpayOptions,
-  EVENTS_DISCOVERY_SERVICE,
   TRY_ON_AI_SERVICE,
   TRY_ON_ORCHESTRATOR,
   PRODUCT_IMAGE_AI_SERVICE,
@@ -369,12 +368,6 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
       },
     },
     {
-      provide: EVENTS_DISCOVERY_SERVICE,
-      inject: [AIOptions, GeminiService, BedrockService],
-      useFactory: (options: AIOptions, gemini: GeminiService, bedrock: BedrockService) =>
-        options.provider === 'gemini' ? gemini : bedrock,
-    },
-    {
       provide: TWILIO_SERVICE,
       useClass: TwilioService,
     },
@@ -437,7 +430,6 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     TRY_ON_AI_SERVICE,
     TRY_ON_ORCHESTRATOR,
     PRODUCT_IMAGE_AI_SERVICE,
-    EVENTS_DISCOVERY_SERVICE,
     TWILIO_SERVICE,
     TRANSACTIONS_REPOSITORY,
     DUES_REPOSITORY,

@@ -3,17 +3,12 @@ import { Paged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { DiscoveredEvent, EVENTS_DISCOVERY_SERVICE, IEventsDiscoveryService } from '../../../shared';
-import { JEWELLERY_EVENT_SYNC_STATES } from '../constants';
 import {
   EJewelleryEventStatus,
   JewelleryEvent,
   JewelleryEventDuplicateQuery,
-  JewelleryEventRelatedQuery,
   JewelleryEventDetailResult,
-  JewelleryEventUpsertResult,
-  JewelleryEventSyncStatesResult,
-  JewelleryEventSlugRef,
+  JewelleryEventRelatedQuery,
 } from '../domain';
 import {
   CreateJewelleryEventRequestModel,
@@ -23,14 +18,13 @@ import {
 } from '../models';
 import { IJewelleryEventService } from './i-jewellery-event.service';
 import { IJewelleryEventsRepository, JEWELLERY_EVENTS_REPOSITORY } from './i-jewellery-events.repository';
-import { buildEventSlug, eventDedupeKey } from '../utils/slug.util';
+import { buildEventSlug } from '../utils/slug.util';
 
 @Injectable()
 export class JewelleryEventService implements IJewelleryEventService {
   constructor(
     @Inject(JEWELLERY_EVENTS_REPOSITORY)
     private readonly eventsRepo: IJewelleryEventsRepository,
-    @Inject(EVENTS_DISCOVERY_SERVICE) private readonly eventsDiscovery: IEventsDiscoveryService,
     @InjectPinoLogger(JewelleryEventService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -98,40 +92,6 @@ export class JewelleryEventService implements IJewelleryEventService {
     };
   }
 
-  private fromGemini(event: DiscoveredEvent): JewelleryEvent {
-    const startDate = this.toDate(event.startDate);
-    const slug = (event.slug && event.slug.trim()) || buildEventSlug({ name: event.name, city: event.city, startDate });
-    return plainToInstance(
-      JewelleryEvent,
-      {
-        name: (event.name ?? '').trim(),
-        slug,
-        description: event.description?.trim() || null,
-        startDate,
-        endDate: this.toDate(event.endDate),
-        city: event.city?.trim() || null,
-        state: event.state?.trim() || null,
-        country: 'India',
-        venue: event.venue?.trim() || null,
-        organizer: event.organizer?.trim() || null,
-        category: event.category?.trim() || null,
-        website: event.website?.trim() || null,
-        registrationUrl: event.registrationUrl?.trim() || null,
-        sourceUrl: event.sourceUrl?.trim() || null,
-        visitorEntryFee: event.visitorEntryFee?.trim() || null,
-        stallFee: event.stallFee?.trim() || null,
-        contactEmail: event.contactEmail?.trim() || null,
-        contactPhone: event.contactPhone?.trim() || null,
-        tags: this.normalizeTags(event.tags),
-        status: EJewelleryEventStatus.ACTIVE,
-        isFeatured: false,
-        seoTitle: null,
-        seoDescription: null,
-      },
-      { excludeExtraneousValues: true },
-    );
-  }
-
   async listPublic(query: ListJewelleryEventsQueryModel): Promise<Paged<JewelleryEvent>> {
     return this.eventsRepo.list({
       pageNumber: query.pageNumber,
@@ -195,13 +155,15 @@ export class JewelleryEventService implements IJewelleryEventService {
     const baseSlug = data.slug || buildEventSlug({ name: data.name, city: data.city, startDate: data.startDate });
     data.slug = await this.resolveUniqueSlug(baseSlug);
 
-    return this.eventsRepo.create({
+    const created = await this.eventsRepo.create({
       ...(data as JewelleryEvent),
       status: data.status ?? EJewelleryEventStatus.ACTIVE,
       isFeatured: data.isFeatured ?? false,
       tags: data.tags ?? [],
       country: data.country ?? 'India',
     });
+    this.logger.info({ eventId: created.id, slug: created.slug }, 'Jewellery event created');
+    return created;
   }
 
   async update(id: string, body: UpdateJewelleryEventRequestModel): Promise<JewelleryEvent> {
@@ -229,7 +191,9 @@ export class JewelleryEventService implements IJewelleryEventService {
       data.slug = await this.resolveUniqueSlug(baseSlug, id);
     }
 
-    return this.eventsRepo.update(id, data);
+    const updated = await this.eventsRepo.update(id, data);
+    this.logger.info({ eventId: id }, 'Jewellery event updated');
+    return updated;
   }
 
   async delete(id: string): Promise<void> {
@@ -238,84 +202,6 @@ export class JewelleryEventService implements IJewelleryEventService {
       throw new NotFoundException('Event not found');
     }
     await this.eventsRepo.delete(id);
-  }
-
-  async fetchStateEvents(state: string): Promise<DiscoveredEvent[]> {
-    this.logger.info({ state }, 'Fetching jewellery events for state');
-    const basic = await this.eventsDiscovery.fetchBasicEventsForState(state);
-
-    const needsEnrichment: DiscoveredEvent[] = [];
-    const known: DiscoveredEvent[] = [];
-
-    for (const event of basic) {
-      const slug = event.slug || buildEventSlug({ name: event.name, city: event.city, startDate: event.startDate });
-      const existing = await this.eventsRepo.findBySlug(slug);
-      const missingDetails = !event.description || !event.visitorEntryFee || !event.contactEmail || !event.contactPhone;
-      if (!existing || missingDetails) {
-        needsEnrichment.push(event);
-      } else {
-        known.push(event);
-      }
-    }
-
-    const enriched = needsEnrichment.length ? await this.eventsDiscovery.enrichEvents(needsEnrichment) : [];
-
-    return [...known, ...enriched];
-  }
-
-  async mergeAndUpsert(events: DiscoveredEvent[]): Promise<JewelleryEventUpsertResult> {
-    const map = new Map<string, DiscoveredEvent>();
-    for (const event of events) {
-      if (!event?.name?.trim()) continue;
-      map.set(eventDedupeKey(event), event);
-    }
-
-    let upserted = 0;
-    for (const event of map.values()) {
-      const entity = this.fromGemini(event);
-      if (!entity.name) continue;
-
-      const existing = await this.eventsRepo.findDuplicate(
-        plainToInstance(JewelleryEventDuplicateQuery, {
-          name: entity.name,
-          city: entity.city,
-          startDate: entity.startDate,
-        }),
-      );
-      if (existing?.slug) {
-        entity.slug = existing.slug;
-      } else {
-        entity.slug = await this.resolveUniqueSlug(entity.slug);
-      }
-      await this.eventsRepo.upsertBySlug(entity);
-      upserted += 1;
-    }
-
-    this.logger.info({ upserted }, 'Merged jewellery events');
-    return plainToInstance(JewelleryEventUpsertResult, { upserted }, { excludeExtraneousValues: true });
-  }
-
-  async syncStates(states?: string[]): Promise<JewelleryEventSyncStatesResult> {
-    const targetStates = (states?.length ? states : [...JEWELLERY_EVENT_SYNC_STATES]).map((s) => s.trim());
-    const all: DiscoveredEvent[] = [];
-    for (const state of targetStates) {
-      try {
-        const events = await this.fetchStateEvents(state);
-        all.push(...events);
-      } catch (err) {
-        this.logger.error({ err, state }, 'Failed to fetch events for state');
-      }
-    }
-    const result = await this.mergeAndUpsert(all);
-    return plainToInstance(
-      JewelleryEventSyncStatesResult,
-      { states: targetStates, upserted: result.upserted },
-      { excludeExtraneousValues: true },
-    );
-  }
-
-  async listActiveSlugs(): Promise<JewelleryEventSlugRef[]> {
-    const rows = await this.eventsRepo.listActiveSlugs();
-    return rows.map((row) => plainToInstance(JewelleryEventSlugRef, row, { excludeExtraneousValues: true }));
+    this.logger.info({ eventId: id }, 'Jewellery event deleted');
   }
 }

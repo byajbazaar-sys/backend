@@ -1,6 +1,5 @@
 export * from './domain';
 export * from './models';
-export * from './constants';
 export * from './service/i-jewellery-events.repository';
 export * from './service/i-jewellery-event.service';
 export * from './service/jewellery-event.service';

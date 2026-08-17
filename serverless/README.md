@@ -8,7 +8,6 @@ This directory contains the Serverless Framework configuration files organized b
 serverless/
 ├── functions.yml   # Lambda function definitions (API + cron)
 ├── providers.yml   # AWS provider configuration
-├── resources.yml  # Step Functions and other AWS resources
 └── README.md
 ```
 

@@ -12,10 +12,3 @@ export function buildEventSlug(parts: { name?: string; city?: string; startDate?
     .replace(/^-|-$/g, '');
   return slug || `event-${Date.now()}`;
 }
-
-export function eventDedupeKey(event: { name?: string; city?: string; startDate?: string | Date }): string {
-  const name = (event.name ?? '').trim().toLowerCase();
-  const city = (event.city ?? '').trim().toLowerCase();
-  const start = event.startDate != null ? new Date(event.startDate).toISOString().slice(0, 10) : '';
-  return `${name}|${city}|${start}`;
-}

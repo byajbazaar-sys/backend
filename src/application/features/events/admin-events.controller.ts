@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Headers,
   HttpCode,
   HttpStatus,
   Inject,
@@ -11,7 +10,6 @@ import {
   Post,
   Put,
   Query,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
@@ -20,12 +18,10 @@ import { EUserType, Roles, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { JEWELLERY_EVENT_SYNC_STATES } from './constants';
 import {
   CreateJewelleryEventRequestModel,
   JewelleryEventResponseModel,
   JewelleryEventsPagedResponseModel,
-  JewelleryEventSyncStatesResponseModel,
   ListJewelleryEventsQueryModel,
   UpdateJewelleryEventRequestModel,
 } from './models';
@@ -95,22 +91,5 @@ export class AdminEventsController {
   @ApiParam({ name: 'id' })
   async delete(@Param('id') id: string): Promise<void> {
     await this.eventsService.delete(id);
-  }
-
-  @Post('sync')
-  @UseGuards(ThrottlerGuard)
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Internal: sync jewellery events via Gemini (protected by secret)' })
-  @ApiOkResponse({ type: JewelleryEventSyncStatesResponseModel })
-  async sync(
-    @Headers('x-events-sync-secret') secret: string,
-    @Body() body?: { states?: string[] },
-  ): Promise<JewelleryEventSyncStatesResponseModel> {
-    const expected = process.env.EVENTS_SYNC_SECRET;
-    if (!expected || secret !== expected) {
-      throw new UnauthorizedException('Invalid sync secret');
-    }
-    const result = await this.eventsService.syncStates(body?.states ?? [...JEWELLERY_EVENT_SYNC_STATES]);
-    return plainToInstance(JewelleryEventSyncStatesResponseModel, result, { excludeExtraneousValues: true });
   }
 }

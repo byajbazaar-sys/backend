@@ -1,24 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import type {
-  DiscoveredEvent,
-  DiscoveredEventsPayload,
-  GeneratedAiImage,
-  IEventsDiscoveryService,
-  ITryOnAiService,
-} from '../../../application';
+import type { GeneratedAiImage, ITryOnAiService } from '../../../application';
 import {
-  GEMINI_EVENTS_MODEL,
   GEMINI_TRYON_FALLBACK_MODEL,
   GEMINI_TRYON_MODEL,
   GEMINI_TRYON_TIMEOUT_MS,
 } from '../ai.constants';
 import { AIOptions } from '../ai.options';
 import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
-import { buildBasicEventsPrompt, buildEnrichEventsPrompt } from '../prompts/events.prompts';
 import { buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts/try-on.prompts';
-import { extractJsonObject } from '../utils/ai-response.util';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
 
@@ -33,7 +24,7 @@ interface GeminiGenClient {
 type GeminiPart = { text: string } | { inlineData: { data: string; mimeType: string } };
 
 @Injectable()
-export class GeminiService implements ITryOnAiService, IEventsDiscoveryService {
+export class GeminiService implements ITryOnAiService {
   private genClients: GeminiGenClient[] = [];
   private keyPointer = 0;
   private keyInitPromise: Promise<void> = null;
@@ -201,52 +192,5 @@ export class GeminiService implements ITryOnAiService, IEventsDiscoveryService {
       }
     }
     return null;
-  }
-
-  // --- Events discovery ---
-
-  async fetchBasicEventsForState(state: string): Promise<DiscoveredEvent[]> {
-    const payload = await this.callEventsPrompt(buildBasicEventsPrompt(state));
-    return payload.events.filter((e) => (e.name ?? '').trim().length > 0);
-  }
-
-  async enrichEvents(events: DiscoveredEvent[]): Promise<DiscoveredEvent[]> {
-    if (!events.length) return [];
-    const payload = await this.callEventsPrompt(buildEnrichEventsPrompt(events));
-    const detailMap = new Map<string, DiscoveredEvent>();
-    for (const e of payload.events) {
-      if (e.name) detailMap.set(e.name, e);
-    }
-    return events.map((event) => ({
-      ...event,
-      ...(detailMap.get(event.name ?? '') || {}),
-    }));
-  }
-
-  private async callEventsPrompt(prompt: string): Promise<DiscoveredEventsPayload> {
-    await this.ensureGenClients();
-    let lastError: unknown;
-    for (let retry = 0; retry < Math.max(4, this.genClients.length || 1); retry++) {
-      try {
-        const ai = this.getGenClient();
-        const response = (await ai.models.generateContent({
-          model: GEMINI_EVENTS_MODEL,
-          contents: prompt,
-          config: {
-            maxOutputTokens: 4096,
-            responseMimeType: 'application/json',
-            tools: [{ googleSearch: {} }],
-          },
-        })) as { text?: string };
-        const parsed = JSON.parse(extractJsonObject(response.text ?? '', 'Gemini')) as DiscoveredEventsPayload;
-        return { events: Array.isArray(parsed.events) ? parsed.events : [] };
-      } catch (err) {
-        lastError = err;
-        this.logger.warn({ err, retry }, 'Gemini events call failed');
-        if (this.shouldRotateKey(err)) this.rotateKey();
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 }
