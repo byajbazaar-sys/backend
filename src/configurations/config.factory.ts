@@ -105,6 +105,10 @@ export const configFactory = (): IMsConfig => ({
     process.env.GOOGLE_CLIENT_ID ?? '',
     process.env.GOOGLE_CLIENT_SECRET ?? '',
     process.env.GOOGLE_REDIRECT_URI,
+    (process.env.GOOGLE_MOBILE_CLIENT_ID ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
   ),
   razorpay: new RazorpayOptions(
     process.env.RAZORPAY_KEY_ID ?? '',

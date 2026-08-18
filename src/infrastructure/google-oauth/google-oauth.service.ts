@@ -47,10 +47,14 @@ export class GoogleOAuthService implements IGoogleOAuthService {
     }
   }
 
+  private get allowedClientIds(): string[] {
+    return [this.options.clientId, ...this.options.additionalClientIds].filter(Boolean);
+  }
+
   async verifyIdToken(idToken: string): Promise<GoogleUserInfo> {
     const ticket = await this.client.verifyIdToken({
       idToken,
-      audience: this.options.clientId,
+      audience: this.allowedClientIds,
     });
     return ticket.getPayload() as GoogleUserInfo;
   }
@@ -58,8 +62,7 @@ export class GoogleOAuthService implements IGoogleOAuthService {
   async getUserInfoFromIdToken(idToken: string): Promise<GoogleUserInfo> {
     const payload = await this.verifyIdToken(idToken);
 
-    // Verify that the client ID matches
-    if (payload?.aud !== this.options.clientId) {
+    if (!payload?.aud || !this.allowedClientIds.includes(payload.aud)) {
       throw new Error('Invalid token: Client ID mismatch');
     }
 
