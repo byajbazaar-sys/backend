@@ -61,9 +61,17 @@ export class GoogleOAuthService implements IGoogleOAuthService {
 
   async getUserInfoFromIdToken(idToken: string): Promise<GoogleUserInfo> {
     const payload = await this.verifyIdToken(idToken);
+    const issuer = payload?.iss;
+    const allowedIssuers = new Set(['accounts.google.com', 'https://accounts.google.com']);
 
     if (!payload?.aud || !this.allowedClientIds.includes(payload.aud)) {
       throw new Error('Invalid token: Client ID mismatch');
+    }
+    if (!issuer || !allowedIssuers.has(issuer)) {
+      throw new Error('Invalid token: Issuer mismatch');
+    }
+    if (payload.email_verified !== true) {
+      throw new Error('Invalid token: Email is not verified');
     }
 
     return payload;

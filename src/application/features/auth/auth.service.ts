@@ -5,6 +5,7 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
   Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -40,6 +41,8 @@ import {
   CACHE_NAMESPACE,
   CACHE_SERVICE,
   ICacheService,
+  APP_INTEGRITY_SERVICE,
+  IAppIntegrityService,
 } from '../../shared';
 import { EMAIL_TEMPLATE_SERVICE, IEmailTemplateService } from '../notifications';
 import { IPaymentsService, PAYMENTS_SERVICE } from '../payments/service/i-payments.service';
@@ -76,6 +79,7 @@ export class AuthService implements IAuthService {
     @Inject(EMAIL_TEMPLATE_SERVICE) private readonly emailTemplateService: IEmailTemplateService,
     @Optional() @Inject(PAYMENTS_SERVICE) private readonly paymentsService: IPaymentsService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+    @Inject(APP_INTEGRITY_SERVICE) private readonly appIntegrityService: IAppIntegrityService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -437,7 +441,7 @@ export class AuthService implements IAuthService {
       const now = new Date();
 
       if (request.authCode) {
-        // OAuth2 Authorization Code Flow
+        // OAuth2 Authorization Code Flow (web) — no mobile integrity check
         const tokens = await this.googleOAuthService.exchangeCodeForTokens(request.authCode);
 
         // Get user info from ID token
@@ -446,11 +450,11 @@ export class AuthService implements IAuthService {
         } else {
           throw new UnauthorizedException('No ID token received');
         }
-      } else if (request.accessToken) {
-        // Direct Access Token Flow (for mobile apps or other scenarios)
-        googleUser = await this.googleOAuthService.getUserInfoFromIdToken(request.accessToken);
+      } else if (request.idToken) {
+        await this.appIntegrityService.verifyMobileGoogleSso(request);
+        googleUser = await this.googleOAuthService.getUserInfoFromIdToken(request.idToken);
       } else {
-        throw new BadRequestException('Either authCode or accessToken must be provided');
+        throw new BadRequestException('Either authCode or idToken must be provided');
       }
 
       if (!googleUser.email) {
@@ -577,7 +581,8 @@ export class AuthService implements IAuthService {
       if (
         error instanceof BadRequestException ||
         error instanceof UnauthorizedException ||
-        error instanceof ConflictException
+        error instanceof ConflictException ||
+        error instanceof ForbiddenException
       ) {
         throw error;
       }

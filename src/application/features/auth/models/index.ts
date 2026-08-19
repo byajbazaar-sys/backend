@@ -7,3 +7,4 @@ export * from './reset-password-request.model';
 export * from './verify-email-request.model';
 export * from './google-sso-request.model';
 export * from './google-sso-response.model';
+export * from './app-integrity-challenge-response.model';

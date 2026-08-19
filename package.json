@@ -68,6 +68,7 @@
     "heic-convert": "^2.1.0",
     "mjml": "^4.15.3",
     "nestjs-pino": "^4.0.0",
+    "node-app-attest": "^1.0.1",
     "papaparse": "^5.5.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

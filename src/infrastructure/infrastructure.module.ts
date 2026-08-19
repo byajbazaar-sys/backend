@@ -48,6 +48,8 @@ import {
   REDIS_SERVICE,
   CACHE_SERVICE,
   UNIT_OF_WORK,
+  APP_INTEGRITY_SERVICE,
+  AppIntegrityOptions,
 } from '../application';
 import { ResendOptions, ResendService } from './resend';
 import { WebAppOptions } from '../application';
@@ -56,6 +58,7 @@ import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.serv
 import CronServices from './cron';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
 import { GoogleOAuthService } from './google-oauth';
+import { AppIntegrityService } from './app-integrity';
 import {
   UnitOfWork,
   CustomersRepository,
@@ -279,17 +282,29 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     {
       provide: GoogleOAuthOptions,
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) =>
-        new GoogleOAuthOptions(
-          configService.get('googleOAuth').clientId,
-          configService.get('googleOAuth').clientSecret,
-          configService.get('googleOAuth').redirectUri,
-        ),
+      useFactory: (configService: ConfigService) => {
+        const googleOAuth = configService.get('googleOAuth');
+        return new GoogleOAuthOptions(
+          googleOAuth.clientId,
+          googleOAuth.clientSecret,
+          googleOAuth.redirectUri,
+          googleOAuth.additionalClientIds,
+        );
+      },
     },
     {
       provide: RazorpayOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('razorpay'),
+    },
+    {
+      provide: AppIntegrityOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('appIntegrity'),
+    },
+    {
+      provide: APP_INTEGRITY_SERVICE,
+      useClass: AppIntegrityService,
     },
     {
       provide: USERS_FILE_STORAGE,
@@ -388,12 +403,14 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     TRANSACTION_LOGS_REPOSITORY,
     EMAIL_SERVICE,
     GOOGLE_OAUTH_SERVICE,
+    APP_INTEGRITY_SERVICE,
     REDIS_SERVICE,
     CACHE_SERVICE,
     RedisOptions,
     FileStorageOptions,
     WebAppOptions,
     GoogleOAuthOptions,
+    AppIntegrityOptions,
     RazorpayOptions,
     ...Seeds,
     ...CronServices,

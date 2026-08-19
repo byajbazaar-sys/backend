@@ -30,9 +30,11 @@ import {
   VerifyEmailRequestModel,
   GoogleSsoRequestModel,
   GoogleSsoResponseModel,
+  AppIntegrityChallengeResponseModel,
 } from './models';
 import { API_AUTH_SERVICE, IApiAuthService } from '../api-access';
 import { ApiTokenResponseModel } from '../api-access/models';
+import { APP_INTEGRITY_SERVICE, IAppIntegrityService } from '../../shared';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -40,6 +42,7 @@ export class AuthController {
   constructor(
     @Inject(AUTH_SERVICE) private readonly authService: IAuthService,
     @Inject(API_AUTH_SERVICE) private readonly apiAuthService: IApiAuthService,
+    @Inject(APP_INTEGRITY_SERVICE) private readonly appIntegrityService: IAppIntegrityService,
     @InjectPinoLogger(AuthController.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -126,6 +129,16 @@ export class AuthController {
     return 'Password reset successfully';
   }
 
+  @Post('app-integrity/challenge')
+  @ApiOperation({ summary: 'Issue a one-time challenge for Play Integrity / App Attest' })
+  @ApiOkResponse({ type: AppIntegrityChallengeResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async createAppIntegrityChallenge(): Promise<AppIntegrityChallengeResponseModel> {
+    return plainToInstance(AppIntegrityChallengeResponseModel, await this.appIntegrityService.createChallenge(), {
+      excludeExtraneousValues: true,
+    });
+  }
+
   @Post('google-sso')
   @ApiOperation({ summary: 'Authenticate with Google SSO' })
   @ApiOkResponse({ type: GoogleSsoResponseModel })
@@ -134,7 +147,7 @@ export class AuthController {
     this.logger.info(
       {
         hasAuthCode: !!body.authCode,
-        hasAccessToken: !!body.accessToken,
+        hasIdToken: !!body.idToken,
       },
       'googleSso called',
     );

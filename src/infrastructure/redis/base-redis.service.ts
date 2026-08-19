@@ -87,6 +87,20 @@ export abstract class BaseRedisService implements OnApplicationBootstrap, IRedis
     }
   }
 
+  public async takeAsync<T>(key: string): Promise<T | null> {
+    if (!this.enabled) {
+      return null;
+    }
+
+    try {
+      const value = await this.redisClient.getDel(key);
+      return !isNilOrEmpty(value) ? fromJson<T>(value as string) : null;
+    } catch (ex) {
+      this.logger.warn({ key, error: ex }, 'Redis take failed — treating as miss');
+      return null;
+    }
+  }
+
   public async deleteAsync(key: string): Promise<boolean> {
     if (!this.enabled) {
       return true;

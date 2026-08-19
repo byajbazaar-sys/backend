@@ -2,7 +2,7 @@ import { generateLoggerConfig, UsersAuthOptions, type Environment } from '@share
 import { Algorithm } from 'jsonwebtoken';
 
 import { IMsConfig } from './i-ms.config';
-import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions } from '../application';
+import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions, AppIntegrityOptions } from '../application';
 import {
   AESEncryptOptions,
   AIOptions,
@@ -118,4 +118,12 @@ export const configFactory = (): IMsConfig => ({
     Number(process.env.DEFAULT_TRIAL_DAYS ?? 7),
   ),
   redis: resolveRedisOptions(),
+  appIntegrity: new AppIntegrityOptions(
+    process.env.GOOGLE_CLOUD_PROJECT_NUMBER ?? '',
+    process.env.ANDROID_PACKAGE_NAME ?? '',
+    process.env.APPLE_BUNDLE_ID ?? '',
+    process.env.APPLE_TEAM_ID ?? '',
+    process.env.APP_INTEGRITY_ALLOW_DEV === 'true',
+    process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON ?? '',
+  ),
 });
