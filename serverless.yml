@@ -19,6 +19,9 @@ custom:
   dotenv:
     path: ${self:custom.dotenvPathByStage.${sls:stage}}
     # DB_* vars come from .env.{stage} (Neon / external Postgres).
+    # Large secrets stay out of Lambda env (4 KB limit); loaded at runtime from SSM instead.
+    exclude:
+      - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
   serverless-offline:
     httpPort: 3003
     lambdaPort: 3002

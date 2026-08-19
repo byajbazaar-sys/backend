@@ -45,7 +45,7 @@ environment:
   APPLE_BUNDLE_ID: ${env:APPLE_BUNDLE_ID, ''}
   APPLE_TEAM_ID: ${env:APPLE_TEAM_ID, ''}
   APP_INTEGRITY_ALLOW_DEV: ${env:APP_INTEGRITY_ALLOW_DEV, 'false'}
-  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${env:GOOGLE_PLAY_SERVICE_ACCOUNT_JSON, ''}
+  GOOGLE_PLAY_SERVICE_ACCOUNT_SSM_PATH: /byajbazaar/${sls:stage}/google-play-service-account-json
 httpApi:
   cors: true
 websocket:
@@ -96,3 +96,8 @@ iam:
         Resource:
           - 'arn:aws:s3:::*'
           - 'arn:aws:s3:::*/*'
+      - Effect: Allow
+        Action:
+          - ssm:GetParameter
+        Resource:
+          - arn:aws:ssm:${aws:region}:${aws:accountId}:parameter/byajbazaar/*

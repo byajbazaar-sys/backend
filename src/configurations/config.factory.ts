@@ -125,5 +125,6 @@ export const configFactory = (): IMsConfig => ({
     process.env.APPLE_TEAM_ID ?? '',
     process.env.APP_INTEGRITY_ALLOW_DEV === 'true',
     process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON ?? '',
+    process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_SSM_PATH ?? '',
   ),
 });

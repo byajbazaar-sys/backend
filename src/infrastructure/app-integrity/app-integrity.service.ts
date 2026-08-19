@@ -22,6 +22,8 @@ type StoredAttestation = {
 
 @Injectable()
 export class AppIntegrityService implements IAppIntegrityService {
+  private serviceAccountCredentialsCache: Record<string, unknown> | null | undefined;
+
   constructor(
     private readonly options: AppIntegrityOptions,
     @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
@@ -95,17 +97,58 @@ export class AppIntegrityService implements IAppIntegrityService {
     return a.length === b.length && timingSafeEqual(a, b);
   }
 
+  private async resolveServiceAccountCredentials(): Promise<Record<string, unknown>> {
+    if (this.serviceAccountCredentialsCache !== undefined) {
+      if (!this.serviceAccountCredentialsCache) {
+        throw new ForbiddenException('Play Integrity is not configured');
+      }
+      return this.serviceAccountCredentialsCache;
+    }
+
+    if (this.options.serviceAccountJson) {
+      try {
+        this.serviceAccountCredentialsCache = JSON.parse(this.options.serviceAccountJson) as Record<
+          string,
+          unknown
+        >;
+        return this.serviceAccountCredentialsCache;
+      } catch {
+        this.serviceAccountCredentialsCache = null;
+        throw new ForbiddenException('Play Integrity is not configured');
+      }
+    }
+
+    if (this.options.serviceAccountSsmPath) {
+      try {
+        const { SSMClient, GetParameterCommand } = await import('@aws-sdk/client-ssm');
+        const response = await new SSMClient({}).send(
+          new GetParameterCommand({
+            Name: this.options.serviceAccountSsmPath,
+            WithDecryption: true,
+          }),
+        );
+        this.serviceAccountCredentialsCache = JSON.parse(response.Parameter?.Value ?? '') as Record<
+          string,
+          unknown
+        >;
+        return this.serviceAccountCredentialsCache;
+      } catch (error) {
+        this.logger.warn({ error }, 'Failed to load Play Integrity service account from SSM');
+        this.serviceAccountCredentialsCache = null;
+        throw new ForbiddenException('Play Integrity is not configured');
+      }
+    }
+
+    this.serviceAccountCredentialsCache = null;
+    throw new ForbiddenException('Play Integrity is not configured');
+  }
+
   private async verifyAndroidToken(token: string, challenge: string): Promise<void> {
     if (!this.options.playIntegrityReady) {
       throw new ForbiddenException('Play Integrity is not configured');
     }
 
-    let credentials: Record<string, unknown>;
-    try {
-      credentials = JSON.parse(this.options.serviceAccountJson) as Record<string, unknown>;
-    } catch {
-      throw new ForbiddenException('Play Integrity is not configured');
-    }
+    const credentials = await this.resolveServiceAccountCredentials();
 
     const { GoogleAuth } = await import('google-auth-library');
     const auth = new GoogleAuth({
