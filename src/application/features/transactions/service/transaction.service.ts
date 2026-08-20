@@ -173,6 +173,9 @@ export class TransactionService implements ITransactionService {
       data.loanSeq = await this.loansRepo.allocateTransactionSeq(data.loanId, data.createdBy);
 
       const transaction = await this.transactionsRepo.create(data);
+      if (due && data.dueId) {
+        transaction.due = due;
+      }
 
       const loanAfterCreate = await this.loansRepo.findById(data.loanId, data.createdBy);
       await this.recordLog({
