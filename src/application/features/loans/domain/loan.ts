@@ -19,6 +19,10 @@ export class Loan {
   @Expose()
   public customerId: string;
 
+  /** Populated on list/detail reads when the customer relation is joined. */
+  @Expose()
+  public customerName?: string;
+
   @Expose()
   public tenureType: ELoanTenureType;
 

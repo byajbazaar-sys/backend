@@ -18,6 +18,10 @@ export class LoanResponseModel {
   customerId: string;
 
   @Expose()
+  @ApiPropertyOptional({ description: 'Customer display name', example: 'Rajesh Kumar' })
+  customerName?: string;
+
+  @Expose()
   @ApiProperty({ enum: ELoanTenureType, example: ELoanTenureType.MONTHS, description: 'Tenure type' })
   tenureType: ELoanTenureType;
 

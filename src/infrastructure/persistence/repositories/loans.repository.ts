@@ -18,9 +18,27 @@ import {
   OpenLoanMaturityRef,
 } from '../../../application';
 import { Due, EDueType } from '../../../application/shared';
+import { CustomerEntity } from '../entities/customer.entity';
 import { DueEntity } from '../entities/due.entity';
 import { LoanEntity } from '../entities/loan.entity';
 import { TransactionalContext } from '../transactional-context';
+
+function formatLoanCustomerName(customer?: Pick<CustomerEntity, 'firstName' | 'middleName' | 'lastName'>): string | undefined {
+  if (!customer) return undefined;
+  const name = [customer.firstName, customer.middleName, customer.lastName].filter(Boolean).join(' ').trim();
+  return name || undefined;
+}
+
+function mapLoan(entity: LoanEntity & { customer?: CustomerEntity }): Loan {
+  return plainToInstance(
+    Loan,
+    {
+      ...entity,
+      customerName: formatLoanCustomerName(entity.customer),
+    },
+    { excludeExtraneousValues: true },
+  );
+}
 
 @Injectable()
 export class LoansRepository implements ILoansRepository {
@@ -202,12 +220,16 @@ export class LoansRepository implements ILoansRepository {
 
   async findById(id: string, createdBy: string): Promise<Loan | null> {
     if (!id) return null;
-    const loan = await this.loanRepo.findOne({
-      where: { id, createdBy },
-      relations: ['loanItems'],
-    });
+    const loan = await this.loanRepo
+      .createQueryBuilder('loan')
+      .leftJoin('loan.customer', 'customer')
+      .addSelect(['customer.id', 'customer.firstName', 'customer.middleName', 'customer.lastName'])
+      .leftJoinAndSelect('loan.loanItems', 'loanItems')
+      .where('loan.id = :id', { id })
+      .andWhere('loan.createdBy = :createdBy', { createdBy })
+      .getOne();
     if (!loan) return null;
-    return plainToInstance(Loan, loan, { excludeExtraneousValues: true });
+    return mapLoan(loan);
   }
 
   async findByIds(ids: string[]): Promise<Loan[]> {
@@ -228,7 +250,10 @@ export class LoansRepository implements ILoansRepository {
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
     const sortField = params.sortField || 'createdAt';
 
-    const qb = this.loanRepo.createQueryBuilder('loan');
+    const qb = this.loanRepo
+      .createQueryBuilder('loan')
+      .leftJoin('loan.customer', 'customer')
+      .addSelect(['customer.id', 'customer.firstName', 'customer.middleName', 'customer.lastName']);
 
     if (customerId) {
       qb.andWhere('loan.customer_id = :customerId', { customerId });
@@ -242,7 +267,7 @@ export class LoansRepository implements ILoansRepository {
       qb.andWhere('loan.status = :status', { status });
     }
 
-    const [loans, totalCount] = await qb
+    const [loanRows, totalCount] = await qb
       .orderBy(`loan.${sortField}`, sortOrder)
       .skip(skip)
       .take(pageSize)
@@ -260,7 +285,7 @@ export class LoansRepository implements ILoansRepository {
       .getRawOne();
 
     const data = toPaged(Loan, {
-      items: loans,
+      items: loanRows.map(mapLoan),
       page: pageNumber,
       perPage: pageSize,
       totalCount,
@@ -280,7 +305,10 @@ export class LoansRepository implements ILoansRepository {
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
     const sortField = params.sortField || 'createdAt';
 
-    const qb = this.loanRepo.createQueryBuilder('loan');
+    const qb = this.loanRepo
+      .createQueryBuilder('loan')
+      .leftJoin('loan.customer', 'customer')
+      .addSelect(['customer.id', 'customer.firstName', 'customer.middleName', 'customer.lastName']);
 
     if (customerId) qb.andWhere('loan.customer_id = :customerId', { customerId });
     if (createdBy) qb.andWhere('loan.created_by = :createdBy', { createdBy });
@@ -293,7 +321,7 @@ export class LoansRepository implements ILoansRepository {
     }
 
     const loans = await qb.orderBy(`loan.${sortField}`, sortOrder).getMany();
-    return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
+    return loans.map(mapLoan);
   }
 
   async getStats(userId: string, filterOptions: LoanStatsFilterOptions): Promise<LoanStats> {
