@@ -88,10 +88,10 @@ function bordersMostlyTransparent(data: Buffer, width: number, height: number): 
   return samples > 0 && transparent / samples > 0.4;
 }
 
-/**
- * Normalize AI preview output to a solid #FFFFFF backdrop.
- */
-export async function ensureWhiteProductPng(buffer: Buffer): Promise<Buffer> {
+async function stripExteriorBackdrop(buffer: Buffer, mode: 'white' | 'transparent'): Promise<Buffer> {
+  const encodePng = (pipeline: sharp.Sharp) =>
+    pipeline.png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer();
+
   const meta = await sharp(buffer).metadata();
   if (meta.hasAlpha) {
     const sample = await sharp(buffer)
@@ -101,12 +101,14 @@ export async function ensureWhiteProductPng(buffer: Buffer): Promise<Buffer> {
       .raw()
       .toBuffer({ resolveWithObject: true });
     if (bordersMostlyTransparent(sample.data, sample.info.width, sample.info.height)) {
-      return sharp(buffer)
+      const pipeline = sharp(buffer)
         .rotate()
         .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
-        .flatten({ background: '#ffffff' })
-        .png({ compressionLevel: 9, adaptiveFiltering: true })
-        .toBuffer();
+        .ensureAlpha();
+      if (mode === 'white') {
+        return encodePng(pipeline.flatten({ background: '#ffffff' }));
+      }
+      return encodePng(pipeline);
     }
   }
 
@@ -116,28 +118,38 @@ export async function ensureWhiteProductPng(buffer: Buffer): Promise<Buffer> {
   for (let i = 0; i < exterior.length; i++) {
     if (!exterior[i]) continue;
     const o = i * 4;
-    data[o] = 255;
-    data[o + 1] = 255;
-    data[o + 2] = 255;
-    data[o + 3] = 255;
+    if (mode === 'white') {
+      data[o] = 255;
+      data[o + 1] = 255;
+      data[o + 2] = 255;
+      data[o + 3] = 255;
+    } else {
+      data[o] = 0;
+      data[o + 1] = 0;
+      data[o + 2] = 0;
+      data[o + 3] = 0;
+    }
   }
 
-  return sharp(data, {
+  const pipeline = sharp(data, {
     raw: { width: info.width, height: info.height, channels: 4 },
-  })
-    .flatten({ background: '#ffffff' })
-    .png({ compressionLevel: 9, adaptiveFiltering: true })
-    .toBuffer();
+  });
+  if (mode === 'white') {
+    return encodePng(pipeline.flatten({ background: '#ffffff' }));
+  }
+  return encodePng(pipeline);
 }
 
-/** Encode AI transparent cutout as PNG — no matting or pixel stripping. */
+/**
+ * Normalize AI preview output to a solid #FFFFFF backdrop.
+ */
+export async function ensureWhiteProductPng(buffer: Buffer): Promise<Buffer> {
+  return stripExteriorBackdrop(buffer, 'white');
+}
+
+/** Encode AI transparent cutout as PNG; strip baked checkerboard/grey backdrops to alpha. */
 export async function finalizeTransparentProductPng(buffer: Buffer): Promise<Buffer> {
-  return sharp(buffer)
-    .rotate()
-    .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
-    .ensureAlpha()
-    .png({ compressionLevel: 9, adaptiveFiltering: true })
-    .toBuffer();
+  return stripExteriorBackdrop(buffer, 'transparent');
 }
 
 /** Keep API preview payloads under Lambda's 6MB response limit. */
