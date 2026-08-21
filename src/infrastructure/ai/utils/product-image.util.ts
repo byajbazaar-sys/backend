@@ -60,86 +60,6 @@ function markExteriorPixels(
   return external;
 }
 
-/** Interior holes (e.g. ring band) where AI baked checkerboard instead of real transparency. */
-function markEnclosedCheckerboard(data: Buffer, width: number, height: number): Uint8Array {
-  const enclosed = new Uint8Array(width * height);
-  const visited = new Uint8Array(width * height);
-  const idx = (x: number, y: number) => y * width + x;
-
-  const isCandidate = (x: number, y: number) => {
-    const o = idx(x, y) * 4;
-    return isBackdropCandidate(data[o], data[o + 1], data[o + 2]);
-  };
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const start = idx(x, y);
-      if (visited[start] || !isCandidate(x, y)) continue;
-
-      const component: number[] = [];
-      let touchesBorder = false;
-      let hasGrey = false;
-      let hasWhite = false;
-      const queue = [start];
-      visited[start] = 1;
-
-      let head = 0;
-      while (head < queue.length) {
-        const i = queue[head++];
-        component.push(i);
-        const px = i % width;
-        const py = (i - px) / width;
-        if (px === 0 || px === width - 1 || py === 0 || py === height - 1) touchesBorder = true;
-
-        const o = i * 4;
-        if (isWhitePixel(data[o], data[o + 1], data[o + 2])) hasWhite = true;
-        else hasGrey = true;
-
-        const neighbors = [
-          [px - 1, py],
-          [px + 1, py],
-          [px, py - 1],
-          [px, py + 1],
-        ];
-        for (const [nx, ny] of neighbors) {
-          if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-          const ni = idx(nx, ny);
-          if (visited[ni] || !isCandidate(nx, ny)) continue;
-          visited[ni] = 1;
-          queue.push(ni);
-        }
-      }
-
-      if (touchesBorder || !hasGrey || !hasWhite) continue;
-      for (const i of component) enclosed[i] = 1;
-    }
-  }
-
-  return enclosed;
-}
-
-function applyBackdropMask(
-  data: Buffer,
-  mask: Uint8Array,
-  mode: 'white' | 'transparent',
-): void {
-  for (let i = 0; i < mask.length; i++) {
-    if (!mask[i]) continue;
-    const o = i * 4;
-    if (mode === 'white') {
-      data[o] = 255;
-      data[o + 1] = 255;
-      data[o + 2] = 255;
-      data[o + 3] = 255;
-    } else {
-      data[o] = 0;
-      data[o + 1] = 0;
-      data[o + 2] = 0;
-      data[o + 3] = 0;
-    }
-  }
-}
-
 async function loadProductRaster(buffer: Buffer) {
   return sharp(buffer)
     .rotate()
@@ -194,9 +114,22 @@ async function stripExteriorBackdrop(buffer: Buffer, mode: 'white' | 'transparen
 
   const { data, info } = await loadProductRaster(buffer);
   const exterior = markExteriorPixels(data, info.width, info.height, isBackdropCandidate);
-  const enclosedCheckerboard = markEnclosedCheckerboard(data, info.width, info.height);
-  applyBackdropMask(data, exterior, mode);
-  applyBackdropMask(data, enclosedCheckerboard, mode);
+
+  for (let i = 0; i < exterior.length; i++) {
+    if (!exterior[i]) continue;
+    const o = i * 4;
+    if (mode === 'white') {
+      data[o] = 255;
+      data[o + 1] = 255;
+      data[o + 2] = 255;
+      data[o + 3] = 255;
+    } else {
+      data[o] = 0;
+      data[o + 1] = 0;
+      data[o + 2] = 0;
+      data[o + 3] = 0;
+    }
+  }
 
   const pipeline = sharp(data, {
     raw: { width: info.width, height: info.height, channels: 4 },
