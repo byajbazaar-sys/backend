@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import {
   ISalesBillsRepository,
   SalesBill,
+  SalesBillLineItem,
   SalesAnalytics,
   SalesBillsFilterOptions,
   SalesAnalyticsFilterOptions,
@@ -16,7 +17,10 @@ import {
   BillLineUpdate,
   InventoryItemSale,
   UpdateSalesBillPatch,
+  CreateSalesBillEntityInput,
+  CreateSalesBillLineEntityInput,
 } from '../../../application';
+import { SalesBillsExportFilterOptions } from '../../../application/features/sales-bills/options/sales-bills-export-filter.options';
 import { InventoryItemEntity } from '../entities/inventory-item.entity';
 import { SalesBillItemEntity } from '../entities/sales-bill-item.entity';
 import { SalesBillEntity } from '../entities/sales-bill.entity';
@@ -34,7 +38,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return plainToInstance(SalesBill, entity, { excludeExtraneousValues: true });
   }
 
-  private buildQuery(filter: Omit<SalesBillsFilterOptions, 'pageNumber' | 'pageSize'>) {
+  private buildQuery(filter: SalesBillsExportFilterOptions) {
     const qb = this.billsRepo
       .createQueryBuilder('bill')
       .leftJoinAndSelect('bill.items', 'items')
@@ -72,22 +76,78 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     return qb;
   }
 
+  private toSalesBillEntityInput(bill: SalesBill): CreateSalesBillEntityInput {
+    return {
+      createdBy: bill.createdBy!,
+      billNumber: bill.billNumber,
+      documentType: bill.documentType,
+      customerName: bill.customerName,
+      customerMobile: bill.customerMobile,
+      customerId: bill.customerId,
+      customerAddress: bill.customerAddress,
+      customerState: bill.customerState,
+      customerStateCode: bill.customerStateCode,
+      customerGstin: bill.customerGstin,
+      customerPan: bill.customerPan,
+      customerPropName: bill.customerPropName,
+      subtotal: bill.subtotal,
+      discount: bill.discount,
+      taxAmount: bill.taxAmount,
+      cgstRate: bill.cgstRate,
+      sgstRate: bill.sgstRate,
+      cgstAmount: bill.cgstAmount,
+      sgstAmount: bill.sgstAmount,
+      roundOff: bill.roundOff,
+      goldRate24k: bill.goldRate24k,
+      metalRates: bill.metalRates,
+      grandTotal: bill.grandTotal,
+      amountReceived: bill.amountReceived,
+      depositApplied: bill.depositApplied,
+      totalPurchaseCost: bill.totalPurchaseCost,
+      totalProfit: bill.totalProfit,
+      paymentMode: bill.paymentMode,
+      status: bill.status,
+      issuedAt: bill.issuedAt,
+    };
+  }
+
+  private toSalesBillLineEntityInput(item: SalesBillLineItem): CreateSalesBillLineEntityInput {
+    return {
+      inventoryItemId: item.inventoryItemId,
+      itemName: item.itemName,
+      sku: item.sku,
+      barcode: item.barcode,
+      metalType: item.metalType,
+      purity: item.purity,
+      grossWeight: item.grossWeight,
+      netWeight: item.netWeight,
+      lessWeight: item.lessWeight,
+      hsnCode: item.hsnCode,
+      huid: item.huid,
+      makingCharges: item.makingCharges,
+      sellingPrice: item.sellingPrice,
+      quantity: item.quantity,
+      lineTotal: item.lineTotal,
+      purchaseRatePerGram: item.purchaseRatePerGram,
+      purchaseCost: item.purchaseCost,
+      profitAmount: item.profitAmount,
+    };
+  }
+
   async create(data: SalesBill, stockDeductions: InventoryStockDeduction[] = []): Promise<SalesBill> {
-    const { items, ...billData } = data;
+    const { items } = data;
 
     return this.billsRepo.manager.transaction(async (manager) => {
       const billsRepo = manager.getRepository(SalesBillEntity);
       const itemsRepo = manager.getRepository(SalesBillItemEntity);
       const inventoryRepo = manager.getRepository(InventoryItemEntity);
 
-      const entity = billsRepo.create(billData as Partial<SalesBillEntity>);
-      const saved = await billsRepo.save(entity);
+      const saved = await billsRepo.save(this.toSalesBillEntityInput(data));
 
       if (items?.length) {
-        const lineEntities = items.map((item) =>
-          itemsRepo.create({ ...item, billId: saved.id } as Partial<SalesBillItemEntity>),
-        );
-        await itemsRepo.save(lineEntities);
+        for (const item of items) {
+          await itemsRepo.save({ ...this.toSalesBillLineEntityInput(item), billId: saved.id });
+        }
       }
 
       for (const deduction of stockDeductions) {
@@ -130,7 +190,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
     });
   }
 
-  async findAllForExport(filter: Omit<SalesBillsFilterOptions, 'pageNumber' | 'pageSize'>): Promise<SalesBill[]> {
+  async findAllForExport(filter: SalesBillsExportFilterOptions): Promise<SalesBill[]> {
     const rows = await this.buildQuery(filter).getMany();
     return rows.map((e) => this.mapBill(e));
   }
@@ -186,7 +246,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
         }
       }
 
-      await billsRepo.update(id, patch as Partial<SalesBillEntity>);
+      await billsRepo.update(id, patch);
 
       const updated = await billsRepo.findOne({ where: { id }, relations: ['items'] });
       if (!updated) throw new Error('Bill not found after update');

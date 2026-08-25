@@ -1,18 +1,14 @@
 import { ConflictException } from '@nestjs/common';
-import {
-  buildCatalogSlug,
-  CATALOG_SLUG_TAKEN_MESSAGE,
-  isValidCatalogSlug,
-} from '@shared-libs';
+import { buildCatalogSlug, CATALOG_SLUG_TAKEN_MESSAGE, isValidCatalogSlug } from '@shared-libs';
 
 import { IUsersRepository } from '../service/i-users.repository';
 
 /** Resolve catalog slug from business name; rejects duplicates without auto-suffixing. */
 export async function resolveCatalogSlugForBusinessName(
   usersRepo: IUsersRepository,
-  businessName?: string | null,
+  businessName?: string,
   excludeUserId?: string,
-): Promise<string | null> {
+): Promise<string> {
   const slug = buildCatalogSlug(businessName);
   if (!slug || !isValidCatalogSlug(slug)) return null;
 

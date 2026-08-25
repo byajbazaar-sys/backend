@@ -7,11 +7,11 @@ export interface CreateTransactionInput {
   transactionType: ETransactionType;
   paidIn: ETransactionPaidIn;
   createdBy: string;
-  dueId?: string | null;
+  dueId?: string;
   amountRemainingDelta?: number;
   amountPaidDelta?: number;
   interestRemainingDelta?: number;
   interestPaidDelta?: number;
-  periodsAtCreation?: number | null;
-  loanSeq?: number | null;
+  periodsAtCreation?: number;
+  loanSeq?: number;
 }

@@ -2,7 +2,14 @@ import { generateLoggerConfig, UsersAuthOptions, type Environment } from '@share
 import { Algorithm } from 'jsonwebtoken';
 
 import { IMsConfig } from './i-ms.config';
-import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions, AppIntegrityOptions } from '../application';
+import {
+  WebAppOptions,
+  FileStorageOptions,
+  GoogleOAuthOptions,
+  RazorpayOptions,
+  AppIntegrityOptions,
+  MetaWhatsAppOptions,
+} from '../application';
 import {
   AESEncryptOptions,
   AIOptions,
@@ -126,5 +133,14 @@ export const configFactory = (): IMsConfig => ({
     process.env.APP_INTEGRITY_ALLOW_DEV === 'true',
     process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON ?? '',
     process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_SSM_PATH ?? '',
+  ),
+  metaWhatsApp: new MetaWhatsAppOptions(
+    process.env.META_GRAPH_API_VERSION ?? 'v22.0',
+    process.env.META_APP_ID ?? '',
+    process.env.META_APP_SECRET ?? '',
+    process.env.META_TEST_WABA_ID ?? '',
+    process.env.META_TEST_PHONE_NUMBER_ID ?? '',
+    process.env.META_TEST_ACCESS_TOKEN ?? '',
+    process.env.META_WEBHOOK_VERIFY_TOKEN ?? '',
   ),
 });

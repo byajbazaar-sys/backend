@@ -29,11 +29,16 @@ export class GlobalResponseInterceptor<T> implements NestInterceptor<T, ApiRespo
 
     return next.handle().pipe(
       map((data) => {
+        const response = context.switchToHttp().getResponse();
+        if (response.headersSent) {
+          return data;
+        }
+
         const res = this.handleSuccess(data, context);
 
         if (res instanceof StreamableFile) {
           this.logger.log(`[${request.method}] ${request.url} → file download`);
-        } else {
+        } else if (res && typeof res === 'object' && 'statusCode' in res) {
           this.logger.log(`[${request.method}] ${request.url} → ${res.statusCode} ${res.message}`);
         }
 

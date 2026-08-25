@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
-import { QueryDeepPartialEntity, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
-import { IPlansRepository, Plan, UpdatePlanPatch } from '../../../application';
+import { IPlansRepository, Plan, UpdatePlanEntityInput, UpdatePlanPatch } from '../../../application';
 import { PlanEntity } from '../entities/plan.entity';
 
 @Injectable()
@@ -73,7 +73,7 @@ export class PlansRepository implements IPlansRepository {
   }
 
   async update(id: string, data: UpdatePlanPatch): Promise<Plan> {
-    const updateData: QueryDeepPartialEntity<PlanEntity> = {};
+    const updateData: UpdatePlanEntityInput = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.price !== undefined) updateData.price = data.price;
     if (data.currency !== undefined) updateData.currency = data.currency;

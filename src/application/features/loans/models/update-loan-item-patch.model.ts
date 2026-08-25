@@ -24,7 +24,7 @@ export class UpdateLoanItemPatch {
   currentRate?: number;
 
   @Expose()
-  imageRef?: string | null;
+  imageRef?: string;
 
   @Expose()
   createdBy?: string;

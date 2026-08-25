@@ -4,8 +4,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 
 import { AIOptions, AivotTryOnOptions, CloudflareTryOnOptions } from './ai';
+import { ResendOptions, ResendService } from './resend';
 import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
-import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
 import {
   CUSTOMERS_REPOSITORY,
   DUES_REPOSITORY,
@@ -41,7 +41,10 @@ import {
   JEWELLERY_EVENTS_REPOSITORY,
   TRY_ON_ASSETS_REPOSITORY,
   DEPOSITS_REPOSITORY,
+  WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
+  META_GRAPH_CLIENT,
   RazorpayOptions,
+  MetaWhatsAppOptions,
   TRY_ON_AI_SERVICE,
   TRY_ON_ORCHESTRATOR,
   PRODUCT_IMAGE_AI_SERVICE,
@@ -51,14 +54,15 @@ import {
   APP_INTEGRITY_SERVICE,
   AppIntegrityOptions,
 } from '../application';
-import { ResendOptions, ResendService } from './resend';
 import { WebAppOptions } from '../application';
 import { AivotService } from './ai/services/aivot.service';
+import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
 import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.service';
+import { AppIntegrityService } from './app-integrity';
 import CronServices from './cron';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
 import { GoogleOAuthService } from './google-oauth';
-import { AppIntegrityService } from './app-integrity';
+import { MetaGraphClient } from './meta';
 import {
   UnitOfWork,
   CustomersRepository,
@@ -90,13 +94,14 @@ import {
   JewelleryEventsRepository,
   TryOnAssetsRepository,
   DepositsRepository,
+  WhatsAppBusinessConnectionsRepository,
 } from './persistence';
 import Entities from './persistence/entities';
 import Seeds from './persistence/seeds';
 import { generateDataSourceOptions } from './persistence/type-orm.config';
+import { RedisOptions, RedisService, RedisCacheService } from './redis';
 import { FileStorageMock, UsersFileStorage } from './s3';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
-import { RedisOptions, RedisService, RedisCacheService } from './redis';
 
 @Global()
 @Module({
@@ -239,6 +244,10 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
       useClass: DepositsRepository,
     },
     {
+      provide: WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
+      useClass: WhatsAppBusinessConnectionsRepository,
+    },
+    {
       provide: WEBSOCKET_MESSAGE_SERVICE,
       useClass: WebSocketMessageService,
     },
@@ -296,6 +305,15 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
       provide: RazorpayOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('razorpay'),
+    },
+    {
+      provide: MetaWhatsAppOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('metaWhatsApp'),
+    },
+    {
+      provide: META_GRAPH_CLIENT,
+      useClass: MetaGraphClient,
     },
     {
       provide: AppIntegrityOptions,
@@ -397,6 +415,8 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     JEWELLERY_EVENTS_REPOSITORY,
     TRY_ON_ASSETS_REPOSITORY,
     DEPOSITS_REPOSITORY,
+    WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
+    META_GRAPH_CLIENT,
     COUPON_REDEMPTIONS_REPOSITORY,
     REFUNDS_REPOSITORY,
     WEBSOCKET_MESSAGE_SERVICE,
@@ -412,8 +432,9 @@ import { RedisOptions, RedisService, RedisCacheService } from './redis';
     GoogleOAuthOptions,
     AppIntegrityOptions,
     RazorpayOptions,
+    MetaWhatsAppOptions,
     ...Seeds,
     ...CronServices,
   ],
 })
-export class InfrastructureModule { }
+export class InfrastructureModule {}

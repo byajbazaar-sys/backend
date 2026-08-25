@@ -9,6 +9,7 @@ import {
   Customer,
   CustomersFilterOptions,
   CustomersDownloadFilterOptions,
+  UpdateCustomerEntityInput,
 } from '../../../application';
 import { CustomerEntity } from '../entities/customer.entity';
 
@@ -42,7 +43,8 @@ export class CustomersRepository implements ICustomersRepository {
       removePanCard: _omitRemovePan,
       ...rest
     } = updateDto as Customer & { id?: string; createdBy?: string };
-    await this.customerRepo.update({ id, createdBy }, rest as Partial<CustomerEntity>);
+    const entityUpdate: UpdateCustomerEntityInput = rest;
+    await this.customerRepo.update({ id, createdBy }, entityUpdate);
     const updated = await this.customerRepo.findOne({ where: { id, createdBy } });
     if (!updated) return null;
     return plainToInstance(Customer, updated, { excludeExtraneousValues: true });

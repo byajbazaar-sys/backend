@@ -1,7 +1,6 @@
 import { Paged } from '@shared-libs';
 
 import { BulkDeleteResult } from '../../../shared';
-
 import { SalesBill, SalesAnalytics, GstCsvExportResult } from '../domain';
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel, UpdateSalesBillRequestModel } from '../models';
 

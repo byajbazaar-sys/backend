@@ -10,8 +10,15 @@ import { Paged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { BulkDeleteResult, CACHE_NAMESPACE, CACHE_SERVICE, DASHBOARD_CACHE_TTL_SECONDS, ICacheService, queryCacheParts, salesAnalyticsCacheParts } from '../../../shared';
-
+import {
+  BulkDeleteResult,
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  DASHBOARD_CACHE_TTL_SECONDS,
+  ICacheService,
+  queryCacheParts,
+  salesAnalyticsCacheParts,
+} from '../../../shared';
 import { EInventoryItemStatus } from '../../inventory/enums';
 import {
   IInventoryCategoriesRepository,
@@ -36,7 +43,7 @@ import {
   UpdateSalesBillRequestModel,
   UpdateSalesBillPatch,
 } from '../models';
-import { SalesAnalyticsFilterOptions, SalesBillsFilterOptions } from '../options';
+import { SalesAnalyticsFilterOptions, SalesBillsExportFilterOptions, SalesBillsFilterOptions } from '../options';
 import { BillLineUpdate } from './bill-line-update';
 import { ISalesBillService } from './i-sales-bill.service';
 import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
@@ -373,7 +380,7 @@ export class SalesBillService implements ISalesBillService {
 
   async exportGstCsv(userId: string, query: ListSalesBillsQueryModel): Promise<GstCsvExportResult> {
     const filter = this.mapListQuery(userId, query);
-    const { pageNumber: _pageNumber, pageSize: _pageSize, ...exportFilter } = filter;
+    const exportFilter = plainToInstance(SalesBillsExportFilterOptions, filter, { excludeExtraneousValues: true });
     const bills = await this.billsRepo.findAllForExport(exportFilter);
     const csv = toGstExportCsv(bills);
     const filename = `GST_Export_${new Date().toISOString().slice(0, 10)}.csv`;

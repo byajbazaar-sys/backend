@@ -7,13 +7,7 @@ export class FileStorageOptions implements IS3StorageOptions {
   public region: string;
   public endpoint?: string;
 
-  constructor(
-    accessKeyId: string,
-    secretAccessKey: string,
-    bucket: string,
-    region: string,
-    endpoint?: string,
-  ) {
+  constructor(accessKeyId: string, secretAccessKey: string, bucket: string, region: string, endpoint?: string) {
     this.accessKeyId = accessKeyId;
     this.secretAccessKey = secretAccessKey;
     this.bucket = bucket;

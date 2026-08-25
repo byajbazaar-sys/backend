@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
-import { In, QueryDeepPartialEntity, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import {
   ACTIVE_SUBSCRIPTION_STATUSES,
@@ -11,6 +11,7 @@ import {
   ISubscriptionsRepository,
   Subscription,
   SubscriptionPatch,
+  UpdateSubscriptionEntityInput,
 } from '../../../application';
 import { ESubscriptionStatus } from '../../../application/features/payments/domain/enums';
 import { SubscriptionEntity } from '../entities/subscription.entity';
@@ -58,7 +59,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
   }
 
   async update(id: string, data: SubscriptionPatch): Promise<Subscription> {
-    const updateData: QueryDeepPartialEntity<SubscriptionEntity> = {};
+    const updateData: UpdateSubscriptionEntityInput = {};
     if (data.planId !== undefined) updateData.planId = data.planId;
     if (data.provider !== undefined) updateData.provider = data.provider;
     if (data.providerSubscriptionId !== undefined) {
@@ -76,7 +77,7 @@ export class SubscriptionsRepository implements ISubscriptionsRepository {
     if (data.couponId !== undefined) updateData.couponId = data.couponId;
     if (data.discountAmount !== undefined) updateData.discountAmount = data.discountAmount;
     if (data.notes !== undefined) {
-      updateData.notes = data.notes as object;
+      updateData.notes = data.notes;
     }
 
     await this.subscriptionRepo.update(id, updateData);

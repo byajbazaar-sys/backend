@@ -73,6 +73,10 @@ import {
   PublicCatalogService,
   INVENTORY_CATALOG_SERVICE,
   InventoryCatalogService,
+  WHATSAPP_SERVICE,
+  WhatsAppService,
+  WHATSAPP_WEBHOOK_SERVICE,
+  WhatsAppWebhookService,
 } from './features';
 import { EMAIL_TEMPLATE_SERVICE, EmailTemplateService } from './features/notifications';
 import {
@@ -226,6 +230,14 @@ import {
       provide: INVENTORY_CATALOG_SERVICE,
       useClass: InventoryCatalogService,
     },
+    {
+      provide: WHATSAPP_SERVICE,
+      useClass: WhatsAppService,
+    },
+    {
+      provide: WHATSAPP_WEBHOOK_SERVICE,
+      useClass: WhatsAppWebhookService,
+    },
   ],
   exports: [
     PassportModule,
@@ -240,4 +252,3 @@ import {
   ],
 })
 export class ApplicationModule {}
-

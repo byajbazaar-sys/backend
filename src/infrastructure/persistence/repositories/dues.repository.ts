@@ -5,6 +5,7 @@ import { plainToInstance } from 'class-transformer';
 import { In, Repository } from 'typeorm';
 
 import { Due, DuesFilterOptions, IDuesRepository, EDueType } from '../../../application';
+import { UpdateDueEntityInput } from '../../../application/features/transactions/models/update-due-entity-input.model';
 import { DueEntity } from '../entities/due.entity';
 import { TransactionEntity } from '../entities/transaction.entity';
 import { TransactionalContext } from '../transactional-context';
@@ -145,7 +146,8 @@ export class DuesRepository implements IDuesRepository {
       createdBy: _omitCreatedBy,
       ...rest
     } = due as Due & { id?: string };
-    await this.dueRepo.update(id, rest as Partial<DueEntity>);
+    const entityUpdate: UpdateDueEntityInput = rest;
+    await this.dueRepo.update(id, entityUpdate);
     const updated = await this.dueRepo.findOne({ where: { id } });
     if (!updated) return null;
     return plainToInstance(Due, updated, { excludeExtraneousValues: true });

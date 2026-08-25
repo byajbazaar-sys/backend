@@ -1,5 +1,3 @@
-import { Paged } from '@shared-libs';
-
 import { BulkDeleteResult } from '../../../shared';
 import { MetalRate } from '../domain';
 import { CreateMetalRateRequestModel, ListMetalRatesQueryModel } from '../models';

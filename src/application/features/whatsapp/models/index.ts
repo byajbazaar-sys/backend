@@ -1,0 +1,77 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Expose } from 'class-transformer';
+import { IsNotEmpty, IsUUID } from 'class-validator';
+
+export * from './send-whatsapp-message-request.model';
+export * from './send-whatsapp-template-message-request.model';
+export * from './create-whatsapp-template-request.model';
+export * from './connect-whatsapp-business-request.model';
+export * from './whatsapp-connection-response.model';
+export * from './get-whatsapp-connection-query.model';
+export * from './whatsapp-webhook-payload.model';
+
+export class ListWhatsAppTemplatesQueryModel {
+  @ApiProperty({ description: 'Business (tenant) ID — must match authenticated user' })
+  @Expose()
+  @IsUUID()
+  @IsNotEmpty()
+  businessId: string;
+}
+
+export class WhatsAppMessageResponseModel {
+  @ApiProperty({ example: true })
+  @Expose()
+  success: boolean;
+
+  @ApiProperty({ example: 'wamid.HBgM...' })
+  @Expose()
+  messageId: string;
+}
+
+export class WhatsAppTemplateCreateResponseModel {
+  @ApiProperty({ example: true })
+  @Expose()
+  success: boolean;
+
+  @ApiProperty({ example: '123456789' })
+  @Expose()
+  templateId: string;
+
+  @ApiProperty({ example: 'PENDING' })
+  @Expose()
+  status: string;
+}
+
+export class WhatsAppTemplateSummaryResponseModel {
+  @ApiProperty()
+  @Expose()
+  id: string;
+
+  @ApiProperty()
+  @Expose()
+  name: string;
+
+  @ApiProperty()
+  @Expose()
+  language: string;
+
+  @ApiProperty()
+  @Expose()
+  status: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  category?: string;
+}
+
+export class WhatsAppTemplateListResponseModel {
+  @ApiProperty({ type: [WhatsAppTemplateSummaryResponseModel] })
+  @Expose()
+  items: WhatsAppTemplateSummaryResponseModel[];
+}
+
+export class WhatsAppWebhookAckResponseModel {
+  @ApiProperty({ example: true })
+  @Expose()
+  received: boolean;
+}

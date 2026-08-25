@@ -47,7 +47,7 @@ export class JewelleryEventsRepository implements IJewelleryEventsRepository {
     } = data as JewelleryEvent & {
       id?: string;
     };
-    await this.eventRepo.update(id, rest as Partial<JewelleryEventEntity>);
+    await this.eventRepo.update(id, rest);
     const updated = await this.eventRepo.findOne({ where: { id } });
     if (!updated) {
       throw new Error(`Jewellery event ${id} not found after update`);

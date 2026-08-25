@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
-import { QueryDeepPartialEntity, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
-import { IPaymentsRepository, Payment } from '../../../application';
+import { IPaymentsRepository, Payment, UpsertPaymentEntityInput } from '../../../application';
 import { PaymentEntity } from '../entities/payment.entity';
 
 @Injectable()
@@ -56,7 +56,7 @@ export class PaymentsRepository implements IPaymentsRepository {
     });
 
     if (existing) {
-      const updateData: QueryDeepPartialEntity<PaymentEntity> = {
+      const updateData: UpsertPaymentEntityInput = {
         userId: data.userId,
         subscriptionId: data.subscriptionId ?? null,
         providerOrderId: data.providerOrderId ?? null,
@@ -71,7 +71,7 @@ export class PaymentsRepository implements IPaymentsRepository {
         tax: data.tax ?? null,
         capturedAt: data.capturedAt ?? null,
         invoiceId: data.invoiceId ?? null,
-        rawJson: (data.rawJson ?? {}) as object,
+        rawJson: data.rawJson ?? {},
       };
       await this.paymentRepo.update(existing.id, updateData);
       const updated = await this.paymentRepo.findOne({ where: { id: existing.id } });

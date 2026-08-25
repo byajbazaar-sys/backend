@@ -32,7 +32,7 @@ export class AddPublicCatalogFields1779400000000 implements MigrationInterface {
     `);
     const usedSlugs = new Set(existingSlugRows.map((r) => r.catalog_slug));
 
-    const rows: { id: string; business_name: string | null }[] = await queryRunner.query(`
+    const rows: { id: string; business_name: string }[] = await queryRunner.query(`
       SELECT "id", "business_name"
       FROM "users"
       WHERE "business_name" IS NOT NULL

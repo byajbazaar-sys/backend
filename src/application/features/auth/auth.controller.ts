@@ -32,9 +32,9 @@ import {
   GoogleSsoResponseModel,
   AppIntegrityChallengeResponseModel,
 } from './models';
+import { APP_INTEGRITY_SERVICE, IAppIntegrityService } from '../../shared';
 import { API_AUTH_SERVICE, IApiAuthService } from '../api-access';
 import { ApiTokenResponseModel } from '../api-access/models';
-import { APP_INTEGRITY_SERVICE, IAppIntegrityService } from '../../shared';
 
 @ApiTags('auth')
 @Controller('auth')

@@ -46,6 +46,13 @@ environment:
   APPLE_TEAM_ID: ${env:APPLE_TEAM_ID, ''}
   APP_INTEGRITY_ALLOW_DEV: ${env:APP_INTEGRITY_ALLOW_DEV, 'false'}
   GOOGLE_PLAY_SERVICE_ACCOUNT_SSM_PATH: /byajbazaar/${sls:stage}/google-play-service-account-json
+  META_GRAPH_API_VERSION: ${env:META_GRAPH_API_VERSION, 'v22.0'}
+  META_APP_ID: ${env:META_APP_ID, ''}
+  META_APP_SECRET: ${env:META_APP_SECRET, ''}
+  META_TEST_WABA_ID: ${env:META_TEST_WABA_ID, ''}
+  META_TEST_PHONE_NUMBER_ID: ${env:META_TEST_PHONE_NUMBER_ID, ''}
+  META_TEST_ACCESS_TOKEN: ${env:META_TEST_ACCESS_TOKEN, ''}
+  META_WEBHOOK_VERIFY_TOKEN: ${env:META_WEBHOOK_VERIFY_TOKEN, ''}
 httpApi:
   cors: true
 websocket:

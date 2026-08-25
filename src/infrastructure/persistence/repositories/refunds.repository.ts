@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
-import { QueryDeepPartialEntity, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
-import { IRefundsRepository, Refund } from '../../../application';
+import { IRefundsRepository, Refund, UpsertRefundEntityInput } from '../../../application';
 import { RefundEntity } from '../entities/refund.entity';
 
 @Injectable()
@@ -43,12 +43,12 @@ export class RefundsRepository implements IRefundsRepository {
     });
 
     if (existing) {
-      const updateData: QueryDeepPartialEntity<RefundEntity> = {
+      const updateData: UpsertRefundEntityInput = {
         paymentId: data.paymentId,
         amount: data.amount,
         status: data.status,
         reason: data.reason ?? null,
-        rawJson: (data.rawJson ?? {}) as object,
+        rawJson: data.rawJson ?? {},
       };
       await this.refundRepo.update(existing.id, updateData);
       const updated = await this.refundRepo.findOne({ where: { id: existing.id } });

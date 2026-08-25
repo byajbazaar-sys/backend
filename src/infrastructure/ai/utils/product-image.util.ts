@@ -98,12 +98,7 @@ function markExteriorPixels(
 }
 
 /** Peel backdrop pixels that touch product-coloured neighbours (protects diamonds at edges). */
-function peelBackdropFromProductEdges(
-  data: Buffer,
-  width: number,
-  height: number,
-  exterior: Uint8Array,
-): void {
+function peelBackdropFromProductEdges(data: Buffer, width: number, height: number, exterior: Uint8Array): void {
   const idx = (x: number, y: number) => y * width + x;
 
   for (let pass = 0; pass < 24; pass++) {
@@ -144,12 +139,7 @@ function peelBackdropFromProductEdges(
  * Bright white gems often have subtle facet variation; flat studio white does not.
  * Protect high-variance bright regions from backdrop removal.
  */
-function protectTexturedBrightRegions(
-  data: Buffer,
-  width: number,
-  height: number,
-  exterior: Uint8Array,
-): void {
+function protectTexturedBrightRegions(data: Buffer, width: number, height: number, exterior: Uint8Array): void {
   const idx = (x: number, y: number) => y * width + x;
 
   for (let y = 0; y < height; y++) {
@@ -259,13 +249,7 @@ export async function ensureWhiteProductPng(buffer: Buffer): Promise<Buffer> {
  */
 export async function removeWhiteBackground(buffer: Buffer): Promise<Buffer> {
   const { data, info } = await loadProductRaster(buffer);
-  const exterior = markExteriorPixels(
-    data,
-    info.width,
-    info.height,
-    isStrictBackdropWhite,
-    isProductPixel,
-  );
+  const exterior = markExteriorPixels(data, info.width, info.height, isStrictBackdropWhite, isProductPixel);
 
   peelBackdropFromProductEdges(data, info.width, info.height, exterior);
   protectTexturedBrightRegions(data, info.width, info.height, exterior);

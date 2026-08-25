@@ -21,7 +21,7 @@ export interface CreateUserInput {
   profilePhotoFileName?: string;
   profilePhotoContentType?: string;
   businessName?: string;
-  catalogSlug?: string | null;
+  catalogSlug?: string;
   catalogEnabled?: boolean;
   createdAt?: Date;
   updatedAt?: Date;

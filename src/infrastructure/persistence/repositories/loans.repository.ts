@@ -23,7 +23,9 @@ import { DueEntity } from '../entities/due.entity';
 import { LoanEntity } from '../entities/loan.entity';
 import { TransactionalContext } from '../transactional-context';
 
-function formatLoanCustomerName(customer?: Pick<CustomerEntity, 'firstName' | 'middleName' | 'lastName'>): string | undefined {
+function formatLoanCustomerName(
+  customer?: Pick<CustomerEntity, 'firstName' | 'middleName' | 'lastName'>,
+): string | undefined {
   if (!customer) return undefined;
   const name = [customer.firstName, customer.middleName, customer.lastName].filter(Boolean).join(' ').trim();
   return name || undefined;
@@ -42,7 +44,7 @@ function mapLoan(entity: LoanEntity & { customer?: CustomerEntity }): Loan {
 
 @Injectable()
 export class LoansRepository implements ILoansRepository {
-  constructor(@InjectRepository(LoanEntity) private readonly defaultLoanRepo: Repository<LoanEntity>) {}
+  constructor(@InjectRepository(LoanEntity) private readonly defaultLoanRepo: Repository<LoanEntity>) { }
 
   private get loanRepo(): Repository<LoanEntity> {
     return TransactionalContext.repositoryFor(LoanEntity, this.defaultLoanRepo);
@@ -145,7 +147,7 @@ export class LoansRepository implements ILoansRepository {
     return plainToInstance(Loan, loans, { excludeExtraneousValues: true });
   }
 
-  async update(id: string, updateDto: Loan): Promise<Loan | null> {
+  async update(id: string, updateDto: Loan): Promise<Loan> {
     if (!id) return null;
     // version is server-owned: callers may carry a stale one they read earlier.
     const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
@@ -166,7 +168,7 @@ export class LoansRepository implements ILoansRepository {
     updateDto: Loan,
     unpaidDues: Due[],
     unpaidTypes: EDueType[] = [EDueType.UPCOMING_DUE, EDueType.PAST_DUE, EDueType.OVERDUE],
-  ): Promise<Loan | null> {
+  ): Promise<Loan> {
     if (!id) return null;
     const { loanItems, interestPrincipalBasis: _basis, version: _version, ...data } = updateDto;
     const createdBy = updateDto.createdBy;
@@ -218,7 +220,7 @@ export class LoansRepository implements ILoansRepository {
     return active ? run(active) : this.defaultLoanRepo.manager.transaction(run);
   }
 
-  async findById(id: string, createdBy: string): Promise<Loan | null> {
+  async findById(id: string, createdBy: string): Promise<Loan> {
     if (!id) return null;
     const loan = await this.loanRepo
       .createQueryBuilder('loan')
@@ -441,6 +443,8 @@ export class LoansRepository implements ILoansRepository {
       )
       .getMany();
 
-    return rows.map((r) => plainToInstance(OpenLoanMaturityRef, { id: r.id, createdBy: r.createdBy }, { excludeExtraneousValues: true }));
+    return rows.map((r) =>
+      plainToInstance(OpenLoanMaturityRef, { id: r.id, createdBy: r.createdBy }, { excludeExtraneousValues: true }),
+    );
   }
 }

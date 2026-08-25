@@ -15,6 +15,7 @@ import {
   TransactionsDownloadFilterOptions,
 } from '../../../application';
 import { CreateTransactionInput } from '../../../application/features/transactions/models';
+import { CreateTransactionEntityInput } from '../../../application/features/transactions/models/create-transaction-entity-input.model';
 import { TransactionEntity } from '../entities/transaction.entity';
 import { TransactionalContext } from '../transactional-context';
 
@@ -30,7 +31,7 @@ export class TransactionsRepository implements ITransactionsRepository {
   }
 
   async create(createTransaction: CreateTransactionInput): Promise<Transaction> {
-    const entity = this.transactionRepo.create({
+    const entityInput: CreateTransactionEntityInput = {
       loanId: createTransaction.loanId,
       customerId: createTransaction.customerId,
       amount: createTransaction.amount,
@@ -44,7 +45,8 @@ export class TransactionsRepository implements ITransactionsRepository {
       interestPaidDelta: createTransaction.interestPaidDelta ?? 0,
       periodsAtCreation: createTransaction.periodsAtCreation ?? null,
       loanSeq: createTransaction.loanSeq ?? null,
-    } as unknown as Partial<TransactionEntity>);
+    };
+    const entity = this.transactionRepo.create(entityInput);
     const created = await this.transactionRepo.save(entity);
     return plainToInstance(Transaction, created, { excludeExtraneousValues: true });
   }

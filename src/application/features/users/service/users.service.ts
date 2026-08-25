@@ -183,11 +183,7 @@ export class UsersService implements IUsersService {
           definedUpdates.businessName = trimmed;
           const previous = (existingUser.businessName ?? '').trim();
           if (trimmed !== previous) {
-            definedUpdates.catalogSlug = await resolveCatalogSlugForBusinessName(
-              this.usersRepo,
-              trimmed,
-              id,
-            );
+            definedUpdates.catalogSlug = await resolveCatalogSlugForBusinessName(this.usersRepo, trimmed, id);
           }
         }
       }

@@ -46,7 +46,7 @@ export class ItemsRepository implements IItemsRepository {
   }
 
   async update(id: string, updateItem: UpdateItemRequestModel): Promise<Item> {
-    await this.itemRepo.update(id, updateItem as Partial<ItemEntity>);
+    await this.itemRepo.update(id, updateItem);
     const updated = await this.itemRepo.findOne({ where: { id } });
     if (!updated) {
       throw new NotFoundException('Item not found');

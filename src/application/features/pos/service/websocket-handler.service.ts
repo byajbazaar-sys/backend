@@ -10,6 +10,7 @@ import {
   IWebSocketConnectionsRepository,
   WEBSOCKET_CONNECTIONS_REPOSITORY,
 } from './i-websocket-connections.repository';
+import { IWebSocketHandlerService } from './i-websocket-handler.service';
 import { IWebSocketMessageService, WEBSOCKET_MESSAGE_SERVICE } from '../../../shared';
 import { InventoryItem } from '../../inventory/domain';
 import { BARCODE_SERVICE, IBarcodeService } from '../../inventory/service/i-barcode.service';
@@ -17,9 +18,8 @@ import {
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
 } from '../../inventory/service/i-inventory-items.repository';
-import { EDeviceType } from '../enums';
 import { WebSocketConnectResult } from '../domain';
-import { IWebSocketHandlerService } from './i-websocket-handler.service';
+import { EDeviceType } from '../enums';
 
 @Injectable()
 export class WebSocketHandlerService implements IWebSocketHandlerService {

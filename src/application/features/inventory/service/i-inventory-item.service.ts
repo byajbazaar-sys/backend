@@ -1,7 +1,6 @@
 import { Paged } from '@shared-libs';
 
 import { BulkDeleteResult } from '../../../shared';
-
 import { InventoryItem, InventoryItemSale } from '../domain';
 import {
   CreateInventoryItemRequestModel,

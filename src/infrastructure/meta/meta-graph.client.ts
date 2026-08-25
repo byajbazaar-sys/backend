@@ -1,0 +1,211 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
+import axios, { AxiosInstance } from 'axios';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { assertMetaGraphSuccess, mapMetaGraphError } from './meta-graph.errors';
+import {
+  IMetaGraphClient,
+  MetaCreateTemplateResult,
+  MetaGraphCredentials,
+  MetaSendMessageResult,
+  MetaTemplateSummary,
+  MetaWhatsAppOptions
+} from '../../application';
+
+interface MetaMessagesResponse {
+  messages?: { id?: string }[];
+  error?: { message?: string; code?: number };
+}
+
+interface MetaTemplateCreateResponse {
+  id?: string;
+  status?: string;
+  error?: { message?: string; code?: number };
+}
+
+interface MetaTemplateListResponse {
+  data?: {
+    id?: string;
+    name?: string;
+    language?: string;
+    status?: string;
+    category?: string;
+  }[];
+  error?: { message?: string; code?: number };
+}
+
+@Injectable()
+export class MetaGraphClient implements IMetaGraphClient {
+  private readonly http: AxiosInstance;
+
+  constructor(
+    private readonly options: MetaWhatsAppOptions,
+    @InjectPinoLogger(MetaGraphClient.name) private readonly logger: PinoLogger,
+  ) {
+    this.http = axios.create({
+      baseURL: this.options.graphApiBaseUrl,
+      timeout: 30_000,
+      validateStatus: () => true,
+    });
+  }
+
+  async sendTextMessage(credentials: MetaGraphCredentials, to: string, body: string): Promise<MetaSendMessageResult> {
+    return this.postMessage(credentials, {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'text',
+      text: { body },
+    });
+  }
+
+  async sendTemplateMessage(
+    credentials: MetaGraphCredentials,
+    to: string,
+    templateName: string,
+    languageCode: string,
+    parameters: string[],
+  ): Promise<MetaSendMessageResult> {
+    const template: Record<string, unknown> = {
+      name: templateName,
+      language: { code: languageCode },
+    };
+
+    if (parameters.length > 0) {
+      template.components = [
+        {
+          type: 'body',
+          parameters: parameters.map((text) => ({ type: 'text', text })),
+        },
+      ];
+    }
+
+    return this.postMessage(credentials, {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template,
+    });
+  }
+
+  async createMessageTemplate(
+    credentials: MetaGraphCredentials,
+    name: string,
+    language: string,
+    category: string,
+    bodyText: string,
+  ): Promise<MetaCreateTemplateResult> {
+    const placeholderCount = (bodyText.match(/\{\{\d+\}\}/g) ?? []).length;
+    const exampleValues = Array.from({ length: placeholderCount }, (_, index) => `Example ${index + 1}`);
+
+    const payload = {
+      name,
+      language,
+      category,
+      components: [
+        {
+          type: 'BODY',
+          text: bodyText,
+          ...(exampleValues.length ? { example: { body_text: [exampleValues] } } : {}),
+        },
+      ],
+    };
+
+    try {
+      const response = await this.http.post<MetaTemplateCreateResponse>(
+        `/${credentials.wabaId}/message_templates`,
+        payload,
+        { headers: this.authHeaders(credentials.accessToken) },
+      );
+
+      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to create WhatsApp template');
+      this.logger.info(
+        {
+          operation: 'createMessageTemplate',
+          metaEndpoint: `/${credentials.wabaId}/message_templates`,
+          httpStatus: response.status,
+          templateId: body.id,
+          templateStatus: body.status,
+        },
+        'WhatsApp template created',
+      );
+
+      return {
+        templateId: String(body.id ?? ''),
+        status: String(body.status ?? 'PENDING'),
+      };
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to create WhatsApp template');
+    }
+  }
+
+  async listMessageTemplates(credentials: MetaGraphCredentials): Promise<MetaTemplateSummary[]> {
+    try {
+      const response = await this.http.get<MetaTemplateListResponse>(`/${credentials.wabaId}/message_templates`, {
+        headers: this.authHeaders(credentials.accessToken),
+        params: {
+          fields: 'id,name,language,status,category',
+          limit: 100,
+        },
+      });
+
+      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to list WhatsApp templates');
+      this.logger.info(
+        {
+          operation: 'listMessageTemplates',
+          metaEndpoint: `/${credentials.wabaId}/message_templates`,
+          httpStatus: response.status,
+          templateCount: body.data?.length ?? 0,
+        },
+        'WhatsApp templates listed',
+      );
+
+      return (body.data ?? []).map((row) => ({
+        id: String(row.id ?? ''),
+        name: String(row.name ?? ''),
+        language: String(row.language ?? ''),
+        status: String(row.status ?? ''),
+        category: row.category,
+      }));
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to list WhatsApp templates');
+    }
+  }
+
+  private async postMessage(
+    credentials: MetaGraphCredentials,
+    payload: Record<string, unknown>,
+  ): Promise<MetaSendMessageResult> {
+    try {
+      const response = await this.http.post<MetaMessagesResponse>(`/${credentials.phoneNumberId}/messages`, payload, {
+        headers: this.authHeaders(credentials.accessToken),
+      });
+
+      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to send WhatsApp message');
+      const messageId = body.messages?.[0]?.id;
+      if (!messageId) {
+        throw new BadRequestException('Meta did not return a WhatsApp message ID');
+      }
+
+      this.logger.info(
+        {
+          operation: 'sendMessage',
+          metaEndpoint: `/${credentials.phoneNumberId}/messages`,
+          httpStatus: response.status,
+          messageId,
+        },
+        'WhatsApp message sent',
+      );
+
+      return { messageId };
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to send WhatsApp message');
+    }
+  }
+
+  private authHeaders(accessToken: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    };
+  }
+}

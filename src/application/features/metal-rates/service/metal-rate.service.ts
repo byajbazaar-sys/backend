@@ -3,16 +3,15 @@ import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { BulkDeleteResult, CACHE_NAMESPACE, CACHE_SERVICE, ICacheService, queryCacheParts } from '../../../shared';
-
 import { EMetalType } from '../../inventory/enums';
 import {
-  CURRENT_RATE_KEYS,
-  CurrentRateKey,
   isAllowedRatePurity,
+  CurrentRateKey,
   METAL_RATE_CURRENT_CACHE_TTL_SECONDS,
   metalRateCurrentCacheKey,
   purityToCurrentKey,
 } from '../constants';
+import { createEmptyCurrentMetalRatesData, createEmptyCurrentRateSnapshot, CurrentMetalRatesData, CurrentRateSnapshot } from '../domain';
 import { MetalRate } from '../domain';
 import {
   CreateMetalRateRequestModel,
@@ -41,31 +40,41 @@ export class MetalRateService implements IMetalRateService {
     return plainToInstance(CurrentMetalRatesResponseModel, response, { excludeExtraneousValues: true });
   }
 
-  private async loadCurrentRates(userId: string): Promise<Record<string, number | string>> {
+  private async loadCurrentRates(userId: string): Promise<CurrentMetalRatesData> {
     const latest = await this.ratesRepo.findCurrentRates(userId);
-    const response: Record<string, number | string> = {
-      gold24: null,
-      gold22: null,
-      gold20: null,
-      gold18: null,
-      silver999: null,
-      silver925: null,
-      gold24UpdatedAt: null,
-      gold22UpdatedAt: null,
-      gold20UpdatedAt: null,
-      gold18UpdatedAt: null,
-      silver999UpdatedAt: null,
-      silver925UpdatedAt: null,
-    };
+    const response = createEmptyCurrentMetalRatesData();
 
     for (const entry of latest) {
       const key = purityToCurrentKey(entry.metalType, entry.purity);
       if (!key) continue;
       response[key] = Number(entry.rate);
-      response[`${key}UpdatedAt`] = entry.createdAt?.toISOString() ?? null;
+      this.setCurrentRateUpdatedAt(response, key, entry.createdAt?.toISOString() ?? null);
     }
 
     return response;
+  }
+
+  private setCurrentRateUpdatedAt(data: CurrentMetalRatesData, key: CurrentRateKey, value: string | null): void {
+    switch (key) {
+      case 'gold24':
+        data.gold24UpdatedAt = value;
+        break;
+      case 'gold22':
+        data.gold22UpdatedAt = value;
+        break;
+      case 'gold20':
+        data.gold20UpdatedAt = value;
+        break;
+      case 'gold18':
+        data.gold18UpdatedAt = value;
+        break;
+      case 'silver999':
+        data.silver999UpdatedAt = value;
+        break;
+      case 'silver925':
+        data.silver925UpdatedAt = value;
+        break;
+    }
   }
 
   async create(data: CreateMetalRateRequestModel, userId: string): Promise<MetalRate> {
@@ -186,8 +195,7 @@ export class MetalRateService implements IMetalRateService {
     }
 
     const days = [...byDay.keys()].sort();
-    const running: Partial<Record<CurrentRateKey, number>> = {};
-    for (const key of CURRENT_RATE_KEYS) running[key] = null;
+    const running: CurrentRateSnapshot = createEmptyCurrentRateSnapshot();
 
     const result: MetalRateChartPointModel[] = [];
 

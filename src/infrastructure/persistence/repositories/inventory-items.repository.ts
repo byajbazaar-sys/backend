@@ -12,6 +12,7 @@ import {
   InventoryItemUpdatePatch,
   InventoryCategoryBreakdown,
 } from '../../../application';
+import { InventoryItemEntityUpdateInput } from '../../../application/features/inventory/models/inventory-item-entity-update-input.model';
 import { InventoryItemEntity } from '../entities/inventory-item.entity';
 
 @Injectable()
@@ -164,7 +165,8 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     const { categoryName: _categoryName, ...rest } = data as InventoryItemUpdatePatch & {
       categoryName?: string;
     };
-    await this.repo.update(id, rest as Partial<InventoryItemEntity>);
+    const entityUpdate: InventoryItemEntityUpdateInput = rest;
+    await this.repo.update(id, entityUpdate);
     return this.findById(id);
   }
 
@@ -253,11 +255,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     });
   }
 
-  async bulkUpdateCatalogVisibility(
-    ids: string[],
-    createdBy: string,
-    isCatalogVisible: boolean,
-  ): Promise<number> {
+  async bulkUpdateCatalogVisibility(ids: string[], createdBy: string, isCatalogVisible: boolean): Promise<number> {
     if (!ids.length) return 0;
     const result = await this.repo
       .createQueryBuilder()

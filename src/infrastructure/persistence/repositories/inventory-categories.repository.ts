@@ -45,7 +45,7 @@ export class InventoryCategoriesRepository implements IInventoryCategoriesReposi
   }
 
   async update(id: string, data: UpdateInventoryCategoryRequestModel): Promise<InventoryCategory> {
-    await this.repo.update(id, data as Partial<InventoryCategoryEntity>);
+    await this.repo.update(id, data);
     const updated = await this.repo.findOne({ where: { id } });
     return plainToInstance(InventoryCategory, updated, { excludeExtraneousValues: true });
   }

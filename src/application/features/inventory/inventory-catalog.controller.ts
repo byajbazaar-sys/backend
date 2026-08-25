@@ -1,14 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Inject,
-  Patch,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
@@ -22,8 +12,8 @@ import {
   InventoryItemsPagedResponseModel,
   UpdateCatalogSettingsRequestModel,
 } from './models';
-import { INVENTORY_CATALOG_SERVICE, IInventoryCatalogService } from './service/i-inventory-catalog.service';
 import { INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
+import { INVENTORY_CATALOG_SERVICE, IInventoryCatalogService } from './service/i-inventory-catalog.service';
 
 @ApiTags('inventory-catalog')
 @ApiBearerAuth('user')
@@ -76,11 +66,7 @@ export class InventoryCatalogController {
     @Body() body: BulkUpdateCatalogVisibilityRequestModel,
     @Identity() identity: IIdentity,
   ): Promise<BulkUpdateCatalogVisibilityResponseModel> {
-    const result = await this.catalogService.bulkUpdateVisibility(
-      identity.userId,
-      body.ids,
-      body.isCatalogVisible,
-    );
+    const result = await this.catalogService.bulkUpdateVisibility(identity.userId, body.ids, body.isCatalogVisible);
     return plainToInstance(BulkUpdateCatalogVisibilityResponseModel, result, {
       excludeExtraneousValues: true,
     });

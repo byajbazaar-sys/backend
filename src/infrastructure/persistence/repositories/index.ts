@@ -27,3 +27,4 @@ export * from './plans.repository';
 export * from './jewellery-events.repository';
 export * from './try-on-assets.repository';
 export * from './deposits.repository';
+export * from './whatsapp-business-connections.repository';

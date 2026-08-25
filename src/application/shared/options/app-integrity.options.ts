@@ -10,9 +10,7 @@ export class AppIntegrityOptions {
   ) {}
 
   get playIntegrityReady(): boolean {
-    return Boolean(
-      this.androidPackageName && (this.serviceAccountJson || this.serviceAccountSsmPath),
-    );
+    return Boolean(this.androidPackageName && (this.serviceAccountJson || this.serviceAccountSsmPath));
   }
 
   get appAttestReady(): boolean {

@@ -17,7 +17,13 @@ import { DepositsDownloadFilterOptions, DepositsFilterOptions } from '../options
 import { DepositStats } from './deposit-stats';
 import { IDepositService } from './i-deposit.service';
 import { DEPOSITS_REPOSITORY, IDepositsRepository } from './i-deposits.repository';
-import { CACHE_NAMESPACE, CACHE_SERVICE, DASHBOARD_CACHE_TTL_SECONDS, ICacheService, queryCacheParts } from '../../../shared';
+import {
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  DASHBOARD_CACHE_TTL_SECONDS,
+  ICacheService,
+  queryCacheParts,
+} from '../../../shared';
 
 @Injectable()
 export class DepositService implements IDepositService {

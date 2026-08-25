@@ -60,7 +60,7 @@ export class LoanItemsRepository implements ILoanItemsRepository {
   async update(id: string, loanId: string, updateData: UpdateLoanItemPatch): Promise<LoanItem> {
     const { createdBy, ...rest } = updateData;
     const entityUpdate = createdBy ? { ...rest, createdBy } : rest;
-    await this.loanItemRepo.update({ id, loanId }, entityUpdate as Partial<LoanItemEntity>);
+    await this.loanItemRepo.update({ id, loanId }, entityUpdate);
     const updated = await this.loanItemRepo.findOne({ where: { id, loanId } });
     if (!updated) return null;
     return plainToInstance(LoanItem, updated, { excludeExtraneousValues: true });

@@ -5,6 +5,7 @@ import FormData from 'form-data';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import sharp from 'sharp';
 
+import { GeneratedAiImage, IProductImageAiService, ITryOnAiService, ProductImageInput } from '../../../application';
 import {
   CLOUDFLARE_TRYON_MAX_IMAGE_PX,
   CLOUDFLARE_TRYON_MIME,
@@ -12,7 +13,6 @@ import {
   resolveCloudflareTryOnModelId,
 } from '../ai.constants';
 import { CloudflareTryOnOptions, type CloudflareCredential } from '../cloudflare-try-on.options';
-import { GeneratedAiImage, IProductImageAiService, ITryOnAiService, ProductImageInput } from '../../../application';
 import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
 import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.prompts';
 import { buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts/try-on.prompts';

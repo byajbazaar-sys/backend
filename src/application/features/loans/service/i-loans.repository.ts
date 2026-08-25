@@ -7,7 +7,7 @@ export const LOANS_REPOSITORY = 'LOANS_REPOSITORY';
 export interface ILoansRepository {
   create(createLoan: Loan): Promise<Loan>;
   findByCustomerId(customerId: string): Promise<Loan[]>;
-  update(id: string, updateDto: Loan): Promise<Loan | null>;
+  update(id: string, updateDto: Loan): Promise<Loan>;
   /**
    * Atomically update a loan and replace its unpaid dues (paid dues are never touched).
    */
@@ -16,7 +16,7 @@ export interface ILoansRepository {
     updateDto: Loan,
     unpaidDues: Due[],
     unpaidTypes?: EDueType[],
-  ): Promise<Loan | null>;
+  ): Promise<Loan>;
   /** Atomically reserves the next per-loan transaction sequence number. */
   allocateTransactionSeq(loanId: string, createdBy: string): Promise<number>;
   /** Moves the replay checkpoint; call after any change that recomputes balances. */

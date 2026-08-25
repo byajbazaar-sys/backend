@@ -26,18 +26,18 @@ export class UserUpdatePatch {
   emailVerifiedAt?: Date;
 
   @Expose()
-  resetPasswordToken?: string | null;
+  resetPasswordToken?: string;
 
   @Expose()
   @Type(() => Date)
-  resetPasswordExpires?: Date | null;
+  resetPasswordExpires?: Date;
 
   @Expose()
-  emailVerificationToken?: string | null;
+  emailVerificationToken?: string;
 
   @Expose()
   @Type(() => Date)
-  emailVerificationExpires?: Date | null;
+  emailVerificationExpires?: Date;
 
   @Expose()
   profilePhotoRef?: string;
@@ -108,5 +108,5 @@ export class UserUpdatePatch {
 
   @Expose()
   @Type(() => Date)
-  trialEndsAt?: Date | null;
+  trialEndsAt?: Date;
 }

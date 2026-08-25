@@ -1,5 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { GoogleSsoRequestModel } from '../../application/features/auth/models';
@@ -15,20 +15,20 @@ const CHALLENGE_PREFIX = 'app-integrity:challenge:';
 const ATTEST_PREFIX = 'app-integrity:attest:';
 const ATTEST_TTL_SECONDS = 60 * 60 * 24 * 180;
 
-type StoredAttestation = {
+interface StoredAttestation {
   publicKey: string;
   signCount: number;
-};
+}
 
 @Injectable()
 export class AppIntegrityService implements IAppIntegrityService {
-  private serviceAccountCredentialsCache: Record<string, unknown> | null | undefined;
+  private serviceAccountCredentialsCache: Record<string, unknown> | undefined;
 
   constructor(
     private readonly options: AppIntegrityOptions,
     @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
     @InjectPinoLogger(AppIntegrityService.name) private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   async createChallenge(): Promise<AppIntegrityChallengeResult> {
     if (!this.redis.isEnabled()) {
@@ -60,20 +60,20 @@ export class AppIntegrityService implements IAppIntegrityService {
     await this.consumeChallenge(request.integrityChallenge);
 
     if (hasAndroid) {
-      await this.verifyAndroidToken(request.integrityToken!, request.integrityChallenge);
+      await this.verifyAndroidToken(request.integrityToken, request.integrityChallenge);
       return;
     }
 
     if (request.integrityAttestation) {
       await this.registerIosAttestation(
-        request.integrityKeyId!,
+        request.integrityKeyId,
         request.integrityAttestation,
         request.integrityChallenge,
       );
       return;
     }
 
-    await this.verifyIosAssertion(request.integrityKeyId!, request.integrityAssertion!, request.integrityChallenge);
+    await this.verifyIosAssertion(request.integrityKeyId, request.integrityAssertion, request.integrityChallenge);
   }
 
   private async consumeChallenge(challenge: string): Promise<void> {
@@ -107,10 +107,7 @@ export class AppIntegrityService implements IAppIntegrityService {
 
     if (this.options.serviceAccountJson) {
       try {
-        this.serviceAccountCredentialsCache = JSON.parse(this.options.serviceAccountJson) as Record<
-          string,
-          unknown
-        >;
+        this.serviceAccountCredentialsCache = JSON.parse(this.options.serviceAccountJson) as Record<string, unknown>;
         return this.serviceAccountCredentialsCache;
       } catch {
         this.serviceAccountCredentialsCache = null;
@@ -127,10 +124,7 @@ export class AppIntegrityService implements IAppIntegrityService {
             WithDecryption: true,
           }),
         );
-        this.serviceAccountCredentialsCache = JSON.parse(response.Parameter?.Value ?? '') as Record<
-          string,
-          unknown
-        >;
+        this.serviceAccountCredentialsCache = JSON.parse(response.Parameter?.Value ?? '') as Record<string, unknown>;
         return this.serviceAccountCredentialsCache;
       } catch (error) {
         this.logger.warn({ error }, 'Failed to load Play Integrity service account from SSM');
@@ -159,10 +153,10 @@ export class AppIntegrityService implements IAppIntegrityService {
     const client = await auth.getClient();
     let payload:
       | {
-          requestDetails?: { requestHash?: string };
-          appIntegrity?: { appRecognitionVerdict?: string; packageName?: string };
-          deviceIntegrity?: { deviceRecognitionVerdict?: string[] };
-        }
+        requestDetails?: { requestHash?: string };
+        appIntegrity?: { appRecognitionVerdict?: string; packageName?: string };
+        deviceIntegrity?: { deviceRecognitionVerdict?: string[] };
+      }
       | undefined;
 
     try {

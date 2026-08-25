@@ -1,11 +1,14 @@
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { plainToInstance } from 'class-transformer';
 import { sanitizeCatalogSlugParam } from '@shared-libs';
+import { plainToInstance } from 'class-transformer';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
-import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from '../../inventory/service/i-inventory-items.repository';
 import { USERS_FILE_STORAGE, IUsersFileStorage } from '../../../shared';
+import {
+  IInventoryItemsRepository,
+  INVENTORY_ITEMS_REPOSITORY,
+} from '../../inventory/service/i-inventory-items.repository';
+import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
 import { ListPublicCatalogQueryModel, PublicCatalogItemModel, PublicCatalogResponseModel } from '../models';
 import { IPublicCatalogService } from './i-public-catalog.service';
 import { InventoryItem } from '../../inventory/domain';
@@ -70,28 +73,26 @@ export class PublicCatalogService implements IPublicCatalogService {
 
     let shopLogoUrl: string | undefined;
     if (user.shopLogoRef) {
-      shopLogoUrl =
-        (await this.usersFileStorage.getUrlAsync(user.shopLogoRef)) ?? user.shopLogoRef ?? undefined;
+      shopLogoUrl = (await this.usersFileStorage.getUrlAsync(user.shopLogoRef)) ?? user.shopLogoRef ?? undefined;
     }
 
-    const paged =
-      catalogActive
-        ? await this.itemsRepo.findPublicCatalog(user.id, {
-            search: query.search,
-            categoryId: query.categoryId,
-            metalType: query.metalType,
-            pageNumber: query.pageNumber,
-            pageSize: query.pageSize,
-          })
-        : {
-            items: [] as InventoryItem[],
-            page: query.pageNumber ?? 0,
-            perPage: query.pageSize ?? 24,
-            totalCount: 0,
-            totalPages: 0,
-            hasNextPage: false,
-            hasPreviousPage: false,
-          };
+    const paged = catalogActive
+      ? await this.itemsRepo.findPublicCatalog(user.id, {
+          search: query.search,
+          categoryId: query.categoryId,
+          metalType: query.metalType,
+          pageNumber: query.pageNumber,
+          pageSize: query.pageSize,
+        })
+      : {
+          items: [] as InventoryItem[],
+          page: query.pageNumber ?? 0,
+          perPage: query.pageSize ?? 24,
+          totalCount: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        };
 
     const publicItems = await Promise.all(paged.items.map((item) => this.toPublicItem(item)));
 

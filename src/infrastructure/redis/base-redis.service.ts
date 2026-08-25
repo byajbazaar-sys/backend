@@ -2,8 +2,8 @@ import { OnApplicationBootstrap } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { createClient, RedisClientType } from 'redis';
 
-import { IRedisService } from '../../application/shared/services/i-redis.service';
 import { IRedisOptions } from './options';
+import { IRedisService } from '../../application';
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
@@ -66,35 +66,35 @@ export abstract class BaseRedisService implements OnApplicationBootstrap, IRedis
       const resolvedKey = !isNilOrEmpty(prefix) ? `${prefix}:${key}` : key;
       await this.redisClient.set(resolvedKey, toJson(value), expiration ? { EX: expiration } : undefined);
       const result = await this.redisClient.get(resolvedKey);
-      return fromJson<T>(result as string);
+      return fromJson<T>(result);
     } catch (ex) {
       this.logger.warn({ key, error: ex }, 'Redis set failed — continuing without cache');
       return value;
     }
   }
 
-  public async getAsync<T>(key: string): Promise<T | null> {
+  public async getAsync<T>(key: string): Promise<T> {
     if (!this.enabled) {
       return null;
     }
 
     try {
       const value = await this.redisClient.get(key);
-      return !isNilOrEmpty(value) ? fromJson<T>(value as string) : null;
+      return !isNilOrEmpty(value) ? fromJson<T>(value) : null;
     } catch (ex) {
       this.logger.warn({ key, error: ex }, 'Redis get failed — treating as cache miss');
       return null;
     }
   }
 
-  public async takeAsync<T>(key: string): Promise<T | null> {
+  public async takeAsync<T>(key: string): Promise<T> {
     if (!this.enabled) {
       return null;
     }
 
     try {
       const value = await this.redisClient.getDel(key);
-      return !isNilOrEmpty(value) ? fromJson<T>(value as string) : null;
+      return !isNilOrEmpty(value) ? fromJson<T>(value) : null;
     } catch (ex) {
       this.logger.warn({ key, error: ex }, 'Redis take failed — treating as miss');
       return null;

@@ -1,9 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
-import { QueryDeepPartialEntity, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
-import { IPaymentEventsRepository, PaymentEvent, PaymentEventLinksData, PaymentEventInsertResult } from '../../../application';
+import {
+  IPaymentEventsRepository,
+  PaymentEvent,
+  PaymentEventInsertResult,
+  PaymentEventLinksData,
+  UpdatePaymentEventLinksEntityInput,
+} from '../../../application';
 import { PaymentEventEntity } from '../entities/payment-event.entity';
 
 @Injectable()
@@ -66,7 +72,11 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
     if (!existing) {
       throw new Error(`Payment event ${data.provider}/${data.eventId} missing after conflict`);
     }
-    return plainToInstance(PaymentEventInsertResult, { event: existing, created: false }, { excludeExtraneousValues: true });
+    return plainToInstance(
+      PaymentEventInsertResult,
+      { event: existing, created: false },
+      { excludeExtraneousValues: true },
+    );
   }
 
   async findByProviderAndEventId(provider: string, eventId: string): Promise<PaymentEvent> {
@@ -85,7 +95,7 @@ export class PaymentEventsRepository implements IPaymentEventsRepository {
   }
 
   async updateLinks(id: string, data: PaymentEventLinksData): Promise<PaymentEvent> {
-    const patch: QueryDeepPartialEntity<PaymentEventEntity> = {};
+    const patch: UpdatePaymentEventLinksEntityInput = {};
     if (data.userId !== undefined) patch.userId = data.userId;
     if (data.paymentId !== undefined) patch.paymentId = data.paymentId;
     if (data.paymentOrderId !== undefined) patch.paymentOrderId = data.paymentOrderId;

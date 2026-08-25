@@ -33,7 +33,7 @@ export class PosSessionsRepository implements IPosSessionsRepository {
   }
 
   async update(id: string, data: PosSessionPatch): Promise<PosSession> {
-    await this.repo.update(id, data as Partial<PosSessionEntity>);
+    await this.repo.update(id, data);
     const updated = await this.repo.findOne({ where: { id } });
     return plainToInstance(PosSession, updated, { excludeExtraneousValues: true });
   }

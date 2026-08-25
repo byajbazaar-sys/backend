@@ -18,12 +18,13 @@ import { MetalRatesController } from './metal-rates';
 import { NotificationsController } from './notifications';
 import { PaymentsController, AdminPaymentsController } from './payments';
 import { PosSessionsController, PosSessionPublicController, PosSessionLeaveController } from './pos';
-import { SupportController } from './support';
+import { PublicCatalogController } from './public-catalog';
 import { SalesBillsController } from './sales-bills';
+import { SupportController } from './support';
 import { TransactionsController } from './transactions';
 import { TryOnController } from './try-on';
-import { PublicCatalogController } from './public-catalog';
 import { UsersController } from './users';
+import { WhatsAppController, WhatsAppWebhookController } from './whatsapp';
 
 export * from './users';
 export * from './auth';
@@ -43,6 +44,7 @@ export * from './events';
 export * from './try-on';
 export * from './deposits';
 export * from './public-catalog';
+export * from './whatsapp';
 
 export const Controllers = [
   UsersController,
@@ -71,6 +73,8 @@ export const Controllers = [
   TryOnController,
   DepositsController,
   PublicCatalogController,
+  WhatsAppController,
+  WhatsAppWebhookController,
 ];
 
 export const Services = [JwtService];

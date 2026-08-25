@@ -17,6 +17,7 @@ import {
   NotificationsFilterOptions,
   NotificationDeliveryPatch,
 } from '../../../application/features/notifications';
+import { NotificationEntityUpdateInput } from '../../../application/features/notifications/models/notification-entity-update-input.model';
 import { NotificationEntity } from '../entities/notification.entity';
 
 @Injectable()
@@ -45,7 +46,7 @@ export class NotificationsRepository implements INotificationsRepository {
     const updateData = instanceToPlain(
       plainToInstance(NotificationDeliveryPatch, notification, { excludeExtraneousValues: true }),
       { exposeUnsetFields: false },
-    ) as Partial<NotificationEntity>;
+    ) as NotificationEntityUpdateInput;
 
     await this.notificationRepo.update(id, updateData);
     const updated = await this.notificationRepo.findOne({ where: { id } });

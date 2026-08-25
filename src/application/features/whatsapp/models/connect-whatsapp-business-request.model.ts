@@ -1,0 +1,36 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+
+export class ConnectWhatsAppBusinessRequestModel {
+  @ApiProperty({ description: 'Business (tenant) ID — must match authenticated user' })
+  @IsUUID()
+  @IsNotEmpty()
+  businessId: string;
+
+  @ApiProperty({ description: 'WhatsApp Business Account ID from Meta Embedded Signup' })
+  @IsString()
+  @IsNotEmpty()
+  wabaId: string;
+
+  @ApiProperty({ description: 'Phone number ID from Meta Embedded Signup' })
+  @IsString()
+  @IsNotEmpty()
+  phoneNumberId: string;
+
+  @ApiProperty({
+    description: 'Short-lived access token from Meta Embedded Signup — stored encrypted server-side only',
+  })
+  @IsString()
+  @IsNotEmpty()
+  accessToken: string;
+
+  @ApiPropertyOptional({ example: '+91 98765 43210' })
+  @IsOptional()
+  @IsString()
+  displayPhoneNumber?: string;
+
+  @ApiPropertyOptional({ example: 'ABC Jewellers' })
+  @IsOptional()
+  @IsString()
+  businessName?: string;
+}

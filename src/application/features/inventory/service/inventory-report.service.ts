@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { CACHE_NAMESPACE, CACHE_SERVICE, DASHBOARD_CACHE_TTL_SECONDS, ICacheService } from '../../../shared';
 import { InventoryAnalytics, InventoryDashboardStats, InventoryItem } from '../domain';
 import { EInventoryItemStatus, EMetalType } from '../enums';
-import { CACHE_NAMESPACE, CACHE_SERVICE, DASHBOARD_CACHE_TTL_SECONDS, ICacheService } from '../../../shared';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import { IInventoryReportService } from './i-inventory-report.service';
 

@@ -47,7 +47,7 @@ export class UsersRepository implements IUsersRepository {
   }
 
   async update(id: string, updateDto: UserUpdatePatch): Promise<User> {
-    await this.userRepo.update(id, updateDto as Partial<UserEntity>);
+    await this.userRepo.update(id, updateDto);
     const updated = await this.userRepo.findOne({ where: { id } });
     if (!updated) return null;
     return plainToInstance(User, updated, { excludeExtraneousValues: true });
@@ -78,9 +78,7 @@ export class UsersRepository implements IUsersRepository {
   }
 
   async existsCatalogSlug(catalogSlug: string, excludeUserId?: string): Promise<boolean> {
-    const qb = this.userRepo
-      .createQueryBuilder('user')
-      .where('user.catalog_slug = :catalogSlug', { catalogSlug });
+    const qb = this.userRepo.createQueryBuilder('user').where('user.catalog_slug = :catalogSlug', { catalogSlug });
     if (excludeUserId) {
       qb.andWhere('user.id != :excludeUserId', { excludeUserId });
     }

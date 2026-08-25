@@ -10,8 +10,8 @@ import {
 } from '../models';
 import { IInventoryCatalogService } from './i-inventory-catalog.service';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
-import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
 import { CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
+import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
 
 @Injectable()
 export class InventoryCatalogService implements IInventoryCatalogService {
@@ -35,9 +35,7 @@ export class InventoryCatalogService implements IInventoryCatalogService {
     const publishedItemCount = await this.itemsRepo.countCatalogVisible(userId);
     const expectedSlug = user.businessName ? buildCatalogSlug(user.businessName) : '';
     const slugConflict =
-      !!expectedSlug &&
-      !user.catalogSlug &&
-      (await this.usersRepo.existsCatalogSlug(expectedSlug, userId));
+      !!expectedSlug && !user.catalogSlug && (await this.usersRepo.existsCatalogSlug(expectedSlug, userId));
 
     const catalogEnabled = user.catalogEnabled !== false;
     const catalogActive = catalogEnabled && !!user.catalogSlug;
@@ -101,11 +99,7 @@ export class InventoryCatalogService implements IInventoryCatalogService {
       );
     }
 
-    const updatedCount = await this.itemsRepo.bulkUpdateCatalogVisibility(
-      uniqueIds,
-      userId,
-      isCatalogVisible,
-    );
+    const updatedCount = await this.itemsRepo.bulkUpdateCatalogVisibility(uniqueIds, userId, isCatalogVisible);
 
     if (isCatalogVisible && updatedCount > 0 && user.catalogSlug && user.catalogEnabled === false) {
       await this.usersRepo.update(userId, { catalogEnabled: true });
@@ -113,9 +107,13 @@ export class InventoryCatalogService implements IInventoryCatalogService {
     }
 
     this.logger.info({ userId, updatedCount, isCatalogVisible }, 'Catalog visibility bulk updated');
-    return plainToInstance(BulkUpdateCatalogVisibilityResponseModel, { updatedCount }, {
-      excludeExtraneousValues: true,
-    });
+    return plainToInstance(
+      BulkUpdateCatalogVisibilityResponseModel,
+      { updatedCount },
+      {
+        excludeExtraneousValues: true,
+      },
+    );
   }
 
   private async invalidateUserDetailsCache(userId: string): Promise<void> {

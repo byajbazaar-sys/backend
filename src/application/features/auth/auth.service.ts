@@ -26,7 +26,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
 import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
-import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../users/utils/catalog-slug.helper';
 import { IAuthService } from './interfaces';
 import {
   USERS_FILE_STORAGE,
@@ -46,6 +45,7 @@ import {
 } from '../../shared';
 import { EMAIL_TEMPLATE_SERVICE, IEmailTemplateService } from '../notifications';
 import { IPaymentsService, PAYMENTS_SERVICE } from '../payments/service/i-payments.service';
+import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../users';
 
 type ResolvedUser = User & { id: string; email: string; userType: EUserType };
 
@@ -81,7 +81,7 @@ export class AuthService implements IAuthService {
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @Inject(APP_INTEGRITY_SERVICE) private readonly appIntegrityService: IAppIntegrityService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   private requireEmail(email: string, message = 'Email is required'): string {
     const normalized = email?.toLowerCase().trim();
@@ -233,7 +233,7 @@ export class AuthService implements IAuthService {
       const emailVerificationToken = randomBytes(32).toString('hex');
       const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-      let catalogSlug: string | null = null;
+      let catalogSlug: string = null;
       if (user.businessName?.trim()) {
         catalogSlug = await resolveCatalogSlugForBusinessName(this.usersRepo, user.businessName);
       }

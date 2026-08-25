@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { ApiConfiguration, IApiConfigurationRepository } from '../../../application';
+import { SaveApiConfigurationEntityInput } from '../../../application/features/api-access/models/save-api-configuration-entity-input.model';
 import { ApiConfigurationEntity } from '../entities/api-configuration.entity';
 
 @Injectable()
@@ -33,7 +34,14 @@ export class ApiConfigurationRepository implements IApiConfigurationRepository {
   }
 
   async save(configuration: ApiConfiguration): Promise<ApiConfiguration> {
-    const entity = this.repo.create(configuration as Partial<ApiConfigurationEntity>);
+    const entityInput: SaveApiConfigurationEntityInput = {
+      userId: configuration.userId,
+      apiKey: configuration.apiKey,
+      apiSecretHash: configuration.apiSecretHash,
+      isActive: configuration.isActive,
+      lastUsedAt: configuration.lastUsedAt,
+    };
+    const entity = this.repo.create(entityInput);
     const saved = await this.repo.save(entity);
     return this.map(saved);
   }

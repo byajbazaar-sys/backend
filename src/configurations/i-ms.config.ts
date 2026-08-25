@@ -2,7 +2,14 @@ import { UsersAuthOptions, IDbOptions } from '@shared-libs';
 import { Params } from 'nestjs-pino';
 
 import { IApiOptions } from './i-api.options';
-import { WebAppOptions, FileStorageOptions, GoogleOAuthOptions, RazorpayOptions, AppIntegrityOptions } from '../application';
+import {
+  WebAppOptions,
+  FileStorageOptions,
+  GoogleOAuthOptions,
+  RazorpayOptions,
+  AppIntegrityOptions,
+  MetaWhatsAppOptions,
+} from '../application';
 import {
   AESEncryptOptions,
   AIOptions,
@@ -27,5 +34,6 @@ export interface IMsConfig {
   razorpay: RazorpayOptions;
   redis?: RedisOptions;
   appIntegrity: AppIntegrityOptions;
+  metaWhatsApp: MetaWhatsAppOptions;
   logger: Params;
 }
