@@ -171,6 +171,42 @@ export class MetaGraphClient implements IMetaGraphClient {
     }
   }
 
+  async exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string> {
+    try {
+      const response = await this.http.get<{
+        access_token?: string;
+        error?: { message?: string; code?: number };
+      }>('/oauth/access_token', {
+          params: {
+            client_id: this.options.appId,
+            client_secret: this.options.appSecret,
+            code: code.trim(),
+            redirect_uri: redirectUri.trim(),
+          },
+        },
+      );
+
+      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to exchange Meta OAuth code');
+      const accessToken = body.access_token?.trim();
+      if (!accessToken) {
+        throw new BadRequestException('Meta did not return an access token');
+      }
+
+      this.logger.info(
+        {
+          operation: 'exchangeCodeForAccessToken',
+          metaEndpoint: '/oauth/access_token',
+          httpStatus: response.status,
+        },
+        'Meta OAuth code exchanged for access token',
+      );
+
+      return accessToken;
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to exchange Meta OAuth code');
+    }
+  }
+
   private async postMessage(
     credentials: MetaGraphCredentials,
     payload: Record<string, unknown>,

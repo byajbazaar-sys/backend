@@ -17,12 +17,26 @@ export class ConnectWhatsAppBusinessRequestModel {
   @IsNotEmpty()
   phoneNumberId: string;
 
-  @ApiProperty({
-    description: 'Short-lived access token from Meta Embedded Signup — stored encrypted server-side only',
+  @ApiPropertyOptional({
+    description: 'Short-lived OAuth code from Meta Embedded Signup — exchanged server-side',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  accessToken: string;
+  code?: string;
+
+  @ApiPropertyOptional({
+    description: 'Redirect URI used during Embedded Signup — required when exchanging code',
+  })
+  @IsOptional()
+  @IsString()
+  redirectUri?: string;
+
+  @ApiPropertyOptional({
+    description: 'Short-lived access token — only when Meta returns a token directly (legacy/dev)',
+  })
+  @IsOptional()
+  @IsString()
+  accessToken?: string;
 
   @ApiPropertyOptional({ example: '+91 98765 43210' })
   @IsOptional()

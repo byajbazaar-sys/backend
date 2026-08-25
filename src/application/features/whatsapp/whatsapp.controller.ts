@@ -58,6 +58,8 @@ export class WhatsAppController {
       {
         wabaId: body.wabaId,
         phoneNumberId: body.phoneNumberId,
+        code: body.code,
+        redirectUri: body.redirectUri,
         accessToken: body.accessToken,
         displayPhoneNumber: body.displayPhoneNumber,
         businessName: body.businessName,

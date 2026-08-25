@@ -8,7 +8,13 @@ export class ConnectWhatsAppBusinessData {
   phoneNumberId: string;
 
   @Expose()
-  accessToken: string;
+  accessToken?: string;
+
+  @Expose()
+  code?: string;
+
+  @Expose()
+  redirectUri?: string;
 
   @Expose()
   displayPhoneNumber?: string;

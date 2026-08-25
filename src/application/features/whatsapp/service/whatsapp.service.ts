@@ -101,11 +101,24 @@ export class WhatsAppService implements IWhatsAppService {
     data: ConnectWhatsAppBusinessData,
   ): Promise<WhatsAppBusinessConnection> {
     this.assertBusinessAccess(userId, businessId);
-    if (!data.wabaId?.trim() || !data.phoneNumberId?.trim() || !data.accessToken?.trim()) {
-      throw new BadRequestException('wabaId, phoneNumberId, and accessToken are required');
+    if (!data.wabaId?.trim() || !data.phoneNumberId?.trim()) {
+      throw new BadRequestException('wabaId and phoneNumberId are required');
     }
 
-    const encryptedToken = this.aesEncrypt.encrypt(data.accessToken.trim());
+    let accessToken = data.accessToken?.trim();
+    if (!accessToken && data.code?.trim()) {
+      const redirectUri = data.redirectUri?.trim();
+      if (!redirectUri) {
+        throw new BadRequestException('redirectUri is required when exchanging an OAuth code');
+      }
+      accessToken = await this.metaGraphClient.exchangeCodeForAccessToken(data.code.trim(), redirectUri);
+    }
+
+    if (!accessToken) {
+      throw new BadRequestException('code or accessToken is required');
+    }
+
+    const encryptedToken = this.aesEncrypt.encrypt(accessToken);
     const connectionData = plainToInstance(
       SaveWhatsAppBusinessConnectionData,
       {
