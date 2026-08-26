@@ -21,4 +21,7 @@ export class ConnectWhatsAppBusinessData {
 
   @Expose()
   businessName?: string;
+
+  @Expose()
+  registrationPin: string;
 }

@@ -6,6 +6,7 @@ export * from './send-whatsapp-message-request.model';
 export * from './send-whatsapp-template-message-request.model';
 export * from './create-whatsapp-template-request.model';
 export * from './connect-whatsapp-business-request.model';
+export * from './register-whatsapp-phone-request.model';
 export * from './whatsapp-connection-response.model';
 export * from './get-whatsapp-connection-query.model';
 export * from './whatsapp-webhook-payload.model';
@@ -74,4 +75,14 @@ export class WhatsAppWebhookAckResponseModel {
   @ApiProperty({ example: true })
   @Expose()
   received: boolean;
+}
+
+export class WhatsAppRegisterPhoneResponseModel {
+  @ApiProperty({ example: true })
+  @Expose()
+  success: boolean;
+
+  @ApiProperty({ example: 'CONNECTED' })
+  @Expose()
+  status: string;
 }
