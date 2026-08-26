@@ -1,6 +1,7 @@
 import { Expose, Type } from 'class-transformer';
 
 import { WhatsAppWebhookConversation } from './whatsapp-webhook-conversation';
+import { WhatsAppWebhookMessageStatusError } from './whatsapp-webhook-message-status-error';
 import { WhatsAppWebhookPricing } from './whatsapp-webhook-pricing';
 
 export class WhatsAppWebhookMessageStatus {
@@ -29,4 +30,8 @@ export class WhatsAppWebhookMessageStatus {
   @Expose()
   @Type(() => WhatsAppWebhookPricing)
   pricing?: WhatsAppWebhookPricing;
+
+  @Expose()
+  @Type(() => WhatsAppWebhookMessageStatusError)
+  errors?: WhatsAppWebhookMessageStatusError[];
 }

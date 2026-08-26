@@ -42,6 +42,7 @@ import {
   TRY_ON_ASSETS_REPOSITORY,
   DEPOSITS_REPOSITORY,
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
+  WHATSAPP_MESSAGES_REPOSITORY,
   META_GRAPH_CLIENT,
   RazorpayOptions,
   MetaWhatsAppOptions,
@@ -95,6 +96,7 @@ import {
   TryOnAssetsRepository,
   DepositsRepository,
   WhatsAppBusinessConnectionsRepository,
+  WhatsAppMessagesRepository,
 } from './persistence';
 import Entities from './persistence/entities';
 import Seeds from './persistence/seeds';
@@ -246,6 +248,10 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     {
       provide: WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
       useClass: WhatsAppBusinessConnectionsRepository,
+    },
+    {
+      provide: WHATSAPP_MESSAGES_REPOSITORY,
+      useClass: WhatsAppMessagesRepository,
     },
     {
       provide: WEBSOCKET_MESSAGE_SERVICE,
@@ -416,6 +422,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     TRY_ON_ASSETS_REPOSITORY,
     DEPOSITS_REPOSITORY,
     WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
+    WHATSAPP_MESSAGES_REPOSITORY,
     META_GRAPH_CLIENT,
     COUPON_REDEMPTIONS_REPOSITORY,
     REFUNDS_REPOSITORY,

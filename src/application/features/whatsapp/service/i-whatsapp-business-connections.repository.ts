@@ -8,6 +8,7 @@ export const WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY = 'WHATSAPP_BUSINESS_CONNE
 
 export interface IWhatsAppBusinessConnectionsRepository {
   findByUserId(userId: string): Promise<WhatsAppBusinessConnection | null>;
+  findByWabaAndPhoneNumberId(wabaId: string, phoneNumberId: string): Promise<WhatsAppBusinessConnection | null>;
   findEncryptedTokenByUserId(userId: string): Promise<string | null>;
   upsertConnection(
     userId: string,

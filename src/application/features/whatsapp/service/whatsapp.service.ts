@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { AES_ENCRYPT_SERVICE, IAESEncryptService } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -7,18 +7,21 @@ import { MetaWhatsAppOptions } from '../../../shared';
 import {
   ConnectWhatsAppBusinessData,
   SaveWhatsAppBusinessConnectionData,
+  SaveWhatsAppOutboundMessageData,
   WhatsAppBusinessConnection,
   WhatsAppDisconnectResult,
+  WhatsAppMessage,
   WhatsAppMessageResult,
   WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
 } from '../domain';
-import { EWhatsAppConnectionStatus } from '../enums';
+import { EWhatsAppConnectionStatus, EWhatsAppMessageDeliveryStatus } from '../enums';
 import { IMetaGraphClient, META_GRAPH_CLIENT, MetaGraphCredentials, MetaTemplateSummary } from './i-meta-graph.client';
 import {
   IWhatsAppBusinessConnectionsRepository,
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
 } from './i-whatsapp-business-connections.repository';
+import { IWhatsAppMessagesRepository, WHATSAPP_MESSAGES_REPOSITORY } from './i-whatsapp-messages.repository';
 import { IWhatsAppService } from './i-whatsapp.service';
 
 @Injectable()
@@ -28,6 +31,8 @@ export class WhatsAppService implements IWhatsAppService {
     @Inject(META_GRAPH_CLIENT) private readonly metaGraphClient: IMetaGraphClient,
     @Inject(WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY)
     private readonly connectionsRepo: IWhatsAppBusinessConnectionsRepository,
+    @Inject(WHATSAPP_MESSAGES_REPOSITORY)
+    private readonly messagesRepo: IWhatsAppMessagesRepository,
     @Inject(AES_ENCRYPT_SERVICE) private readonly aesEncrypt: IAESEncryptService,
     @InjectPinoLogger(WhatsAppService.name) private readonly logger: PinoLogger,
   ) { }
@@ -41,6 +46,7 @@ export class WhatsAppService implements IWhatsAppService {
     this.assertBusinessAccess(userId, businessId);
     const credentials = await this.resolveCredentials(userId);
     const result = await this.metaGraphClient.sendTextMessage(credentials, to, body);
+    await this.persistOutboundMessage(userId, credentials, to, result.messageId);
     return plainToInstance(
       WhatsAppMessageResult,
       { success: true, messageId: result.messageId },
@@ -65,6 +71,7 @@ export class WhatsAppService implements IWhatsAppService {
       languageCode,
       parameters,
     );
+    await this.persistOutboundMessage(userId, credentials, to, result.messageId);
     return plainToInstance(
       WhatsAppMessageResult,
       { success: true, messageId: result.messageId },
@@ -189,6 +196,19 @@ export class WhatsAppService implements IWhatsAppService {
     return connection;
   }
 
+  async getMessageDeliveryStatus(
+    userId: string,
+    businessId: string,
+    metaMessageId: string,
+  ): Promise<WhatsAppMessage> {
+    this.assertBusinessAccess(userId, businessId);
+    const message = await this.messagesRepo.findByUserIdAndMetaMessageId(userId, metaMessageId.trim());
+    if (!message) {
+      throw new NotFoundException('WhatsApp message not found');
+    }
+    return message;
+  }
+
   async disconnectWhatsAppBusiness(userId: string, businessId: string): Promise<WhatsAppDisconnectResult> {
     this.assertBusinessAccess(userId, businessId);
     const connection = await this.connectionsRepo.findByUserId(userId);
@@ -225,6 +245,42 @@ export class WhatsAppService implements IWhatsAppService {
 
     const registered = await this.metaGraphClient.registerPhoneNumber(accessToken, phoneNumberId, pin);
     return plainToInstance(WhatsAppRegisterPhoneResult, registered, { excludeExtraneousValues: true });
+  }
+
+  private async persistOutboundMessage(
+    userId: string,
+    credentials: MetaGraphCredentials,
+    recipient: string,
+    metaMessageId: string,
+  ): Promise<void> {
+    const normalizedRecipient = recipient.replace(/\D/g, '');
+    const data = plainToInstance(
+      SaveWhatsAppOutboundMessageData,
+      {
+        userId,
+        wabaId: credentials.wabaId,
+        phoneNumberId: credentials.phoneNumberId,
+        metaMessageId,
+        recipient: normalizedRecipient,
+        deliveryStatus: EWhatsAppMessageDeliveryStatus.Sent,
+        statusTimestamp: String(Math.floor(Date.now() / 1000)),
+      },
+      { excludeExtraneousValues: true },
+    );
+
+    await this.messagesRepo.createOutboundMessage(data);
+    this.logger.info(
+      {
+        operation: 'sendWhatsAppMessage',
+        userId,
+        wabaId: credentials.wabaId,
+        phoneNumberId: credentials.phoneNumberId,
+        metaMessageId,
+        recipient: normalizedRecipient,
+        deliveryStatus: EWhatsAppMessageDeliveryStatus.Sent,
+      },
+      'WhatsApp outbound message accepted by Meta',
+    );
   }
 
   /** Strip query/hash so token exchange matches Meta OAuth redirect_uri (pathname only). */

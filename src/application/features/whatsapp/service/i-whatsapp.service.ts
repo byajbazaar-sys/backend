@@ -2,6 +2,7 @@ import {
   ConnectWhatsAppBusinessData,
   WhatsAppBusinessConnection,
   WhatsAppDisconnectResult,
+  WhatsAppMessage,
   WhatsAppMessageResult,
   WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
@@ -39,6 +40,7 @@ export interface IWhatsAppService {
     businessId: string,
     data: ConnectWhatsAppBusinessData,
   ): Promise<WhatsAppBusinessConnection>;
+  getMessageDeliveryStatus(userId: string, businessId: string, metaMessageId: string): Promise<WhatsAppMessage>;
   registerWhatsAppPhone(
     userId: string,
     businessId: string,

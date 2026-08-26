@@ -20,6 +20,17 @@ export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessC
     return row ? this.map(row) : null;
   }
 
+  async findByWabaAndPhoneNumberId(wabaId: string, phoneNumberId: string): Promise<WhatsAppBusinessConnection> {
+    const row = await this.repo.findOne({
+      where: {
+        wabaId: wabaId.trim(),
+        phoneNumberId: phoneNumberId.trim(),
+        connectionStatus: EWhatsAppConnectionStatus.Connected,
+      },
+    });
+    return row ? this.map(row) : null;
+  }
+
   async findEncryptedTokenByUserId(userId: string): Promise<string> {
     const row = await this.repo.findOne({
       where: { userId, connectionStatus: EWhatsAppConnectionStatus.Connected },

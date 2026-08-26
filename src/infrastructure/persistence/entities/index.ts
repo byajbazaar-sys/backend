@@ -32,6 +32,7 @@ import { TransactionEntity } from './transaction.entity';
 import { UserEntity } from './user.entity';
 import { WebSocketConnectionEntity } from './websocket-connection.entity';
 import { WhatsAppBusinessConnectionEntity } from './whatsapp-business-connection.entity';
+import { WhatsAppMessageEntity } from './whatsapp-message.entity';
 
 export { UserEntity } from './user.entity';
 export { CustomerEntity } from './customer.entity';
@@ -67,6 +68,7 @@ export { DepositTransactionEntity } from './deposit-transaction.entity';
 export { DepositReceiptEntity } from './deposit-receipt.entity';
 export { TransactionLogEntity } from './transaction-log.entity';
 export { WhatsAppBusinessConnectionEntity } from './whatsapp-business-connection.entity';
+export { WhatsAppMessageEntity } from './whatsapp-message.entity';
 
 export default [
   UserEntity,
@@ -103,4 +105,5 @@ export default [
   DepositReceiptEntity,
   TransactionLogEntity,
   WhatsAppBusinessConnectionEntity,
+  WhatsAppMessageEntity,
 ];

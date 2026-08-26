@@ -28,3 +28,4 @@ export * from './jewellery-events.repository';
 export * from './try-on-assets.repository';
 export * from './deposits.repository';
 export * from './whatsapp-business-connections.repository';
+export * from './whatsapp-messages.repository';

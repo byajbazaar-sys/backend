@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
@@ -11,12 +11,14 @@ import {
   DisconnectWhatsAppBusinessRequestModel,
   RegisterWhatsAppPhoneRequestModel,
   GetWhatsAppConnectionQueryModel,
+  GetWhatsAppMessageStatusQueryModel,
   ListWhatsAppTemplatesQueryModel,
   SendWhatsAppMessageRequestModel,
   SendWhatsAppTemplateMessageRequestModel,
   WhatsAppConnectionResponseModel,
   WhatsAppDisconnectResponseModel,
   WhatsAppMessageResponseModel,
+  WhatsAppMessageDeliveryStatusResponseModel,
   WhatsAppRegisterPhoneResponseModel,
   WhatsAppTemplateCreateResponseModel,
   WhatsAppTemplateListResponseModel,
@@ -116,6 +118,36 @@ export class WhatsAppController {
       body.text.body,
     );
     return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
+  }
+
+  @Get('messages/:messageId')
+  @ApiOperation({ summary: 'Get WhatsApp message delivery status (updated via Meta webhooks)' })
+  @ApiQuery({ name: 'businessId', required: true, description: 'Business (tenant) ID — must match authenticated user' })
+  @ApiOkResponse({ type: WhatsAppMessageDeliveryStatusResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async getMessageStatus(
+    @Param('messageId') messageId: string,
+    @Query() query: GetWhatsAppMessageStatusQueryModel,
+    @Identity() identity: IIdentity,
+  ): Promise<WhatsAppMessageDeliveryStatusResponseModel> {
+    const message = await this.whatsappService.getMessageDeliveryStatus(
+      identity.userId,
+      query.businessId,
+      messageId,
+    );
+    return plainToInstance(
+      WhatsAppMessageDeliveryStatusResponseModel,
+      {
+        messageId: message.metaMessageId,
+        deliveryStatus: message.deliveryStatus,
+        recipient: message.recipient,
+        statusTimestamp: message.statusTimestamp,
+        errorCode: message.errorCode,
+        errorTitle: message.errorTitle,
+        errorMessage: message.errorMessage,
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Post('messages/template')
