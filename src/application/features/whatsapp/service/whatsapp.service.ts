@@ -10,6 +10,7 @@ import {
   WhatsAppBusinessConnection,
   WhatsAppDisconnectResult,
   WhatsAppMessageResult,
+  WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
 } from '../domain';
 import { EWhatsAppConnectionStatus } from '../enums';
@@ -126,6 +127,8 @@ export class WhatsAppService implements IWhatsAppService {
       throw new BadRequestException('accessToken or code is required');
     }
 
+    await this.ensurePhoneNumberRegistered(accessToken, data.phoneNumberId.trim(), data.registrationPin);
+
     const encryptedToken = this.aesEncrypt.encrypt(accessToken);
     const connectionData = plainToInstance(
       SaveWhatsAppBusinessConnectionData,
@@ -151,6 +154,32 @@ export class WhatsAppService implements IWhatsAppService {
     return saved;
   }
 
+  async registerWhatsAppPhone(
+    userId: string,
+    businessId: string,
+    registrationPin: string,
+  ): Promise<WhatsAppRegisterPhoneResult> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
+      throw new BadRequestException('WhatsApp is not connected for this business');
+    }
+
+    const encryptedToken = await this.connectionsRepo.findEncryptedTokenByUserId(userId);
+    if (!encryptedToken) {
+      throw new BadRequestException('WhatsApp connection token is missing');
+    }
+
+    const accessToken = this.aesEncrypt.decrypt(encryptedToken);
+    const result = await this.ensurePhoneNumberRegistered(
+      accessToken,
+      connection.phoneNumberId,
+      registrationPin,
+    );
+
+    return plainToInstance(WhatsAppRegisterPhoneResult, result, { excludeExtraneousValues: true });
+  }
+
   async getWhatsAppConnection(userId: string, businessId: string): Promise<WhatsAppBusinessConnection> {
     this.assertBusinessAccess(userId, businessId);
     const connection = await this.connectionsRepo.findByUserId(userId);
@@ -169,6 +198,33 @@ export class WhatsAppService implements IWhatsAppService {
     await this.connectionsRepo.updateStatus(userId, EWhatsAppConnectionStatus.Disconnected);
     this.logger.info({ operation: 'disconnectWhatsAppBusiness', userId }, 'WhatsApp business connection disconnected');
     return plainToInstance(WhatsAppDisconnectResult, { success: true }, { excludeExtraneousValues: true });
+  }
+
+  private async ensurePhoneNumberRegistered(
+    accessToken: string,
+    phoneNumberId: string,
+    registrationPin: string,
+  ): Promise<WhatsAppRegisterPhoneResult> {
+    const pin = registrationPin?.trim();
+    if (!/^\d{6}$/.test(pin)) {
+      throw new BadRequestException('registrationPin must be a 6-digit number');
+    }
+
+    const current = await this.metaGraphClient.getPhoneNumberStatus(accessToken, phoneNumberId);
+    if (current.status === 'CONNECTED') {
+      this.logger.info(
+        { operation: 'ensurePhoneNumberRegistered', phoneNumberId, status: current.status },
+        'WhatsApp phone number already registered with Cloud API',
+      );
+      return plainToInstance(
+        WhatsAppRegisterPhoneResult,
+        { success: true, status: current.status },
+        { excludeExtraneousValues: true },
+      );
+    }
+
+    const registered = await this.metaGraphClient.registerPhoneNumber(accessToken, phoneNumberId, pin);
+    return plainToInstance(WhatsAppRegisterPhoneResult, registered, { excludeExtraneousValues: true });
   }
 
   /** Strip query/hash so token exchange matches Meta OAuth redirect_uri (pathname only). */

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches } from 'class-validator';
 
 export class ConnectWhatsAppBusinessRequestModel {
   @ApiProperty({ description: 'Business (tenant) ID — must match authenticated user' })
@@ -47,4 +47,13 @@ export class ConnectWhatsAppBusinessRequestModel {
   @IsOptional()
   @IsString()
   businessName?: string;
+
+  @ApiProperty({
+    description:
+      'Six-digit two-step verification PIN — registers the phone with Meta Cloud API (sets PIN if new, must match if existing)',
+    example: '123456',
+  })
+  @IsNotEmpty()
+  @Matches(/^\d{6}$/, { message: 'registrationPin must be a 6-digit number' })
+  registrationPin: string;
 }

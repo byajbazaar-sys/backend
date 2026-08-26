@@ -7,6 +7,8 @@ import {
   IMetaGraphClient,
   MetaCreateTemplateResult,
   MetaGraphCredentials,
+  MetaPhoneNumberStatus,
+  MetaRegisterPhoneResult,
   MetaSendMessageResult,
   MetaTemplateSummary,
   MetaWhatsAppOptions
@@ -252,6 +254,71 @@ export class MetaGraphClient implements IMetaGraphClient {
     }
 
     mapMetaGraphError(lastError, 'Failed to exchange Meta OAuth code');
+  }
+
+  async getPhoneNumberStatus(accessToken: string, phoneNumberId: string): Promise<MetaPhoneNumberStatus> {
+    try {
+      const response = await this.http.get<{
+        status?: string;
+        code_verification_status?: string;
+        display_phone_number?: string;
+        error?: { message?: string; code?: number };
+      }>(`/${phoneNumberId.trim()}`, {
+        params: {
+          fields: 'status,code_verification_status,display_phone_number',
+        },
+        headers: this.authHeaders(accessToken),
+      });
+
+      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to fetch WhatsApp phone number status');
+      return {
+        status: String(body.status ?? ''),
+        codeVerificationStatus: body.code_verification_status,
+        displayPhoneNumber: body.display_phone_number,
+      };
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to fetch WhatsApp phone number status');
+    }
+  }
+
+  async registerPhoneNumber(
+    accessToken: string,
+    phoneNumberId: string,
+    pin: string,
+  ): Promise<MetaRegisterPhoneResult> {
+    try {
+      const response = await this.http.post<{ success?: boolean; error?: { message?: string; code?: number } }>(
+        `/${phoneNumberId.trim()}/register`,
+        {
+          messaging_product: 'whatsapp',
+          pin: pin.trim(),
+        },
+        {
+          headers: this.authHeaders(accessToken),
+        },
+      );
+
+      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to register WhatsApp phone number');
+      if (!body.success) {
+        throw new BadRequestException('Meta did not confirm WhatsApp phone number registration');
+      }
+
+      const status = await this.getPhoneNumberStatus(accessToken, phoneNumberId);
+
+      this.logger.info(
+        {
+          operation: 'registerPhoneNumber',
+          metaEndpoint: `/${phoneNumberId.trim()}/register`,
+          httpStatus: response.status,
+          phoneStatus: status.status,
+        },
+        'WhatsApp phone number registered with Cloud API',
+      );
+
+      return { success: true, status: status.status || 'CONNECTED' };
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to register WhatsApp phone number');
+    }
   }
 
   private async postMessage(
