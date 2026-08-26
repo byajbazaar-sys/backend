@@ -11,13 +11,11 @@ import {
   DisconnectWhatsAppBusinessRequestModel,
   GetWhatsAppConnectionQueryModel,
   ListWhatsAppTemplatesQueryModel,
-  RegisterWhatsAppPhoneRequestModel,
   SendWhatsAppMessageRequestModel,
   SendWhatsAppTemplateMessageRequestModel,
   WhatsAppConnectionResponseModel,
   WhatsAppDisconnectResponseModel,
   WhatsAppMessageResponseModel,
-  WhatsAppRegisterPhoneResponseModel,
   WhatsAppTemplateCreateResponseModel,
   WhatsAppTemplateListResponseModel,
   WhatsAppTemplateSummaryResponseModel,
@@ -65,28 +63,11 @@ export class WhatsAppController {
         accessToken: body.accessToken,
         displayPhoneNumber: body.displayPhoneNumber,
         businessName: body.businessName,
-        registrationPin: body.registrationPin,
       },
       { excludeExtraneousValues: true },
     );
     const connection = await this.whatsappService.connectWhatsAppBusiness(identity.userId, body.businessId, data);
     return plainToInstance(WhatsAppConnectionResponseModel, connection, { excludeExtraneousValues: true });
-  }
-
-  @Post('register-phone')
-  @ApiOperation({ summary: 'Register connected WhatsApp phone number with Meta Cloud API' })
-  @ApiOkResponse({ type: WhatsAppRegisterPhoneResponseModel })
-  @HttpCode(HttpStatus.OK)
-  async registerPhone(
-    @Body() body: RegisterWhatsAppPhoneRequestModel,
-    @Identity() identity: IIdentity,
-  ): Promise<WhatsAppRegisterPhoneResponseModel> {
-    const result = await this.whatsappService.registerWhatsAppPhone(
-      identity.userId,
-      body.businessId,
-      body.registrationPin,
-    );
-    return plainToInstance(WhatsAppRegisterPhoneResponseModel, result, { excludeExtraneousValues: true });
   }
 
   @Post('disconnect')

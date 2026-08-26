@@ -3,7 +3,6 @@ import {
   WhatsAppBusinessConnection,
   WhatsAppDisconnectResult,
   WhatsAppMessageResult,
-  WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
 } from '../domain';
 import { MetaTemplateSummary } from './i-meta-graph.client';
@@ -39,11 +38,6 @@ export interface IWhatsAppService {
     businessId: string,
     data: ConnectWhatsAppBusinessData,
   ): Promise<WhatsAppBusinessConnection>;
-  registerWhatsAppPhone(
-    userId: string,
-    businessId: string,
-    registrationPin: string,
-  ): Promise<WhatsAppRegisterPhoneResult>;
   getWhatsAppConnection(userId: string, businessId: string): Promise<WhatsAppBusinessConnection>;
   disconnectWhatsAppBusiness(userId: string, businessId: string): Promise<WhatsAppDisconnectResult>;
 }

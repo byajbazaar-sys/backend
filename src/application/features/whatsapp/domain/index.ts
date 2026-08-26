@@ -5,5 +5,4 @@ export * from './whatsapp-message-result';
 export * from './whatsapp-template-create-result';
 export * from './whatsapp-disconnect-result';
 export * from './whatsapp-webhook-ack-result';
-export * from './whatsapp-register-phone-result';
 export * from './webhook';

@@ -21,17 +21,6 @@ export interface MetaGraphCredentials {
   wabaId: string;
 }
 
-export interface MetaPhoneNumberStatus {
-  status: string;
-  codeVerificationStatus?: string;
-  displayPhoneNumber?: string;
-}
-
-export interface MetaRegisterPhoneResult {
-  success: boolean;
-  status: string;
-}
-
 export const META_GRAPH_CLIENT = 'IMetaGraphClient';
 
 export interface IMetaGraphClient {
@@ -53,6 +42,4 @@ export interface IMetaGraphClient {
   listMessageTemplates(credentials: MetaGraphCredentials): Promise<MetaTemplateSummary[]>;
   exchangeCodeForAccessToken(code: string, redirectUri?: string): Promise<string>;
   exchangeShortLivedUserToken(shortLivedToken: string): Promise<string>;
-  getPhoneNumberStatus(accessToken: string, phoneNumberId: string): Promise<MetaPhoneNumberStatus>;
-  registerPhoneNumber(accessToken: string, phoneNumberId: string, pin: string): Promise<MetaRegisterPhoneResult>;
 }
