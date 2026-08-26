@@ -107,7 +107,7 @@ export class WhatsAppService implements IWhatsAppService {
 
     let accessToken = data.accessToken?.trim();
     if (!accessToken && data.code?.trim()) {
-      const redirectUri = data.redirectUri?.trim();
+      const redirectUri = this.normalizeMetaOAuthRedirectUri(data.redirectUri);
       if (!redirectUri) {
         throw new BadRequestException('redirectUri is required when exchanging an OAuth code');
       }
@@ -161,6 +161,25 @@ export class WhatsAppService implements IWhatsAppService {
     await this.connectionsRepo.updateStatus(userId, EWhatsAppConnectionStatus.Disconnected);
     this.logger.info({ operation: 'disconnectWhatsAppBusiness', userId }, 'WhatsApp business connection disconnected');
     return plainToInstance(WhatsAppDisconnectResult, { success: true }, { excludeExtraneousValues: true });
+  }
+
+  /** Strip query/hash so token exchange matches Meta OAuth redirect_uri (pathname only). */
+  private normalizeMetaOAuthRedirectUri(redirectUri: string | undefined): string {
+    const trimmed = redirectUri?.trim();
+    if (!trimmed) return '';
+
+    try {
+      const parsed = new URL(trimmed);
+      parsed.search = '';
+      parsed.hash = '';
+      let normalized = parsed.toString();
+      if (parsed.pathname !== '/' && normalized.endsWith('/')) {
+        normalized = normalized.slice(0, -1);
+      }
+      return normalized;
+    } catch {
+      return trimmed.split('#')[0]?.split('?')[0]?.replace(/\/$/, '') ?? trimmed;
+    }
   }
 
   private assertBusinessAccess(userId: string, businessId: string): void {
