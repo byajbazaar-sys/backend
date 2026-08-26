@@ -105,17 +105,25 @@ export class WhatsAppService implements IWhatsAppService {
       throw new BadRequestException('wabaId and phoneNumberId are required');
     }
 
-    let accessToken = data.accessToken?.trim();
-    if (!accessToken && data.code?.trim()) {
-      const redirectUri = this.normalizeMetaOAuthRedirectUri(data.redirectUri);
-      if (!redirectUri) {
-        throw new BadRequestException('redirectUri is required when exchanging an OAuth code');
+    let accessToken: string | undefined;
+    const shortLivedToken = data.accessToken?.trim();
+    if (shortLivedToken) {
+      try {
+        accessToken = await this.metaGraphClient.exchangeShortLivedUserToken(shortLivedToken);
+      } catch (err) {
+        this.logger.warn(
+          { err, operation: 'connectWhatsAppBusiness' },
+          'Long-lived token exchange failed; storing short-lived Embedded Signup token',
+        );
+        accessToken = shortLivedToken;
       }
-      accessToken = await this.metaGraphClient.exchangeCodeForAccessToken(data.code.trim(), redirectUri);
+    } else if (data.code?.trim()) {
+      const redirectUri = this.normalizeMetaOAuthRedirectUri(data.redirectUri);
+      accessToken = await this.metaGraphClient.exchangeCodeForAccessToken(data.code.trim(), redirectUri || undefined);
     }
 
     if (!accessToken) {
-      throw new BadRequestException('code or accessToken is required');
+      throw new BadRequestException('accessToken or code is required');
     }
 
     const encryptedToken = this.aesEncrypt.encrypt(accessToken);

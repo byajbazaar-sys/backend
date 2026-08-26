@@ -40,5 +40,6 @@ export interface IMetaGraphClient {
     bodyText: string,
   ): Promise<MetaCreateTemplateResult>;
   listMessageTemplates(credentials: MetaGraphCredentials): Promise<MetaTemplateSummary[]>;
-  exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string>;
+  exchangeCodeForAccessToken(code: string, redirectUri?: string): Promise<string>;
+  exchangeShortLivedUserToken(shortLivedToken: string): Promise<string>;
 }

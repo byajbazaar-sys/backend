@@ -171,40 +171,87 @@ export class MetaGraphClient implements IMetaGraphClient {
     }
   }
 
-  async exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string> {
+  async exchangeShortLivedUserToken(shortLivedToken: string): Promise<string> {
     try {
       const response = await this.http.get<{
         access_token?: string;
         error?: { message?: string; code?: number };
       }>('/oauth/access_token', {
-          params: {
-            client_id: this.options.appId,
-            client_secret: this.options.appSecret,
-            code: code.trim(),
-            redirect_uri: redirectUri.trim(),
-          },
+        params: {
+          grant_type: 'fb_exchange_token',
+          client_id: this.options.appId,
+          client_secret: this.options.appSecret,
+          fb_exchange_token: shortLivedToken.trim(),
         },
-      );
+      });
 
-      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to exchange Meta OAuth code');
+      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to exchange Meta user token');
       const accessToken = body.access_token?.trim();
       if (!accessToken) {
         throw new BadRequestException('Meta did not return an access token');
       }
 
       this.logger.info(
-        {
-          operation: 'exchangeCodeForAccessToken',
-          metaEndpoint: '/oauth/access_token',
-          httpStatus: response.status,
-        },
-        'Meta OAuth code exchanged for access token',
+        { operation: 'exchangeShortLivedUserToken', metaEndpoint: '/oauth/access_token', httpStatus: response.status },
+        'Meta short-lived user token exchanged for long-lived token',
       );
 
       return accessToken;
     } catch (err) {
-      mapMetaGraphError(err, 'Failed to exchange Meta OAuth code');
+      mapMetaGraphError(err, 'Failed to exchange Meta user token');
     }
+  }
+
+  async exchangeCodeForAccessToken(code: string, redirectUri?: string): Promise<string> {
+    const normalizedRedirect = redirectUri?.trim();
+    const redirectCandidates: Array<string | undefined> = [undefined];
+    if (normalizedRedirect) {
+      redirectCandidates.push(normalizedRedirect);
+      if (!normalizedRedirect.endsWith('/')) {
+        redirectCandidates.push(`${normalizedRedirect}/`);
+      }
+    }
+
+    let lastError: unknown;
+    for (const candidate of redirectCandidates) {
+      try {
+        const params: Record<string, string> = {
+          client_id: this.options.appId,
+          client_secret: this.options.appSecret,
+          code: code.trim(),
+        };
+        if (candidate) {
+          params.redirect_uri = candidate;
+        }
+
+        const response = await this.http.get<{
+          access_token?: string;
+          error?: { message?: string; code?: number; error_subcode?: number };
+        }>('/oauth/access_token', { params });
+
+        const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to exchange Meta OAuth code');
+        const accessToken = body.access_token?.trim();
+        if (!accessToken) {
+          throw new BadRequestException('Meta did not return an access token');
+        }
+
+        this.logger.info(
+          {
+            operation: 'exchangeCodeForAccessToken',
+            metaEndpoint: '/oauth/access_token',
+            httpStatus: response.status,
+            usedRedirectUri: Boolean(candidate),
+          },
+          'Meta OAuth code exchanged for access token',
+        );
+
+        return accessToken;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    mapMetaGraphError(lastError, 'Failed to exchange Meta OAuth code');
   }
 
   private async postMessage(
