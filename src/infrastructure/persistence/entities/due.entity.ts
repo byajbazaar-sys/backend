@@ -62,4 +62,7 @@ export class DueEntity {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @Column({ type: 'timestamptz', name: 'whatsapp_reminder_sent_at', nullable: true })
+  whatsappReminderSentAt?: Date;
 }

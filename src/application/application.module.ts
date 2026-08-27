@@ -77,6 +77,8 @@ import {
   WhatsAppService,
   WHATSAPP_WEBHOOK_SERVICE,
   WhatsAppWebhookService,
+  WHATSAPP_DUE_REMINDER_SERVICE,
+  WhatsAppDueReminderService,
 } from './features';
 import { EMAIL_TEMPLATE_SERVICE, EmailTemplateService } from './features/notifications';
 import {
@@ -238,6 +240,10 @@ import {
       provide: WHATSAPP_WEBHOOK_SERVICE,
       useClass: WhatsAppWebhookService,
     },
+    {
+      provide: WHATSAPP_DUE_REMINDER_SERVICE,
+      useClass: WhatsAppDueReminderService,
+    },
   ],
   exports: [
     PassportModule,
@@ -249,6 +255,7 @@ import {
     PAYMENTS_SERVICE,
     JEWELLERY_EVENT_SERVICE,
     TRY_ON_SERVICE,
+    WHATSAPP_DUE_REMINDER_SERVICE,
   ],
 })
 export class ApplicationModule {}

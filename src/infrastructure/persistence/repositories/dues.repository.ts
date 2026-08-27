@@ -4,7 +4,8 @@ import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { In, Repository } from 'typeorm';
 
-import { Due, DuesFilterOptions, IDuesRepository, EDueType } from '../../../application';
+import { Due, DuesFilterOptions, IDuesRepository, EDueType, WhatsAppDueReminderCandidate } from '../../../application';
+import { EWhatsAppConnectionStatus } from '../../../application/features/whatsapp/enums';
 import { UpdateDueEntityInput } from '../../../application/features/transactions/models/update-due-entity-input.model';
 import { DueEntity } from '../entities/due.entity';
 import { TransactionEntity } from '../entities/transaction.entity';
@@ -185,5 +186,47 @@ export class DuesRepository implements IDuesRepository {
       order: { dueDate: 'ASC' },
     });
     return plainToInstance(Due, dues, { excludeExtraneousValues: true });
+  }
+
+  async findPendingWhatsAppDueReminders(): Promise<WhatsAppDueReminderCandidate[]> {
+    const unpaidTypes = [EDueType.UPCOMING_DUE, EDueType.PAST_DUE, EDueType.OVERDUE];
+
+    const rows = await this.dueRepo
+      .createQueryBuilder('d')
+      .innerJoin('d.customer', 'customer')
+      .innerJoin('d.user', 'user')
+      .innerJoin(
+        'whatsapp_business_connections',
+        'wbc',
+        'wbc.user_id = d.created_by AND wbc.connection_status = :connected AND wbc.due_reminders_enabled = true',
+        { connected: EWhatsAppConnectionStatus.Connected },
+      )
+      .where('d.type IN (:...unpaidTypes)', { unpaidTypes })
+      .andWhere('d.whatsapp_reminder_sent_at IS NULL')
+      .andWhere(`(d.due_date AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date`)
+      .andWhere('COALESCE(NULLIF(TRIM(customer.phone), \'\'), NULLIF(TRIM(customer.alternative_phone), \'\')) IS NOT NULL')
+      .select([
+        'd.id AS "dueId"',
+        'd.created_by AS "userId"',
+        'd.due_amount AS "dueAmount"',
+        'customer.first_name AS "customerFirstName"',
+        'COALESCE(NULLIF(TRIM(wbc.business_name), \'\'), NULLIF(TRIM(user.business_name), \'\'), \'Your business\') AS "businessName"',
+        'COALESCE(NULLIF(TRIM(customer.phone), \'\'), NULLIF(TRIM(customer.alternative_phone), \'\')) AS "customerPhone"',
+      ])
+      .getRawMany<WhatsAppDueReminderCandidate>();
+
+    return rows.map((row) => ({
+      dueId: row.dueId,
+      userId: row.userId,
+      customerPhone: row.customerPhone,
+      businessName: row.businessName,
+      dueAmount: Number(row.dueAmount),
+      customerFirstName: row.customerFirstName,
+    }));
+  }
+
+  async markWhatsAppReminderSent(dueId: string): Promise<void> {
+    if (!dueId) return;
+    await this.dueRepo.update({ id: dueId }, { whatsappReminderSentAt: new Date() });
   }
 }

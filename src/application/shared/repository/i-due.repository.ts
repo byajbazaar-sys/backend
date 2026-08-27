@@ -6,6 +6,15 @@ import { Due } from '../domain';
 
 export const DUES_REPOSITORY = 'IDuesRepository';
 
+export interface WhatsAppDueReminderCandidate {
+  dueId: string;
+  userId: string;
+  customerPhone: string;
+  businessName: string;
+  dueAmount: number;
+  customerFirstName: string;
+}
+
 export interface IDuesRepository {
   listDues(params: DuesFilterOptions): Promise<Paged<Due>>;
   create(due: Due): Promise<Due>;
@@ -22,4 +31,6 @@ export interface IDuesRepository {
   deleteByLoanIdExcept(loanId: string, keepDueIds: string[]): Promise<void>;
   findByLoanId(loanId: string): Promise<Due[]>;
   findByLoanIdAndType(loanId: string, types: EDueType[]): Promise<Due[]>;
+  findPendingWhatsAppDueReminders(): Promise<WhatsAppDueReminderCandidate[]>;
+  markWhatsAppReminderSent(dueId: string): Promise<void>;
 }

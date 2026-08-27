@@ -3,7 +3,7 @@ import { CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { BaseCronService } from '@shared-libs';
 import { PinoLogger } from 'nestjs-pino';
 
-import { TRANSACTION_SERVICE, ITransactionService } from '../../application';
+import { TRANSACTION_SERVICE, ITransactionService, WHATSAPP_DUE_REMINDER_SERVICE, IWhatsAppDueReminderService } from '../../application';
 
 @Injectable()
 export class UpdateDuesCronService extends BaseCronService {
@@ -11,6 +11,7 @@ export class UpdateDuesCronService extends BaseCronService {
     schedulerRegistry: SchedulerRegistry,
     logger: PinoLogger,
     @Inject(TRANSACTION_SERVICE) private readonly transactionService: ITransactionService,
+    @Inject(WHATSAPP_DUE_REMINDER_SERVICE) private readonly whatsappDueReminderService: IWhatsAppDueReminderService,
   ) {
     super(schedulerRegistry, logger);
   }
@@ -30,6 +31,12 @@ export class UpdateDuesCronService extends BaseCronService {
   public async executeTaskAsync(): Promise<void> {
     try {
       await this.transactionService.updateDues();
+    } catch (error) {
+      this.logger.error(error);
+    }
+
+    try {
+      await this.whatsappDueReminderService.sendPendingDueReminders();
     } catch (error) {
       this.logger.error(error);
     }

@@ -5,3 +5,5 @@ export * from './i-whatsapp-business-connections.repository';
 export * from './i-whatsapp-messages.repository';
 export * from './whatsapp.service';
 export * from './whatsapp-webhook.service';
+export * from './whatsapp-due-reminder.service';
+export * from './i-whatsapp-due-reminder.service';
