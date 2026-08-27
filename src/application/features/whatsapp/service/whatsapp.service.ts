@@ -15,6 +15,7 @@ import {
   WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
 } from '../domain';
+import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
 import { EWhatsAppConnectionStatus, EWhatsAppMessageDeliveryStatus } from '../enums';
 import { IMetaGraphClient, META_GRAPH_CLIENT, MetaGraphCredentials, MetaTemplateSummary } from './i-meta-graph.client';
 import {
@@ -135,6 +136,7 @@ export class WhatsAppService implements IWhatsAppService {
     }
 
     await this.ensurePhoneNumberRegistered(accessToken, data.phoneNumberId.trim(), data.registrationPin);
+    await this.subscribeAppToWaba(accessToken, data.wabaId.trim());
 
     const encryptedToken = this.aesEncrypt.encrypt(accessToken);
     const connectionData = plainToInstance(
@@ -158,6 +160,9 @@ export class WhatsAppService implements IWhatsAppService {
       },
       'WhatsApp business connection stored',
     );
+
+    await this.provisionDefaultTemplates(accessToken, saved.wabaId, saved.phoneNumberId);
+
     return saved;
   }
 
@@ -196,6 +201,34 @@ export class WhatsAppService implements IWhatsAppService {
     return connection;
   }
 
+  async updateWhatsAppSettings(
+    userId: string,
+    businessId: string,
+    dueRemindersEnabled: boolean,
+  ): Promise<WhatsAppBusinessConnection> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
+      throw new BadRequestException('WhatsApp is not connected for this business');
+    }
+
+    const updated = await this.connectionsRepo.updateDueRemindersEnabled(userId, dueRemindersEnabled);
+    if (!updated) {
+      throw new BadRequestException('WhatsApp is not connected for this business');
+    }
+
+    this.logger.info(
+      {
+        operation: 'updateWhatsAppSettings',
+        userId,
+        dueRemindersEnabled,
+      },
+      'WhatsApp settings updated',
+    );
+
+    return updated;
+  }
+
   async getMessageDeliveryStatus(
     userId: string,
     businessId: string,
@@ -218,6 +251,85 @@ export class WhatsAppService implements IWhatsAppService {
     await this.connectionsRepo.updateStatus(userId, EWhatsAppConnectionStatus.Disconnected);
     this.logger.info({ operation: 'disconnectWhatsAppBusiness', userId }, 'WhatsApp business connection disconnected');
     return plainToInstance(WhatsAppDisconnectResult, { success: true }, { excludeExtraneousValues: true });
+  }
+
+  private async subscribeAppToWaba(accessToken: string, wabaId: string): Promise<void> {
+    try {
+      const result = await this.metaGraphClient.subscribeAppToWaba(accessToken, wabaId);
+      this.logger.info(
+        { operation: 'subscribeAppToWaba', wabaId, success: result.success },
+        'WhatsApp app subscribed to WABA for webhook delivery',
+      );
+    } catch (err) {
+      this.logger.warn(
+        { err, operation: 'subscribeAppToWaba', wabaId },
+        'Failed to subscribe app to WABA; delivery webhooks may not update until retried',
+      );
+    }
+  }
+
+  private async provisionDefaultTemplates(
+    accessToken: string,
+    wabaId: string,
+    phoneNumberId: string,
+  ): Promise<void> {
+    const credentials: MetaGraphCredentials = { accessToken, wabaId, phoneNumberId };
+
+    let templates: MetaTemplateSummary[];
+    try {
+      templates = await this.metaGraphClient.listMessageTemplates(credentials);
+    } catch (err) {
+      this.logger.warn(
+        { err, operation: 'provisionDefaultTemplates', wabaId },
+        'Failed to list WhatsApp templates; skipping default template provisioning',
+      );
+      return;
+    }
+
+    for (const definition of WHATSAPP_DEFAULT_TEMPLATES) {
+      const existing = templates.find(
+        (template) => template.name === definition.name && template.language === definition.language,
+      );
+
+      if (existing) {
+        this.logger.info(
+          {
+            operation: 'provisionDefaultTemplates',
+            wabaId,
+            templateName: existing.name,
+            templateStatus: existing.status,
+          },
+          'Default WhatsApp template already exists on WABA',
+        );
+        continue;
+      }
+
+      try {
+        const created = await this.metaGraphClient.createMessageTemplate(
+          credentials,
+          definition.name,
+          definition.language,
+          definition.category,
+          definition.bodyText,
+        );
+
+        this.logger.info(
+          {
+            operation: 'provisionDefaultTemplates',
+            wabaId,
+            templateName: definition.name,
+            templateId: created.templateId,
+            templateStatus: created.status,
+          },
+          'Default WhatsApp template provisioned on connect',
+        );
+      } catch (err) {
+        this.logger.warn(
+          { err, operation: 'provisionDefaultTemplates', wabaId, templateName: definition.name },
+          'Failed to provision default WhatsApp template; connect succeeded without it',
+        );
+      }
+    }
   }
 
   private async ensurePhoneNumberRegistered(

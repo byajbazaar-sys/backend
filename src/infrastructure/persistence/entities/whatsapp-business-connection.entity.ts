@@ -29,6 +29,9 @@ export class WhatsAppBusinessConnectionEntity {
   @Column({ type: 'text', name: 'access_token_reference' })
   accessTokenReference: string;
 
+  @Column({ type: 'boolean', name: 'due_reminders_enabled', default: false })
+  dueRemindersEnabled: boolean;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 

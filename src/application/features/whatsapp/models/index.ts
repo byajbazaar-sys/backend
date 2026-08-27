@@ -10,6 +10,7 @@ export * from './register-whatsapp-phone-request.model';
 export * from './whatsapp-connection-response.model';
 export * from './get-whatsapp-connection-query.model';
 export * from './get-whatsapp-message-status-query.model';
+export * from './update-whatsapp-settings-request.model';
 export * from './whatsapp-webhook-payload.model';
 
 export class ListWhatsAppTemplatesQueryModel {

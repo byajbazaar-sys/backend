@@ -16,4 +16,5 @@ export interface IWhatsAppBusinessConnectionsRepository {
     accessTokenReference: string,
   ): Promise<WhatsAppBusinessConnection>;
   updateStatus(userId: string, connectionStatus: EWhatsAppConnectionStatus): Promise<void>;
+  updateDueRemindersEnabled(userId: string, dueRemindersEnabled: boolean): Promise<WhatsAppBusinessConnection | null>;
 }

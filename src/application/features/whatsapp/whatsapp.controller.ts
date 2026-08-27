@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
@@ -15,6 +15,7 @@ import {
   ListWhatsAppTemplatesQueryModel,
   SendWhatsAppMessageRequestModel,
   SendWhatsAppTemplateMessageRequestModel,
+  UpdateWhatsAppSettingsRequestModel,
   WhatsAppConnectionResponseModel,
   WhatsAppDisconnectResponseModel,
   WhatsAppMessageResponseModel,
@@ -72,6 +73,22 @@ export class WhatsAppController {
       { excludeExtraneousValues: true },
     );
     const connection = await this.whatsappService.connectWhatsAppBusiness(identity.userId, body.businessId, data);
+    return plainToInstance(WhatsAppConnectionResponseModel, connection, { excludeExtraneousValues: true });
+  }
+
+  @Patch('settings')
+  @ApiOperation({ summary: 'Update WhatsApp settings for the connected business' })
+  @ApiOkResponse({ type: WhatsAppConnectionResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async updateSettings(
+    @Body() body: UpdateWhatsAppSettingsRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<WhatsAppConnectionResponseModel> {
+    const connection = await this.whatsappService.updateWhatsAppSettings(
+      identity.userId,
+      body.businessId,
+      body.dueRemindersEnabled,
+    );
     return plainToInstance(WhatsAppConnectionResponseModel, connection, { excludeExtraneousValues: true });
   }
 

@@ -72,6 +72,22 @@ export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessC
     await this.repo.update({ userId }, { connectionStatus });
   }
 
+  async updateDueRemindersEnabled(
+    userId: string,
+    dueRemindersEnabled: boolean,
+  ): Promise<WhatsAppBusinessConnection> {
+    const row = await this.repo.findOne({
+      where: { userId, connectionStatus: EWhatsAppConnectionStatus.Connected },
+    });
+    if (!row) {
+      return null;
+    }
+
+    row.dueRemindersEnabled = dueRemindersEnabled;
+    const saved = await this.repo.save(row);
+    return this.map(saved);
+  }
+
   private map(row: WhatsAppBusinessConnectionEntity): WhatsAppBusinessConnection {
     return plainToInstance(
       WhatsAppBusinessConnection,
@@ -83,6 +99,7 @@ export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessC
         displayPhoneNumber: row.displayPhoneNumber,
         businessName: row.businessName,
         connectionStatus: row.connectionStatus,
+        dueRemindersEnabled: row.dueRemindersEnabled,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       },

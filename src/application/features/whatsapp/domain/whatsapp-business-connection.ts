@@ -25,6 +25,9 @@ export class WhatsAppBusinessConnection {
   connectionStatus: EWhatsAppConnectionStatus;
 
   @Expose()
+  dueRemindersEnabled: boolean;
+
+  @Expose()
   createdAt: Date;
 
   @Expose()

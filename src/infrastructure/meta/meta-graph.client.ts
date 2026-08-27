@@ -10,6 +10,7 @@ import {
   MetaPhoneNumberStatus,
   MetaRegisterPhoneResult,
   MetaSendMessageResult,
+  MetaSubscribeAppResult,
   MetaTemplateSummary,
   MetaWhatsAppOptions
 } from '../../application';
@@ -278,6 +279,36 @@ export class MetaGraphClient implements IMetaGraphClient {
       };
     } catch (err) {
       mapMetaGraphError(err, 'Failed to fetch WhatsApp phone number status');
+    }
+  }
+
+  async subscribeAppToWaba(accessToken: string, wabaId: string): Promise<MetaSubscribeAppResult> {
+    try {
+      const response = await this.http.post<{ success?: boolean; error?: { message?: string; code?: number } }>(
+        `/${wabaId.trim()}/subscribed_apps`,
+        {},
+        { headers: this.authHeaders(accessToken) },
+      );
+
+      const body = assertMetaGraphSuccess(
+        response.status,
+        response.data,
+        'Failed to subscribe app to WhatsApp Business Account',
+      );
+
+      this.logger.info(
+        {
+          operation: 'subscribeAppToWaba',
+          metaEndpoint: `/${wabaId.trim()}/subscribed_apps`,
+          httpStatus: response.status,
+          success: body.success,
+        },
+        'App subscribed to WhatsApp Business Account webhooks',
+      );
+
+      return { success: Boolean(body.success) };
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to subscribe app to WhatsApp Business Account');
     }
   }
 

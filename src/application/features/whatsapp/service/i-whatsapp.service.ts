@@ -47,5 +47,10 @@ export interface IWhatsAppService {
     registrationPin: string,
   ): Promise<WhatsAppRegisterPhoneResult>;
   getWhatsAppConnection(userId: string, businessId: string): Promise<WhatsAppBusinessConnection>;
+  updateWhatsAppSettings(
+    userId: string,
+    businessId: string,
+    dueRemindersEnabled: boolean,
+  ): Promise<WhatsAppBusinessConnection>;
   disconnectWhatsAppBusiness(userId: string, businessId: string): Promise<WhatsAppDisconnectResult>;
 }

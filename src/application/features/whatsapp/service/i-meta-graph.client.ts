@@ -32,6 +32,10 @@ export interface MetaRegisterPhoneResult {
   status: string;
 }
 
+export interface MetaSubscribeAppResult {
+  success: boolean;
+}
+
 export const META_GRAPH_CLIENT = 'IMetaGraphClient';
 
 export interface IMetaGraphClient {
@@ -55,4 +59,5 @@ export interface IMetaGraphClient {
   exchangeShortLivedUserToken(shortLivedToken: string): Promise<string>;
   getPhoneNumberStatus(accessToken: string, phoneNumberId: string): Promise<MetaPhoneNumberStatus>;
   registerPhoneNumber(accessToken: string, phoneNumberId: string, pin: string): Promise<MetaRegisterPhoneResult>;
+  subscribeAppToWaba(accessToken: string, wabaId: string): Promise<MetaSubscribeAppResult>;
 }

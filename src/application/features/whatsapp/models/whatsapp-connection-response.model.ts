@@ -32,6 +32,10 @@ export class WhatsAppConnectionResponseModel {
   @Expose()
   connectionStatus: EWhatsAppConnectionStatus;
 
+  @ApiProperty({ default: false })
+  @Expose()
+  dueRemindersEnabled: boolean;
+
   @ApiProperty()
   @Expose()
   createdAt: Date;
