@@ -1,7 +1,4 @@
-import {
-  SaveWhatsAppBusinessConnectionData,
-  WhatsAppBusinessConnection,
-} from '../domain';
+import { SaveWhatsAppBusinessConnectionData, UpdateWhatsAppSettingsData, WhatsAppBusinessConnection } from '../domain';
 import { EWhatsAppConnectionStatus } from '../enums';
 
 export const WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY = 'WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY';
@@ -16,5 +13,5 @@ export interface IWhatsAppBusinessConnectionsRepository {
     accessTokenReference: string,
   ): Promise<WhatsAppBusinessConnection>;
   updateStatus(userId: string, connectionStatus: EWhatsAppConnectionStatus): Promise<void>;
-  updateDueRemindersEnabled(userId: string, dueRemindersEnabled: boolean): Promise<WhatsAppBusinessConnection | null>;
+  updateSettings(userId: string, data: UpdateWhatsAppSettingsData): Promise<WhatsAppBusinessConnection | null>;
 }

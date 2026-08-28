@@ -5,8 +5,8 @@ import { plainToInstance } from 'class-transformer';
 import { In, Repository } from 'typeorm';
 
 import { Due, DuesFilterOptions, IDuesRepository, EDueType, WhatsAppDueReminderCandidate } from '../../../application';
-import { EWhatsAppConnectionStatus } from '../../../application/features/whatsapp/enums';
 import { UpdateDueEntityInput } from '../../../application/features/transactions/models/update-due-entity-input.model';
+import { EWhatsAppConnectionStatus } from '../../../application/features/whatsapp/enums';
 import { DueEntity } from '../entities/due.entity';
 import { TransactionEntity } from '../entities/transaction.entity';
 import { TransactionalContext } from '../transactional-context';
@@ -204,14 +204,14 @@ export class DuesRepository implements IDuesRepository {
       .where('d.type IN (:...unpaidTypes)', { unpaidTypes })
       .andWhere('d.whatsapp_reminder_sent_at IS NULL')
       .andWhere(`(d.due_date AT TIME ZONE 'Asia/Kolkata')::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date`)
-      .andWhere('COALESCE(NULLIF(TRIM(customer.phone), \'\'), NULLIF(TRIM(customer.alternative_phone), \'\')) IS NOT NULL')
+      .andWhere("COALESCE(NULLIF(TRIM(customer.phone), ''), NULLIF(TRIM(customer.alternative_phone), '')) IS NOT NULL")
       .select([
         'd.id AS "dueId"',
         'd.created_by AS "userId"',
         'd.due_amount AS "dueAmount"',
         'customer.first_name AS "customerFirstName"',
-        'COALESCE(NULLIF(TRIM(wbc.business_name), \'\'), NULLIF(TRIM(user.business_name), \'\'), \'Your business\') AS "businessName"',
-        'COALESCE(NULLIF(TRIM(customer.phone), \'\'), NULLIF(TRIM(customer.alternative_phone), \'\')) AS "customerPhone"',
+        "COALESCE(NULLIF(TRIM(wbc.business_name), ''), NULLIF(TRIM(user.business_name), ''), 'Your business') AS \"businessName\"",
+        "COALESCE(NULLIF(TRIM(customer.phone), ''), NULLIF(TRIM(customer.alternative_phone), '')) AS \"customerPhone\"",
       ])
       .getRawMany<WhatsAppDueReminderCandidate>();
 

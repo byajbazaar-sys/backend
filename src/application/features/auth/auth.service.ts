@@ -24,9 +24,8 @@ import { randomBytes } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
 
-import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
-import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
 import { IAuthService } from './interfaces';
+import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
 import {
   USERS_FILE_STORAGE,
   IUsersFileStorage,
@@ -45,6 +44,7 @@ import {
 } from '../../shared';
 import { EMAIL_TEMPLATE_SERVICE, IEmailTemplateService } from '../notifications';
 import { IPaymentsService, PAYMENTS_SERVICE } from '../payments/service/i-payments.service';
+import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
 import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../users';
 
 type ResolvedUser = User & { id: string; email: string; userType: EUserType };
@@ -81,7 +81,7 @@ export class AuthService implements IAuthService {
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @Inject(APP_INTEGRITY_SERVICE) private readonly appIntegrityService: IAppIntegrityService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   private requireEmail(email: string, message = 'Email is required'): string {
     const normalized = email?.toLowerCase().trim();

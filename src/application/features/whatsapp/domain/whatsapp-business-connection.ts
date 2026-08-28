@@ -28,6 +28,9 @@ export class WhatsAppBusinessConnection {
   dueRemindersEnabled: boolean;
 
   @Expose()
+  reengagementTemplateName?: string;
+
+  @Expose()
   createdAt: Date;
 
   @Expose()

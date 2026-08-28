@@ -36,6 +36,13 @@ export class WhatsAppConnectionResponseModel {
   @Expose()
   dueRemindersEnabled: boolean;
 
+  @ApiPropertyOptional({
+    description: 'Approved template used when the 24-hour customer service window is closed',
+    example: 'byajbazaar_hello',
+  })
+  @Expose()
+  reengagementTemplateName?: string;
+
   @ApiProperty()
   @Expose()
   createdAt: Date;

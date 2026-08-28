@@ -1,8 +1,4 @@
-import {
-  SaveWhatsAppOutboundMessageData,
-  UpdateWhatsAppMessageStatusData,
-  WhatsAppMessage,
-} from '../domain';
+import { SaveWhatsAppOutboundMessageData, UpdateWhatsAppMessageStatusData, WhatsAppMessage } from '../domain';
 
 export const WHATSAPP_MESSAGES_REPOSITORY = 'WHATSAPP_MESSAGES_REPOSITORY';
 

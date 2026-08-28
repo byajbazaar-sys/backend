@@ -3,7 +3,12 @@ import { CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { BaseCronService } from '@shared-libs';
 import { PinoLogger } from 'nestjs-pino';
 
-import { TRANSACTION_SERVICE, ITransactionService, WHATSAPP_DUE_REMINDER_SERVICE, IWhatsAppDueReminderService } from '../../application';
+import {
+  TRANSACTION_SERVICE,
+  ITransactionService,
+  WHATSAPP_DUE_REMINDER_SERVICE,
+  IWhatsAppDueReminderService,
+} from '../../application';
 
 @Injectable()
 export class UpdateDuesCronService extends BaseCronService {

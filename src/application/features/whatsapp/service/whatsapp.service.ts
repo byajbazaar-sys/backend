@@ -4,10 +4,12 @@ import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { MetaWhatsAppOptions } from '../../../shared';
+import { WHATSAPP_DEFAULT_TEMPLATES, WHATSAPP_REENGAGEMENT_TEMPLATE } from '../constants/whatsapp-default-template.constants';
 import {
   ConnectWhatsAppBusinessData,
   SaveWhatsAppBusinessConnectionData,
   SaveWhatsAppOutboundMessageData,
+  UpdateWhatsAppSettingsData,
   WhatsAppBusinessConnection,
   WhatsAppDisconnectResult,
   WhatsAppMessage,
@@ -15,15 +17,19 @@ import {
   WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
 } from '../domain';
-import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
 import { EWhatsAppConnectionStatus, EWhatsAppMessageDeliveryStatus } from '../enums';
 import { IMetaGraphClient, META_GRAPH_CLIENT, MetaGraphCredentials, MetaTemplateSummary } from './i-meta-graph.client';
 import {
   IWhatsAppBusinessConnectionsRepository,
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
 } from './i-whatsapp-business-connections.repository';
+import {
+  IWhatsAppConversationWindowsRepository,
+  WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
+} from './i-whatsapp-conversation-windows.repository';
 import { IWhatsAppMessagesRepository, WHATSAPP_MESSAGES_REPOSITORY } from './i-whatsapp-messages.repository';
 import { IWhatsAppService } from './i-whatsapp.service';
+import { isWithinCustomerServiceWindow, normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
 
 @Injectable()
 export class WhatsAppService implements IWhatsAppService {
@@ -32,27 +38,16 @@ export class WhatsAppService implements IWhatsAppService {
     @Inject(META_GRAPH_CLIENT) private readonly metaGraphClient: IMetaGraphClient,
     @Inject(WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY)
     private readonly connectionsRepo: IWhatsAppBusinessConnectionsRepository,
+    @Inject(WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY)
+    private readonly conversationWindowsRepo: IWhatsAppConversationWindowsRepository,
     @Inject(WHATSAPP_MESSAGES_REPOSITORY)
     private readonly messagesRepo: IWhatsAppMessagesRepository,
     @Inject(AES_ENCRYPT_SERVICE) private readonly aesEncrypt: IAESEncryptService,
     @InjectPinoLogger(WhatsAppService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
-  async sendTextMessage(
-    userId: string,
-    businessId: string,
-    to: string,
-    body: string,
-  ): Promise<WhatsAppMessageResult> {
-    this.assertBusinessAccess(userId, businessId);
-    const credentials = await this.resolveCredentials(userId);
-    const result = await this.metaGraphClient.sendTextMessage(credentials, to, body);
-    await this.persistOutboundMessage(userId, credentials, to, result.messageId);
-    return plainToInstance(
-      WhatsAppMessageResult,
-      { success: true, messageId: result.messageId },
-      { excludeExtraneousValues: true },
-    );
+  async sendTextMessage(userId: string, businessId: string, to: string, body: string): Promise<WhatsAppMessageResult> {
+    return this.sendWhatsAppMessage(userId, businessId, to, body);
   }
 
   async sendTemplateMessage(
@@ -65,14 +60,119 @@ export class WhatsAppService implements IWhatsAppService {
   ): Promise<WhatsAppMessageResult> {
     this.assertBusinessAccess(userId, businessId);
     const credentials = await this.resolveCredentials(userId);
+    const recipient = normalizeWhatsAppRecipient(to);
+    return this.sendWhatsAppTemplate(userId, credentials, recipient, templateName, languageCode, parameters);
+  }
+
+  /**
+   * Sends free-text when the customer service window is open; otherwise sends the configured
+   * approved re-engagement template (Meta error 131047 prevention).
+   */
+  private async sendWhatsAppMessage(
+    userId: string,
+    businessId: string,
+    to: string,
+    textBody: string,
+  ): Promise<WhatsAppMessageResult> {
+    this.assertBusinessAccess(userId, businessId);
+    const credentials = await this.resolveCredentials(userId);
+    const recipient = normalizeWhatsAppRecipient(to);
+    const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
+      userId,
+      credentials.wabaId,
+      credentials.phoneNumberId,
+      recipient,
+    );
+
+    if (isWithinCustomerServiceWindow(lastInboundAt)) {
+      return this.sendWhatsAppText(userId, credentials, recipient, textBody);
+    }
+
+    const reengagementTemplate = await this.resolveReengagementTemplate(userId);
+    this.logger.info(
+      {
+        operation: 'sendWhatsAppMessage',
+        userId,
+        recipient,
+        lastInboundAt: lastInboundAt?.toISOString() ?? null,
+        templateName: reengagementTemplate.name,
+      },
+      'Customer service window closed; sending user-configured re-engagement template instead of free-text',
+    );
+
+    return this.sendWhatsAppTemplate(
+      userId,
+      credentials,
+      recipient,
+      reengagementTemplate.name,
+      reengagementTemplate.language,
+      [],
+    );
+  }
+
+  private async resolveReengagementTemplate(
+    userId: string,
+  ): Promise<{ name: string; language: string }> {
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    const configuredName = connection?.reengagementTemplateName?.trim();
+
+    if (configuredName) {
+      const knownTemplate = WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === configuredName);
+      return {
+        name: configuredName,
+        language: knownTemplate?.language ?? WHATSAPP_REENGAGEMENT_TEMPLATE.language,
+      };
+    }
+
+    if (connection?.connectionStatus === EWhatsAppConnectionStatus.Connected) {
+      throw new BadRequestException(
+        'Add an approved re-engagement template name in WhatsApp settings before messaging customers outside the 24-hour window.',
+      );
+    }
+
+    if (this.options.isTestConfigured) {
+      return {
+        name: WHATSAPP_REENGAGEMENT_TEMPLATE.name,
+        language: WHATSAPP_REENGAGEMENT_TEMPLATE.language,
+      };
+    }
+
+    throw new BadRequestException(
+      'Add an approved re-engagement template name in WhatsApp settings before messaging customers outside the 24-hour window.',
+    );
+  }
+
+  private async sendWhatsAppText(
+    userId: string,
+    credentials: MetaGraphCredentials,
+    recipient: string,
+    body: string,
+  ): Promise<WhatsAppMessageResult> {
+    const result = await this.metaGraphClient.sendTextMessage(credentials, recipient, body);
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
+    return plainToInstance(
+      WhatsAppMessageResult,
+      { success: true, messageId: result.messageId },
+      { excludeExtraneousValues: true },
+    );
+  }
+
+  private async sendWhatsAppTemplate(
+    userId: string,
+    credentials: MetaGraphCredentials,
+    recipient: string,
+    templateName: string,
+    languageCode: string,
+    parameters: string[],
+  ): Promise<WhatsAppMessageResult> {
     const result = await this.metaGraphClient.sendTemplateMessage(
       credentials,
-      to,
+      recipient,
       templateName,
       languageCode,
       parameters,
     );
-    await this.persistOutboundMessage(userId, credentials, to, result.messageId);
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
     return plainToInstance(
       WhatsAppMessageResult,
       { success: true, messageId: result.messageId },
@@ -183,11 +283,7 @@ export class WhatsAppService implements IWhatsAppService {
     }
 
     const accessToken = this.aesEncrypt.decrypt(encryptedToken);
-    const result = await this.ensurePhoneNumberRegistered(
-      accessToken,
-      connection.phoneNumberId,
-      registrationPin,
-    );
+    const result = await this.ensurePhoneNumberRegistered(accessToken, connection.phoneNumberId, registrationPin);
 
     return plainToInstance(WhatsAppRegisterPhoneResult, result, { excludeExtraneousValues: true });
   }
@@ -204,7 +300,7 @@ export class WhatsAppService implements IWhatsAppService {
   async updateWhatsAppSettings(
     userId: string,
     businessId: string,
-    dueRemindersEnabled: boolean,
+    data: UpdateWhatsAppSettingsData,
   ): Promise<WhatsAppBusinessConnection> {
     this.assertBusinessAccess(userId, businessId);
     const connection = await this.connectionsRepo.findByUserId(userId);
@@ -212,7 +308,11 @@ export class WhatsAppService implements IWhatsAppService {
       throw new BadRequestException('WhatsApp is not connected for this business');
     }
 
-    const updated = await this.connectionsRepo.updateDueRemindersEnabled(userId, dueRemindersEnabled);
+    if (data.dueRemindersEnabled === undefined && data.reengagementTemplateName === undefined) {
+      throw new BadRequestException('No WhatsApp settings were provided to update');
+    }
+
+    const updated = await this.connectionsRepo.updateSettings(userId, data);
     if (!updated) {
       throw new BadRequestException('WhatsApp is not connected for this business');
     }
@@ -221,7 +321,8 @@ export class WhatsAppService implements IWhatsAppService {
       {
         operation: 'updateWhatsAppSettings',
         userId,
-        dueRemindersEnabled,
+        dueRemindersEnabled: data.dueRemindersEnabled,
+        reengagementTemplateName: data.reengagementTemplateName,
       },
       'WhatsApp settings updated',
     );
@@ -229,11 +330,7 @@ export class WhatsAppService implements IWhatsAppService {
     return updated;
   }
 
-  async getMessageDeliveryStatus(
-    userId: string,
-    businessId: string,
-    metaMessageId: string,
-  ): Promise<WhatsAppMessage> {
+  async getMessageDeliveryStatus(userId: string, businessId: string, metaMessageId: string): Promise<WhatsAppMessage> {
     this.assertBusinessAccess(userId, businessId);
     const message = await this.messagesRepo.findByUserIdAndMetaMessageId(userId, metaMessageId.trim());
     if (!message) {
@@ -268,11 +365,7 @@ export class WhatsAppService implements IWhatsAppService {
     }
   }
 
-  private async provisionDefaultTemplates(
-    accessToken: string,
-    wabaId: string,
-    phoneNumberId: string,
-  ): Promise<void> {
+  private async provisionDefaultTemplates(accessToken: string, wabaId: string, phoneNumberId: string): Promise<void> {
     const credentials: MetaGraphCredentials = { accessToken, wabaId, phoneNumberId };
 
     let templates: MetaTemplateSummary[];
@@ -365,7 +458,7 @@ export class WhatsAppService implements IWhatsAppService {
     recipient: string,
     metaMessageId: string,
   ): Promise<void> {
-    const normalizedRecipient = recipient.replace(/\D/g, '');
+    const normalizedRecipient = normalizeWhatsAppRecipient(recipient);
     const data = plainToInstance(
       SaveWhatsAppOutboundMessageData,
       {

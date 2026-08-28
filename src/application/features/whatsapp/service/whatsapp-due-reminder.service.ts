@@ -1,11 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { DUES_REPOSITORY, IDuesRepository } from '../../../shared/repository/i-due.repository';
-
-import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
 import { IWhatsAppDueReminderService, WhatsAppDueReminderRunResult } from './i-whatsapp-due-reminder.service';
 import { IWhatsAppService, WHATSAPP_SERVICE } from './i-whatsapp.service';
+import { DUES_REPOSITORY, IDuesRepository } from '../../../shared/repository/i-due.repository';
+import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
+import { normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
 
 const DUE_REMINDER_TEMPLATE =
   WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_due_reminder') ??
@@ -24,8 +24,8 @@ export class WhatsAppDueReminderService implements IWhatsAppDueReminderService {
     const result: WhatsAppDueReminderRunResult = { sent: 0, skipped: 0, failed: 0 };
 
     for (const candidate of candidates) {
-      const recipient = this.normalizeRecipientPhone(candidate.customerPhone);
-      if (!recipient) {
+      const recipient = normalizeWhatsAppRecipient(candidate.customerPhone);
+      if (!recipient || recipient.length < 11) {
         result.skipped += 1;
         this.logger.warn(
           {
@@ -76,17 +76,6 @@ export class WhatsAppDueReminderService implements IWhatsAppDueReminderService {
     }
 
     return result;
-  }
-
-  private normalizeRecipientPhone(phone: string | undefined): string | null {
-    const digits = phone?.replace(/\D/g, '') ?? '';
-    if (digits.length === 10) {
-      return `91${digits}`;
-    }
-    if (digits.length >= 11 && digits.length <= 15) {
-      return digits;
-    }
-    return null;
   }
 
   private formatInrAmount(amount: number): string {

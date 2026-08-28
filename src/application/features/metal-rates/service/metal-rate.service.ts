@@ -11,7 +11,12 @@ import {
   metalRateCurrentCacheKey,
   purityToCurrentKey,
 } from '../constants';
-import { createEmptyCurrentMetalRatesData, createEmptyCurrentRateSnapshot, CurrentMetalRatesData, CurrentRateSnapshot } from '../domain';
+import {
+  createEmptyCurrentMetalRatesData,
+  createEmptyCurrentRateSnapshot,
+  CurrentMetalRatesData,
+  CurrentRateSnapshot,
+} from '../domain';
 import { MetalRate } from '../domain';
 import {
   CreateMetalRateRequestModel,

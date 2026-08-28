@@ -1,10 +1,22 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 
-import { ConnectWhatsAppBusinessData } from './domain';
+import { ConnectWhatsAppBusinessData, UpdateWhatsAppSettingsData } from './domain';
 import {
   ConnectWhatsAppBusinessRequestModel,
   CreateWhatsAppTemplateRequestModel,
@@ -32,7 +44,7 @@ import { IWhatsAppService, WHATSAPP_SERVICE } from './service';
 @UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
 @Controller('whatsapp')
 export class WhatsAppController {
-  constructor(@Inject(WHATSAPP_SERVICE) private readonly whatsappService: IWhatsAppService) { }
+  constructor(@Inject(WHATSAPP_SERVICE) private readonly whatsappService: IWhatsAppService) {}
 
   @Get('connection')
   @ApiOperation({ summary: 'Get WhatsApp connection status for the current business' })
@@ -84,10 +96,18 @@ export class WhatsAppController {
     @Body() body: UpdateWhatsAppSettingsRequestModel,
     @Identity() identity: IIdentity,
   ): Promise<WhatsAppConnectionResponseModel> {
+    const settings = plainToInstance(
+      UpdateWhatsAppSettingsData,
+      {
+        dueRemindersEnabled: body.dueRemindersEnabled,
+        reengagementTemplateName: body.reengagementTemplateName,
+      },
+      { excludeExtraneousValues: true },
+    );
     const connection = await this.whatsappService.updateWhatsAppSettings(
       identity.userId,
       body.businessId,
-      body.dueRemindersEnabled,
+      settings,
     );
     return plainToInstance(WhatsAppConnectionResponseModel, connection, { excludeExtraneousValues: true });
   }
@@ -147,11 +167,7 @@ export class WhatsAppController {
     @Query() query: GetWhatsAppMessageStatusQueryModel,
     @Identity() identity: IIdentity,
   ): Promise<WhatsAppMessageDeliveryStatusResponseModel> {
-    const message = await this.whatsappService.getMessageDeliveryStatus(
-      identity.userId,
-      query.businessId,
-      messageId,
-    );
+    const message = await this.whatsappService.getMessageDeliveryStatus(identity.userId, query.businessId, messageId);
     return plainToInstance(
       WhatsAppMessageDeliveryStatusResponseModel,
       {

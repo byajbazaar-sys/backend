@@ -12,7 +12,7 @@ import {
   MetaSendMessageResult,
   MetaSubscribeAppResult,
   MetaTemplateSummary,
-  MetaWhatsAppOptions
+  MetaWhatsAppOptions,
 } from '../../application';
 
 interface MetaMessagesResponse {
@@ -207,7 +207,7 @@ export class MetaGraphClient implements IMetaGraphClient {
 
   async exchangeCodeForAccessToken(code: string, redirectUri?: string): Promise<string> {
     const normalizedRedirect = redirectUri?.trim();
-    const redirectCandidates: Array<string | undefined> = [undefined];
+    const redirectCandidates: (string | undefined)[] = [undefined];
     if (normalizedRedirect) {
       redirectCandidates.push(normalizedRedirect);
       if (!normalizedRedirect.endsWith('/')) {
@@ -271,7 +271,11 @@ export class MetaGraphClient implements IMetaGraphClient {
         headers: this.authHeaders(accessToken),
       });
 
-      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to fetch WhatsApp phone number status');
+      const body = assertMetaGraphSuccess(
+        response.status,
+        response.data,
+        'Failed to fetch WhatsApp phone number status',
+      );
       return {
         status: String(body.status ?? ''),
         codeVerificationStatus: body.code_verification_status,
@@ -312,11 +316,7 @@ export class MetaGraphClient implements IMetaGraphClient {
     }
   }
 
-  async registerPhoneNumber(
-    accessToken: string,
-    phoneNumberId: string,
-    pin: string,
-  ): Promise<MetaRegisterPhoneResult> {
+  async registerPhoneNumber(accessToken: string, phoneNumberId: string, pin: string): Promise<MetaRegisterPhoneResult> {
     try {
       const response = await this.http.post<{ success?: boolean; error?: { message?: string; code?: number } }>(
         `/${phoneNumberId.trim()}/register`,

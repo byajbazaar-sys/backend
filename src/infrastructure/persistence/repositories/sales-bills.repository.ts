@@ -78,7 +78,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
 
   private toSalesBillEntityInput(bill: SalesBill): CreateSalesBillEntityInput {
     return {
-      createdBy: bill.createdBy!,
+      createdBy: bill.createdBy,
       billNumber: bill.billNumber,
       documentType: bill.documentType,
       customerName: bill.customerName,

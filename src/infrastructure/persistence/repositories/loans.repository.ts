@@ -44,7 +44,7 @@ function mapLoan(entity: LoanEntity & { customer?: CustomerEntity }): Loan {
 
 @Injectable()
 export class LoansRepository implements ILoansRepository {
-  constructor(@InjectRepository(LoanEntity) private readonly defaultLoanRepo: Repository<LoanEntity>) { }
+  constructor(@InjectRepository(LoanEntity) private readonly defaultLoanRepo: Repository<LoanEntity>) {}
 
   private get loanRepo(): Repository<LoanEntity> {
     return TransactionalContext.repositoryFor(LoanEntity, this.defaultLoanRepo);

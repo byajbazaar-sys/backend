@@ -30,10 +30,7 @@ export function loanStatsCacheParts(startDate: Date, endDate: Date, itemId?: str
 }
 
 /** Stable cache key segments from query/filter params (sorted keys). */
-export function queryCacheParts(
-  endpoint: string,
-  params: Record<string, string | number | undefined>,
-): string[] {
+export function queryCacheParts(endpoint: string, params: Record<string, string | number | undefined>): string[] {
   const parts = [endpoint];
   for (const key of Object.keys(params).sort()) {
     const value = params[key];

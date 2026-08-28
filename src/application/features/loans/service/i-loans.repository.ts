@@ -11,12 +11,7 @@ export interface ILoansRepository {
   /**
    * Atomically update a loan and replace its unpaid dues (paid dues are never touched).
    */
-  updateAndReplaceUnpaidDues(
-    id: string,
-    updateDto: Loan,
-    unpaidDues: Due[],
-    unpaidTypes?: EDueType[],
-  ): Promise<Loan>;
+  updateAndReplaceUnpaidDues(id: string, updateDto: Loan, unpaidDues: Due[], unpaidTypes?: EDueType[]): Promise<Loan>;
   /** Atomically reserves the next per-loan transaction sequence number. */
   allocateTransactionSeq(loanId: string, createdBy: string): Promise<number>;
   /** Moves the replay checkpoint; call after any change that recomputes balances. */

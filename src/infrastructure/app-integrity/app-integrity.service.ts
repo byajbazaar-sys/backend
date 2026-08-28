@@ -28,7 +28,7 @@ export class AppIntegrityService implements IAppIntegrityService {
     private readonly options: AppIntegrityOptions,
     @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
     @InjectPinoLogger(AppIntegrityService.name) private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   async createChallenge(): Promise<AppIntegrityChallengeResult> {
     if (!this.redis.isEnabled()) {
@@ -153,10 +153,10 @@ export class AppIntegrityService implements IAppIntegrityService {
     const client = await auth.getClient();
     let payload:
       | {
-        requestDetails?: { requestHash?: string };
-        appIntegrity?: { appRecognitionVerdict?: string; packageName?: string };
-        deviceIntegrity?: { deviceRecognitionVerdict?: string[] };
-      }
+          requestDetails?: { requestHash?: string };
+          appIntegrity?: { appRecognitionVerdict?: string; packageName?: string };
+          deviceIntegrity?: { deviceRecognitionVerdict?: string[] };
+        }
       | undefined;
 
     try {

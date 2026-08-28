@@ -1,8 +1,15 @@
 import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import * as crypto from 'crypto';
 import { plainToInstance } from 'class-transformer';
+import * as crypto from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
+import {
+  IWhatsAppBusinessConnectionsRepository,
+  WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
+} from './i-whatsapp-business-connections.repository';
+import { IWhatsAppMessagesRepository, WHATSAPP_MESSAGES_REPOSITORY } from './i-whatsapp-messages.repository';
+import { MetaWhatsAppOptions } from '../../../shared/options/meta-whatsapp.options';
+import { META_WHATSAPP_REENGAGEMENT_ERROR_CODE } from '../constants/whatsapp-messaging.constants';
 import {
   parseWhatsAppWebhookPayload,
   SaveWhatsAppOutboundMessageData,
@@ -11,18 +18,14 @@ import {
   WhatsAppWebhookMessageStatus,
   WhatsAppWebhookPayload,
 } from '../domain';
-import {
-  EWhatsAppMessageDeliveryStatus,
-  parseWhatsAppMessageDeliveryStatus,
-} from '../enums';
-import { MetaWhatsAppOptions } from '../../../shared/options/meta-whatsapp.options';
 import { WhatsAppBusinessConnection } from '../domain/whatsapp-business-connection';
+import { parseWhatsAppMessageDeliveryStatus } from '../enums';
 import {
-  IWhatsAppBusinessConnectionsRepository,
-  WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
-} from './i-whatsapp-business-connections.repository';
-import { IWhatsAppMessagesRepository, WHATSAPP_MESSAGES_REPOSITORY } from './i-whatsapp-messages.repository';
+  IWhatsAppConversationWindowsRepository,
+  WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
+} from './i-whatsapp-conversation-windows.repository';
 import { IWhatsAppWebhookService } from './i-whatsapp-webhook.service';
+import { parseWhatsAppWebhookUnixTimestamp } from '../utils/whatsapp-messaging.util';
 
 @Injectable()
 export class WhatsAppWebhookService implements IWhatsAppWebhookService {
@@ -30,6 +33,8 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
     private readonly options: MetaWhatsAppOptions,
     @Inject(WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY)
     private readonly connectionsRepo: IWhatsAppBusinessConnectionsRepository,
+    @Inject(WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY)
+    private readonly conversationWindowsRepo: IWhatsAppConversationWindowsRepository,
     @Inject(WHATSAPP_MESSAGES_REPOSITORY)
     private readonly messagesRepo: IWhatsAppMessagesRepository,
     @InjectPinoLogger(WhatsAppWebhookService.name) private readonly logger: PinoLogger,
@@ -68,8 +73,55 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
 
     const payload = parseWhatsAppWebhookPayload(rawPayload);
     this.logWebhookMetadata(payload);
+    await this.processWebhookInboundMessages(payload);
     await this.processWebhookStatuses(payload);
     return plainToInstance(WhatsAppWebhookAckResult, { received: true }, { excludeExtraneousValues: true });
+  }
+
+  private async processWebhookInboundMessages(payload: WhatsAppWebhookPayload): Promise<void> {
+    for (const entry of payload.entry ?? []) {
+      const wabaId = entry.id;
+      for (const change of entry.changes ?? []) {
+        const value = change.value;
+        const phoneNumberId = value.metadata?.phoneNumberId;
+        if (!phoneNumberId || !value.messages?.length) {
+          continue;
+        }
+
+        const connection = await this.connectionsRepo.findByWabaAndPhoneNumberId(wabaId, phoneNumberId);
+        if (!connection) {
+          continue;
+        }
+
+        for (const message of value.messages) {
+          if (!message.from?.trim()) {
+            continue;
+          }
+
+          const inboundAt = parseWhatsAppWebhookUnixTimestamp(message.timestamp);
+          await this.conversationWindowsRepo.recordInboundMessage(
+            connection.userId,
+            wabaId,
+            phoneNumberId,
+            message.from,
+            inboundAt,
+          );
+
+          this.logger.info(
+            {
+              operation: 'whatsappWebhookInbound',
+              userId: connection.userId,
+              wabaId,
+              phoneNumberId,
+              sender: message.from,
+              inboundAt: inboundAt.toISOString(),
+              messageType: message.type,
+            },
+            'WhatsApp inbound message recorded for customer service window',
+          );
+        }
+      }
+    }
   }
 
   private verifySignature(rawBody: string, signature: string | undefined): boolean {
@@ -122,6 +174,20 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
 
     const metaMessageId = status.id.trim();
     const firstError = status.errors?.[0];
+    if (firstError?.code === META_WHATSAPP_REENGAGEMENT_ERROR_CODE) {
+      this.logger.warn(
+        {
+          operation: 'whatsappWebhookStatus',
+          wabaId,
+          phoneNumberId,
+          metaMessageId,
+          recipient: status.recipientId,
+          errorCode: firstError.code,
+          errorTitle: firstError.title,
+        },
+        'WhatsApp message failed: customer service window closed (131047 re-engagement required)',
+      );
+    }
     const update = plainToInstance(
       UpdateWhatsAppMessageStatusData,
       {

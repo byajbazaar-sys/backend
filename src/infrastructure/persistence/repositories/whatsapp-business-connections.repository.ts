@@ -3,7 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
-import { ConnectWhatsAppBusinessData, SaveWhatsAppBusinessConnectionData, WhatsAppBusinessConnection } from '../../../application/features/whatsapp/domain';
+import {
+  SaveWhatsAppBusinessConnectionData,
+  UpdateWhatsAppSettingsData,
+  WhatsAppBusinessConnection,
+} from '../../../application/features/whatsapp/domain';
 import { EWhatsAppConnectionStatus } from '../../../application/features/whatsapp/enums';
 import { IWhatsAppBusinessConnectionsRepository } from '../../../application/features/whatsapp/service/i-whatsapp-business-connections.repository';
 import { WhatsAppBusinessConnectionEntity } from '../entities/whatsapp-business-connection.entity';
@@ -72,10 +76,7 @@ export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessC
     await this.repo.update({ userId }, { connectionStatus });
   }
 
-  async updateDueRemindersEnabled(
-    userId: string,
-    dueRemindersEnabled: boolean,
-  ): Promise<WhatsAppBusinessConnection> {
+  async updateSettings(userId: string, data: UpdateWhatsAppSettingsData): Promise<WhatsAppBusinessConnection> {
     const row = await this.repo.findOne({
       where: { userId, connectionStatus: EWhatsAppConnectionStatus.Connected },
     });
@@ -83,7 +84,13 @@ export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessC
       return null;
     }
 
-    row.dueRemindersEnabled = dueRemindersEnabled;
+    if (data.dueRemindersEnabled !== undefined) {
+      row.dueRemindersEnabled = data.dueRemindersEnabled;
+    }
+    if (data.reengagementTemplateName !== undefined) {
+      row.reengagementTemplateName = data.reengagementTemplateName.trim() || null;
+    }
+
     const saved = await this.repo.save(row);
     return this.map(saved);
   }
@@ -100,6 +107,7 @@ export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessC
         businessName: row.businessName,
         connectionStatus: row.connectionStatus,
         dueRemindersEnabled: row.dueRemindersEnabled,
+        reengagementTemplateName: row.reengagementTemplateName,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       },

@@ -1,24 +1,23 @@
 import { ApiAccessTokenEntity } from './api-access-token.entity';
 import { ApiConfigurationEntity } from './api-configuration.entity';
-import { PaymentEntity } from './payment.entity';
-import { PaymentEventEntity } from './payment-event.entity';
 import { CouponRedemptionEntity } from './coupon-redemption.entity';
 import { CouponEntity } from './coupon.entity';
 import { CustomerEntity } from './customer.entity';
-import { JewelleryEventEntity } from './jewellery-event.entity';
-import { TryOnAssetEntity } from './try-on-asset.entity';
 import { DepositAccountEntity } from './deposit-account.entity';
-import { DepositTransactionEntity } from './deposit-transaction.entity';
 import { DepositReceiptEntity } from './deposit-receipt.entity';
+import { DepositTransactionEntity } from './deposit-transaction.entity';
 import { DueEntity } from './due.entity';
 import { InventoryCategoryEntity } from './inventory-category.entity';
 import { InventoryItemEntity } from './inventory-item.entity';
 import { ItemEntity } from './item.entity';
+import { JewelleryEventEntity } from './jewellery-event.entity';
 import { LoanItemEntity } from './loan-item.entity';
 import { LoanEntity } from './loan.entity';
 import { MetalRateEntity } from './metal-rate.entity';
 import { NotificationEntity } from './notification.entity';
+import { PaymentEventEntity } from './payment-event.entity';
 import { PaymentOrderEntity } from './payment-order.entity';
+import { PaymentEntity } from './payment.entity';
 import { PlanEntity } from './plan.entity';
 import { PosSessionEntity } from './pos-session.entity';
 import { RefundEntity } from './refund.entity';
@@ -29,9 +28,11 @@ import { SubscriptionEntity } from './subscription.entity';
 import { SupportRequestEntity } from './support-request.entity';
 import { TransactionLogEntity } from './transaction-log.entity';
 import { TransactionEntity } from './transaction.entity';
+import { TryOnAssetEntity } from './try-on-asset.entity';
 import { UserEntity } from './user.entity';
 import { WebSocketConnectionEntity } from './websocket-connection.entity';
 import { WhatsAppBusinessConnectionEntity } from './whatsapp-business-connection.entity';
+import { WhatsAppConversationWindowEntity } from './whatsapp-conversation-window.entity';
 import { WhatsAppMessageEntity } from './whatsapp-message.entity';
 
 export { UserEntity } from './user.entity';
@@ -68,6 +69,7 @@ export { DepositTransactionEntity } from './deposit-transaction.entity';
 export { DepositReceiptEntity } from './deposit-receipt.entity';
 export { TransactionLogEntity } from './transaction-log.entity';
 export { WhatsAppBusinessConnectionEntity } from './whatsapp-business-connection.entity';
+export { WhatsAppConversationWindowEntity } from './whatsapp-conversation-window.entity';
 export { WhatsAppMessageEntity } from './whatsapp-message.entity';
 
 export default [
@@ -105,5 +107,6 @@ export default [
   DepositReceiptEntity,
   TransactionLogEntity,
   WhatsAppBusinessConnectionEntity,
+  WhatsAppConversationWindowEntity,
   WhatsAppMessageEntity,
 ];

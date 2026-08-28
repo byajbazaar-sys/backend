@@ -11,8 +11,7 @@ export const WHATSAPP_DEFAULT_TEMPLATES: WhatsAppDefaultTemplateDefinition[] = [
     name: 'byajbazaar_hello',
     language: 'en_US',
     category: 'UTILITY',
-    bodyText:
-      'Hello! Your WhatsApp Business account is now connected with ByajBazaar. Reply to this message anytime.',
+    bodyText: 'Hello! Your WhatsApp Business account is now connected with ByajBazaar. Reply to this message anytime.',
   },
   {
     name: 'byajbazaar_due_reminder',
@@ -22,6 +21,10 @@ export const WHATSAPP_DEFAULT_TEMPLATES: WhatsAppDefaultTemplateDefinition[] = [
       'Hi from {{1}}. Due reminder: your {{2}} due for this month amounting to {{3}} is pending. Please pay at your earliest convenience.',
   },
 ];
+
+/** Approved template used to re-open conversations outside the 24-hour window (no variables). */
+export const WHATSAPP_REENGAGEMENT_TEMPLATE =
+  WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_hello') ?? WHATSAPP_DEFAULT_TEMPLATES[0];
 
 /** @deprecated Use WHATSAPP_DEFAULT_TEMPLATES */
 export const WHATSAPP_DEFAULT_TEMPLATE = WHATSAPP_DEFAULT_TEMPLATES[0];
