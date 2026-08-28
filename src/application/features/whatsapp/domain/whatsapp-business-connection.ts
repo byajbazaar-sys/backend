@@ -46,6 +46,12 @@ export class WhatsAppBusinessConnection {
   codeVerificationStatus?: string;
 
   @Expose()
+  canSendMessages?: boolean;
+
+  @Expose()
+  messagingBlockReason?: string;
+
+  @Expose()
   createdAt: Date;
 
   @Expose()

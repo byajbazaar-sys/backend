@@ -30,6 +30,12 @@ export function mapMetaGraphError(err: unknown, fallbackMessage = 'Meta Graph AP
     const message = body?.error?.message || err.message || fallbackMessage;
     const code = body?.error?.code;
 
+    if (code === 131037) {
+      throw new BadRequestException(
+        'WhatsApp display name must be approved before sending (Meta error #131037). For Meta test numbers (+1 555), open WhatsApp Manager → Phone numbers, edit the display name, and submit it for review.',
+      );
+    }
+
     if (status === 401 || code === 190) {
       throw new UnauthorizedException('Invalid Meta access token');
     }
@@ -65,6 +71,12 @@ export function assertMetaGraphSuccess<T extends { error?: MetaErrorBody['error'
 
   const message = body?.error?.message || fallbackMessage;
   const code = body?.error?.code;
+
+  if (code === 131037) {
+    throw new BadRequestException(
+      'WhatsApp display name must be approved before sending (Meta error #131037). For Meta test numbers (+1 555), open WhatsApp Manager → Phone numbers, edit the display name, and submit it for review.',
+    );
+  }
 
   if (status === 401 || code === 190) {
     throw new UnauthorizedException('Invalid Meta access token');

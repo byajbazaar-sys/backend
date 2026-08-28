@@ -30,6 +30,9 @@ import {
 import { IWhatsAppMessagesRepository, WHATSAPP_MESSAGES_REPOSITORY } from './i-whatsapp-messages.repository';
 import { IWhatsAppService } from './i-whatsapp.service';
 import { isWithinCustomerServiceWindow, normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
+import {
+  evaluateWhatsAppMessagingReadiness,
+} from '../utils/whatsapp-display-name.util';
 
 @Injectable()
 export class WhatsAppService implements IWhatsAppService {
@@ -148,6 +151,7 @@ export class WhatsAppService implements IWhatsAppService {
     recipient: string,
     body: string,
   ): Promise<WhatsAppMessageResult> {
+    await this.assertMessagingAllowed(userId, credentials);
     const result = await this.metaGraphClient.sendTextMessage(credentials, recipient, body);
     await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
     return this.buildMessageResult(result.messageId, 'text');
@@ -161,6 +165,7 @@ export class WhatsAppService implements IWhatsAppService {
     languageCode: string,
     parameters: string[],
   ): Promise<WhatsAppMessageResult> {
+    await this.assertMessagingAllowed(userId, credentials);
     const result = await this.metaGraphClient.sendTemplateMessage(
       credentials,
       recipient,
@@ -435,6 +440,29 @@ export class WhatsAppService implements IWhatsAppService {
     }
   }
 
+  private async assertMessagingAllowed(userId: string, credentials: MetaGraphCredentials): Promise<void> {
+    const encryptedToken = await this.connectionsRepo.findEncryptedTokenByUserId(userId);
+    if (!encryptedToken) {
+      throw new BadRequestException('WhatsApp connection token is missing');
+    }
+
+    const accessToken = this.aesEncrypt.decrypt(encryptedToken);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    const profile = await this.metaGraphClient.getPhoneNumberStatus(accessToken, credentials.phoneNumberId);
+    const readiness = evaluateWhatsAppMessagingReadiness({
+      metaPhoneStatus: profile.status,
+      displayNameStatus: profile.nameStatus,
+      displayPhoneNumber: connection?.displayPhoneNumber || profile.displayPhoneNumber,
+    });
+
+    if (!readiness.canSendMessages) {
+      throw new BadRequestException(
+        readiness.messagingBlockReason ??
+          'WhatsApp messaging is blocked until the display name is approved in Meta WhatsApp Manager.',
+      );
+    }
+  }
+
   private async enrichConnectionWithMetaProfile(
     userId: string,
     connection: WhatsAppBusinessConnection,
@@ -447,6 +475,12 @@ export class WhatsAppService implements IWhatsAppService {
     try {
       const accessToken = this.aesEncrypt.decrypt(encryptedToken);
       const profile = await this.metaGraphClient.getPhoneNumberStatus(accessToken, connection.phoneNumberId);
+      const displayPhoneNumber = connection.displayPhoneNumber || profile.displayPhoneNumber || undefined;
+      const readiness = evaluateWhatsAppMessagingReadiness({
+        metaPhoneStatus: profile.status,
+        displayNameStatus: profile.nameStatus,
+        displayPhoneNumber,
+      });
       return plainToInstance(
         WhatsAppBusinessConnection,
         {
@@ -455,7 +489,9 @@ export class WhatsAppService implements IWhatsAppService {
           displayNameStatus: profile.nameStatus || undefined,
           verifiedDisplayName: profile.verifiedName || undefined,
           codeVerificationStatus: profile.codeVerificationStatus || undefined,
-          displayPhoneNumber: connection.displayPhoneNumber || profile.displayPhoneNumber || undefined,
+          displayPhoneNumber,
+          canSendMessages: readiness.canSendMessages,
+          messagingBlockReason: readiness.messagingBlockReason,
         },
         { excludeExtraneousValues: true },
       );

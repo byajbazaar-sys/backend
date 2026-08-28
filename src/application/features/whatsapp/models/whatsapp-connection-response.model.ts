@@ -68,6 +68,18 @@ export class WhatsAppConnectionResponseModel {
   @Expose()
   codeVerificationStatus?: string;
 
+  @ApiPropertyOptional({
+    description: 'Whether Meta currently allows outbound messaging for this phone number',
+  })
+  @Expose()
+  canSendMessages?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Human-readable reason outbound messaging is blocked, when canSendMessages is false',
+  })
+  @Expose()
+  messagingBlockReason?: string;
+
   @ApiProperty()
   @Expose()
   createdAt: Date;
