@@ -304,7 +304,7 @@ export class WhatsAppService implements IWhatsAppService {
     if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
       return null;
     }
-    return connection;
+    return this.enrichConnectionWithMetaProfile(userId, connection);
   }
 
   async updateWhatsAppSettings(
@@ -432,6 +432,44 @@ export class WhatsAppService implements IWhatsAppService {
           'Failed to provision default WhatsApp template; connect succeeded without it',
         );
       }
+    }
+  }
+
+  private async enrichConnectionWithMetaProfile(
+    userId: string,
+    connection: WhatsAppBusinessConnection,
+  ): Promise<WhatsAppBusinessConnection> {
+    const encryptedToken = await this.connectionsRepo.findEncryptedTokenByUserId(userId);
+    if (!encryptedToken) {
+      return connection;
+    }
+
+    try {
+      const accessToken = this.aesEncrypt.decrypt(encryptedToken);
+      const profile = await this.metaGraphClient.getPhoneNumberStatus(accessToken, connection.phoneNumberId);
+      return plainToInstance(
+        WhatsAppBusinessConnection,
+        {
+          ...connection,
+          metaPhoneStatus: profile.status || undefined,
+          displayNameStatus: profile.nameStatus || undefined,
+          verifiedDisplayName: profile.verifiedName || undefined,
+          codeVerificationStatus: profile.codeVerificationStatus || undefined,
+          displayPhoneNumber: connection.displayPhoneNumber || profile.displayPhoneNumber || undefined,
+        },
+        { excludeExtraneousValues: true },
+      );
+    } catch (err) {
+      this.logger.warn(
+        {
+          err,
+          operation: 'enrichConnectionWithMetaProfile',
+          userId,
+          phoneNumberId: connection.phoneNumberId,
+        },
+        'Failed to fetch live Meta phone profile for WhatsApp connection',
+      );
+      return connection;
     }
   }
 

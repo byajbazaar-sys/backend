@@ -263,10 +263,12 @@ export class MetaGraphClient implements IMetaGraphClient {
         status?: string;
         code_verification_status?: string;
         display_phone_number?: string;
+        verified_name?: string;
+        name_status?: string;
         error?: { message?: string; code?: number };
       }>(`/${phoneNumberId.trim()}`, {
         params: {
-          fields: 'status,code_verification_status,display_phone_number',
+          fields: 'status,code_verification_status,display_phone_number,verified_name,name_status',
         },
         headers: this.authHeaders(accessToken),
       });
@@ -280,6 +282,8 @@ export class MetaGraphClient implements IMetaGraphClient {
         status: String(body.status ?? ''),
         codeVerificationStatus: body.code_verification_status,
         displayPhoneNumber: body.display_phone_number,
+        verifiedName: body.verified_name,
+        nameStatus: body.name_status,
       };
     } catch (err) {
       mapMetaGraphError(err, 'Failed to fetch WhatsApp phone number status');

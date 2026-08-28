@@ -30,6 +30,21 @@ export class WhatsAppBusinessConnection {
   @Expose()
   reengagementTemplateName?: string;
 
+  /** Live Meta Cloud API registration status for the connected phone number (e.g. CONNECTED). */
+  @Expose()
+  metaPhoneStatus?: string;
+
+  /** Live Meta display-name review status (e.g. APPROVED, PENDING_REVIEW). */
+  @Expose()
+  displayNameStatus?: string;
+
+  /** Live Meta verified display name for the connected phone number. */
+  @Expose()
+  verifiedDisplayName?: string;
+
+  @Expose()
+  codeVerificationStatus?: string;
+
   @Expose()
   createdAt: Date;
 

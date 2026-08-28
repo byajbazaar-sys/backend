@@ -43,6 +43,31 @@ export class WhatsAppConnectionResponseModel {
   @Expose()
   reengagementTemplateName?: string;
 
+  @ApiPropertyOptional({
+    description: 'Live Meta Cloud API phone registration status',
+    example: 'CONNECTED',
+  })
+  @Expose()
+  metaPhoneStatus?: string;
+
+  @ApiPropertyOptional({
+    description: 'Live Meta display name review status',
+    example: 'APPROVED',
+  })
+  @Expose()
+  displayNameStatus?: string;
+
+  @ApiPropertyOptional({
+    description: 'Live Meta verified display name for the sender number',
+    example: 'ByajBazaar',
+  })
+  @Expose()
+  verifiedDisplayName?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  codeVerificationStatus?: string;
+
   @ApiProperty()
   @Expose()
   createdAt: Date;
