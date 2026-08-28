@@ -150,11 +150,7 @@ export class WhatsAppService implements IWhatsAppService {
   ): Promise<WhatsAppMessageResult> {
     const result = await this.metaGraphClient.sendTextMessage(credentials, recipient, body);
     await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
-    return plainToInstance(
-      WhatsAppMessageResult,
-      { success: true, messageId: result.messageId },
-      { excludeExtraneousValues: true },
-    );
+    return this.buildMessageResult(result.messageId, 'text');
   }
 
   private async sendWhatsAppTemplate(
@@ -173,9 +169,23 @@ export class WhatsAppService implements IWhatsAppService {
       parameters,
     );
     await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
+    return this.buildMessageResult(result.messageId, 'template', templateName);
+  }
+
+  private buildMessageResult(
+    messageId: string,
+    messageType: 'text' | 'template',
+    templateName?: string,
+  ): WhatsAppMessageResult {
     return plainToInstance(
       WhatsAppMessageResult,
-      { success: true, messageId: result.messageId },
+      {
+        success: true,
+        messageId,
+        deliveryStatus: EWhatsAppMessageDeliveryStatus.Sent,
+        messageType,
+        templateName,
+      },
       { excludeExtraneousValues: true },
     );
   }
