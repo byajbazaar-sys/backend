@@ -37,20 +37,6 @@ export class WhatsAppConnectionResponseModel {
   dueRemindersEnabled: boolean;
 
   @ApiPropertyOptional({
-    description: 'Approved template used when the 24-hour customer service window is closed',
-    example: 'byajbazaar_hello',
-  })
-  @Expose()
-  reengagementTemplateName?: string;
-
-  @ApiPropertyOptional({
-    description: 'Meta template language code for the re-engagement template (must match WhatsApp Manager)',
-    example: 'en',
-  })
-  @Expose()
-  reengagementTemplateLanguage?: string;
-
-  @ApiPropertyOptional({
     description: 'Live Meta Cloud API phone registration status',
     example: 'CONNECTED',
   })

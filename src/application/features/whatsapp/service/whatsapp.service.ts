@@ -9,6 +9,7 @@ import {
   ConnectWhatsAppBusinessData,
   SaveWhatsAppBusinessConnectionData,
   SaveWhatsAppOutboundMessageData,
+  SendWhatsAppTextMessageOptions,
   UpdateWhatsAppSettingsData,
   WhatsAppBusinessConnection,
   WhatsAppDisconnectResult,
@@ -49,8 +50,14 @@ export class WhatsAppService implements IWhatsAppService {
     @InjectPinoLogger(WhatsAppService.name) private readonly logger: PinoLogger,
   ) {}
 
-  async sendTextMessage(userId: string, businessId: string, to: string, body: string): Promise<WhatsAppMessageResult> {
-    return this.sendWhatsAppMessage(userId, businessId, to, body);
+  async sendTextMessage(
+    userId: string,
+    businessId: string,
+    to: string,
+    body: string,
+    options?: SendWhatsAppTextMessageOptions,
+  ): Promise<WhatsAppMessageResult> {
+    return this.sendWhatsAppMessage(userId, businessId, to, body, options);
   }
 
   async sendTemplateMessage(
@@ -76,6 +83,7 @@ export class WhatsAppService implements IWhatsAppService {
     businessId: string,
     to: string,
     textBody: string,
+    options?: SendWhatsAppTextMessageOptions,
   ): Promise<WhatsAppMessageResult> {
     this.assertBusinessAccess(userId, businessId);
     const credentials = await this.resolveCredentials(userId);
@@ -91,7 +99,7 @@ export class WhatsAppService implements IWhatsAppService {
       return this.sendWhatsAppText(userId, credentials, recipient, textBody);
     }
 
-    const reengagementTemplate = await this.resolveReengagementTemplate(userId);
+    const reengagementTemplate = await this.resolveReengagementTemplateFromMeta(userId, options);
     this.logger.info(
       {
         operation: 'sendWhatsAppMessage',
@@ -99,8 +107,9 @@ export class WhatsAppService implements IWhatsAppService {
         recipient,
         lastInboundAt: lastInboundAt?.toISOString() ?? null,
         templateName: reengagementTemplate.name,
+        templateLanguage: reengagementTemplate.language,
       },
-      'Customer service window closed; sending user-configured re-engagement template instead of free-text',
+      'Customer service window closed; sending approved Meta template instead of free-text',
     );
 
     return this.sendWhatsAppTemplate(
@@ -113,44 +122,28 @@ export class WhatsAppService implements IWhatsAppService {
     );
   }
 
-  private async resolveReengagementTemplate(
+  private async resolveReengagementTemplateFromMeta(
     userId: string,
+    options?: SendWhatsAppTextMessageOptions,
   ): Promise<{ name: string; language: string }> {
-    const connection = await this.connectionsRepo.findByUserId(userId);
-    const configuredName = connection?.reengagementTemplateName?.trim();
+    const templateName = options?.reengagementTemplateName?.trim();
+    const templateLanguage = options?.reengagementTemplateLanguage?.trim();
 
-    if (configuredName) {
-      const configuredLanguage = connection?.reengagementTemplateLanguage?.trim();
-      if (configuredLanguage) {
-        return { name: configuredName, language: configuredLanguage };
-      }
-
-      const knownTemplate = WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === configuredName);
-      if (knownTemplate?.language) {
-        return { name: configuredName, language: knownTemplate.language };
+    if (!templateName || !templateLanguage) {
+      if (this.options.isTestConfigured) {
+        return {
+          name: WHATSAPP_REENGAGEMENT_TEMPLATE.name,
+          language: WHATSAPP_REENGAGEMENT_TEMPLATE.language,
+        };
       }
 
       throw new BadRequestException(
-        'Set the re-engagement template language in WhatsApp settings. It must match the template language in WhatsApp Manager (e.g. en or en_US).',
+        'Outside the 24-hour customer service window. Select an approved template from Meta to re-engage the customer.',
       );
     }
 
-    if (connection?.connectionStatus === EWhatsAppConnectionStatus.Connected) {
-      throw new BadRequestException(
-        'Add an approved re-engagement template name in WhatsApp settings before messaging customers outside the 24-hour window.',
-      );
-    }
-
-    if (this.options.isTestConfigured) {
-      return {
-        name: WHATSAPP_REENGAGEMENT_TEMPLATE.name,
-        language: WHATSAPP_REENGAGEMENT_TEMPLATE.language,
-      };
-    }
-
-    throw new BadRequestException(
-      'Add an approved re-engagement template name in WhatsApp settings before messaging customers outside the 24-hour window.',
-    );
+    await this.assertApprovedTemplateExists(userId, templateName, templateLanguage);
+    return { name: templateName, language: templateLanguage };
   }
 
   private async sendWhatsAppText(
@@ -331,11 +324,7 @@ export class WhatsAppService implements IWhatsAppService {
       throw new BadRequestException('WhatsApp is not connected for this business');
     }
 
-    if (
-      data.dueRemindersEnabled === undefined &&
-      data.reengagementTemplateName === undefined &&
-      data.reengagementTemplateLanguage === undefined
-    ) {
+    if (data.dueRemindersEnabled === undefined) {
       throw new BadRequestException('No WhatsApp settings were provided to update');
     }
 
@@ -349,8 +338,6 @@ export class WhatsAppService implements IWhatsAppService {
         operation: 'updateWhatsAppSettings',
         userId,
         dueRemindersEnabled: data.dueRemindersEnabled,
-        reengagementTemplateName: data.reengagementTemplateName,
-        reengagementTemplateLanguage: data.reengagementTemplateLanguage,
       },
       'WhatsApp settings updated',
     );
@@ -450,6 +437,30 @@ export class WhatsAppService implements IWhatsAppService {
           'Failed to provision default WhatsApp template; connect succeeded without it',
         );
       }
+    }
+  }
+
+  private async assertApprovedTemplateExists(
+    userId: string,
+    templateName: string,
+    templateLanguage: string,
+  ): Promise<void> {
+    const credentials = await this.resolveCredentials(userId);
+    const templates = await this.metaGraphClient.listMessageTemplates(credentials);
+    const match = templates.find(
+      (template) => template.name === templateName && template.language === templateLanguage,
+    );
+
+    if (!match) {
+      throw new BadRequestException(
+        `Template "${templateName}" (${templateLanguage}) was not found in your WhatsApp Business Account.`,
+      );
+    }
+
+    if (match.status?.toUpperCase() !== 'APPROVED') {
+      throw new BadRequestException(
+        `Template "${templateName}" (${templateLanguage}) is ${match.status}. Only approved templates can be used for messaging.`,
+      );
     }
   }
 

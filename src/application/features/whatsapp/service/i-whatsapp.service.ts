@@ -1,5 +1,6 @@
 import {
   ConnectWhatsAppBusinessData,
+  SendWhatsAppTextMessageOptions,
   UpdateWhatsAppSettingsData,
   WhatsAppBusinessConnection,
   WhatsAppDisconnectResult,
@@ -13,7 +14,13 @@ import { MetaTemplateSummary } from './i-meta-graph.client';
 export const WHATSAPP_SERVICE = 'WHATSAPP_SERVICE';
 
 export interface IWhatsAppService {
-  sendTextMessage(userId: string, businessId: string, to: string, body: string): Promise<WhatsAppMessageResult>;
+  sendTextMessage(
+    userId: string,
+    businessId: string,
+    to: string,
+    body: string,
+    options?: SendWhatsAppTextMessageOptions,
+  ): Promise<WhatsAppMessageResult>;
   sendTemplateMessage(
     userId: string,
     businessId: string,

@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsNotEmpty, IsString, IsUUID, Matches, MaxLength, ValidateNested } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, ValidateNested } from 'class-validator';
 
 class WhatsAppTextBodyModel {
   @ApiProperty({ example: 'Hello from ByajBazaar' })
@@ -29,4 +29,24 @@ export class SendWhatsAppMessageRequestModel {
   @ValidateNested()
   @Type(() => WhatsAppTextBodyModel)
   text: WhatsAppTextBodyModel;
+
+  @ApiPropertyOptional({
+    description: 'Approved Meta template name used when the 24-hour customer service window is closed',
+    example: 'test_user',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  @Matches(/^[a-z0-9_]+$/)
+  reengagementTemplateName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Meta template language code matching WhatsApp Manager',
+    example: 'en',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  @Matches(/^[a-z]{2}(_[A-Za-z]{2,8})?$/)
+  reengagementTemplateLanguage?: string;
 }

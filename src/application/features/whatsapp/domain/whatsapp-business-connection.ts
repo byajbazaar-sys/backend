@@ -27,12 +27,6 @@ export class WhatsAppBusinessConnection {
   @Expose()
   dueRemindersEnabled: boolean;
 
-  @Expose()
-  reengagementTemplateName?: string;
-
-  @Expose()
-  reengagementTemplateLanguage?: string;
-
   /** Live Meta Cloud API registration status for the connected phone number (e.g. CONNECTED). */
   @Expose()
   metaPhoneStatus?: string;

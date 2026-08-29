@@ -100,8 +100,6 @@ export class WhatsAppController {
       UpdateWhatsAppSettingsData,
       {
         dueRemindersEnabled: body.dueRemindersEnabled,
-        reengagementTemplateName: body.reengagementTemplateName,
-        reengagementTemplateLanguage: body.reengagementTemplateLanguage,
       },
       { excludeExtraneousValues: true },
     );
@@ -154,6 +152,10 @@ export class WhatsAppController {
       body.businessId,
       body.to,
       body.text.body,
+      {
+        reengagementTemplateName: body.reengagementTemplateName,
+        reengagementTemplateLanguage: body.reengagementTemplateLanguage,
+      },
     );
     return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
   }
