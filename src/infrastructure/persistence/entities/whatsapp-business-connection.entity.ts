@@ -35,6 +35,9 @@ export class WhatsAppBusinessConnectionEntity {
   @Column({ type: 'varchar', length: 512, name: 'reengagement_template_name', nullable: true })
   reengagementTemplateName?: string;
 
+  @Column({ type: 'varchar', length: 16, name: 'reengagement_template_language', nullable: true })
+  reengagementTemplateLanguage?: string;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 

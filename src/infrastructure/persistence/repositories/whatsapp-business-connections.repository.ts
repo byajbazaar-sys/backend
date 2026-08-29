@@ -90,6 +90,9 @@ export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessC
     if (data.reengagementTemplateName !== undefined) {
       row.reengagementTemplateName = data.reengagementTemplateName.trim() || null;
     }
+    if (data.reengagementTemplateLanguage !== undefined) {
+      row.reengagementTemplateLanguage = data.reengagementTemplateLanguage.trim() || null;
+    }
 
     const saved = await this.repo.save(row);
     return this.map(saved);
@@ -108,6 +111,7 @@ export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessC
         connectionStatus: row.connectionStatus,
         dueRemindersEnabled: row.dueRemindersEnabled,
         reengagementTemplateName: row.reengagementTemplateName,
+        reengagementTemplateLanguage: row.reengagementTemplateLanguage,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       },

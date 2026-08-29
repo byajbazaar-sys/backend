@@ -120,11 +120,19 @@ export class WhatsAppService implements IWhatsAppService {
     const configuredName = connection?.reengagementTemplateName?.trim();
 
     if (configuredName) {
+      const configuredLanguage = connection?.reengagementTemplateLanguage?.trim();
+      if (configuredLanguage) {
+        return { name: configuredName, language: configuredLanguage };
+      }
+
       const knownTemplate = WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === configuredName);
-      return {
-        name: configuredName,
-        language: knownTemplate?.language ?? WHATSAPP_REENGAGEMENT_TEMPLATE.language,
-      };
+      if (knownTemplate?.language) {
+        return { name: configuredName, language: knownTemplate.language };
+      }
+
+      throw new BadRequestException(
+        'Set the re-engagement template language in WhatsApp settings. It must match the template language in WhatsApp Manager (e.g. en or en_US).',
+      );
     }
 
     if (connection?.connectionStatus === EWhatsAppConnectionStatus.Connected) {
@@ -323,7 +331,11 @@ export class WhatsAppService implements IWhatsAppService {
       throw new BadRequestException('WhatsApp is not connected for this business');
     }
 
-    if (data.dueRemindersEnabled === undefined && data.reengagementTemplateName === undefined) {
+    if (
+      data.dueRemindersEnabled === undefined &&
+      data.reengagementTemplateName === undefined &&
+      data.reengagementTemplateLanguage === undefined
+    ) {
       throw new BadRequestException('No WhatsApp settings were provided to update');
     }
 
@@ -338,6 +350,7 @@ export class WhatsAppService implements IWhatsAppService {
         userId,
         dueRemindersEnabled: data.dueRemindersEnabled,
         reengagementTemplateName: data.reengagementTemplateName,
+        reengagementTemplateLanguage: data.reengagementTemplateLanguage,
       },
       'WhatsApp settings updated',
     );

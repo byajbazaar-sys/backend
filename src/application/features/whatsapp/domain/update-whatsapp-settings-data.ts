@@ -6,4 +6,7 @@ export class UpdateWhatsAppSettingsData {
 
   @Expose()
   reengagementTemplateName?: string;
+
+  @Expose()
+  reengagementTemplateLanguage?: string;
 }

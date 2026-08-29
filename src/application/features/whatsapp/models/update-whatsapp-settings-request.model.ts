@@ -28,4 +28,17 @@ export class UpdateWhatsAppSettingsRequestModel {
     message: 'reengagementTemplateName must use lowercase letters, numbers, and underscores only',
   })
   reengagementTemplateName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Meta template language code for the re-engagement template',
+    example: 'en',
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  @Matches(/^[a-z]{2}(_[A-Za-z]{2,8})?$/, {
+    message: 'reengagementTemplateLanguage must be a valid locale code (e.g. en or en_US)',
+  })
+  reengagementTemplateLanguage?: string;
 }

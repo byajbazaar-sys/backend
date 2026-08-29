@@ -36,6 +36,12 @@ export function mapMetaGraphError(err: unknown, fallbackMessage = 'Meta Graph AP
       );
     }
 
+    if (code === 132001) {
+      throw new BadRequestException(
+        'WhatsApp template language does not match Meta (error #132001). Use the exact language code from WhatsApp Manager — e.g. en vs en_US.',
+      );
+    }
+
     if (status === 401 || code === 190) {
       throw new UnauthorizedException('Invalid Meta access token');
     }
@@ -75,6 +81,12 @@ export function assertMetaGraphSuccess<T extends { error?: MetaErrorBody['error'
   if (code === 131037) {
     throw new BadRequestException(
       'WhatsApp display name must be approved before sending (Meta error #131037). For Meta test numbers (+1 555), open WhatsApp Manager → Phone numbers, edit the display name, and submit it for review.',
+    );
+  }
+
+  if (code === 132001) {
+    throw new BadRequestException(
+      'WhatsApp template language does not match Meta (error #132001). Use the exact language code from WhatsApp Manager — e.g. en vs en_US.',
     );
   }
 

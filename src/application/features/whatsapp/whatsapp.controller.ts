@@ -101,6 +101,7 @@ export class WhatsAppController {
       {
         dueRemindersEnabled: body.dueRemindersEnabled,
         reengagementTemplateName: body.reengagementTemplateName,
+        reengagementTemplateLanguage: body.reengagementTemplateLanguage,
       },
       { excludeExtraneousValues: true },
     );

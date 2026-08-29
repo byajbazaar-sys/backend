@@ -44,6 +44,13 @@ export class WhatsAppConnectionResponseModel {
   reengagementTemplateName?: string;
 
   @ApiPropertyOptional({
+    description: 'Meta template language code for the re-engagement template (must match WhatsApp Manager)',
+    example: 'en',
+  })
+  @Expose()
+  reengagementTemplateLanguage?: string;
+
+  @ApiPropertyOptional({
     description: 'Live Meta Cloud API phone registration status',
     example: 'CONNECTED',
   })
