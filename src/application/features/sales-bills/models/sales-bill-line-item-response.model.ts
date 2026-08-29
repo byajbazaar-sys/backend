@@ -63,6 +63,10 @@ export class SalesBillLineItemResponseModel {
   quantity: number;
 
   @Expose()
+  @ApiPropertyOptional({ enum: ['MULTIPLY', 'FIXED'] })
+  quantityPricingMode?: string;
+
+  @Expose()
   @ApiProperty()
   lineTotal: number;
 

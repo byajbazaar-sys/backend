@@ -4,6 +4,7 @@ export interface BillLineUpdate {
   sellingPrice?: number;
   makingCharges?: number;
   quantity?: number;
+  quantityPricingMode?: string;
   lineTotal?: number;
   purchaseCost?: number;
   profitAmount?: number;

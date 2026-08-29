@@ -48,6 +48,7 @@ export interface CreateSalesBillLineEntityInput {
   makingCharges?: number;
   sellingPrice: number;
   quantity: number;
+  quantityPricingMode?: string;
   lineTotal: number;
   purchaseRatePerGram?: number;
   purchaseCost?: number;

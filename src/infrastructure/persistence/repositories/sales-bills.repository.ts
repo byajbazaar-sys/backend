@@ -21,6 +21,7 @@ import {
   CreateSalesBillLineEntityInput,
 } from '../../../application';
 import { SalesBillsExportFilterOptions } from '../../../application/features/sales-bills/options/sales-bills-export-filter.options';
+import { computeBillLineTotal } from '../../../application/features/sales-bills/utils/bill-line-total.util';
 import { InventoryItemEntity } from '../entities/inventory-item.entity';
 import { SalesBillItemEntity } from '../entities/sales-bill-item.entity';
 import { SalesBillEntity } from '../entities/sales-bill.entity';
@@ -127,6 +128,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
       makingCharges: item.makingCharges,
       sellingPrice: item.sellingPrice,
       quantity: item.quantity,
+      quantityPricingMode: item.quantityPricingMode,
       lineTotal: item.lineTotal,
       purchaseRatePerGram: item.purchaseRatePerGram,
       purchaseCost: item.purchaseCost,
@@ -236,10 +238,12 @@ export class SalesBillsRepository implements ISalesBillsRepository {
           if (update.sellingPrice != null) line.sellingPrice = update.sellingPrice;
           if (update.makingCharges != null) line.makingCharges = update.makingCharges;
           if (update.quantity != null) line.quantity = update.quantity;
+          if (update.quantityPricingMode != null) line.quantityPricingMode = update.quantityPricingMode;
 
           const qty = Number(line.quantity) || 1;
           const price = Number(line.sellingPrice) || 0;
-          line.lineTotal = update.lineTotal ?? Math.round(price * qty * 100) / 100;
+          line.lineTotal =
+            update.lineTotal ?? computeBillLineTotal(price, qty, line.quantityPricingMode);
           if (update.purchaseCost != null) line.purchaseCost = update.purchaseCost;
           if (update.profitAmount != null) line.profitAmount = update.profitAmount;
           await itemsRepo.save(line);

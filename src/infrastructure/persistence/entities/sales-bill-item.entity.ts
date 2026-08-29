@@ -66,6 +66,9 @@ export class SalesBillItemEntity {
   @Column({ type: 'int', default: 1 })
   quantity: number;
 
+  @Column({ name: 'quantity_pricing_mode', type: 'varchar', length: 16, default: 'MULTIPLY' })
+  quantityPricingMode: string;
+
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   lineTotal: number;
 }

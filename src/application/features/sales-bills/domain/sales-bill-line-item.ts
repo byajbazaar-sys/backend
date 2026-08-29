@@ -50,6 +50,9 @@ export class SalesBillLineItem {
   quantity: number;
 
   @Expose()
+  quantityPricingMode?: string;
+
+  @Expose()
   lineTotal: number;
 
   @Expose()

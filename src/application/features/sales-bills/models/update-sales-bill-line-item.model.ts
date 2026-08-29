@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+
+import { EQuantityPricingMode } from '../enums';
 
 export class UpdateSalesBillLineItemModel {
   @ApiProperty()
@@ -28,4 +30,9 @@ export class UpdateSalesBillLineItemModel {
   @IsNumber()
   @Min(1)
   quantity?: number;
+
+  @ApiPropertyOptional({ enum: EQuantityPricingMode })
+  @IsOptional()
+  @IsEnum(EQuantityPricingMode)
+  quantityPricingMode?: EQuantityPricingMode;
 }

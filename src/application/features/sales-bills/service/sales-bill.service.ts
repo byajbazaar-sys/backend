@@ -49,6 +49,7 @@ import { ISalesBillService } from './i-sales-bill.service';
 import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
 import { InventoryStockDeduction } from './inventory-stock-deduction';
 import { toGstExportCsv } from '../utils/gst-export.util';
+import { computeBillLineTotal } from '../utils/bill-line-total.util';
 import {
   computeUnitPurchaseCost,
   computeLineProfit,
@@ -264,7 +265,11 @@ export class SalesBillService implements ISalesBillService {
     for (const item of data.items) {
       const hsnHuid = await this.resolveLineHsnHuid(item);
       const weights = this.resolveBillLineWeights(item);
-      const lineTotal = Math.round(Number(item.sellingPrice) * item.quantity * 100) / 100;
+      const lineTotal = computeBillLineTotal(
+        item.sellingPrice,
+        item.quantity,
+        item.quantityPricingMode,
+      );
       const purchase = await this.resolveLinePurchaseSnapshot(item, lineTotal);
       lineItems.push({
         inventoryItemId: item.inventoryItemId,
@@ -281,6 +286,7 @@ export class SalesBillService implements ISalesBillService {
         makingCharges: item.makingCharges ?? 0,
         sellingPrice: item.sellingPrice,
         quantity: item.quantity,
+        quantityPricingMode: item.quantityPricingMode,
         lineTotal,
         purchaseRatePerGram: purchase.purchaseRatePerGram,
         purchaseCost: purchase.purchaseCost,
@@ -502,7 +508,8 @@ export class SalesBillService implements ISalesBillService {
         const line = (bill.items ?? []).find((l) => l.id === patch.id);
         const qty = patch.quantity ?? Number(line.quantity);
         const price = patch.sellingPrice ?? Number(line.sellingPrice);
-        const lineTotal = Math.round(price * qty * 100) / 100;
+        const qtyMode = patch.quantityPricingMode ?? line.quantityPricingMode;
+        const lineTotal = computeBillLineTotal(price, qty, qtyMode);
         const profitCalc = recalcLineProfitFromExisting(
           lineTotal,
           Number(line.purchaseCost ?? 0),
@@ -517,6 +524,7 @@ export class SalesBillService implements ISalesBillService {
           sellingPrice: patch.sellingPrice,
           makingCharges: patch.makingCharges,
           quantity: patch.quantity,
+          quantityPricingMode: patch.quantityPricingMode,
           lineTotal,
           purchaseCost: profitCalc.purchaseCost,
           profitAmount: profitCalc.profitAmount,
@@ -528,7 +536,8 @@ export class SalesBillService implements ISalesBillService {
       const patch = lineUpdates.find((u) => u.id === line.id);
       const qty = patch?.quantity ?? Number(line.quantity);
       const price = patch?.sellingPrice ?? Number(line.sellingPrice);
-      return sum + Math.round(price * qty * 100) / 100;
+      const qtyMode = patch?.quantityPricingMode ?? line.quantityPricingMode;
+      return sum + computeBillLineTotal(price, qty, qtyMode);
     }, 0);
 
     const discount = data.discount != null ? Number(data.discount) : Number(bill.discount ?? 0);
