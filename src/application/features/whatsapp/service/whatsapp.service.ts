@@ -3,8 +3,7 @@ import { AES_ENCRYPT_SERVICE, IAESEncryptService } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { MetaWhatsAppOptions } from '../../../shared';
-import { WHATSAPP_DEFAULT_TEMPLATES, WHATSAPP_REENGAGEMENT_TEMPLATE } from '../constants/whatsapp-default-template.constants';
+import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
 import {
   ConnectWhatsAppBusinessData,
   SaveWhatsAppBusinessConnectionData,
@@ -38,7 +37,6 @@ import {
 @Injectable()
 export class WhatsAppService implements IWhatsAppService {
   constructor(
-    private readonly options: MetaWhatsAppOptions,
     @Inject(META_GRAPH_CLIENT) private readonly metaGraphClient: IMetaGraphClient,
     @Inject(WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY)
     private readonly connectionsRepo: IWhatsAppBusinessConnectionsRepository,
@@ -130,13 +128,6 @@ export class WhatsAppService implements IWhatsAppService {
     const templateLanguage = options?.reengagementTemplateLanguage?.trim();
 
     if (!templateName || !templateLanguage) {
-      if (this.options.isTestConfigured) {
-        return {
-          name: WHATSAPP_REENGAGEMENT_TEMPLATE.name,
-          language: WHATSAPP_REENGAGEMENT_TEMPLATE.language,
-        };
-      }
-
       throw new BadRequestException(
         'Outside the 24-hour customer service window. Select an approved template from Meta to re-engage the customer.',
       );
@@ -623,30 +614,20 @@ export class WhatsAppService implements IWhatsAppService {
 
   private async resolveCredentials(userId: string): Promise<MetaGraphCredentials> {
     const connection = await this.connectionsRepo.findByUserId(userId);
-    if (connection?.connectionStatus === EWhatsAppConnectionStatus.Connected) {
-      const encryptedToken = await this.connectionsRepo.findEncryptedTokenByUserId(userId);
-      if (!encryptedToken) {
-        throw new BadRequestException('WhatsApp connection token is missing');
-      }
-      const accessToken = this.aesEncrypt.decrypt(encryptedToken);
-      return {
-        accessToken,
-        phoneNumberId: connection.phoneNumberId,
-        wabaId: connection.wabaId,
-      };
+    if (connection?.connectionStatus !== EWhatsAppConnectionStatus.Connected) {
+      throw new BadRequestException('WhatsApp is not connected for this business. Connect your WhatsApp account first.');
     }
 
-    if (!this.options.isTestConfigured) {
-      throw new BadRequestException(
-        'WhatsApp is not configured for this business. Connect a WhatsApp account or configure Meta test credentials.',
-      );
+    const encryptedToken = await this.connectionsRepo.findEncryptedTokenByUserId(userId);
+    if (!encryptedToken) {
+      throw new BadRequestException('WhatsApp connection token is missing');
     }
 
-    this.logger.debug({ userId, operation: 'resolveCredentials' }, 'Using Meta test WhatsApp credentials');
+    const accessToken = this.aesEncrypt.decrypt(encryptedToken);
     return {
-      accessToken: this.options.testAccessToken,
-      phoneNumberId: this.options.testPhoneNumberId,
-      wabaId: this.options.testWabaId,
+      accessToken,
+      phoneNumberId: connection.phoneNumberId,
+      wabaId: connection.wabaId,
     };
   }
 }
