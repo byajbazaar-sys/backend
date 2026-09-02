@@ -27,3 +27,19 @@ export function trialDaysRemaining(user: TrialUserFields, defaultTrialDays: numb
 export function defaultTrialEndsAt(defaultTrialDays: number, from = new Date()): Date {
   return new Date(from.getTime() + defaultTrialDays * MS_PER_DAY);
 }
+
+/** Ads are hidden during the no-ads welcome period or with an active paid plan. */
+export function shouldShowAds(
+  user: TrialUserFields | null,
+  hasActiveSubscription: boolean,
+  defaultTrialDays: number,
+  now = new Date(),
+): boolean {
+  if (hasActiveSubscription) {
+    return false;
+  }
+  if (!user) {
+    return true;
+  }
+  return !isTrialActive(user, defaultTrialDays, now);
+}

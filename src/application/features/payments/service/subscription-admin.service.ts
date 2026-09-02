@@ -23,8 +23,10 @@ import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
 import { ISubscriptionAdminService } from './i-subscription-admin.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { REFUND_SERVICE, RefundService } from './refund.service';
+import { RazorpayOptions, CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { isPaymentRefundable, remainingRefundableAmount } from '../utils/refund.util';
+import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
 
 @Injectable()
 export class SubscriptionAdminService implements ISubscriptionAdminService {
@@ -38,6 +40,8 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(REFUNDS_REPOSITORY) private readonly refundsRepo: IRefundsRepository,
     @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+    private readonly razorpayOptions: RazorpayOptions,
   ) {}
 
   async list(query: ListAdminSubscriptionsQueryModel): Promise<AdminSubscriptionsPagedResponseModel> {
@@ -173,8 +177,35 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     return plainToInstance(RefundResponseModel, saved, { excludeExtraneousValues: true });
   }
 
-  async extendTrial(_id: string, _body: ExtendTrialRequestModel): Promise<AdminSubscriptionDetailResponseModel> {
-    throw new BadRequestException('Trials are no longer supported');
+  async extendTrial(id: string, body: ExtendTrialRequestModel): Promise<AdminSubscriptionDetailResponseModel> {
+    if (!body.days && !body.trialEndsAt) {
+      throw new BadRequestException('Provide days or trialEndsAt');
+    }
+
+    const sub = await this.requireSubscription(id);
+    const user = await this.usersRepo.findById(sub.userId);
+    if (!user?.id) {
+      throw new NotFoundException('User not found');
+    }
+
+    let newTrialEndsAt: Date;
+    if (body.trialEndsAt) {
+      newTrialEndsAt = new Date(body.trialEndsAt);
+    } else {
+      const currentEnds = resolveTrialEndsAt(user, this.razorpayOptions.defaultTrialDays);
+      const now = new Date();
+      const base = currentEnds && currentEnds > now ? currentEnds : now;
+      newTrialEndsAt = new Date(base.getTime() + body.days * 24 * 60 * 60 * 1000);
+    }
+
+    if (Number.isNaN(newTrialEndsAt.getTime())) {
+      throw new BadRequestException('Invalid trialEndsAt');
+    }
+
+    await this.usersRepo.update(user.id, { trialEndsAt: newTrialEndsAt });
+    await this.cache.bumpUserCache(CACHE_NAMESPACE.USER_DETAILS, user.id);
+    const userRow = await this.loadUserRow(sub.userId);
+    return this.toDetail(sub, null, userRow);
   }
 
   private async loadUserRow(userId: string) {
@@ -265,6 +296,16 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
 
     const email = userRow?.email ?? '';
     const userName = [userRow?.firstName, userRow?.lastName].filter(Boolean).join(' ') || email;
+    const trialUser = userRow
+      ? {
+          trialEndsAt: userRow.trialEndsAt,
+          createdAt: userRow.createdAt,
+        }
+      : null;
+    const defaultTrialDays = this.razorpayOptions.defaultTrialDays;
+    const resolvedTrialEndsAt = trialUser ? resolveTrialEndsAt(trialUser, defaultTrialDays) : null;
+    const onTrial = trialUser ? isTrialActive(trialUser, defaultTrialDays) : false;
+    const daysRemaining = trialUser ? trialDaysRemaining(trialUser, defaultTrialDays) : 0;
 
     return plainToInstance(
       AdminSubscriptionDetailResponseModel,
@@ -287,9 +328,9 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
         cancelAtPeriodEnd: sub.cancelAtPeriodEnd ?? false,
         cancelledAt: sub.cancelledAt ?? null,
         providerPlanId: sub.planId,
-        isOnTrial: false,
-        trialEndsAt: null,
-        trialDaysRemaining: 0,
+        isOnTrial: onTrial,
+        trialEndsAt: resolvedTrialEndsAt,
+        trialDaysRemaining: daysRemaining,
         payments: plainToInstance(PaymentResponseModel, payments, { excludeExtraneousValues: true }),
         refunds: plainToInstance(RefundResponseModel, refunds, { excludeExtraneousValues: true }),
         webhookEvents: plainToInstance(

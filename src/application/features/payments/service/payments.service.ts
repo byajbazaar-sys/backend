@@ -35,6 +35,12 @@ import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { resolveCheckoutPlan, subscriptionTotalCount } from '../utils/checkout-plan.util';
+import {
+  isTrialActive,
+  resolveTrialEndsAt,
+  shouldShowAds,
+  trialDaysRemaining,
+} from '../utils/trial.util';
 
 @Injectable()
 export class PaymentsService implements IPaymentsService {
@@ -212,16 +218,22 @@ export class PaymentsService implements IPaymentsService {
     }
     const active = latest?.status === ESubscriptionStatus.Active;
     const activePlan = await this.plansRepo.findActiveDefault();
+    const user = await this.usersRepo.findById(userId);
+    const defaultTrialDays = this.razorpayOptions.defaultTrialDays;
+    const onNoAdsTrial = user ? isTrialActive(user, defaultTrialDays) : false;
+    const trialEndsAt = user ? resolveTrialEndsAt(user, defaultTrialDays) : null;
+    const daysRemaining = user ? trialDaysRemaining(user, defaultTrialDays) : 0;
+    const showAds = shouldShowAds(user, !!active, defaultTrialDays);
 
     return plainToInstance(
       SubscriptionStatusResponseModel,
       {
         hasActiveSubscription: !!active,
         hasAppAccess: true,
-        showAds: !active,
-        isOnTrial: false,
-        trialEndsAt: null,
-        trialDaysRemaining: 0,
+        showAds,
+        isOnTrial: onNoAdsTrial,
+        trialEndsAt,
+        trialDaysRemaining: daysRemaining,
         status: latest?.status ?? null,
         subscriptionId: latest?.id ?? null,
         currentStart: latest?.currentStart ?? null,
