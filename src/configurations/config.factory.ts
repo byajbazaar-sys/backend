@@ -138,9 +138,6 @@ export const configFactory = (): IMsConfig => ({
     process.env.META_GRAPH_API_VERSION ?? 'v22.0',
     process.env.META_APP_ID ?? '',
     process.env.META_APP_SECRET ?? '',
-    process.env.META_TEST_WABA_ID ?? '',
-    process.env.META_TEST_PHONE_NUMBER_ID ?? '',
-    process.env.META_TEST_ACCESS_TOKEN ?? '',
     process.env.META_WEBHOOK_VERIFY_TOKEN ?? '',
   ),
 });
