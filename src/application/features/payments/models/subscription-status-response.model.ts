@@ -9,20 +9,24 @@ export class SubscriptionStatusResponseModel {
   hasActiveSubscription: boolean;
 
   @Expose()
-  @ApiProperty({ description: 'Whether the user can access premium features (subscription or trial)' })
+  @ApiProperty({ description: 'Whether the user can access app features (always true for logged-in users)' })
   hasAppAccess: boolean;
 
   @Expose()
-  @ApiProperty({ description: 'Whether the user is currently on trial' })
+  @ApiProperty({ description: 'Whether ads should be shown (false when user has an active subscription)' })
+  showAds: boolean;
+
+  @Expose()
+  @ApiProperty({ description: 'Deprecated — trials are no longer offered', deprecated: true })
   isOnTrial: boolean;
 
   @Expose()
-  @ApiPropertyOptional({ type: Date, nullable: true })
+  @ApiPropertyOptional({ type: Date, nullable: true, deprecated: true })
   @Type(() => Date)
   trialEndsAt?: Date;
 
   @Expose()
-  @ApiPropertyOptional({ description: 'Days remaining in trial', nullable: true })
+  @ApiPropertyOptional({ description: 'Deprecated — trials are no longer offered', nullable: true, deprecated: true })
   trialDaysRemaining?: number;
 
   @Expose()

@@ -21,6 +21,7 @@ import {
   ApplyCouponRequestModel,
   ApplyCouponResponseModel,
   CancelSubscriptionRequestModel,
+  CheckoutPlanResponseModel,
   CreateSubscriptionRequestModel,
   CreateSubscriptionResponseModel,
   PaymentResponseModel,
@@ -33,8 +34,7 @@ import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
 import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
-import { requireCheckoutPlan } from '../utils/checkout-plan.util';
-import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
+import { resolveCheckoutPlan, subscriptionTotalCount } from '../utils/checkout-plan.util';
 
 @Injectable()
 export class PaymentsService implements IPaymentsService {
@@ -54,15 +54,13 @@ export class PaymentsService implements IPaymentsService {
     return !!active;
   }
 
-  async hasAppAccess(userId: string): Promise<boolean> {
-    if (await this.hasActiveSubscription(userId)) {
-      return true;
-    }
-    const user = await this.usersRepo.findById(userId);
-    if (!user) {
-      return false;
-    }
-    return isTrialActive(user, this.razorpayOptions.defaultTrialDays);
+  async hasAppAccess(_userId: string): Promise<boolean> {
+    return true;
+  }
+
+  async listCheckoutPlans(): Promise<CheckoutPlanResponseModel[]> {
+    const plans = await this.plansRepo.findActiveCheckoutPlans();
+    return plainToInstance(CheckoutPlanResponseModel, plans, { excludeExtraneousValues: true });
   }
 
   async createSubscription(
@@ -70,7 +68,8 @@ export class PaymentsService implements IPaymentsService {
     body: CreateSubscriptionRequestModel,
     userProfile: SubscriptionUserProfileData,
   ): Promise<CreateSubscriptionResponseModel> {
-    const activePlan = await requireCheckoutPlan(this.plansRepo);
+    const activePlan = await resolveCheckoutPlan(this.plansRepo, body.planId);
+    const billingPeriod = activePlan.interval?.trim().toLowerCase() === 'yearly' ? 'yearly' : 'monthly';
     const originalAmount = Number(activePlan.price);
     const currency = activePlan.currency?.trim().toUpperCase() || this.razorpayOptions.planCurrency;
     let discountAmount = 0;
@@ -124,7 +123,7 @@ export class PaymentsService implements IPaymentsService {
     const razorpayPlanId =
       finalAmount === originalAmount
         ? activePlan.providerPlanId
-        : (await this.razorpay.ensureMonthlyPlan(amountPaise, currency)).id;
+        : (await this.razorpay.ensureBillingPlan(amountPaise, billingPeriod, currency)).id;
 
     const previousSub = await this.subscriptionsRepo.findLatestByUserId(userId);
     const providerCustomerId = previousSub?.providerCustomerId ?? null;
@@ -167,6 +166,7 @@ export class PaymentsService implements IPaymentsService {
     const rzpSub = await this.razorpay.createSubscription(
       plainToInstance(RazorpayCreateSubscriptionData, {
         planId: razorpayPlanId,
+        totalCount: subscriptionTotalCount(activePlan),
         notes: {
           userId,
           subscriptionId: local.id,
@@ -211,21 +211,17 @@ export class PaymentsService implements IPaymentsService {
       latest = await this.syncSubscriptionFromRazorpay(latest);
     }
     const active = latest?.status === ESubscriptionStatus.Active;
-    const user = await this.usersRepo.findById(userId);
-    const defaultTrialDays = this.razorpayOptions.defaultTrialDays;
-    const trialEndsAt = user ? resolveTrialEndsAt(user, defaultTrialDays) : null;
-    const onTrial = user ? isTrialActive(user, defaultTrialDays) : false;
-    const daysRemaining = user ? trialDaysRemaining(user, defaultTrialDays) : 0;
     const activePlan = await this.plansRepo.findActiveDefault();
 
     return plainToInstance(
       SubscriptionStatusResponseModel,
       {
         hasActiveSubscription: !!active,
-        hasAppAccess: !!active || onTrial,
-        isOnTrial: onTrial,
-        trialEndsAt,
-        trialDaysRemaining: daysRemaining,
+        hasAppAccess: true,
+        showAds: !active,
+        isOnTrial: false,
+        trialEndsAt: null,
+        trialDaysRemaining: 0,
         status: latest?.status ?? null,
         subscriptionId: latest?.id ?? null,
         currentStart: latest?.currentStart ?? null,
@@ -286,7 +282,7 @@ export class PaymentsService implements IPaymentsService {
   }
 
   async applyCoupon(userId: string, body: ApplyCouponRequestModel): Promise<ApplyCouponResponseModel> {
-    const activePlan = await requireCheckoutPlan(this.plansRepo);
+    const activePlan = await resolveCheckoutPlan(this.plansRepo, body.planId);
     const preview = await this.couponService.preview(body.code, userId, Number(activePlan.price));
     return this.couponService.toResponse(preview);
   }

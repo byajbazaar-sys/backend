@@ -1,5 +1,6 @@
 export * from './create-subscription-request.model';
 export * from './apply-coupon-request.model';
+export * from './checkout-plan-response.model';
 export * from './cancel-subscription-request.model';
 export * from './create-subscription-response.model';
 export * from './subscription-status-response.model';

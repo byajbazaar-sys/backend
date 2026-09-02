@@ -1,4 +1,4 @@
-/** API routes that require an active subscription or trial. */
+/** API routes that previously required subscription (now open to all authenticated users). */
 const PREMIUM_API_PATH_PATTERNS: RegExp[] = [
   /\/inventory(\/|$)/,
   /\/bills(\/|$)/,

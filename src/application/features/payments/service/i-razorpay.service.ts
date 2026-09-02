@@ -15,6 +15,11 @@ export const RAZORPAY_SERVICE = 'RAZORPAY_SERVICE';
 
 export interface IRazorpayService {
   ensureMonthlyPlan(amountPaise: number, currency?: string): Promise<RazorpayPlanResult>;
+  ensureBillingPlan(
+    amountPaise: number,
+    period: 'monthly' | 'yearly',
+    currency?: string,
+  ): Promise<RazorpayPlanResult>;
   createMonthlyPlan(params: RazorpayCreateMonthlyPlanData): Promise<RazorpayPlanResult>;
   createOrGetCustomer(params: RazorpayCreateCustomerData): Promise<RazorpayCustomerResult>;
   createSubscription(params: RazorpayCreateSubscriptionData): Promise<RazorpaySubscriptionResult>;

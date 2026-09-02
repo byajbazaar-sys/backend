@@ -3,6 +3,7 @@ import {
   ApplyCouponRequestModel,
   ApplyCouponResponseModel,
   CancelSubscriptionRequestModel,
+  CheckoutPlanResponseModel,
   CreateSubscriptionRequestModel,
   CreateSubscriptionResponseModel,
   PaymentResponseModel,
@@ -14,6 +15,7 @@ export const PAYMENTS_SERVICE = 'PAYMENTS_SERVICE';
 export interface IPaymentsService {
   hasActiveSubscription(userId: string): Promise<boolean>;
   hasAppAccess(userId: string): Promise<boolean>;
+  listCheckoutPlans(): Promise<CheckoutPlanResponseModel[]>;
   createSubscription(
     userId: string,
     body: CreateSubscriptionRequestModel,

@@ -23,8 +23,11 @@ export class PlanService implements IPlanService {
     const interval = body.interval?.trim().toLowerCase() || 'monthly';
     const intervalCount = body.intervalCount ?? 1;
 
-    if (interval !== 'monthly' || intervalCount !== 1) {
-      throw new BadRequestException('Only monthly plans with interval count 1 are supported');
+    if (interval !== 'monthly' && interval !== 'yearly') {
+      throw new BadRequestException('Only monthly and yearly plans with interval count 1 are supported');
+    }
+    if (intervalCount !== 1) {
+      throw new BadRequestException('Only plans with interval count 1 are supported');
     }
 
     const existingByName = await this.plansRepo.findByNameAndPrice(body.name.trim(), body.price);
@@ -40,14 +43,17 @@ export class PlanService implements IPlanService {
     }
 
     const amountPaise = Math.round(body.price * 100);
-    const rzpPlan = await this.razorpay.createMonthlyPlan(
-      plainToInstance(RazorpayCreateMonthlyPlanData, {
-        name: body.name.trim(),
-        amountPaise,
-        currency,
-        existingPlanId: body.providerPlanId?.trim(),
-      }),
-    );
+    const billingPeriod = interval === 'yearly' ? 'yearly' : 'monthly';
+    const rzpPlan = body.providerPlanId?.trim()
+      ? await this.razorpay.createMonthlyPlan(
+          plainToInstance(RazorpayCreateMonthlyPlanData, {
+            name: body.name.trim(),
+            amountPaise,
+            currency,
+            existingPlanId: body.providerPlanId.trim(),
+          }),
+        )
+      : await this.razorpay.ensureBillingPlan(amountPaise, billingPeriod, currency);
 
     const duplicate = await this.plansRepo.findByProviderPlanId(rzpPlan.id);
     if (duplicate) {

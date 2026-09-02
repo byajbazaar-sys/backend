@@ -23,6 +23,7 @@ import {
   ApplyCouponRequestModel,
   ApplyCouponResponseModel,
   CancelSubscriptionRequestModel,
+  CheckoutPlanResponseModel,
   CreateSubscriptionRequestModel,
   CreateSubscriptionResponseModel,
   PaymentResponseModel,
@@ -43,11 +44,20 @@ export class PaymentsController {
     @InjectPinoLogger(PaymentsController.name) private readonly logger: PinoLogger,
   ) {}
 
+  @Get('subscription/plans')
+  @ApiBearerAuth('user')
+  @UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
+  @ApiOperation({ summary: 'List active subscription plans for checkout' })
+  @ApiOkResponse({ type: [CheckoutPlanResponseModel] })
+  async listCheckoutPlans(): Promise<CheckoutPlanResponseModel[]> {
+    return this.paymentsService.listCheckoutPlans();
+  }
+
   @Post('subscription/create')
   @ApiBearerAuth('user')
   @UseGuards(ThrottlerGuard, UserAuthGuard, RolesGuard)
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create Razorpay monthly subscription' })
+  @ApiOperation({ summary: 'Create Razorpay subscription (monthly or yearly)' })
   @ApiOkResponse({ type: CreateSubscriptionResponseModel })
   async createSubscription(
     @Body() body: CreateSubscriptionRequestModel,

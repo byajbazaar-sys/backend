@@ -14,7 +14,8 @@ export const PAYMENT_JWT_EXPIRES_IN = '2h';
 export const AUTH_SCOPE_FULL = 'full';
 export const AUTH_SCOPE_PAYMENT = 'payment';
 export const SUBSCRIPTION_PROVIDER_RAZORPAY = 'razorpay';
-export const SUBSCRIPTION_PLAN_AMOUNT_INR = 599;
+export const SUBSCRIPTION_PLAN_AMOUNT_INR = 48;
+export const SUBSCRIPTION_PLAN_YEARLY_AMOUNT_INR = 399;
 export const SUBSCRIPTION_CURRENCY = 'INR';
 
 // Auth

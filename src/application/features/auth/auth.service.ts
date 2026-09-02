@@ -106,16 +106,12 @@ export class AuthService implements IAuthService {
     redirectPath: string;
   }> {
     const isAdmin = identity.userType === EUserType.Admin;
-    let hasPremiumAccess = isAdmin;
     let subscriptionStatus: string = null;
 
     if (!isAdmin && this.paymentsService) {
-      hasPremiumAccess = await this.paymentsService.hasAppAccess(identity.userId);
       const status = await this.paymentsService.getStatus(identity.userId);
       if (status.hasActiveSubscription) {
         subscriptionStatus = 'active';
-      } else if (status.isOnTrial) {
-        subscriptionStatus = 'trial';
       } else {
         subscriptionStatus = status.status ?? 'inactive';
       }
@@ -131,7 +127,7 @@ export class AuthService implements IAuthService {
     return {
       accessToken,
       paymentToken: null,
-      requiresSubscription: !hasPremiumAccess,
+      requiresSubscription: false,
       subscriptionStatus,
       redirectPath: '/dashboard',
     };

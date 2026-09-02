@@ -58,6 +58,22 @@ export class PlansRepository implements IPlansRepository {
     return this.mapEntity(entity);
   }
 
+  async findActiveCheckoutPlans(): Promise<Plan[]> {
+    const entities = await this.planRepo.find({
+      where: { active: true },
+      order: { interval: 'ASC', price: 'ASC', createdAt: 'DESC' },
+    });
+    return entities
+      .filter((entity) => {
+        const interval = entity.interval?.trim().toLowerCase();
+        const intervalCount = entity.intervalCount ?? 1;
+        return (
+          (interval === 'monthly' && intervalCount === 1) || (interval === 'yearly' && intervalCount === 1)
+        );
+      })
+      .map((entity) => this.mapEntity(entity));
+  }
+
   async insert(data: Plan): Promise<Plan> {
     const entity = this.planRepo.create({
       name: data.name,

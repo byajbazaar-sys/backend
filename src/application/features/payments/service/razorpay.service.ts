@@ -63,11 +63,17 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
     };
   }
 
-  /**
-   * Find or create a Razorpay plan for a specific amount (e.g. coupon-discounted checkout).
-   */
   async ensureMonthlyPlan(amountPaise: number, currency = 'INR'): Promise<RazorpayPlanResult> {
+    return this.ensureBillingPlan(amountPaise, 'monthly', currency);
+  }
+
+  async ensureBillingPlan(
+    amountPaise: number,
+    period: 'monthly' | 'yearly',
+    currency = 'INR',
+  ): Promise<RazorpayPlanResult> {
     const client = this.getClient();
+    const interval = 1;
 
     try {
       const listed = (await client.plans.all({ count: 100 })) as unknown as {
@@ -78,8 +84,8 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
         return (
           Number(item.amount) === amountPaise &&
           String(item.currency ?? 'INR') === currency &&
-          String(p.period) === 'monthly' &&
-          Number(p.interval) === 1
+          String(p.period) === period &&
+          Number(p.interval) === interval
         );
       });
       if (match) {
@@ -97,18 +103,20 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
       this.logger.warn({ err }, 'Razorpay plans.list failed');
     }
 
+    const label = period === 'yearly' ? 'Yearly' : 'Monthly';
     const created = (await client.plans.create({
-      period: 'monthly',
-      interval: 1,
+      period,
+      interval,
       item: {
-        name: `ByajBazaar Monthly (${amountPaise / 100} ${currency})`,
+        name: `ByajBazaar ${label} (${amountPaise / 100} ${currency})`,
         amount: amountPaise,
         currency,
-        description: 'ByajBazaar SaaS monthly subscription',
+        description: `ByajBazaar SaaS ${period} subscription`,
       },
       notes: {
         app: 'byajbazaar',
         amount_paise: String(amountPaise),
+        period,
       },
     })) as unknown as Record<string, unknown>;
 
@@ -117,8 +125,8 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
       id: String(created.id),
       amount: Number(item.amount ?? amountPaise),
       currency: String(item.currency ?? currency),
-      period: String(created.period ?? 'monthly'),
-      interval: Number(created.interval ?? 1),
+      period: String(created.period ?? period),
+      interval: Number(created.interval ?? interval),
       raw: created,
     };
   }

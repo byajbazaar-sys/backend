@@ -6,10 +6,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository, In } from 'typeorm';
 
 import { IUsersRepository, User, CreateUserInput, UserUpdatePatch } from '../../../application';
-import { defaultTrialEndsAt } from '../../../application/features/payments/utils/trial.util';
 import { UserEntity } from '../entities/user.entity';
-
-const DEFAULT_TRIAL_DAYS = Number(process.env.DEFAULT_TRIAL_DAYS ?? 7);
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {
@@ -19,9 +16,6 @@ export class UsersRepository implements IUsersRepository {
     const dto = { ...createUserDto };
     if (dto.password) {
       dto.password = hashSync(dto.password, BCRYPT_SALT_ROUNDS);
-    }
-    if (!dto.trialEndsAt && dto.userType !== EUserType.Admin) {
-      dto.trialEndsAt = defaultTrialEndsAt(DEFAULT_TRIAL_DAYS);
     }
     const entity = this.userRepo.create(dto);
     const created = await this.userRepo.save(entity);

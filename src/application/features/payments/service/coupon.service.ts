@@ -11,7 +11,7 @@ import { COUPONS_REPOSITORY, ICouponsRepository } from './i-coupons.repository';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { RazorpayOptions } from '../../../shared';
-import { requireCheckoutPlan } from '../utils/checkout-plan.util';
+import { resolveCheckoutPlan } from '../utils/checkout-plan.util';
 
 @Injectable()
 export class CouponService implements ICouponService {
@@ -58,7 +58,7 @@ export class CouponService implements ICouponService {
       throw new BadRequestException('Coupon redemption limit reached');
     }
 
-    const amount = originalAmount ?? Number((await requireCheckoutPlan(this.plansRepo)).price);
+    const amount = originalAmount ?? Number((await resolveCheckoutPlan(this.plansRepo)).price);
     if (Number(coupon.minimumAmount) > amount) {
       throw new BadRequestException(`Minimum subscription amount for this coupon is ₹${coupon.minimumAmount}`);
     }

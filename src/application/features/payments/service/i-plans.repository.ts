@@ -9,6 +9,7 @@ export interface IPlansRepository {
   findByProviderPlanId(providerPlanId: string): Promise<Plan>;
   findByNameAndPrice(name: string, price: number): Promise<Plan>;
   findActiveDefault(): Promise<Plan>;
+  findActiveCheckoutPlans(): Promise<Plan[]>;
   insert(data: Plan): Promise<Plan>;
   update(id: string, data: UpdatePlanPatch): Promise<Plan>;
 }
