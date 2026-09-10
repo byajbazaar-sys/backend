@@ -6,6 +6,6 @@ export interface IFaceSearchService {
   getLibraryStatus(userId: string): Promise<FaceLibraryStatusModel>;
   syncLibrary(userId: string): Promise<FaceLibrarySyncResponseModel>;
   searchByPhoto(userId: string, imageBuffer: Buffer): Promise<FaceSearchResponseModel>;
-  indexCustomer(userId: string, customerId: string): Promise<void>;
+  indexCustomer(userId: string, customerId: string, imageBuffer?: Buffer): Promise<void>;
   removeCustomer(userId: string, customerId: string): Promise<void>;
 }

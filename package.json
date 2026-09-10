@@ -34,7 +34,8 @@
     "verify:catalog": "ts-node -r tsconfig-paths/register -P ./tsconfig.json ./backfill/verify-catalog-slug.ts",
     "db:clone": "ts-node -r tsconfig-paths/register -P ./tsconfig.json ./scripts/clone-database.ts",
     "s3:migrate-b2": "ts-node -r tsconfig-paths/register -P ./tsconfig.json ./scripts/migrate-s3-to-backblaze.ts",
-    "verify:redis": "ts-node -r tsconfig-paths/register -P ./tsconfig.json ./scripts/verify-redis.ts"
+    "verify:redis": "ts-node -r tsconfig-paths/register -P ./tsconfig.json ./scripts/verify-redis.ts",
+    "verify:face-search": "ts-node -r tsconfig-paths/register -P ./tsconfig.json ./scripts/verify-face-search.ts"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.932.0",

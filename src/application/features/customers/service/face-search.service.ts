@@ -132,14 +132,17 @@ export class FaceSearchService implements IFaceSearchService {
     return plainToInstance(FaceSearchResponseModel, { matches }, { excludeExtraneousValues: true });
   }
 
-  async indexCustomer(userId: string, customerId: string): Promise<void> {
-    if (!this.options.isConfigured) return;
+  async indexCustomer(userId: string, customerId: string, imageBuffer?: Buffer): Promise<void> {
+    if (!this.options.isConfigured) {
+      this.logger.debug({ customerId, userId }, 'Face search not configured; skipping index');
+      return;
+    }
     const customer = await this.customersRepo.findById(customerId, userId);
     if (!customer?.profilePhotoRef) {
       await this.removeCustomer(userId, customerId);
       return;
     }
-    await this.indexCustomerRecord(userId, customer);
+    await this.indexCustomerRecord(userId, customer, imageBuffer);
   }
 
   async removeCustomer(userId: string, customerId: string): Promise<void> {
@@ -151,12 +154,12 @@ export class FaceSearchService implements IFaceSearchService {
     }
   }
 
-  private async indexCustomerRecord(userId: string, customer: Customer): Promise<void> {
+  private async indexCustomerRecord(userId: string, customer: Customer, imageBuffer?: Buffer): Promise<void> {
     if (!customer.profilePhotoRef) {
       throw new BadRequestException('Customer has no profile photo');
     }
 
-    const buffer = await this.fileStorage.readAsync(customer.profilePhotoRef);
+    const buffer = imageBuffer ?? (await this.fileStorage.readAsync(customer.profilePhotoRef));
     const vector = await this.insightFace.extractEmbedding(buffer, 'index');
     await this.qdrant.upsertFace(customer.id, vector, {
       userId,
@@ -164,5 +167,6 @@ export class FaceSearchService implements IFaceSearchService {
       customerName: customerDisplayName(customer),
       profilePhotoRef: customer.profilePhotoRef,
     });
+    this.logger.info({ customerId: customer.id, userId }, 'Customer face indexed in Qdrant');
   }
 }

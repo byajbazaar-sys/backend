@@ -70,12 +70,14 @@ export class CustomerService implements ICustomerService {
     try {
       this.logger.info({ createdBy: body.createdBy }, 'Creating new customer');
       const newId = uuidv4();
+      let profilePhotoBuffer: Buffer | undefined;
       if (body.profilePhoto) {
         const normalized = await normalizeImageBufferForStorageOrThrow(
           body.profilePhoto.buffer,
           body.profilePhoto.mimetype,
           body.profilePhoto.originalname,
         );
+        profilePhotoBuffer = normalized.buffer;
         const proposedRef = `customers/profiles/${newId}.${normalized.fileExtension}`;
         body.profilePhotoRef = await this.customersFileStorage.writeAsync(
           proposedRef,
@@ -116,9 +118,13 @@ export class CustomerService implements ICustomerService {
       this.logger.info({ customerId: createdCustomer.id }, 'Customer created successfully');
       await this.invalidateLoanStatsCache(body.createdBy);
       await this.invalidateCustomersCache(body.createdBy);
-      void this.faceSearchService.indexCustomer(body.createdBy, createdCustomer.id).catch((err) => {
-        this.logger.warn({ customerId: createdCustomer.id, err }, 'Face index after create failed');
-      });
+      if (createdCustomer.profilePhotoRef) {
+        try {
+          await this.faceSearchService.indexCustomer(body.createdBy, createdCustomer.id, profilePhotoBuffer);
+        } catch (err) {
+          this.logger.warn({ customerId: createdCustomer.id, err }, 'Face index after create failed');
+        }
+      }
       return this.enrichCustomerSignedUrls(createdCustomer);
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof ConflictException) {
@@ -220,6 +226,7 @@ export class CustomerService implements ICustomerService {
         body.panCardRef = null;
       }
 
+      let profilePhotoBuffer: Buffer | undefined;
       if (body.profilePhoto) {
         if (existingCustomer.profilePhotoRef) {
           try {
@@ -233,6 +240,7 @@ export class CustomerService implements ICustomerService {
           body.profilePhoto.mimetype,
           body.profilePhoto.originalname,
         );
+        profilePhotoBuffer = normalized.buffer;
         const proposedRef = `customers/profiles/${id}.${normalized.fileExtension}`;
         body.profilePhotoRef = await this.customersFileStorage.writeAsync(
           proposedRef,
@@ -291,9 +299,13 @@ export class CustomerService implements ICustomerService {
 
       this.logger.info({ customerId: id }, 'Customer updated successfully');
       await this.invalidateCustomersCache(body.createdBy);
-      void this.faceSearchService.indexCustomer(body.createdBy, id).catch((err) => {
-        this.logger.warn({ customerId: id, err }, 'Face index after update failed');
-      });
+      if (body.profilePhoto && updatedCustomer.profilePhotoRef) {
+        try {
+          await this.faceSearchService.indexCustomer(body.createdBy, id, profilePhotoBuffer);
+        } catch (err) {
+          this.logger.warn({ customerId: id, err }, 'Face index after update failed');
+        }
+      }
       return this.enrichCustomerSignedUrls(updatedCustomer);
     } catch (err) {
       if (
@@ -371,9 +383,11 @@ export class CustomerService implements ICustomerService {
       await this.invalidateLoanStatsCache(createdBy);
       await this.invalidateCustomersCache(createdBy);
       await this.invalidateTransactionsCache(createdBy);
-      void this.faceSearchService.removeCustomer(createdBy, id).catch((err) => {
+      try {
+        await this.faceSearchService.removeCustomer(createdBy, id);
+      } catch (err) {
         this.logger.warn({ customerId: id, err }, 'Face vector remove after delete failed');
-      });
+      }
     } catch (err) {
       if (err instanceof NotFoundException || err instanceof ConflictException || err instanceof ForbiddenException) {
         throw err;
