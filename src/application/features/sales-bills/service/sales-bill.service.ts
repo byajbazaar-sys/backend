@@ -591,6 +591,13 @@ export class SalesBillService implements ISalesBillService {
     }
     if (data.paymentMode !== undefined) patch.paymentMode = data.paymentMode;
     if (data.status !== undefined) patch.status = data.status;
+    if (data.issuedAt !== undefined) {
+      const issuedAt = new Date(data.issuedAt);
+      if (Number.isNaN(issuedAt.getTime())) {
+        throw new BadRequestException('Invalid issue date');
+      }
+      patch.issuedAt = issuedAt;
+    }
 
     const updated = await this.billsRepo.updateBill(id, patch, lineUpdates);
 

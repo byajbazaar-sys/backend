@@ -6,3 +6,4 @@ export * from './update-customer-entity-input.model';
 export * from './list-customers-query.model';
 export * from './download-customers-query.model';
 export * from './customers-paged-response.model';
+export * from './face-search.models';

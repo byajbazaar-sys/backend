@@ -17,6 +17,7 @@ import {
   CloudflareTryOnOptions,
   ResendOptions,
   RedisOptions,
+  FaceCompareOptions,
 } from '../infrastructure';
 
 export interface IMsConfig {
@@ -35,5 +36,6 @@ export interface IMsConfig {
   redis?: RedisOptions;
   appIntegrity: AppIntegrityOptions;
   metaWhatsApp: MetaWhatsAppOptions;
+  faceCompare: FaceCompareOptions;
   logger: Params;
 }

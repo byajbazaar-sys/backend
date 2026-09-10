@@ -25,4 +25,5 @@ export interface UpdateSalesBillPatch {
   totalProfit?: number;
   paymentMode?: EPaymentMode;
   status?: EBillStatus;
+  issuedAt?: Date;
 }

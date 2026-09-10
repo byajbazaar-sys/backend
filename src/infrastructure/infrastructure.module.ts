@@ -65,6 +65,7 @@ import CronServices from './cron';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
 import { GoogleOAuthService } from './google-oauth';
 import { MetaGraphClient } from './meta';
+import { FaceCompareOptions, InsightFaceClient, QdrantClient } from './face-compare';
 import {
   UnitOfWork,
   CustomersRepository,
@@ -300,6 +301,13 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('cloudflareTryOn'),
     },
+    {
+      provide: FaceCompareOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('faceCompare'),
+    },
+    InsightFaceClient,
+    QdrantClient,
     {
       provide: GoogleOAuthOptions,
       inject: [ConfigService],

@@ -11,12 +11,14 @@ import {
   Param,
   Query,
   UploadedFiles,
+  UploadedFile,
   UseInterceptors,
   Inject,
   StreamableFile,
   Header,
+  BadRequestException,
 } from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiConsumes,
@@ -41,9 +43,12 @@ import {
   GetCustomerParamsModel,
   ListCustomersQueryRequestModel,
   UpdateCustomerRequestModel,
+  FaceLibraryStatusModel,
+  FaceLibrarySyncResponseModel,
+  FaceSearchResponseModel,
 } from './models';
 import { CustomersFilterOptions, CustomersDownloadFilterOptions } from './options';
-import { ICustomerService, CUSTOMER_SERVICE } from './service';
+import { FACE_SEARCH_SERVICE, ICustomerService, CUSTOMER_SERVICE, IFaceSearchService } from './service';
 import { ExportFormat } from '../../shared';
 
 @ApiTags('customers')
@@ -54,6 +59,7 @@ export class CustomersController {
   constructor(
     @InjectPinoLogger(CustomersController.name) private readonly logger: PinoLogger,
     @Inject(CUSTOMER_SERVICE) private readonly customerService: ICustomerService,
+    @Inject(FACE_SEARCH_SERVICE) private readonly faceSearchService: IFaceSearchService,
   ) {}
 
   @Post()
@@ -172,6 +178,35 @@ export class CustomersController {
       disposition: `attachment; filename="${filename}.pdf"`,
       length: pdf.length,
     });
+  }
+
+  @Get('face-library/status')
+  @ApiOperation({ summary: 'Face library indexing status for customer photo search' })
+  @ApiOkResponse({ type: FaceLibraryStatusModel })
+  async getFaceLibraryStatus(@Identity() identity: IIdentity): Promise<FaceLibraryStatusModel> {
+    return this.faceSearchService.getLibraryStatus(identity.userId);
+  }
+
+  @Post('face-library/sync')
+  @ApiOperation({ summary: 'Index customer profile photos into the face vector library' })
+  @ApiOkResponse({ type: FaceLibrarySyncResponseModel })
+  async syncFaceLibrary(@Identity() identity: IIdentity): Promise<FaceLibrarySyncResponseModel> {
+    return this.faceSearchService.syncLibrary(identity.userId);
+  }
+
+  @Post('face-search')
+  @ApiOperation({ summary: 'Find customers by face photo' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('photo'))
+  @ApiOkResponse({ type: FaceSearchResponseModel })
+  async searchByFace(
+    @UploadedFile() photo: Express.Multer.File,
+    @Identity() identity: IIdentity,
+  ): Promise<FaceSearchResponseModel> {
+    if (!photo?.buffer?.length) {
+      throw new BadRequestException('photo is required');
+    }
+    return this.faceSearchService.searchByPhoto(identity.userId, photo.buffer);
   }
 
   @Get(':id')

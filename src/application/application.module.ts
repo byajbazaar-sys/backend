@@ -19,6 +19,8 @@ import {
   AuthService,
   CUSTOMER_SERVICE,
   CustomerService,
+  FACE_SEARCH_SERVICE,
+  FaceSearchService,
   ITEM_SERVICE,
   ItemService,
   LOAN_SERVICE,
@@ -118,6 +120,10 @@ import {
     {
       provide: CUSTOMER_SERVICE,
       useClass: CustomerService,
+    },
+    {
+      provide: FACE_SEARCH_SERVICE,
+      useClass: FaceSearchService,
     },
     {
       provide: LOAN_SERVICE,

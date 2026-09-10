@@ -18,6 +18,7 @@ import {
   parseCloudflareCredentials,
   ResendOptions,
   RedisOptions,
+  FaceCompareOptions,
   type TryOnAiProvider,
   AIVOT_TRYON_TIMEOUT_MS,
   AIVOT_TRYON_MAX_RETRIES,
@@ -139,5 +140,16 @@ export const configFactory = (): IMsConfig => ({
     process.env.META_APP_ID ?? '',
     process.env.META_APP_SECRET ?? '',
     process.env.META_WEBHOOK_VERIFY_TOKEN ?? '',
+  ),
+  faceCompare: new FaceCompareOptions(
+    process.env.FACE_COMPARE_API_URL?.trim() ||
+      process.env.INSIGHTFACE_API_URL?.trim() ||
+      'http://140.245.93.109:8000',
+    process.env.QDRANT_URL?.trim() || '',
+    process.env.QDRANT_API_KEY?.trim() || '',
+    process.env.QDRANT_COLLECTION?.trim() || 'customer_faces',
+    Number(process.env.QDRANT_VECTOR_SIZE) || 512,
+    Number(process.env.FACE_MATCH_THRESHOLD) || 0.45,
+    Number(process.env.FACE_COMPARE_TIMEOUT_MS) || 30_000,
   ),
 });
