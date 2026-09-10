@@ -13,7 +13,7 @@ export class WhatsAppMessageResult {
   deliveryStatus: EWhatsAppMessageDeliveryStatus;
 
   @Expose()
-  messageType: 'text' | 'template';
+  messageType: 'text' | 'template' | 'document';
 
   @Expose()
   templateName?: string;

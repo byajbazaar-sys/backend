@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
+import FormData from 'form-data';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { assertMetaGraphSuccess, mapMetaGraphError } from './meta-graph.errors';
@@ -8,6 +9,7 @@ import {
   MetaCreateTemplateResult,
   MetaGraphCredentials,
   MetaPhoneNumberStatus,
+  MetaWhatsAppBusinessAccountInfo,
   MetaRegisterPhoneResult,
   MetaSendMessageResult,
   MetaSubscribeAppResult,
@@ -37,6 +39,11 @@ interface MetaTemplateListResponse {
   error?: { message?: string; code?: number };
 }
 
+interface MetaMediaUploadResponse {
+  id?: string;
+  error?: { message?: string; code?: number };
+}
+
 @Injectable()
 export class MetaGraphClient implements IMetaGraphClient {
   private readonly http: AxiosInstance;
@@ -59,6 +66,109 @@ export class MetaGraphClient implements IMetaGraphClient {
       type: 'text',
       text: { body },
     });
+  }
+
+  async sendDocumentMessage(
+    credentials: MetaGraphCredentials,
+    to: string,
+    mediaId: string,
+    filename: string,
+  ): Promise<MetaSendMessageResult> {
+    return this.postMessage(credentials, {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'document',
+      document: {
+        id: mediaId,
+        filename,
+      },
+    });
+  }
+
+  async sendTemplateDocumentMessage(
+    credentials: MetaGraphCredentials,
+    to: string,
+    templateName: string,
+    languageCode: string,
+    mediaId: string,
+    filename: string,
+    bodyParameters: string[],
+  ): Promise<MetaSendMessageResult> {
+    const components: Record<string, unknown>[] = [
+      {
+        type: 'header',
+        parameters: [
+          {
+            type: 'document',
+            document: { id: mediaId, filename },
+          },
+        ],
+      },
+    ];
+
+    if (bodyParameters.length > 0) {
+      components.push({
+        type: 'body',
+        parameters: bodyParameters.map((text) => ({ type: 'text', text })),
+      });
+    }
+
+    return this.postMessage(credentials, {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components,
+      },
+    });
+  }
+
+  async uploadMedia(
+    credentials: MetaGraphCredentials,
+    fileBuffer: Buffer,
+    mimeType: string,
+    filename: string,
+  ): Promise<string> {
+    try {
+      const form = new FormData();
+      form.append('messaging_product', 'whatsapp');
+      form.append('type', mimeType);
+      form.append('file', fileBuffer, { filename, contentType: mimeType });
+
+      const response = await this.http.post<MetaMediaUploadResponse>(
+        `/${credentials.phoneNumberId}/media`,
+        form,
+        {
+          headers: {
+            Authorization: `Bearer ${credentials.accessToken}`,
+            ...form.getHeaders(),
+          },
+        },
+      );
+
+      const body = assertMetaGraphSuccess(response.status, response.data, 'Failed to upload WhatsApp media');
+      const mediaId = body.id?.trim();
+      if (!mediaId) {
+        throw new BadRequestException('Meta did not return a WhatsApp media ID');
+      }
+
+      this.logger.info(
+        {
+          operation: 'uploadMedia',
+          metaEndpoint: `/${credentials.phoneNumberId}/media`,
+          httpStatus: response.status,
+          mediaId,
+          filename,
+        },
+        'WhatsApp media uploaded',
+      );
+
+      return mediaId;
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to upload WhatsApp media');
+    }
   }
 
   async sendTemplateMessage(
@@ -96,21 +206,26 @@ export class MetaGraphClient implements IMetaGraphClient {
     language: string,
     category: string,
     bodyText: string,
+    headerFormat?: 'DOCUMENT',
   ): Promise<MetaCreateTemplateResult> {
     const placeholderCount = (bodyText.match(/\{\{\d+\}\}/g) ?? []).length;
     const exampleValues = Array.from({ length: placeholderCount }, (_, index) => `Example ${index + 1}`);
+
+    const components: Record<string, unknown>[] = [];
+    if (headerFormat === 'DOCUMENT') {
+      components.push({ type: 'HEADER', format: 'DOCUMENT' });
+    }
+    components.push({
+      type: 'BODY',
+      text: bodyText,
+      ...(exampleValues.length ? { example: { body_text: [exampleValues] } } : {}),
+    });
 
     const payload = {
       name,
       language,
       category,
-      components: [
-        {
-          type: 'BODY',
-          text: bodyText,
-          ...(exampleValues.length ? { example: { body_text: [exampleValues] } } : {}),
-        },
-      ],
+      components,
     };
 
     try {
@@ -255,6 +370,35 @@ export class MetaGraphClient implements IMetaGraphClient {
     }
 
     mapMetaGraphError(lastError, 'Failed to exchange Meta OAuth code');
+  }
+
+  async getWhatsAppBusinessAccount(
+    accessToken: string,
+    wabaId: string,
+  ): Promise<MetaWhatsAppBusinessAccountInfo> {
+    try {
+      const response = await this.http.get<{
+        primary_funding_id?: string;
+        currency?: string;
+        error?: { message?: string; code?: number };
+      }>(`/${wabaId.trim()}`, {
+        params: { fields: 'primary_funding_id,currency' },
+        headers: this.authHeaders(accessToken),
+      });
+
+      const body = assertMetaGraphSuccess(
+        response.status,
+        response.data,
+        'Failed to fetch WhatsApp Business Account billing info',
+      );
+
+      return {
+        primaryFundingId: body.primary_funding_id?.trim() || undefined,
+        currency: body.currency?.trim() || undefined,
+      };
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to fetch WhatsApp Business Account billing info');
+    }
   }
 
   async getPhoneNumberStatus(accessToken: string, phoneNumberId: string): Promise<MetaPhoneNumberStatus> {

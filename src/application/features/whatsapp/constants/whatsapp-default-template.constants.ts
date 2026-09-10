@@ -3,6 +3,8 @@ export interface WhatsAppDefaultTemplateDefinition {
   language: string;
   category: string;
   bodyText: string;
+  /** When set, creates a template with a document header (for bill PDF delivery). */
+  headerFormat?: 'DOCUMENT';
 }
 
 /** Auto-provisioned on connect when no matching template exists on the WABA. */
@@ -20,7 +22,18 @@ export const WHATSAPP_DEFAULT_TEMPLATES: WhatsAppDefaultTemplateDefinition[] = [
     bodyText:
       'Hi from {{1}}. Due reminder: your {{2}} due for this month amounting to {{3}} is pending. Please pay at your earliest convenience.',
   },
+  {
+    name: 'byajbazaar_bill_pdf',
+    language: 'en_US',
+    category: 'UTILITY',
+    headerFormat: 'DOCUMENT',
+    bodyText: 'Bill from {{1}}.',
+  },
 ];
+
+export const WHATSAPP_BILL_PDF_TEMPLATE =
+  WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_bill_pdf') ??
+  WHATSAPP_DEFAULT_TEMPLATES[0];
 
 /** Approved template used to re-open conversations outside the 24-hour window (no variables). */
 export const WHATSAPP_REENGAGEMENT_TEMPLATE =

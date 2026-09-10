@@ -73,6 +73,12 @@ export class WhatsAppConnectionResponseModel {
   @Expose()
   messagingBlockReason?: string;
 
+  @ApiPropertyOptional({
+    description: 'Whether Meta reports a payment method on the connected WABA (primary_funding_id)',
+  })
+  @Expose()
+  hasPaymentMethod?: boolean;
+
   @ApiProperty()
   @Expose()
   createdAt: Date;

@@ -29,6 +29,15 @@ export interface IWhatsAppService {
     languageCode: string,
     parameters: string[],
   ): Promise<WhatsAppMessageResult>;
+  sendBillPdfDocument(
+    userId: string,
+    businessId: string,
+    to: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    shopName: string,
+  ): Promise<WhatsAppMessageResult>;
   createTemplate(
     userId: string,
     businessId: string,

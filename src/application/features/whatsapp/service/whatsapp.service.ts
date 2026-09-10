@@ -3,7 +3,10 @@ import { AES_ENCRYPT_SERVICE, IAESEncryptService } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
+import {
+  WHATSAPP_BILL_PDF_TEMPLATE,
+  WHATSAPP_DEFAULT_TEMPLATES,
+} from '../constants/whatsapp-default-template.constants';
 import {
   ConnectWhatsAppBusinessData,
   SaveWhatsAppBusinessConnectionData,
@@ -70,6 +73,56 @@ export class WhatsAppService implements IWhatsAppService {
     const credentials = await this.resolveCredentials(userId);
     const recipient = normalizeWhatsAppRecipient(to);
     return this.sendWhatsAppTemplate(userId, credentials, recipient, templateName, languageCode, parameters);
+  }
+
+  async sendBillPdfDocument(
+    userId: string,
+    businessId: string,
+    to: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    shopName: string,
+  ): Promise<WhatsAppMessageResult> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
+      throw new BadRequestException(
+        'WhatsApp is not connected. Connect WhatsApp Business in Account settings before sharing bills.',
+      );
+    }
+
+    const credentials = await this.resolveCredentials(userId);
+    const recipient = normalizeWhatsAppRecipient(to);
+    await this.assertMessagingAllowed(userId, credentials);
+
+    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, mimeType, filename);
+    const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
+      userId,
+      credentials.wabaId,
+      credentials.phoneNumberId,
+      recipient,
+    );
+
+    if (isWithinCustomerServiceWindow(lastInboundAt)) {
+      const result = await this.metaGraphClient.sendDocumentMessage(credentials, recipient, mediaId, filename);
+      await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
+      return this.buildMessageResult(result.messageId, 'document');
+    }
+
+    const billTemplate = WHATSAPP_BILL_PDF_TEMPLATE;
+    await this.assertApprovedTemplateExists(userId, billTemplate.name, billTemplate.language);
+    const result = await this.metaGraphClient.sendTemplateDocumentMessage(
+      credentials,
+      recipient,
+      billTemplate.name,
+      billTemplate.language,
+      mediaId,
+      filename,
+      [shopName.trim() || 'Your shop'],
+    );
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
+    return this.buildMessageResult(result.messageId, 'template', billTemplate.name);
   }
 
   /**
@@ -171,7 +224,7 @@ export class WhatsAppService implements IWhatsAppService {
 
   private buildMessageResult(
     messageId: string,
-    messageType: 'text' | 'template',
+    messageType: 'text' | 'template' | 'document',
     templateName?: string,
   ): WhatsAppMessageResult {
     return plainToInstance(
@@ -410,6 +463,7 @@ export class WhatsAppService implements IWhatsAppService {
           definition.language,
           definition.category,
           definition.bodyText,
+          definition.headerFormat,
         );
 
         this.logger.info(
@@ -489,13 +543,18 @@ export class WhatsAppService implements IWhatsAppService {
 
     try {
       const accessToken = this.aesEncrypt.decrypt(encryptedToken);
-      const profile = await this.metaGraphClient.getPhoneNumberStatus(accessToken, connection.phoneNumberId);
+      const [profile, wabaInfo] = await Promise.all([
+        this.metaGraphClient.getPhoneNumberStatus(accessToken, connection.phoneNumberId),
+        this.metaGraphClient.getWhatsAppBusinessAccount(accessToken, connection.wabaId),
+      ]);
       const displayPhoneNumber = connection.displayPhoneNumber || profile.displayPhoneNumber || undefined;
       const readiness = evaluateWhatsAppMessagingReadiness({
         metaPhoneStatus: profile.status,
         displayNameStatus: profile.nameStatus,
         displayPhoneNumber,
       });
+      const hasPaymentMethod = Boolean(wabaInfo.primaryFundingId);
+      const canSendMessages = readiness.canSendMessages && hasPaymentMethod;
       return plainToInstance(
         WhatsAppBusinessConnection,
         {
@@ -505,8 +564,13 @@ export class WhatsAppService implements IWhatsAppService {
           verifiedDisplayName: profile.verifiedName || undefined,
           codeVerificationStatus: profile.codeVerificationStatus || undefined,
           displayPhoneNumber,
-          canSendMessages: readiness.canSendMessages,
-          messagingBlockReason: readiness.messagingBlockReason,
+          canSendMessages,
+          messagingBlockReason:
+            readiness.messagingBlockReason ??
+            (!hasPaymentMethod
+              ? 'Add a payment method in Meta WhatsApp Manager before sending messages.'
+              : undefined),
+          hasPaymentMethod,
         },
         { excludeExtraneousValues: true },
       );

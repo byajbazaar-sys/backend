@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -9,9 +10,12 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
@@ -25,6 +29,7 @@ import {
   GetWhatsAppConnectionQueryModel,
   GetWhatsAppMessageStatusQueryModel,
   ListWhatsAppTemplatesQueryModel,
+  SendWhatsAppDocumentMessageRequestModel,
   SendWhatsAppMessageRequestModel,
   SendWhatsAppTemplateMessageRequestModel,
   UpdateWhatsAppSettingsRequestModel,
@@ -184,6 +189,52 @@ export class WhatsAppController {
       },
       { excludeExtraneousValues: true },
     );
+  }
+
+  @Post('messages/document')
+  @ApiOperation({ summary: 'Send a bill PDF to a customer via WhatsApp Cloud API (document attachment only)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['businessId', 'to', 'shopName', 'file'],
+      properties: {
+        businessId: { type: 'string', format: 'uuid' },
+        to: { type: 'string', example: '919827258776' },
+        shopName: { type: 'string', example: 'Shree Jewellers' },
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOkResponse({ type: WhatsAppMessageResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async sendDocumentMessage(
+    @Body() body: SendWhatsAppDocumentMessageRequestModel,
+    @UploadedFile() file: Express.Multer.File,
+    @Identity() identity: IIdentity,
+  ): Promise<WhatsAppMessageResponseModel> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('PDF file is required');
+    }
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('Only PDF files are supported for bill sharing');
+    }
+
+    const result = await this.whatsappService.sendBillPdfDocument(
+      identity.userId,
+      body.businessId,
+      body.to,
+      file.buffer,
+      file.originalname || 'bill.pdf',
+      file.mimetype,
+      body.shopName,
+    );
+    return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
   }
 
   @Post('messages/template')

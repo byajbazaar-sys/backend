@@ -48,6 +48,10 @@ export class WhatsAppBusinessConnection {
   @Expose()
   messagingBlockReason?: string;
 
+  /** False when Meta WABA has no primary_funding_id (payment method not attached). */
+  @Expose()
+  hasPaymentMethod?: boolean;
+
   @Expose()
   createdAt: Date;
 
