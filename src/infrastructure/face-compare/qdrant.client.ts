@@ -36,17 +36,23 @@ export class QdrantClient {
   async ensureCollection(): Promise<void> {
     const name = this.options.collectionName;
     const existing = await this.http.get(`/collections/${name}`);
-    if (existing.status === 200) return;
-
-    const created = await this.http.put(`/collections/${name}`, {
-      vectors: {
-        size: this.options.vectorSize,
-        distance: 'Cosine',
-      },
-    });
-    if (created.status < 200 || created.status >= 300) {
-      throw new Error(`Failed to create Qdrant collection (${created.status})`);
+    if (existing.status !== 200) {
+      const created = await this.http.put(`/collections/${name}`, {
+        vectors: {
+          size: this.options.vectorSize,
+          distance: 'Cosine',
+        },
+      });
+      if (created.status < 200 || created.status >= 300) {
+        throw new Error(`Failed to create Qdrant collection (${created.status})`);
+      }
     }
+
+    // Required for userId filter on search/count (Qdrant returns 400 without this index).
+    await this.http.put(`/collections/${name}/index`, {
+      field_name: 'userId',
+      field_schema: 'keyword',
+    });
   }
 
   async upsertFace(pointId: string, vector: number[], payload: QdrantFacePayload): Promise<void> {
