@@ -116,6 +116,18 @@ export class WhatsAppController {
     return plainToInstance(WhatsAppConnectionResponseModel, connection, { excludeExtraneousValues: true });
   }
 
+  @Post('provision-templates')
+  @ApiOperation({ summary: 'Create missing default WhatsApp message templates on the connected WABA' })
+  @ApiOkResponse({ schema: { example: { success: true } } })
+  @HttpCode(HttpStatus.OK)
+  async provisionTemplates(
+    @Body() body: DisconnectWhatsAppBusinessRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<{ success: boolean }> {
+    await this.whatsappService.provisionWhatsAppDefaultTemplates(identity.userId, body.businessId);
+    return { success: true };
+  }
+
   @Post('register-phone')
   @ApiOperation({ summary: 'Register connected WhatsApp phone number with Meta Cloud API' })
   @ApiOkResponse({ type: WhatsAppRegisterPhoneResponseModel })

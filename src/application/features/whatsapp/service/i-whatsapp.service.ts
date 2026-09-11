@@ -65,4 +65,5 @@ export interface IWhatsAppService {
     data: UpdateWhatsAppSettingsData,
   ): Promise<WhatsAppBusinessConnection>;
   disconnectWhatsAppBusiness(userId: string, businessId: string): Promise<WhatsAppDisconnectResult>;
+  provisionWhatsAppDefaultTemplates(userId: string, businessId: string): Promise<void>;
 }

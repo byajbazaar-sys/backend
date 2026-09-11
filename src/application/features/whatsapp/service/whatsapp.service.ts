@@ -1,4 +1,13 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ForbiddenException,
+  HttpException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { AES_ENCRYPT_SERVICE, IAESEncryptService } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -323,7 +332,7 @@ export class WhatsAppService implements IWhatsAppService {
 
     await this.provisionDefaultTemplates(accessToken, saved.wabaId, saved.phoneNumberId);
 
-    return saved;
+    return this.enrichConnectionWithMetaProfile(userId, saved);
   }
 
   async registerWhatsAppPhone(
@@ -344,6 +353,7 @@ export class WhatsAppService implements IWhatsAppService {
 
     const accessToken = this.aesEncrypt.decrypt(encryptedToken);
     const result = await this.ensurePhoneNumberRegistered(accessToken, connection.phoneNumberId, registrationPin);
+    await this.provisionDefaultTemplates(accessToken, connection.wabaId, connection.phoneNumberId);
 
     return plainToInstance(WhatsAppRegisterPhoneResult, result, { excludeExtraneousValues: true });
   }
@@ -396,6 +406,22 @@ export class WhatsAppService implements IWhatsAppService {
       throw new NotFoundException('WhatsApp message not found');
     }
     return message;
+  }
+
+  async provisionWhatsAppDefaultTemplates(userId: string, businessId: string): Promise<void> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
+      throw new BadRequestException('WhatsApp is not connected for this business');
+    }
+
+    const encryptedToken = await this.connectionsRepo.findEncryptedTokenByUserId(userId);
+    if (!encryptedToken) {
+      throw new BadRequestException('WhatsApp connection token is missing');
+    }
+
+    const accessToken = this.aesEncrypt.decrypt(encryptedToken);
+    await this.provisionDefaultTemplates(accessToken, connection.wabaId, connection.phoneNumberId);
   }
 
   async disconnectWhatsAppBusiness(userId: string, businessId: string): Promise<WhatsAppDisconnectResult> {
@@ -598,21 +624,80 @@ export class WhatsAppService implements IWhatsAppService {
       throw new BadRequestException('registrationPin must be a 6-digit number');
     }
 
-    const current = await this.metaGraphClient.getPhoneNumberStatus(accessToken, phoneNumberId);
-    if (current.status === 'CONNECTED') {
-      this.logger.info(
-        { operation: 'ensurePhoneNumberRegistered', phoneNumberId, status: current.status },
-        'WhatsApp phone number already registered with Cloud API',
-      );
-      return plainToInstance(
-        WhatsAppRegisterPhoneResult,
-        { success: true, status: current.status },
-        { excludeExtraneousValues: true },
+    const retryDelaysMs = [0, 2000, 3000, 4000, 5000];
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt++) {
+      if (retryDelaysMs[attempt] > 0) {
+        await this.sleep(retryDelaysMs[attempt]);
+      }
+
+      try {
+        const current = await this.metaGraphClient.getPhoneNumberStatus(accessToken, phoneNumberId);
+        if (current.status === 'CONNECTED') {
+          this.logger.info(
+            { operation: 'ensurePhoneNumberRegistered', phoneNumberId, status: current.status, attempt },
+            'WhatsApp phone number already registered with Cloud API',
+          );
+          return plainToInstance(
+            WhatsAppRegisterPhoneResult,
+            { success: true, status: current.status },
+            { excludeExtraneousValues: true },
+          );
+        }
+
+        const registered = await this.metaGraphClient.registerPhoneNumber(accessToken, phoneNumberId, pin);
+        return plainToInstance(WhatsAppRegisterPhoneResult, registered, { excludeExtraneousValues: true });
+      } catch (err) {
+        lastError = err;
+        const canRetry = attempt < retryDelaysMs.length - 1 && this.isRetryableWhatsAppRegistrationError(err);
+        this.logger.warn(
+          {
+            err,
+            operation: 'ensurePhoneNumberRegistered',
+            phoneNumberId,
+            attempt: attempt + 1,
+            willRetry: canRetry,
+          },
+          'WhatsApp phone registration attempt failed',
+        );
+        if (!canRetry) {
+          throw err;
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new BadRequestException('WhatsApp phone registration failed');
+  }
+
+  private isRetryableWhatsAppRegistrationError(err: unknown): boolean {
+    if (err instanceof ServiceUnavailableException || err instanceof BadGatewayException) {
+      return true;
+    }
+
+    if (err instanceof BadRequestException) {
+      const message = err.message.toLowerCase();
+      return (
+        message.includes('not verified') ||
+        message.includes('not ready') ||
+        message.includes('pending') ||
+        message.includes('does not exist') ||
+        message.includes('invalid parameter') ||
+        message.includes('temporarily unavailable') ||
+        message.includes('try again')
       );
     }
 
-    const registered = await this.metaGraphClient.registerPhoneNumber(accessToken, phoneNumberId, pin);
-    return plainToInstance(WhatsAppRegisterPhoneResult, registered, { excludeExtraneousValues: true });
+    if (err instanceof HttpException) {
+      const status = err.getStatus();
+      return status === 429 || status >= 500;
+    }
+
+    return false;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async persistOutboundMessage(

@@ -4,6 +4,7 @@ import FormData from 'form-data';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { assertMetaGraphSuccess, mapMetaGraphError } from './meta-graph.errors';
+import { buildWhatsAppSampleBillPdf } from './whatsapp-sample-bill.pdf';
 import {
   IMetaGraphClient,
   MetaCreateTemplateResult,
@@ -41,6 +42,16 @@ interface MetaTemplateListResponse {
 
 interface MetaMediaUploadResponse {
   id?: string;
+  error?: { message?: string; code?: number };
+}
+
+interface MetaUploadSessionResponse {
+  id?: string;
+  error?: { message?: string; code?: number };
+}
+
+interface MetaResumableUploadResponse {
+  h?: string;
   error?: { message?: string; code?: number };
 }
 
@@ -213,7 +224,18 @@ export class MetaGraphClient implements IMetaGraphClient {
 
     const components: Record<string, unknown>[] = [];
     if (headerFormat === 'DOCUMENT') {
-      components.push({ type: 'HEADER', format: 'DOCUMENT' });
+      const samplePdf = buildWhatsAppSampleBillPdf();
+      const headerHandle = await this.uploadTemplateMediaHandle(
+        credentials.accessToken,
+        samplePdf,
+        'byajbazaar-sample-bill.pdf',
+        'application/pdf',
+      );
+      components.push({
+        type: 'HEADER',
+        format: 'DOCUMENT',
+        example: { header_handle: [headerHandle] },
+      });
     }
     components.push({
       type: 'BODY',
@@ -528,6 +550,74 @@ export class MetaGraphClient implements IMetaGraphClient {
       return { messageId };
     } catch (err) {
       mapMetaGraphError(err, 'Failed to send WhatsApp message');
+    }
+  }
+
+  private async uploadTemplateMediaHandle(
+    accessToken: string,
+    fileBuffer: Buffer,
+    fileName: string,
+    mimeType: string,
+  ): Promise<string> {
+    const appId = this.options.appId.trim();
+    if (!appId) {
+      throw new BadRequestException('META_APP_ID is not configured');
+    }
+
+    try {
+      const sessionResponse = await this.http.post<MetaUploadSessionResponse>(`/${appId}/uploads`, null, {
+        params: {
+          file_name: fileName,
+          file_length: fileBuffer.length,
+          file_type: mimeType,
+        },
+        headers: this.authHeaders(accessToken),
+      });
+
+      const sessionBody = assertMetaGraphSuccess(
+        sessionResponse.status,
+        sessionResponse.data,
+        'Failed to start Meta template media upload session',
+      );
+      const sessionId = sessionBody.id?.trim();
+      if (!sessionId) {
+        throw new BadRequestException('Meta did not return a template media upload session ID');
+      }
+
+      const uploadResponse = await this.http.post<MetaResumableUploadResponse>(`/${sessionId}`, fileBuffer, {
+        headers: {
+          Authorization: `OAuth ${accessToken}`,
+          file_offset: '0',
+          'Content-Type': 'application/octet-stream',
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      });
+
+      const uploadBody = assertMetaGraphSuccess(
+        uploadResponse.status,
+        uploadResponse.data,
+        'Failed to upload Meta template media sample',
+      );
+      const handle = uploadBody.h?.trim();
+      if (!handle) {
+        throw new BadRequestException('Meta did not return a template media handle');
+      }
+
+      this.logger.info(
+        {
+          operation: 'uploadTemplateMediaHandle',
+          metaEndpoint: `/${sessionId}`,
+          fileName,
+          mimeType,
+          fileLength: fileBuffer.length,
+        },
+        'Meta template media sample uploaded',
+      );
+
+      return handle;
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to upload Meta template media sample');
     }
   }
 
