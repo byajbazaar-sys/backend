@@ -10,7 +10,7 @@ import { EOrderStatus } from '../enums';
 export const ORDER_SERVICE = 'ORDER_SERVICE';
 
 export interface IOrdersService {
-  create(createdBy: string, data: CreateOrderData): Promise<Order>;
+  create(createdBy: string, data: CreateOrderData, image?: Express.Multer.File): Promise<Order>;
   findAll(options: OrdersFilterOptions): Promise<Paged<Order>>;
   findOne(id: string, createdBy: string): Promise<Order>;
   getStats(createdBy: string): Promise<OrderStats>;

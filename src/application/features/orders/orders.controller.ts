@@ -85,14 +85,17 @@ export class OrdersController {
 
   @Post()
   @ApiOperation({ summary: 'Create an order' })
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @UseInterceptors(FileInterceptor('image'))
   @ApiResponse({ status: HttpStatus.CREATED, type: OrderResponseModel })
   @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() body: CreateOrderRequestModel,
+    @UploadedFile() image: Express.Multer.File,
     @Identity() identity: IIdentity,
   ): Promise<OrderResponseModel> {
     const data = plainToInstance(CreateOrderData, body, { excludeExtraneousValues: true });
-    const order = await this.ordersService.create(identity.userId, data);
+    const order = await this.ordersService.create(identity.userId, data, image);
     return plainToInstance(OrderResponseModel, order, { excludeExtraneousValues: true });
   }
 

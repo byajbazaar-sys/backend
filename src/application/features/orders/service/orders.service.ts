@@ -42,7 +42,7 @@ export class OrdersService implements IOrdersService {
     @InjectPinoLogger(OrdersService.name) private readonly logger: PinoLogger,
   ) {}
 
-  async create(createdBy: string, data: CreateOrderData): Promise<Order> {
+  async create(createdBy: string, data: CreateOrderData, image?: Express.Multer.File): Promise<Order> {
     const customer = await this.customersRepo.findById(data.customerId, createdBy);
     if (!customer) throw new NotFoundException('Customer not found');
 
@@ -81,6 +81,11 @@ export class OrdersService implements IOrdersService {
 
     this.logger.info({ orderId: order.id, createdBy }, 'Order created');
     await this.invalidateOrdersCache(createdBy);
+
+    if (image?.buffer?.length) {
+      return this.addAttachment(order.id, createdBy, image);
+    }
+
     return this.enrichOrder(order, createdBy);
   }
 

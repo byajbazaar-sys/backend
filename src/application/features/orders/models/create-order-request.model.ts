@@ -76,4 +76,12 @@ export class CreateOrderRequestModel {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Optional reference image (JPEG, PNG, WebP) — maximum 5MB',
+  })
+  @IsOptional()
+  image?: Express.Multer.File;
 }
