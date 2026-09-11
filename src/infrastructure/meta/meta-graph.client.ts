@@ -247,6 +247,7 @@ export class MetaGraphClient implements IMetaGraphClient {
       name,
       language,
       category,
+      parameter_format: 'POSITIONAL',
       components,
     };
 
@@ -565,14 +566,15 @@ export class MetaGraphClient implements IMetaGraphClient {
     }
 
     try {
-      const sessionResponse = await this.http.post<MetaUploadSessionResponse>(`/${appId}/uploads`, null, {
-        params: {
+      const sessionResponse = await this.http.post<MetaUploadSessionResponse>(
+        `/${appId}/uploads`,
+        {
           file_name: fileName,
-          file_length: fileBuffer.length,
+          file_length: String(fileBuffer.length),
           file_type: mimeType,
         },
-        headers: this.authHeaders(accessToken),
-      });
+        { headers: this.authHeaders(accessToken) },
+      );
 
       const sessionBody = assertMetaGraphSuccess(
         sessionResponse.status,

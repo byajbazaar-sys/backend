@@ -27,7 +27,8 @@ export const WHATSAPP_DEFAULT_TEMPLATES: WhatsAppDefaultTemplateDefinition[] = [
     language: 'en_US',
     category: 'UTILITY',
     headerFormat: 'DOCUMENT',
-    bodyText: 'Bill from {{1}}.',
+    bodyText:
+      'Your bill from {{1}} is attached as a PDF. Please review it and contact us if you have any questions.',
   },
 ];
 

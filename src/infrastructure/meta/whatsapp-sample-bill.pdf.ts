@@ -1,27 +1,7 @@
-/** Minimal valid PDF used as Meta template review sample for document-header templates. */
+/** Valid PDF sample for Meta document-header template review (generated via PDFKit). */
 export function buildWhatsAppSampleBillPdf(): Buffer {
   return Buffer.from(
-    [
-      '%PDF-1.4',
-      '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
-      '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj',
-      '3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 4 0 R>>endobj',
-      '4 0 obj<</Length 44>>stream',
-      'BT /F1 24 Tf 72 720 Td (Sample Bill) Tj ET',
-      'endstream',
-      'endobj',
-      'xref',
-      '0 5',
-      '0000000000 65535 f ',
-      '0000000009 00000 n ',
-      '0000000052 00000 n ',
-      '0000000101 00000 n ',
-      '0000000199 00000 n ',
-      'trailer<</Size 5/Root 1 0 R>>',
-      'startxref',
-      '292',
-      '%%EOF',
-    ].join('\n'),
-    'utf8',
+    'JVBERi0xLjMKJf////8KNyAwIG9iago8PAovVHlwZSAvUGFnZQovUGFyZW50IDEgMCBSCi9NZWRpYUJveCBbMCAwIDU5NS4yOCA4NDEuODldCi9Db250ZW50cyA1IDAgUgovUmVzb3VyY2VzIDYgMCBSCj4+CmVuZG9iago2IDAgb2JqCjw8Ci9Qcm9jU2V0IFsvUERGIC9UZXh0IC9JbWFnZUIgL0ltYWdlQyAvSW1hZ2VJXQovRm9udCA8PAovRjEgOCAwIFIKPj4KL0NvbG9yU3BhY2UgPDwKPj4KPj4KZW5kb2JqCjUgMCBvYmoKPDwKL0xlbmd0aCAxNjIKL0ZpbHRlciAvRmxhdGVEZWNvZGUKPj4Kc3RyZWFtCnicjY6xCgIxEET7fMX8gOfuJrt7gSOFoIWdkE4sjhx2Fv5/I9ETFCzshmF48xgEwoZBGBMPY0a7hXvgX/Wurj3DBa46aES9he2BIYR6DedJo7EtTtZMhZJYtmatgC6ox7Cv4fQnneMgnt54lhc+iefSzyZjm5MY+2xs7CIki1CBEiZNBfwc6erCnrqPi2lBJExulnvuK3ch//D+sn0AFKg7XgplbmRzdHJlYW0KZW5kb2JqCjEwIDAgb2JqCihQREZLaXQpCmVuZG9iagoxMSAwIG9iagooUERGS2l0KQplbmRvYmoKMTIgMCBvYmoKKEQ6MjAyNjA5MTExMTAxMTZaKQplbmRvYmoKOSAwIG9iago8PAovUHJvZHVjZXIgMTAgMCBSCi9DcmVhdG9yIDExIDAgUgovQ3JlYXRpb25EYXRlIDEyIDAgUgo+PgplbmRvYmoKOCAwIG9iago8PAovVHlwZSAvRm9udAovQmFzZUZvbnQgL0hlbHZldGljYQovU3VidHlwZSAvVHlwZTEKL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcKPj4KZW5kb2JqCjQgMCBvYmoKPDwKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDEgMCBSCi9OYW1lcyAyIDAgUgo+PgplbmRvYmoKMSAwIG9iago8PAovVHlwZSAvUGFnZXMKL0NvdW50IDEKL0tpZHMgWzcgMCBSXQo+PgplbmRvYmoKMiAwIG9iago8PAovRGVzdHMgPDwKICAvTmFtZXMgWwpdCj4+Cj4+CmVuZG9iagp4cmVmCjAgMTMKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwODA3IDAwMDAwIG4gCjAwMDAwMDA4NjQgMDAwMDAgbiAKMDAwMDAwMDc0NSAwMDAwMCBuIAowMDAwMDAwNzI0IDAwMDAwIG4gCjAwMDAwMDAyMzIgMDAwMDAgbiAKMDAwMDAwMDEyNSAwMDAwMCBuIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDA2MjcgMDAwMDAgbiAKMDAwMDAwMDU1MiAwMDAwMCBuIAowMDAwMDAwNDY2IDAwMDAwIG4gCjAwMDAwMDA0OTEgMDAwMDAgbiAKMDAwMDAwMDUxNiAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDEzCi9Sb290IDMgMCBSCi9JbmZvIDkgMCBSCi9JRCBbPDM5MDNiZTkxYmQyMTlmMjdlN2UzM2FjNjg4ZTE1YWMyPiA8MzkwM2JlOTFiZDIxOWYyN2U3ZTMzYWM2ODhlMTVhYzI+XQo+PgpzdGFydHhyZWYKOTExCiUlRU9GCg==',
+    'base64',
   );
 }

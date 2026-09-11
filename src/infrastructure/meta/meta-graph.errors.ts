@@ -15,8 +15,20 @@ interface MetaErrorBody {
     type?: string;
     code?: number;
     error_subcode?: number;
+    error_user_title?: string;
+    error_user_msg?: string;
     fbtrace_id?: string;
   };
+}
+
+function formatMetaErrorMessage(body: MetaErrorBody | undefined, fallbackMessage: string): string {
+  const err = body?.error;
+  if (!err) return fallbackMessage;
+  const detail = err.error_user_msg || err.message || fallbackMessage;
+  if (err.error_subcode != null) {
+    return `${detail} (Meta error subcode ${err.error_subcode})`;
+  }
+  return detail;
 }
 
 export function mapMetaGraphError(err: unknown, fallbackMessage = 'Meta Graph API request failed'): never {
@@ -27,7 +39,7 @@ export function mapMetaGraphError(err: unknown, fallbackMessage = 'Meta Graph AP
   if (err instanceof AxiosError) {
     const status = err.response?.status;
     const body = err.response?.data as MetaErrorBody | undefined;
-    const message = body?.error?.message || err.message || fallbackMessage;
+    const message = formatMetaErrorMessage(body, err.message || fallbackMessage);
     const code = body?.error?.code;
 
     if (code === 131037) {
@@ -75,7 +87,7 @@ export function assertMetaGraphSuccess<T extends { error?: MetaErrorBody['error'
     return body;
   }
 
-  const message = body?.error?.message || fallbackMessage;
+  const message = formatMetaErrorMessage(body, fallbackMessage);
   const code = body?.error?.code;
 
   if (code === 131037) {
