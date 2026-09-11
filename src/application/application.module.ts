@@ -71,6 +71,8 @@ import {
   TryOnService,
   DEPOSIT_SERVICE,
   DepositService,
+  ORDER_SERVICE,
+  OrdersService,
   PUBLIC_CATALOG_SERVICE,
   PublicCatalogService,
   INVENTORY_CATALOG_SERVICE,
@@ -82,6 +84,7 @@ import {
   WHATSAPP_DUE_REMINDER_SERVICE,
   WhatsAppDueReminderService,
 } from './features';
+import { WhatsAppOrderNotificationService, WHATSAPP_ORDER_NOTIFICATION_SERVICE } from './features/whatsapp/service/whatsapp-order-notification.service';
 import { EMAIL_TEMPLATE_SERVICE, EmailTemplateService } from './features/notifications';
 import {
   POS_SESSION_SERVICE,
@@ -231,6 +234,10 @@ import {
       useClass: DepositService,
     },
     {
+      provide: ORDER_SERVICE,
+      useClass: OrdersService,
+    },
+    {
       provide: PUBLIC_CATALOG_SERVICE,
       useClass: PublicCatalogService,
     },
@@ -249,6 +256,10 @@ import {
     {
       provide: WHATSAPP_DUE_REMINDER_SERVICE,
       useClass: WhatsAppDueReminderService,
+    },
+    {
+      provide: WHATSAPP_ORDER_NOTIFICATION_SERVICE,
+      useClass: WhatsAppOrderNotificationService,
     },
   ],
   exports: [

@@ -12,4 +12,5 @@ export interface CreateDepositTransactionInput {
   transactionDate: Date;
   notes?: string;
   salesBillId?: string;
+  orderId?: string;
 }

@@ -13,6 +13,8 @@ import {
   DepositTransaction,
 } from '../domain';
 import { EDepositStatus, EDepositTransactionType } from '../enums';
+import { ESortOrder } from '@shared-libs';
+
 import { DepositsDownloadFilterOptions, DepositsFilterOptions } from '../options';
 import { DepositStats } from './deposit-stats';
 import { IDepositService } from './i-deposit.service';
@@ -92,6 +94,22 @@ export class DepositService implements IDepositService {
     return this.depositsRepo.listRecentTransactions(createdBy, 10);
   }
 
+  async findOrCreateActiveAccount(customerId: string, createdBy: string): Promise<DepositAccount> {
+    const existing = await this.depositsRepo.list({
+      createdBy,
+      customerId,
+      status: EDepositStatus.ACTIVE,
+      page: 1,
+      limit: 1,
+      sortField: 'createdAt',
+      sortOrder: ESortOrder.DESC,
+    });
+    if (existing.items.length > 0) {
+      return existing.items[0];
+    }
+    return this.create(customerId, createdBy, {});
+  }
+
   async addDeposit(id: string, createdBy: string, data: AddDepositData): Promise<DepositAccount> {
     const account = await this.requireActiveAccount(id, createdBy);
     const amount = this.normalizeAmount(data.amount);
@@ -109,6 +127,7 @@ export class DepositService implements IDepositService {
       transactionReference: data.transactionReference,
       transactionDate,
       notes: data.remarks,
+      orderId: data.orderId,
     });
 
     const receiptNumber = await this.generateReceiptNumber(createdBy, tx.id);

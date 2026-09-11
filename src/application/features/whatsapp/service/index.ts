@@ -8,3 +8,4 @@ export * from './whatsapp.service';
 export * from './whatsapp-webhook.service';
 export * from './whatsapp-due-reminder.service';
 export * from './i-whatsapp-due-reminder.service';
+export * from './whatsapp-order-notification.service';

@@ -19,6 +19,7 @@ export interface IDepositService {
   findOne(id: string, createdBy: string): Promise<DepositAccount>;
   getStats(createdBy: string): Promise<DepositStats>;
   getRecentTransactions(createdBy: string): Promise<DepositTransaction[]>;
+  findOrCreateActiveAccount(customerId: string, createdBy: string): Promise<DepositAccount>;
   addDeposit(id: string, createdBy: string, data: AddDepositData): Promise<DepositAccount>;
   adjust(id: string, createdBy: string, data: AdjustDepositData): Promise<DepositAccount>;
   refund(id: string, createdBy: string, data: RefundDepositData): Promise<DepositAccount>;

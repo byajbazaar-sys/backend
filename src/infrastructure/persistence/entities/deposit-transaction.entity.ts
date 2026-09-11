@@ -12,6 +12,7 @@ import {
 import { CustomerEntity } from './customer.entity';
 import { DepositAccountEntity } from './deposit-account.entity';
 import { DepositReceiptEntity } from './deposit-receipt.entity';
+import { OrderEntity } from './order.entity';
 import { SalesBillEntity } from './sales-bill.entity';
 import { UserEntity } from './user.entity';
 import { EDepositTransactionType } from '../../../application/features/deposits/enums';
@@ -65,6 +66,13 @@ export class DepositTransactionEntity {
   @ManyToOne(() => SalesBillEntity, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'sales_bill_id' })
   salesBill: SalesBillEntity;
+
+  @Column({ type: 'uuid', nullable: true })
+  orderId?: string;
+
+  @ManyToOne(() => OrderEntity, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'order_id' })
+  order?: OrderEntity;
 
   @Column({ type: 'timestamptz' })
   transactionDate: Date;

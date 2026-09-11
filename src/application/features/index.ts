@@ -4,6 +4,7 @@ import { SettingsApiController } from './api-access';
 import { AuthController } from './auth';
 import { CustomersController } from './customers';
 import { DepositsController } from './deposits';
+import { OrdersController } from './orders';
 import { EventsController, AdminEventsController } from './events';
 import {
   InventoryCategoriesController,
@@ -43,6 +44,7 @@ export * from './payments';
 export * from './events';
 export * from './try-on';
 export * from './deposits';
+export * from './orders';
 export * from './public-catalog';
 export * from './whatsapp';
 
@@ -72,6 +74,7 @@ export const Controllers = [
   EventsController,
   TryOnController,
   DepositsController,
+  OrdersController,
   PublicCatalogController,
   WhatsAppController,
   WhatsAppWebhookController,

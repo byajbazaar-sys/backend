@@ -15,6 +15,9 @@ import { LoanItemEntity } from './loan-item.entity';
 import { LoanEntity } from './loan.entity';
 import { MetalRateEntity } from './metal-rate.entity';
 import { NotificationEntity } from './notification.entity';
+import { OrderActivityEntity } from './order-activity.entity';
+import { OrderAttachmentEntity } from './order-attachment.entity';
+import { OrderEntity } from './order.entity';
 import { PaymentEventEntity } from './payment-event.entity';
 import { PaymentOrderEntity } from './payment-order.entity';
 import { PaymentEntity } from './payment.entity';
@@ -67,6 +70,9 @@ export { TryOnAssetEntity } from './try-on-asset.entity';
 export { DepositAccountEntity } from './deposit-account.entity';
 export { DepositTransactionEntity } from './deposit-transaction.entity';
 export { DepositReceiptEntity } from './deposit-receipt.entity';
+export { OrderEntity } from './order.entity';
+export { OrderActivityEntity } from './order-activity.entity';
+export { OrderAttachmentEntity } from './order-attachment.entity';
 export { TransactionLogEntity } from './transaction-log.entity';
 export { WhatsAppBusinessConnectionEntity } from './whatsapp-business-connection.entity';
 export { WhatsAppConversationWindowEntity } from './whatsapp-conversation-window.entity';
@@ -105,6 +111,9 @@ export default [
   DepositAccountEntity,
   DepositTransactionEntity,
   DepositReceiptEntity,
+  OrderEntity,
+  OrderActivityEntity,
+  OrderAttachmentEntity,
   TransactionLogEntity,
   WhatsAppBusinessConnectionEntity,
   WhatsAppConversationWindowEntity,

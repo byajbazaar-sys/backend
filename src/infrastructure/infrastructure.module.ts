@@ -41,6 +41,7 @@ import {
   JEWELLERY_EVENTS_REPOSITORY,
   TRY_ON_ASSETS_REPOSITORY,
   DEPOSITS_REPOSITORY,
+  ORDERS_REPOSITORY,
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
   WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
   WHATSAPP_MESSAGES_REPOSITORY,
@@ -97,6 +98,7 @@ import {
   JewelleryEventsRepository,
   TryOnAssetsRepository,
   DepositsRepository,
+  OrdersRepository,
   WhatsAppBusinessConnectionsRepository,
   WhatsAppConversationWindowsRepository,
   WhatsAppMessagesRepository,
@@ -247,6 +249,10 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     {
       provide: DEPOSITS_REPOSITORY,
       useClass: DepositsRepository,
+    },
+    {
+      provide: ORDERS_REPOSITORY,
+      useClass: OrdersRepository,
     },
     {
       provide: WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
@@ -435,6 +441,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     JEWELLERY_EVENTS_REPOSITORY,
     TRY_ON_ASSETS_REPOSITORY,
     DEPOSITS_REPOSITORY,
+    ORDERS_REPOSITORY,
     WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
     WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
     WHATSAPP_MESSAGES_REPOSITORY,

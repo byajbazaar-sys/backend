@@ -23,6 +23,13 @@ export const WHATSAPP_DEFAULT_TEMPLATES: WhatsAppDefaultTemplateDefinition[] = [
       'Hi from {{1}}. Due reminder: your {{2}} due for this month amounting to {{3}} is pending. Please pay at your earliest convenience.',
   },
   {
+    name: 'byajbazaar_order_update',
+    language: 'en_US',
+    category: 'UTILITY',
+    bodyText:
+      'Update from {{1}}: Order {{2}} ({{3}}) is now {{4}}. Expected delivery: {{5}}. Reply if you have any questions.',
+  },
+  {
     name: 'byajbazaar_bill_pdf',
     language: 'en_US',
     category: 'UTILITY',

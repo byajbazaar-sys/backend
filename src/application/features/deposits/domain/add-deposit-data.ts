@@ -16,4 +16,7 @@ export class AddDepositData {
 
   @Expose()
   remarks?: string;
+
+  @Expose()
+  orderId?: string;
 }

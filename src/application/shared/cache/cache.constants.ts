@@ -3,6 +3,7 @@ export const CACHE_NAMESPACE = {
   INVENTORY_REPORTS: 'inventory-reports',
   USER_DETAILS: 'user-details',
   DEPOSITS: 'deposits',
+  ORDERS: 'orders',
   SALES_BILLS: 'sales-bills',
   METAL_RATES: 'metal-rates',
   TRANSACTIONS: 'transactions',
