@@ -126,10 +126,7 @@ export class PaymentsService implements IPaymentsService {
     }
 
     const amountPaise = Math.round(finalAmount * 100);
-    const razorpayPlanId =
-      finalAmount === originalAmount
-        ? activePlan.providerPlanId
-        : (await this.razorpay.ensureBillingPlan(amountPaise, billingPeriod, currency)).id;
+    const razorpayPlanId = (await this.razorpay.ensureBillingPlan(amountPaise, billingPeriod, currency)).id;
 
     const previousSub = await this.subscriptionsRepo.findLatestByUserId(userId);
     const providerCustomerId = previousSub?.providerCustomerId ?? null;
