@@ -13,6 +13,7 @@ export * from './get-whatsapp-connection-query.model';
 export * from './get-whatsapp-message-status-query.model';
 export * from './update-whatsapp-settings-request.model';
 export * from './whatsapp-webhook-payload.model';
+export * from './whatsapp-mobile-return-session.model';
 
 export class ListWhatsAppTemplatesQueryModel {
   @ApiProperty({ description: 'Business (tenant) ID — must match authenticated user' })

@@ -10,7 +10,10 @@ import {
 } from '@nestjs/common';
 import { AES_ENCRYPT_SERVICE, IAESEncryptService } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
+import { randomBytes } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+
+import { IRedisService, REDIS_SERVICE } from '../../../shared/services/i-redis.service';
 
 import {
   WHATSAPP_BILL_PDF_TEMPLATE,
@@ -46,8 +49,19 @@ import {
   evaluateWhatsAppMessagingReadiness,
 } from '../utils/whatsapp-display-name.util';
 
+const WHATSAPP_MOBILE_RETURN_SESSION_PREFIX = 'whatsapp:mobile-return:';
+const WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS = 600;
+
+interface StoredWhatsAppMobileReturnSession {
+  userId: string;
+  businessId: string;
+  createdAt: number;
+}
+
 @Injectable()
 export class WhatsAppService implements IWhatsAppService {
+  private readonly fallbackMobileReturnSessions = new Map<string, StoredWhatsAppMobileReturnSession>();
+
   constructor(
     @Inject(META_GRAPH_CLIENT) private readonly metaGraphClient: IMetaGraphClient,
     @Inject(WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY)
@@ -57,6 +71,7 @@ export class WhatsAppService implements IWhatsAppService {
     @Inject(WHATSAPP_MESSAGES_REPOSITORY)
     private readonly messagesRepo: IWhatsAppMessagesRepository,
     @Inject(AES_ENCRYPT_SERVICE) private readonly aesEncrypt: IAESEncryptService,
+    @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
     @InjectPinoLogger(WhatsAppService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -424,6 +439,75 @@ export class WhatsAppService implements IWhatsAppService {
     await this.provisionDefaultTemplates(accessToken, connection.wabaId, connection.phoneNumberId);
   }
 
+  async createWhatsAppMobileReturnSession(
+    userId: string,
+    businessId: string,
+  ): Promise<{ sessionId: string; expiresInSeconds: number }> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.getWhatsAppConnection(userId, businessId);
+    if (!connection || connection.connectionStatus !== EWhatsAppConnectionStatus.Connected) {
+      throw new BadRequestException('WhatsApp is not connected yet. Finish onboarding in the browser first.');
+    }
+
+    const sessionId = randomBytes(24).toString('base64url');
+    const payload: StoredWhatsAppMobileReturnSession = {
+      userId,
+      businessId,
+      createdAt: Date.now(),
+    };
+
+    await this.storeMobileReturnSession(sessionId, payload);
+
+    this.logger.info(
+      { operation: 'createWhatsAppMobileReturnSession', userId, businessId },
+      'Created WhatsApp mobile return session',
+    );
+
+    return {
+      sessionId,
+      expiresInSeconds: WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS,
+    };
+  }
+
+  async resolveWhatsAppMobileReturnSession(
+    userId: string,
+    businessId: string,
+    sessionId: string,
+  ): Promise<{
+    status: 'connected' | 'processing' | 'expired' | 'invalid';
+    connection?: WhatsAppBusinessConnection | null;
+  }> {
+    this.assertBusinessAccess(userId, businessId);
+
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) {
+      return { status: 'invalid', connection: null };
+    }
+
+    const stored = await this.readMobileReturnSession(normalizedSessionId);
+    if (!stored) {
+      return { status: 'invalid', connection: null };
+    }
+
+    if (stored.userId !== userId || stored.businessId !== businessId) {
+      throw new ForbiddenException('This WhatsApp return session does not belong to your account.');
+    }
+
+    const ageMs = Date.now() - stored.createdAt;
+    if (ageMs > WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS * 1000) {
+      await this.deleteMobileReturnSession(normalizedSessionId);
+      return { status: 'expired', connection: null };
+    }
+
+    const connection = await this.getWhatsAppConnection(userId, businessId);
+    if (connection?.connectionStatus === EWhatsAppConnectionStatus.Connected) {
+      await this.deleteMobileReturnSession(normalizedSessionId);
+      return { status: 'connected', connection };
+    }
+
+    return { status: 'processing', connection: connection ?? null };
+  }
+
   async disconnectWhatsAppBusiness(userId: string, businessId: string): Promise<WhatsAppDisconnectResult> {
     this.assertBusinessAccess(userId, businessId);
     const connection = await this.connectionsRepo.findByUserId(userId);
@@ -778,5 +862,44 @@ export class WhatsAppService implements IWhatsAppService {
       phoneNumberId: connection.phoneNumberId,
       wabaId: connection.wabaId,
     };
+  }
+
+  private mobileReturnSessionKey(sessionId: string): string {
+    return `${WHATSAPP_MOBILE_RETURN_SESSION_PREFIX}${sessionId}`;
+  }
+
+  private async storeMobileReturnSession(
+    sessionId: string,
+    payload: StoredWhatsAppMobileReturnSession,
+  ): Promise<void> {
+    const key = this.mobileReturnSessionKey(sessionId);
+    if (this.redis.isEnabled()) {
+      await this.redis.setAsync(key, payload, WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS);
+      return;
+    }
+
+    this.fallbackMobileReturnSessions.set(sessionId, payload);
+    setTimeout(() => this.fallbackMobileReturnSessions.delete(sessionId), WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS * 1000);
+  }
+
+  private async readMobileReturnSession(
+    sessionId: string,
+  ): Promise<StoredWhatsAppMobileReturnSession | null> {
+    const key = this.mobileReturnSessionKey(sessionId);
+    if (this.redis.isEnabled()) {
+      return (await this.redis.getAsync<StoredWhatsAppMobileReturnSession>(key)) ?? null;
+    }
+
+    return this.fallbackMobileReturnSessions.get(sessionId) ?? null;
+  }
+
+  private async deleteMobileReturnSession(sessionId: string): Promise<void> {
+    const key = this.mobileReturnSessionKey(sessionId);
+    if (this.redis.isEnabled()) {
+      await this.redis.deleteAsync(key);
+      return;
+    }
+
+    this.fallbackMobileReturnSessions.delete(sessionId);
   }
 }

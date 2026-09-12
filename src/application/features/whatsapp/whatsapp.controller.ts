@@ -41,6 +41,11 @@ import {
   WhatsAppTemplateCreateResponseModel,
   WhatsAppTemplateListResponseModel,
   WhatsAppTemplateSummaryResponseModel,
+  CreateWhatsAppMobileReturnSessionRequestModel,
+  CreateWhatsAppMobileReturnSessionResponseModel,
+  ResolveWhatsAppMobileReturnSessionQueryModel,
+  ResolveWhatsAppMobileReturnSessionResponseModel,
+  WhatsAppMobileReturnSessionParamModel,
 } from './models';
 import { IWhatsAppService, WHATSAPP_SERVICE } from './service';
 
@@ -114,6 +119,51 @@ export class WhatsAppController {
       settings,
     );
     return plainToInstance(WhatsAppConnectionResponseModel, connection, { excludeExtraneousValues: true });
+  }
+
+  @Post('mobile-return-session')
+  @ApiOperation({ summary: 'Create a short-lived session to return to the mobile app after WhatsApp onboarding' })
+  @ApiOkResponse({ type: CreateWhatsAppMobileReturnSessionResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async createMobileReturnSession(
+    @Body() body: CreateWhatsAppMobileReturnSessionRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<CreateWhatsAppMobileReturnSessionResponseModel> {
+    const result = await this.whatsappService.createWhatsAppMobileReturnSession(
+      identity.userId,
+      body.businessId,
+    );
+    return plainToInstance(CreateWhatsAppMobileReturnSessionResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get('mobile-return-session/:sessionId')
+  @ApiOperation({ summary: 'Resolve a mobile return session and verify WhatsApp connection server-side' })
+  @ApiOkResponse({ type: ResolveWhatsAppMobileReturnSessionResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async resolveMobileReturnSession(
+    @Param() params: WhatsAppMobileReturnSessionParamModel,
+    @Query() query: ResolveWhatsAppMobileReturnSessionQueryModel,
+    @Identity() identity: IIdentity,
+  ): Promise<ResolveWhatsAppMobileReturnSessionResponseModel> {
+    const result = await this.whatsappService.resolveWhatsAppMobileReturnSession(
+      identity.userId,
+      query.businessId,
+      params.sessionId,
+    );
+    return plainToInstance(
+      ResolveWhatsAppMobileReturnSessionResponseModel,
+      {
+        status: result.status,
+        connection: result.connection
+          ? plainToInstance(WhatsAppConnectionResponseModel, result.connection, {
+              excludeExtraneousValues: true,
+            })
+          : null,
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Post('provision-templates')

@@ -66,4 +66,16 @@ export interface IWhatsAppService {
   ): Promise<WhatsAppBusinessConnection>;
   disconnectWhatsAppBusiness(userId: string, businessId: string): Promise<WhatsAppDisconnectResult>;
   provisionWhatsAppDefaultTemplates(userId: string, businessId: string): Promise<void>;
+  createWhatsAppMobileReturnSession(
+    userId: string,
+    businessId: string,
+  ): Promise<{ sessionId: string; expiresInSeconds: number }>;
+  resolveWhatsAppMobileReturnSession(
+    userId: string,
+    businessId: string,
+    sessionId: string,
+  ): Promise<{
+    status: 'connected' | 'processing' | 'expired' | 'invalid';
+    connection?: WhatsAppBusinessConnection | null;
+  }>;
 }
