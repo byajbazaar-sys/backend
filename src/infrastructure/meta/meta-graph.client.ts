@@ -346,16 +346,9 @@ export class MetaGraphClient implements IMetaGraphClient {
 
   async exchangeCodeForAccessToken(code: string, redirectUri?: string): Promise<string> {
     const normalizedRedirect = redirectUri?.trim();
-    // A code from a full-page OAuth dialog MUST be exchanged with the identical redirect_uri, so
-    // try it first. Omitting it only works for FB.login popup codes, which is the fallback.
-    const redirectCandidates: (string | undefined)[] = [];
-    if (normalizedRedirect) {
-      redirectCandidates.push(normalizedRedirect);
-      redirectCandidates.push(
-        normalizedRedirect.endsWith('/') ? normalizedRedirect.slice(0, -1) : `${normalizedRedirect}/`,
-      );
-    }
-    redirectCandidates.push(undefined);
+    // Codes are single-use: a failed attempt burns the code, so never guess at variants. A dialog
+    // code needs the identical redirect_uri; omitting it is correct only for FB.login popup codes.
+    const redirectCandidates: (string | undefined)[] = [normalizedRedirect || undefined];
 
     let firstError: unknown;
     for (const candidate of redirectCandidates) {
