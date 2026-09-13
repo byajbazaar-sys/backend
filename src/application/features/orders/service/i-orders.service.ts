@@ -19,6 +19,7 @@ export interface IOrdersService {
   addNote(id: string, createdBy: string, note: string, internal?: boolean): Promise<OrderActivity>;
   addAdvance(id: string, createdBy: string, data: AddOrderAdvanceData): Promise<Order>;
   cancel(id: string, createdBy: string): Promise<Order>;
+  delete(id: string, createdBy: string): Promise<void>;
   getActivity(id: string, createdBy: string): Promise<OrderActivity[]>;
   addAttachment(id: string, createdBy: string, file?: Express.Multer.File): Promise<Order>;
   removeAttachment(id: string, attachmentId: string, createdBy: string): Promise<Order>;

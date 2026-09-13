@@ -202,8 +202,8 @@ export class OrdersController {
     return plainToInstance(OrderResponseModel, order, { excludeExtraneousValues: true });
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Cancel an order (soft delete)' })
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Cancel an order' })
   @ApiOkResponse({ type: OrderResponseModel })
   @HttpCode(HttpStatus.OK)
   async cancel(
@@ -212,6 +212,16 @@ export class OrdersController {
   ): Promise<OrderResponseModel> {
     const order = await this.ordersService.cancel(params.id, identity.userId);
     return plainToInstance(OrderResponseModel, order, { excludeExtraneousValues: true });
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Permanently delete an order and its attachments' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param() params: GetOrderParamsModel,
+    @Identity() identity: IIdentity,
+  ): Promise<void> {
+    await this.ordersService.delete(params.id, identity.userId);
   }
 
   @Get(':id/activity')

@@ -372,6 +372,29 @@ export class OrdersService implements IOrdersService {
     return this.enrichOrder(updated, createdBy);
   }
 
+  async delete(id: string, createdBy: string): Promise<void> {
+    const existing = await this.requireOrder(id, createdBy);
+    const attachments = await this.ordersRepo.getAttachments(id, createdBy);
+    const deleted = await this.ordersRepo.delete(id, createdBy);
+    if (!deleted) throw new NotFoundException('Order not found');
+
+    await Promise.all(
+      attachments
+        .map((attachment) => attachment.storageKey)
+        .filter((key): key is string => Boolean(key))
+        .map(async (storageKey) => {
+          try {
+            await this.fileStorage.removeAsync(storageKey);
+          } catch (err) {
+            this.logger.warn({ err, storageKey, orderId: id }, 'Failed to delete order attachment file');
+          }
+        }),
+    );
+
+    this.logger.info({ orderId: id, orderNumber: existing.orderNumber, createdBy }, 'Order deleted');
+    await this.invalidateOrdersCache(createdBy);
+  }
+
   async getActivity(id: string, createdBy: string): Promise<OrderActivity[]> {
     await this.requireOrder(id, createdBy);
     return this.ordersRepo.getActivities(id, createdBy);

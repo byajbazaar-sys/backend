@@ -197,6 +197,13 @@ export class OrdersRepository implements IOrdersRepository {
     return mapped;
   }
 
+  async delete(id: string, createdBy: string): Promise<boolean> {
+    const existing = await this.orderRepo.findOne({ where: { id, createdBy } });
+    if (!existing) return false;
+    await this.orderRepo.delete({ id, createdBy });
+    return true;
+  }
+
   private mapAttachment(entity: OrderAttachmentEntity): OrderAttachment {
     return plainToInstance(
       OrderAttachment,

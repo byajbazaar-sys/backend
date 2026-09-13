@@ -25,4 +25,5 @@ export interface IOrdersRepository {
     mimeType?: string;
   }): Promise<OrderAttachment>;
   deleteAttachment(id: string, orderId: string, createdBy: string): Promise<OrderAttachment | null>;
+  delete(id: string, createdBy: string): Promise<boolean>;
 }
