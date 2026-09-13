@@ -6,6 +6,7 @@ import { EOrderStatus } from '../../orders/enums';
 import { Customer } from '../../customers/domain';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
+import { EWhatsAppMessageContextType } from '../enums';
 import { normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
 import { IWhatsAppService, WHATSAPP_SERVICE } from './i-whatsapp.service';
 
@@ -69,6 +70,11 @@ export class WhatsAppOrderNotificationService {
         ORDER_UPDATE_TEMPLATE.name,
         ORDER_UPDATE_TEMPLATE.language,
         [businessName, order.orderNumber ?? '', itemTitle, statusLabel, dueDate],
+        {
+          contextType: EWhatsAppMessageContextType.Order,
+          contextId: order.id,
+          contextLabel: `Order ${order.orderNumber ?? order.id} · ${statusLabel}`,
+        },
       );
 
       if (note?.trim()) {

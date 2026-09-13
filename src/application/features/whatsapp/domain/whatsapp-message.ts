@@ -1,6 +1,10 @@
 import { Expose } from 'class-transformer';
 
-import { EWhatsAppMessageDeliveryStatus } from '../enums';
+import {
+  EWhatsAppMessageContextType,
+  EWhatsAppMessageDeliveryStatus,
+  EWhatsAppMessageType,
+} from '../enums';
 
 export class WhatsAppMessage {
   @Expose()
@@ -20,6 +24,21 @@ export class WhatsAppMessage {
 
   @Expose()
   recipient: string;
+
+  @Expose()
+  messageType?: EWhatsAppMessageType;
+
+  @Expose()
+  templateName?: string;
+
+  @Expose()
+  contextType?: EWhatsAppMessageContextType;
+
+  @Expose()
+  contextId?: string;
+
+  @Expose()
+  contextLabel?: string;
 
   @Expose()
   deliveryStatus: EWhatsAppMessageDeliveryStatus;

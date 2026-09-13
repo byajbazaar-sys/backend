@@ -5,6 +5,7 @@ import { IWhatsAppDueReminderService, WhatsAppDueReminderRunResult } from './i-w
 import { IWhatsAppService, WHATSAPP_SERVICE } from './i-whatsapp.service';
 import { DUES_REPOSITORY, IDuesRepository } from '../../../shared/repository/i-due.repository';
 import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
+import { EWhatsAppMessageContextType } from '../enums';
 import { normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
 
 const DUE_REMINDER_TEMPLATE =
@@ -50,6 +51,11 @@ export class WhatsAppDueReminderService implements IWhatsAppDueReminderService {
           DUE_REMINDER_TEMPLATE.name,
           DUE_REMINDER_TEMPLATE.language,
           [businessName, dueDescription, formattedAmount],
+          {
+            contextType: EWhatsAppMessageContextType.DueReminder,
+            contextId: candidate.dueId,
+            contextLabel: `Due reminder · ${dueDescription} · ${formattedAmount}`,
+          },
         );
         await this.duesRepo.markWhatsAppReminderSent(candidate.dueId);
         result.sent += 1;

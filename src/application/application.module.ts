@@ -83,6 +83,8 @@ import {
   WhatsAppWebhookService,
   WHATSAPP_DUE_REMINDER_SERVICE,
   WhatsAppDueReminderService,
+  WHATSAPP_REALTIME_SERVICE,
+  WhatsAppRealtimeService,
 } from './features';
 import { WhatsAppOrderNotificationService, WHATSAPP_ORDER_NOTIFICATION_SERVICE } from './features/whatsapp/service/whatsapp-order-notification.service';
 import { EMAIL_TEMPLATE_SERVICE, EmailTemplateService } from './features/notifications';
@@ -252,6 +254,10 @@ import {
     {
       provide: WHATSAPP_WEBHOOK_SERVICE,
       useClass: WhatsAppWebhookService,
+    },
+    {
+      provide: WHATSAPP_REALTIME_SERVICE,
+      useClass: WhatsAppRealtimeService,
     },
     {
       provide: WHATSAPP_DUE_REMINDER_SERVICE,

@@ -28,6 +28,7 @@ import {
   RegisterWhatsAppPhoneRequestModel,
   GetWhatsAppConnectionQueryModel,
   GetWhatsAppMessageStatusQueryModel,
+  ListWhatsAppMessagesQueryModel,
   ListWhatsAppTemplatesQueryModel,
   SendWhatsAppDocumentMessageRequestModel,
   SendWhatsAppMessageRequestModel,
@@ -37,6 +38,7 @@ import {
   WhatsAppDisconnectResponseModel,
   WhatsAppMessageResponseModel,
   WhatsAppMessageDeliveryStatusResponseModel,
+  WhatsAppMessagesPagedResponseModel,
   WhatsAppRegisterPhoneResponseModel,
   WhatsAppTemplateCreateResponseModel,
   WhatsAppTemplateListResponseModel,
@@ -269,6 +271,24 @@ export class WhatsAppController {
     return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
   }
 
+  @Get('messages')
+  @ApiOperation({ summary: 'List outbound WhatsApp message history for the connected business' })
+  @ApiOkResponse({ type: WhatsAppMessagesPagedResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async listMessages(
+    @Query() query: ListWhatsAppMessagesQueryModel,
+    @Identity() identity: IIdentity,
+  ): Promise<WhatsAppMessagesPagedResponseModel> {
+    const paged = await this.whatsappService.listMessageHistory(identity.userId, query.businessId, {
+      pageNumber: query.pageNumber,
+      pageSize: query.pageSize,
+      recipient: query.recipient,
+      deliveryStatus: query.deliveryStatus,
+      contextType: query.contextType,
+    });
+    return plainToInstance(WhatsAppMessagesPagedResponseModel, paged, { excludeExtraneousValues: true });
+  }
+
   @Get('messages/:messageId')
   @ApiOperation({ summary: 'Get WhatsApp message delivery status (updated via Meta webhooks)' })
   @ApiQuery({ name: 'businessId', required: true, description: 'Business (tenant) ID — must match authenticated user' })
@@ -311,6 +331,8 @@ export class WhatsAppController {
         businessId: { type: 'string', format: 'uuid' },
         to: { type: 'string', example: '919827258776' },
         shopName: { type: 'string', example: 'Shree Jewellers' },
+        billNumber: { type: 'string', example: 'INV-1024' },
+        customerName: { type: 'string', example: 'Rahul Sharma' },
         file: { type: 'string', format: 'binary' },
       },
     },
@@ -329,6 +351,16 @@ export class WhatsAppController {
       throw new BadRequestException('Only PDF files are supported for bill sharing');
     }
 
+    const billLabelParts: string[] = [];
+    if (body.billNumber?.trim()) billLabelParts.push(body.billNumber.trim());
+    if (body.customerName?.trim()) {
+      billLabelParts.push(
+        billLabelParts.length > 0
+          ? `→ ${body.customerName.trim()}`
+          : body.customerName.trim(),
+      );
+    }
+
     const result = await this.whatsappService.sendBillPdfDocument(
       identity.userId,
       body.businessId,
@@ -337,6 +369,9 @@ export class WhatsAppController {
       file.originalname || 'bill.pdf',
       file.mimetype,
       body.shopName,
+      {
+        contextLabel: billLabelParts.length > 0 ? billLabelParts.join(' ') : undefined,
+      },
     );
     return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
   }

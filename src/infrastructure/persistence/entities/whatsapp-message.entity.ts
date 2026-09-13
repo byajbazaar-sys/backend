@@ -1,11 +1,16 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-import { EWhatsAppMessageDeliveryStatus } from '../../../application/features/whatsapp/enums';
+import {
+  EWhatsAppMessageContextType,
+  EWhatsAppMessageDeliveryStatus,
+  EWhatsAppMessageType,
+} from '../../../application/features/whatsapp/enums';
 
 @Entity('whatsapp_messages')
 @Index('UQ_whatsapp_messages_meta_message_id', ['metaMessageId'], { unique: true })
 @Index('IDX_whatsapp_messages_user_id_meta_message_id', ['userId', 'metaMessageId'])
 @Index('IDX_whatsapp_messages_waba_phone', ['wabaId', 'phoneNumberId'])
+@Index('IDX_whatsapp_messages_user_id_created_at', ['userId', 'createdAt'])
 export class WhatsAppMessageEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -24,6 +29,21 @@ export class WhatsAppMessageEntity {
 
   @Column({ type: 'varchar', length: 32, name: 'recipient' })
   recipient: string;
+
+  @Column({ type: 'varchar', length: 16, name: 'message_type', nullable: true })
+  messageType?: EWhatsAppMessageType;
+
+  @Column({ type: 'varchar', length: 128, name: 'template_name', nullable: true })
+  templateName?: string;
+
+  @Column({ type: 'varchar', length: 32, name: 'context_type', nullable: true })
+  contextType?: EWhatsAppMessageContextType;
+
+  @Column({ type: 'uuid', name: 'context_id', nullable: true })
+  contextId?: string;
+
+  @Column({ type: 'varchar', length: 255, name: 'context_label', nullable: true })
+  contextLabel?: string;
 
   @Column({ type: 'varchar', length: 16, name: 'delivery_status', default: EWhatsAppMessageDeliveryStatus.Sent })
   deliveryStatus: EWhatsAppMessageDeliveryStatus;

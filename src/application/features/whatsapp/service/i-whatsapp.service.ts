@@ -1,3 +1,5 @@
+import { Paged } from '@shared-libs';
+
 import {
   ConnectWhatsAppBusinessData,
   SendWhatsAppTextMessageOptions,
@@ -6,9 +8,11 @@ import {
   WhatsAppDisconnectResult,
   WhatsAppMessage,
   WhatsAppMessageResult,
+  WhatsAppOutboundContext,
   WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
 } from '../domain';
+import { WhatsAppMessagesFilterOptions } from '../options/whatsapp-messages-filter.options';
 import { MetaTemplateSummary } from './i-meta-graph.client';
 
 export const WHATSAPP_SERVICE = 'WHATSAPP_SERVICE';
@@ -28,6 +32,7 @@ export interface IWhatsAppService {
     templateName: string,
     languageCode: string,
     parameters: string[],
+    outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult>;
   sendBillPdfDocument(
     userId: string,
@@ -37,7 +42,13 @@ export interface IWhatsAppService {
     filename: string,
     mimeType: string,
     shopName: string,
+    outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult>;
+  listMessageHistory(
+    userId: string,
+    businessId: string,
+    options: Omit<WhatsAppMessagesFilterOptions, 'userId'>,
+  ): Promise<Paged<WhatsAppMessage>>;
   createTemplate(
     userId: string,
     businessId: string,

@@ -24,6 +24,7 @@ import {
   IWhatsAppConversationWindowsRepository,
   WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
 } from './i-whatsapp-conversation-windows.repository';
+import { IWhatsAppRealtimeService, WHATSAPP_REALTIME_SERVICE } from './i-whatsapp-realtime.service';
 import { IWhatsAppWebhookService } from './i-whatsapp-webhook.service';
 import { parseWhatsAppWebhookUnixTimestamp } from '../utils/whatsapp-messaging.util';
 
@@ -37,6 +38,8 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
     private readonly conversationWindowsRepo: IWhatsAppConversationWindowsRepository,
     @Inject(WHATSAPP_MESSAGES_REPOSITORY)
     private readonly messagesRepo: IWhatsAppMessagesRepository,
+    @Inject(WHATSAPP_REALTIME_SERVICE)
+    private readonly whatsappRealtime: IWhatsAppRealtimeService,
     @InjectPinoLogger(WhatsAppWebhookService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -234,6 +237,9 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
     }
 
     const previousStatus = existing.deliveryStatus;
+    const previousErrorCode = existing.errorCode;
+    const previousErrorTitle = existing.errorTitle;
+    const previousErrorMessage = existing.errorMessage;
     const updated = await this.messagesRepo.applyStatusUpdate(metaMessageId, update);
     const nextStatus = updated?.deliveryStatus ?? previousStatus;
 
@@ -255,6 +261,17 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
         ? 'WhatsApp message delivery status unchanged (idempotent webhook)'
         : 'WhatsApp message delivery status updated',
     );
+
+    const errorDetailsChanged =
+      nextStatus === 'failed' &&
+      updated != null &&
+      (updated.errorCode !== previousErrorCode ||
+        updated.errorTitle !== previousErrorTitle ||
+        updated.errorMessage !== previousErrorMessage);
+
+    if (updated && (previousStatus !== nextStatus || errorDetailsChanged)) {
+      void this.whatsappRealtime.notifyMessageUpdated(updated).catch(() => undefined);
+    }
   }
 
   private logWebhookMetadata(payload: WhatsAppWebhookPayload): void {

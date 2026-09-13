@@ -10,5 +10,6 @@ export * from './whatsapp-disconnect-result';
 export * from './whatsapp-register-phone-result';
 export * from './update-whatsapp-settings-data';
 export * from './send-whatsapp-text-message-options';
+export * from './whatsapp-outbound-context';
 export * from './whatsapp-webhook-ack-result';
 export * from './webhook';

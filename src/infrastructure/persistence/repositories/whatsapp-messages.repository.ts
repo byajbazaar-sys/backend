@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { getPaginationValues, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
@@ -13,6 +14,7 @@ import {
   shouldAdvanceWhatsAppMessageStatus,
 } from '../../../application/features/whatsapp/enums';
 import { IWhatsAppMessagesRepository } from '../../../application/features/whatsapp/service/i-whatsapp-messages.repository';
+import { WhatsAppMessagesFilterOptions } from '../../../application/features/whatsapp/options/whatsapp-messages-filter.options';
 import { WhatsAppMessageEntity } from '../entities/whatsapp-message.entity';
 
 @Injectable()
@@ -35,11 +37,44 @@ export class WhatsAppMessagesRepository implements IWhatsAppMessagesRepository {
         phoneNumberId: data.phoneNumberId,
         metaMessageId: data.metaMessageId,
         recipient: data.recipient,
+        messageType: data.messageType,
+        templateName: data.templateName,
+        contextType: data.contextType,
+        contextId: data.contextId,
+        contextLabel: data.contextLabel,
         deliveryStatus: data.deliveryStatus,
         statusTimestamp: data.statusTimestamp,
       }),
     );
     return this.map(saved);
+  }
+
+  async listByUserId(options: WhatsAppMessagesFilterOptions) {
+    const { pageNumber, pageSize, skip } = getPaginationValues(options);
+    const qb = this.repo.createQueryBuilder('m').where('m.user_id = :userId', { userId: options.userId });
+
+    if (options.recipient?.trim()) {
+      qb.andWhere('m.recipient LIKE :recipient', { recipient: `%${options.recipient.trim()}%` });
+    }
+    if (options.deliveryStatus) {
+      qb.andWhere('m.delivery_status = :deliveryStatus', { deliveryStatus: options.deliveryStatus });
+    }
+    if (options.contextType) {
+      qb.andWhere('m.context_type = :contextType', { contextType: options.contextType });
+    }
+
+    const [rows, totalCount] = await qb
+      .orderBy('m.created_at', 'DESC')
+      .skip(skip)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return toPaged(WhatsAppMessage, {
+      items: rows.map((row) => this.map(row)),
+      page: pageNumber,
+      perPage: pageSize,
+      totalCount,
+    });
   }
 
   async findByMetaMessageId(metaMessageId: string): Promise<WhatsAppMessage | null> {
@@ -93,6 +128,11 @@ export class WhatsAppMessagesRepository implements IWhatsAppMessagesRepository {
         phoneNumberId: row.phoneNumberId,
         metaMessageId: row.metaMessageId,
         recipient: row.recipient,
+        messageType: row.messageType,
+        templateName: row.templateName,
+        contextType: row.contextType,
+        contextId: row.contextId,
+        contextLabel: row.contextLabel,
         deliveryStatus: row.deliveryStatus,
         statusTimestamp: row.statusTimestamp,
         errorCode: row.errorCode,

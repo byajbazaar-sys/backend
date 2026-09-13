@@ -29,10 +29,17 @@ import {
   WhatsAppDisconnectResult,
   WhatsAppMessage,
   WhatsAppMessageResult,
+  WhatsAppOutboundContext,
   WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
 } from '../domain';
-import { EWhatsAppConnectionStatus, EWhatsAppMessageDeliveryStatus } from '../enums';
+import {
+  EWhatsAppConnectionStatus,
+  EWhatsAppMessageContextType,
+  EWhatsAppMessageDeliveryStatus,
+  EWhatsAppMessageType,
+} from '../enums';
+import { WhatsAppMessagesFilterOptions } from '../options/whatsapp-messages-filter.options';
 import {
   IMetaGraphClient,
   META_GRAPH_CLIENT,
@@ -48,6 +55,7 @@ import {
   WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
 } from './i-whatsapp-conversation-windows.repository';
 import { IWhatsAppMessagesRepository, WHATSAPP_MESSAGES_REPOSITORY } from './i-whatsapp-messages.repository';
+import { IWhatsAppRealtimeService, WHATSAPP_REALTIME_SERVICE } from './i-whatsapp-realtime.service';
 import { IWhatsAppService } from './i-whatsapp.service';
 import { isWithinCustomerServiceWindow, normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
 import {
@@ -87,6 +95,8 @@ export class WhatsAppService implements IWhatsAppService {
     private readonly conversationWindowsRepo: IWhatsAppConversationWindowsRepository,
     @Inject(WHATSAPP_MESSAGES_REPOSITORY)
     private readonly messagesRepo: IWhatsAppMessagesRepository,
+    @Inject(WHATSAPP_REALTIME_SERVICE)
+    private readonly whatsappRealtime: IWhatsAppRealtimeService,
     @Inject(AES_ENCRYPT_SERVICE) private readonly aesEncrypt: IAESEncryptService,
     @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
     @InjectPinoLogger(WhatsAppService.name) private readonly logger: PinoLogger,
@@ -109,11 +119,20 @@ export class WhatsAppService implements IWhatsAppService {
     templateName: string,
     languageCode: string,
     parameters: string[],
+    outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult> {
     this.assertBusinessAccess(userId, businessId);
     const credentials = await this.resolveCredentials(userId);
     const recipient = normalizeWhatsAppRecipient(to);
-    return this.sendWhatsAppTemplate(userId, credentials, recipient, templateName, languageCode, parameters);
+    return this.sendWhatsAppTemplate(
+      userId,
+      credentials,
+      recipient,
+      templateName,
+      languageCode,
+      parameters,
+      outboundContext,
+    );
   }
 
   async sendBillPdfDocument(
@@ -124,6 +143,7 @@ export class WhatsAppService implements IWhatsAppService {
     filename: string,
     mimeType: string,
     shopName: string,
+    outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult> {
     this.assertBusinessAccess(userId, businessId);
     const connection = await this.connectionsRepo.findByUserId(userId);
@@ -145,9 +165,16 @@ export class WhatsAppService implements IWhatsAppService {
       recipient,
     );
 
+    const billContext: WhatsAppOutboundContext = {
+      messageType: EWhatsAppMessageType.Document,
+      contextType: outboundContext?.contextType ?? EWhatsAppMessageContextType.Bill,
+      contextId: outboundContext?.contextId,
+      contextLabel: outboundContext?.contextLabel ?? this.buildBillContextLabel(shopName, outboundContext),
+    };
+
     if (isWithinCustomerServiceWindow(lastInboundAt)) {
       const result = await this.metaGraphClient.sendDocumentMessage(credentials, recipient, mediaId, filename);
-      await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
+      await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, billContext);
       return this.buildMessageResult(result.messageId, 'document');
     }
 
@@ -162,7 +189,11 @@ export class WhatsAppService implements IWhatsAppService {
       filename,
       [shopName.trim() || 'Your shop'],
     );
-    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, {
+      ...billContext,
+      messageType: EWhatsAppMessageType.Template,
+      templateName: billTemplate.name,
+    });
     return this.buildMessageResult(result.messageId, 'template', billTemplate.name);
   }
 
@@ -188,7 +219,10 @@ export class WhatsAppService implements IWhatsAppService {
     );
 
     if (isWithinCustomerServiceWindow(lastInboundAt)) {
-      return this.sendWhatsAppText(userId, credentials, recipient, textBody);
+      return this.sendWhatsAppText(userId, credentials, recipient, textBody, {
+        contextType: EWhatsAppMessageContextType.Manual,
+        contextLabel: textBody.trim().slice(0, 255) || 'Text message',
+      });
     }
 
     const reengagementTemplate = await this.resolveReengagementTemplateFromMeta(userId, options);
@@ -211,6 +245,10 @@ export class WhatsAppService implements IWhatsAppService {
       reengagementTemplate.name,
       reengagementTemplate.language,
       [],
+      {
+        contextType: EWhatsAppMessageContextType.Manual,
+        contextLabel: `Re-engagement · ${reengagementTemplate.name}`,
+      },
     );
   }
 
@@ -236,10 +274,16 @@ export class WhatsAppService implements IWhatsAppService {
     credentials: MetaGraphCredentials,
     recipient: string,
     body: string,
+    outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult> {
     await this.assertMessagingAllowed(userId, credentials);
     const result = await this.metaGraphClient.sendTextMessage(credentials, recipient, body);
-    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, {
+      messageType: EWhatsAppMessageType.Text,
+      contextType: outboundContext?.contextType ?? EWhatsAppMessageContextType.Manual,
+      contextId: outboundContext?.contextId,
+      contextLabel: outboundContext?.contextLabel ?? (body.trim().slice(0, 255) || 'Text message'),
+    });
     return this.buildMessageResult(result.messageId, 'text');
   }
 
@@ -250,6 +294,7 @@ export class WhatsAppService implements IWhatsAppService {
     templateName: string,
     languageCode: string,
     parameters: string[],
+    outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult> {
     await this.assertMessagingAllowed(userId, credentials);
     const result = await this.metaGraphClient.sendTemplateMessage(
@@ -259,7 +304,13 @@ export class WhatsAppService implements IWhatsAppService {
       languageCode,
       parameters,
     );
-    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId);
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, {
+      messageType: EWhatsAppMessageType.Template,
+      templateName,
+      contextType: outboundContext?.contextType ?? EWhatsAppMessageContextType.Manual,
+      contextId: outboundContext?.contextId,
+      contextLabel: outboundContext?.contextLabel ?? templateName,
+    });
     return this.buildMessageResult(result.messageId, 'template', templateName);
   }
 
@@ -538,6 +589,22 @@ export class WhatsAppService implements IWhatsAppService {
       throw new NotFoundException('WhatsApp message not found');
     }
     return message;
+  }
+
+  async listMessageHistory(
+    userId: string,
+    businessId: string,
+    options: Omit<WhatsAppMessagesFilterOptions, 'userId'>,
+  ) {
+    this.assertBusinessAccess(userId, businessId);
+    return this.messagesRepo.listByUserId({
+      userId,
+      pageNumber: options.pageNumber,
+      pageSize: options.pageSize,
+      recipient: options.recipient,
+      deliveryStatus: options.deliveryStatus,
+      contextType: options.contextType,
+    });
   }
 
   async provisionWhatsAppDefaultTemplates(userId: string, businessId: string): Promise<void> {
@@ -943,11 +1010,23 @@ export class WhatsAppService implements IWhatsAppService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  private buildBillContextLabel(shopName: string, outboundContext?: WhatsAppOutboundContext): string {
+    if (outboundContext?.contextLabel?.trim()) {
+      return outboundContext.contextLabel.trim();
+    }
+    const parts: string[] = ['Bill PDF'];
+    if (shopName?.trim()) {
+      parts.push(shopName.trim());
+    }
+    return parts.join(' · ');
+  }
+
   private async persistOutboundMessage(
     userId: string,
     credentials: MetaGraphCredentials,
     recipient: string,
     metaMessageId: string,
+    metadata?: WhatsAppOutboundContext,
   ): Promise<void> {
     const normalizedRecipient = normalizeWhatsAppRecipient(recipient);
     const data = plainToInstance(
@@ -958,13 +1037,18 @@ export class WhatsAppService implements IWhatsAppService {
         phoneNumberId: credentials.phoneNumberId,
         metaMessageId,
         recipient: normalizedRecipient,
+        messageType: metadata?.messageType,
+        templateName: metadata?.templateName,
+        contextType: metadata?.contextType,
+        contextId: metadata?.contextId,
+        contextLabel: metadata?.contextLabel,
         deliveryStatus: EWhatsAppMessageDeliveryStatus.Sent,
         statusTimestamp: String(Math.floor(Date.now() / 1000)),
       },
       { excludeExtraneousValues: true },
     );
 
-    await this.messagesRepo.createOutboundMessage(data);
+    const saved = await this.messagesRepo.createOutboundMessage(data);
     this.logger.info(
       {
         operation: 'sendWhatsAppMessage',
@@ -977,6 +1061,7 @@ export class WhatsAppService implements IWhatsAppService {
       },
       'WhatsApp outbound message accepted by Meta',
     );
+    void this.whatsappRealtime.notifyMessageCreated(saved).catch(() => undefined);
   }
 
   /** Strip query/hash so token exchange matches Meta OAuth redirect_uri (pathname only). */

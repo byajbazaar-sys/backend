@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID, Matches } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 
 export class SendWhatsAppDocumentMessageRequestModel {
   @ApiProperty({ description: 'Business (tenant) ID — must match authenticated user' })
@@ -20,4 +20,16 @@ export class SendWhatsAppDocumentMessageRequestModel {
   @IsNotEmpty()
   @Matches(/\S/)
   shopName: string;
+
+  @ApiPropertyOptional({ description: 'Bill or invoice number shown in message history' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  billNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Customer name shown in message history' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  customerName?: string;
 }
