@@ -415,7 +415,7 @@ export class MetaGraphClient implements IMetaGraphClient {
         error?: { message?: string; code?: number };
       }>('/debug_token', {
         params: { input_token: accessToken.trim() },
-        headers: this.authHeaders(accessToken),
+        headers: this.authHeaders(this.appAccessToken()),
       });
 
       const body = assertMetaGraphSuccess(
@@ -731,6 +731,19 @@ export class MetaGraphClient implements IMetaGraphClient {
     } catch (err) {
       mapMetaGraphError(err, 'Failed to upload Meta template media sample');
     }
+  }
+
+  /**
+   * `{app-id}|{app-secret}` — /debug_token rejects ordinary user tokens with error #100 because the
+   * caller must be the app itself (or an app owner/developer).
+   */
+  private appAccessToken(): string {
+    const appId = this.options.appId?.trim();
+    const appSecret = this.options.appSecret?.trim();
+    if (!appId || !appSecret) {
+      throw new BadRequestException('META_APP_ID and META_APP_SECRET must be configured');
+    }
+    return `${appId}|${appSecret}`;
   }
 
   private authHeaders(accessToken: string): Record<string, string> {
