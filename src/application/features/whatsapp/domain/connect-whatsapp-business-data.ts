@@ -23,5 +23,8 @@ export class ConnectWhatsAppBusinessData {
   businessName?: string;
 
   @Expose()
-  registrationPin: string;
+  registrationPin?: string;
+
+  @Expose()
+  onboardingSessionId?: string;
 }

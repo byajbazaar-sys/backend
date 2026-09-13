@@ -54,12 +54,20 @@ export class ConnectWhatsAppBusinessRequestModel {
   @IsString()
   businessName?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Six-digit two-step verification PIN — registers the phone with Meta Cloud API (sets PIN if new, must match if existing)',
+      'Six-digit two-step verification PIN — registers the phone with Meta Cloud API (sets PIN if new, must match if existing). Optional when onboardingSessionId is supplied.',
     example: '123456',
   })
-  @IsNotEmpty()
+  @IsOptional()
   @Matches(/^\d{6}$/, { message: 'registrationPin must be a 6-digit number' })
-  registrationPin: string;
+  registrationPin?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Onboarding session id returned by POST /whatsapp/onboarding-session — carries the PIN across the Meta OAuth redirect.',
+  })
+  @IsOptional()
+  @IsString()
+  onboardingSessionId?: string;
 }

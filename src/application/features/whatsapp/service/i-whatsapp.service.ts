@@ -66,6 +66,16 @@ export interface IWhatsAppService {
   ): Promise<WhatsAppBusinessConnection>;
   disconnectWhatsAppBusiness(userId: string, businessId: string): Promise<WhatsAppDisconnectResult>;
   provisionWhatsAppDefaultTemplates(userId: string, businessId: string): Promise<void>;
+  createWhatsAppOnboardingSession(
+    userId: string,
+    businessId: string,
+    registrationPin: string,
+    fromMobileApp: boolean,
+  ): Promise<{ sessionId: string; expiresInSeconds: number }>;
+  getWhatsAppOnboardingSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ exists: boolean; fromMobileApp: boolean }>;
   createWhatsAppMobileReturnSession(
     userId: string,
     businessId: string,

@@ -56,6 +56,8 @@ import {
 
 const WHATSAPP_MOBILE_RETURN_SESSION_PREFIX = 'whatsapp:mobile-return:';
 const WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS = 600;
+const WHATSAPP_ONBOARDING_SESSION_PREFIX = 'whatsapp:onboarding:';
+const WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS = 1200;
 
 interface StoredWhatsAppMobileReturnSession {
   userId: string;
@@ -63,9 +65,18 @@ interface StoredWhatsAppMobileReturnSession {
   createdAt: number;
 }
 
+interface StoredWhatsAppOnboardingSession {
+  userId: string;
+  businessId: string;
+  registrationPin: string;
+  fromMobileApp: boolean;
+  createdAt: number;
+}
+
 @Injectable()
 export class WhatsAppService implements IWhatsAppService {
   private readonly fallbackMobileReturnSessions = new Map<string, StoredWhatsAppMobileReturnSession>();
+  private readonly fallbackOnboardingSessions = new Map<string, StoredWhatsAppOnboardingSession>();
 
   constructor(
     @Inject(META_GRAPH_CLIENT) private readonly metaGraphClient: IMetaGraphClient,
@@ -303,6 +314,26 @@ export class WhatsAppService implements IWhatsAppService {
       throw new BadRequestException('accessToken or code is required');
     }
 
+    // The OAuth redirect cannot carry the PIN, so recover it from the server-side session.
+    const onboardingSessionId = data.onboardingSessionId?.trim();
+    let registrationPin = data.registrationPin?.trim();
+    if (onboardingSessionId) {
+      const session = await this.readOnboardingSession(onboardingSessionId);
+      if (!session) {
+        throw new BadRequestException(
+          'This WhatsApp onboarding session has expired. Please start the connection again.',
+        );
+      }
+      if (session.userId !== userId || session.businessId !== businessId) {
+        throw new ForbiddenException('This WhatsApp onboarding session does not belong to your account.');
+      }
+      registrationPin = registrationPin || session.registrationPin;
+    }
+
+    if (!/^\d{6}$/.test(registrationPin ?? '')) {
+      throw new BadRequestException('registrationPin must be a 6-digit number');
+    }
+
     let accessToken: string | undefined;
     const shortLivedToken = data.accessToken?.trim();
     if (shortLivedToken) {
@@ -326,7 +357,7 @@ export class WhatsAppService implements IWhatsAppService {
 
     const resolved = await this.resolveWabaAndPhoneNumber(accessToken, data);
 
-    await this.ensurePhoneNumberRegistered(accessToken, resolved.phoneNumberId, data.registrationPin);
+    await this.ensurePhoneNumberRegistered(accessToken, resolved.phoneNumberId, registrationPin);
     await this.subscribeAppToWaba(accessToken, resolved.wabaId);
 
     const encryptedToken = this.aesEncrypt.encrypt(accessToken);
@@ -353,6 +384,10 @@ export class WhatsAppService implements IWhatsAppService {
     );
 
     await this.provisionDefaultTemplates(accessToken, saved.wabaId, saved.phoneNumberId);
+
+    if (onboardingSessionId) {
+      await this.deleteOnboardingSession(onboardingSessionId);
+    }
 
     return this.enrichConnectionWithMetaProfile(userId, saved);
   }
@@ -514,6 +549,46 @@ export class WhatsAppService implements IWhatsAppService {
 
     const accessToken = this.aesEncrypt.decrypt(encryptedToken);
     await this.provisionDefaultTemplates(accessToken, connection.wabaId, connection.phoneNumberId);
+  }
+
+  /**
+   * Holds the registration PIN server-side across the Meta OAuth redirect. The returned id is
+   * used as the OAuth `state`, so it doubles as CSRF protection without trusting browser storage.
+   */
+  async createWhatsAppOnboardingSession(
+    userId: string,
+    businessId: string,
+    registrationPin: string,
+    fromMobileApp: boolean,
+  ): Promise<{ sessionId: string; expiresInSeconds: number }> {
+    this.assertBusinessAccess(userId, businessId);
+
+    const sessionId = randomBytes(24).toString('base64url');
+    await this.storeOnboardingSession(sessionId, {
+      userId,
+      businessId,
+      registrationPin,
+      fromMobileApp,
+      createdAt: Date.now(),
+    });
+
+    this.logger.info(
+      { operation: 'createWhatsAppOnboardingSession', userId, businessId, fromMobileApp },
+      'Created WhatsApp onboarding session',
+    );
+
+    return { sessionId, expiresInSeconds: WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS };
+  }
+
+  async getWhatsAppOnboardingSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ exists: boolean; fromMobileApp: boolean }> {
+    const stored = await this.readOnboardingSession(sessionId.trim());
+    if (!stored || stored.userId !== userId) {
+      return { exists: false, fromMobileApp: false };
+    }
+    return { exists: true, fromMobileApp: stored.fromMobileApp };
   }
 
   async createWhatsAppMobileReturnSession(
@@ -939,6 +1014,55 @@ export class WhatsAppService implements IWhatsAppService {
       phoneNumberId: connection.phoneNumberId,
       wabaId: connection.wabaId,
     };
+  }
+
+  private onboardingSessionKey(sessionId: string): string {
+    return `${WHATSAPP_ONBOARDING_SESSION_PREFIX}${sessionId}`;
+  }
+
+  private async storeOnboardingSession(
+    sessionId: string,
+    payload: StoredWhatsAppOnboardingSession,
+  ): Promise<void> {
+    if (this.redis.isEnabled()) {
+      await this.redis.setAsync(
+        this.onboardingSessionKey(sessionId),
+        payload,
+        WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS,
+      );
+      return;
+    }
+
+    this.fallbackOnboardingSessions.set(sessionId, payload);
+    setTimeout(
+      () => this.fallbackOnboardingSessions.delete(sessionId),
+      WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS * 1000,
+    );
+  }
+
+  private async readOnboardingSession(
+    sessionId: string,
+  ): Promise<StoredWhatsAppOnboardingSession | null> {
+    if (!sessionId) return null;
+
+    const stored = this.redis.isEnabled()
+      ? await this.redis.getAsync<StoredWhatsAppOnboardingSession>(this.onboardingSessionKey(sessionId))
+      : this.fallbackOnboardingSessions.get(sessionId);
+
+    if (!stored) return null;
+    if (Date.now() - stored.createdAt > WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS * 1000) {
+      await this.deleteOnboardingSession(sessionId);
+      return null;
+    }
+    return stored;
+  }
+
+  private async deleteOnboardingSession(sessionId: string): Promise<void> {
+    if (this.redis.isEnabled()) {
+      await this.redis.deleteAsync(this.onboardingSessionKey(sessionId));
+      return;
+    }
+    this.fallbackOnboardingSessions.delete(sessionId);
   }
 
   private mobileReturnSessionKey(sessionId: string): string {

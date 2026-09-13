@@ -43,6 +43,10 @@ import {
   WhatsAppTemplateSummaryResponseModel,
   CreateWhatsAppMobileReturnSessionRequestModel,
   CreateWhatsAppMobileReturnSessionResponseModel,
+  CreateWhatsAppOnboardingSessionRequestModel,
+  CreateWhatsAppOnboardingSessionResponseModel,
+  GetWhatsAppOnboardingSessionResponseModel,
+  WhatsAppOnboardingSessionParamModel,
   ResolveWhatsAppMobileReturnSessionQueryModel,
   ResolveWhatsAppMobileReturnSessionResponseModel,
   WhatsAppMobileReturnSessionParamModel,
@@ -91,6 +95,7 @@ export class WhatsAppController {
         displayPhoneNumber: body.displayPhoneNumber,
         businessName: body.businessName,
         registrationPin: body.registrationPin,
+        onboardingSessionId: body.onboardingSessionId,
       },
       { excludeExtraneousValues: true },
     );
@@ -119,6 +124,42 @@ export class WhatsAppController {
       settings,
     );
     return plainToInstance(WhatsAppConnectionResponseModel, connection, { excludeExtraneousValues: true });
+  }
+
+  @Post('onboarding-session')
+  @ApiOperation({ summary: 'Start WhatsApp onboarding — stores the PIN across the Meta OAuth redirect' })
+  @ApiOkResponse({ type: CreateWhatsAppOnboardingSessionResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async createOnboardingSession(
+    @Body() body: CreateWhatsAppOnboardingSessionRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<CreateWhatsAppOnboardingSessionResponseModel> {
+    const result = await this.whatsappService.createWhatsAppOnboardingSession(
+      identity.userId,
+      body.businessId,
+      body.registrationPin,
+      body.fromMobileApp ?? false,
+    );
+    return plainToInstance(CreateWhatsAppOnboardingSessionResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get('onboarding-session/:sessionId')
+  @ApiOperation({ summary: 'Check an onboarding session and whether the mobile app started it' })
+  @ApiOkResponse({ type: GetWhatsAppOnboardingSessionResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async getOnboardingSession(
+    @Param() params: WhatsAppOnboardingSessionParamModel,
+    @Identity() identity: IIdentity,
+  ): Promise<GetWhatsAppOnboardingSessionResponseModel> {
+    const result = await this.whatsappService.getWhatsAppOnboardingSession(
+      identity.userId,
+      params.sessionId,
+    );
+    return plainToInstance(GetWhatsAppOnboardingSessionResponseModel, result, {
+      excludeExtraneousValues: true,
+    });
   }
 
   @Post('mobile-return-session')
