@@ -139,6 +139,7 @@ export class WhatsAppController {
       body.businessId,
       body.registrationPin,
       body.fromMobileApp ?? false,
+      body.redirectUri,
     );
     return plainToInstance(CreateWhatsAppOnboardingSessionResponseModel, result, {
       excludeExtraneousValues: true,

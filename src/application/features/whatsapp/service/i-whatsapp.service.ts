@@ -71,6 +71,7 @@ export interface IWhatsAppService {
     businessId: string,
     registrationPin: string,
     fromMobileApp: boolean,
+    redirectUri?: string,
   ): Promise<{ sessionId: string; expiresInSeconds: number }>;
   getWhatsAppOnboardingSession(
     userId: string,

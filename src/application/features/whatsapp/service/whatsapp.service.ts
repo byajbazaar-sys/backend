@@ -70,6 +70,7 @@ interface StoredWhatsAppOnboardingSession {
   businessId: string;
   registrationPin: string;
   fromMobileApp: boolean;
+  redirectUri?: string;
   createdAt: number;
 }
 
@@ -317,6 +318,7 @@ export class WhatsAppService implements IWhatsAppService {
     // The OAuth redirect cannot carry the PIN, so recover it from the server-side session.
     const onboardingSessionId = data.onboardingSessionId?.trim();
     let registrationPin = data.registrationPin?.trim();
+    let sessionRedirectUri: string | undefined;
     if (onboardingSessionId) {
       const session = await this.readOnboardingSession(onboardingSessionId);
       if (!session) {
@@ -328,6 +330,7 @@ export class WhatsAppService implements IWhatsAppService {
         throw new ForbiddenException('This WhatsApp onboarding session does not belong to your account.');
       }
       registrationPin = registrationPin || session.registrationPin;
+      sessionRedirectUri = session.redirectUri;
     }
 
     if (!/^\d{6}$/.test(registrationPin ?? '')) {
@@ -347,7 +350,9 @@ export class WhatsAppService implements IWhatsAppService {
         accessToken = shortLivedToken;
       }
     } else if (data.code?.trim()) {
-      const redirectUri = this.normalizeMetaOAuthRedirectUri(data.redirectUri);
+      // The value recorded when the dialog was opened wins — the client can recompute a different
+      // pathname/origin after the redirect, which Meta rejects with error subcode 36008.
+      const redirectUri = sessionRedirectUri || this.normalizeMetaOAuthRedirectUri(data.redirectUri);
       accessToken = await this.metaGraphClient.exchangeCodeForAccessToken(data.code.trim(), redirectUri || undefined);
     }
 
@@ -560,6 +565,7 @@ export class WhatsAppService implements IWhatsAppService {
     businessId: string,
     registrationPin: string,
     fromMobileApp: boolean,
+    redirectUri?: string,
   ): Promise<{ sessionId: string; expiresInSeconds: number }> {
     this.assertBusinessAccess(userId, businessId);
 
@@ -569,6 +575,7 @@ export class WhatsAppService implements IWhatsAppService {
       businessId,
       registrationPin,
       fromMobileApp,
+      redirectUri: this.normalizeMetaOAuthRedirectUri(redirectUri) || undefined,
       createdAt: Date.now(),
     });
 

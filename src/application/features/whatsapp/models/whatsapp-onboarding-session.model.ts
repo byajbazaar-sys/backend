@@ -20,6 +20,15 @@ export class CreateWhatsAppOnboardingSessionRequestModel {
   @IsOptional()
   @IsBoolean()
   fromMobileApp?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Exact redirect_uri sent to the Meta OAuth dialog — replayed verbatim during code exchange.',
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  redirectUri?: string;
 }
 
 export class CreateWhatsAppOnboardingSessionResponseModel {

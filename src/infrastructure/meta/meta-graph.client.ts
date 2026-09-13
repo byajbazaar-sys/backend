@@ -346,15 +346,18 @@ export class MetaGraphClient implements IMetaGraphClient {
 
   async exchangeCodeForAccessToken(code: string, redirectUri?: string): Promise<string> {
     const normalizedRedirect = redirectUri?.trim();
-    const redirectCandidates: (string | undefined)[] = [undefined];
+    // A code from a full-page OAuth dialog MUST be exchanged with the identical redirect_uri, so
+    // try it first. Omitting it only works for FB.login popup codes, which is the fallback.
+    const redirectCandidates: (string | undefined)[] = [];
     if (normalizedRedirect) {
       redirectCandidates.push(normalizedRedirect);
-      if (!normalizedRedirect.endsWith('/')) {
-        redirectCandidates.push(`${normalizedRedirect}/`);
-      }
+      redirectCandidates.push(
+        normalizedRedirect.endsWith('/') ? normalizedRedirect.slice(0, -1) : `${normalizedRedirect}/`,
+      );
     }
+    redirectCandidates.push(undefined);
 
-    let lastError: unknown;
+    let firstError: unknown;
     for (const candidate of redirectCandidates) {
       try {
         const params: Record<string, string> = {
@@ -382,18 +385,28 @@ export class MetaGraphClient implements IMetaGraphClient {
             operation: 'exchangeCodeForAccessToken',
             metaEndpoint: '/oauth/access_token',
             httpStatus: response.status,
-            usedRedirectUri: Boolean(candidate),
+            usedRedirectUri: candidate ?? '(omitted)',
           },
           'Meta OAuth code exchanged for access token',
         );
 
         return accessToken;
       } catch (err) {
-        lastError = err;
+        // Surface the first (most likely correct) attempt's error, but log every candidate so a
+        // redirect_uri mismatch is diagnosable instead of hidden behind the last fallback.
+        firstError ??= err;
+        this.logger.warn(
+          {
+            operation: 'exchangeCodeForAccessToken',
+            attemptedRedirectUri: candidate ?? '(omitted)',
+            err,
+          },
+          'Meta OAuth code exchange attempt failed',
+        );
       }
     }
 
-    mapMetaGraphError(lastError, 'Failed to exchange Meta OAuth code');
+    mapMetaGraphError(firstError, 'Failed to exchange Meta OAuth code');
   }
 
   /**
