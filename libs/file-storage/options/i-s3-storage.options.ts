@@ -5,4 +5,6 @@ export interface IS3StorageOptions {
   region: string;
   /** S3-compatible endpoint (e.g. Backblaze B2). Omit for AWS S3. */
   endpoint?: string;
+  /** Public CDN base URL, e.g. https://images.byajbazaar.com */
+  imageCdnUrl?: string;
 }

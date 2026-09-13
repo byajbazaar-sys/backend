@@ -290,6 +290,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
           configService.get('fileStorage').bucket,
           configService.get('fileStorage').region,
           configService.get('fileStorage').endpoint,
+          configService.get('fileStorage').imageCdnUrl,
         ),
     },
     {

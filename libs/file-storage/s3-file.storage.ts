@@ -14,6 +14,7 @@ import { PinoLogger } from 'nestjs-pino';
 import { Readable } from 'stream';
 
 import { FileHelper } from './file-helper';
+import { buildImageCdnUrl, extractStorageKey, isCdnEligibleKey } from './image-cdn';
 import { IFileStorage } from './i-file-storage';
 import { IFileUrlResolver } from './i-file-url.resolver';
 import { IS3StorageOptions } from './options';
@@ -209,9 +210,46 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
 
   public async getUrlAsync(path: string): Promise<string> {
     try {
-      const key = this.resolveKey(path);
+      const key = this.resolveKey(extractStorageKey(path) ?? path);
+      const cdnBase = this.storageOptions.imageCdnUrl?.trim();
+
+      if (cdnBase && isCdnEligibleKey(key)) {
+        // Callers rely on a null result to retry with an alternate extension.
+        const version = await this.getObjectVersionAsync(key);
+        return version ? buildImageCdnUrl(key, cdnBase, version) : null;
+      }
+
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        if (extractStorageKey(path)) {
+          return this.isPublic ? await this.getSimpleUrlAsync(key) : await this.getSignedUrlAsync(key);
+        }
+        return path;
+      }
+
       return this.isPublic ? await this.getSimpleUrlAsync(key) : await this.getSignedUrlAsync(key);
     } catch (ex) {
+      this.logger.error(ex);
+      return null;
+    }
+  }
+
+  /**
+   * Version token for a stored object, or null when it is missing.
+   * Doubles as the existence check so CDN URLs cost a single HEAD.
+   */
+  protected async getObjectVersionAsync(key: string): Promise<string> {
+    try {
+      const res = await this.client.send(
+        new HeadObjectCommand({
+          Bucket: this.storageOptions.bucket,
+          Key: key,
+        }),
+      );
+      return res.ETag?.replace(/"/g, '') || res.LastModified?.getTime().toString() || null;
+    } catch (ex) {
+      if (ex.code === 'NotFound' || ex.name === 'NotFound') {
+        return null;
+      }
       this.logger.error(ex);
       return null;
     }

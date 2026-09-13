@@ -49,6 +49,7 @@ function resolveFileStorageOptions(): FileStorageOptions {
     process.env.S3_BUCKET_NAME ?? 'jobs-file-storage',
     process.env.S3_BUCKET_REGION ?? 'ap-south-1',
     endpoint,
+    process.env.IMAGE_CDN_URL?.trim() || undefined,
   );
 }
 

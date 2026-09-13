@@ -29,6 +29,7 @@ environment:
   S3_BUCKET_NAME: ${env:S3_BUCKET_NAME, ''}
   S3_BUCKET_REGION: ${env:S3_BUCKET_REGION, 'ap-south-1'}
   S3_ENDPOINT: ${env:S3_ENDPOINT, ''}
+  IMAGE_CDN_URL: ${env:IMAGE_CDN_URL, ''}
   # Literal / env only — Ref/GetAtt here creates a circular dependency with WebsocketsApi.
   TRY_ON_LAMBDA_NAME: ${self:service}-${sls:stage}-jewelleryTryOn
   WEBSOCKET_API_ENDPOINT: ${env:WEBSOCKET_API_ENDPOINT, ''}
