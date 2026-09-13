@@ -44,6 +44,26 @@ export interface IWhatsAppService {
     shopName: string,
     outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult>;
+  sendDepositPdfDocument(
+    userId: string,
+    businessId: string,
+    to: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    shopName: string,
+    outboundContext?: WhatsAppOutboundContext,
+  ): Promise<WhatsAppMessageResult>;
+  sendTransactionPdfDocument(
+    userId: string,
+    businessId: string,
+    to: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    shopName: string,
+    outboundContext?: WhatsAppOutboundContext,
+  ): Promise<WhatsAppMessageResult>;
   listMessageHistory(
     userId: string,
     businessId: string,

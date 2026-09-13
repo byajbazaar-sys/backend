@@ -4,6 +4,8 @@ import { IsNotEmpty, IsUUID } from 'class-validator';
 
 export * from './send-whatsapp-message-request.model';
 export * from './send-whatsapp-document-message-request.model';
+export * from './send-whatsapp-deposit-document-message-request.model';
+export * from './send-whatsapp-transaction-document-message-request.model';
 export * from './send-whatsapp-template-message-request.model';
 export * from './create-whatsapp-template-request.model';
 export * from './connect-whatsapp-business-request.model';

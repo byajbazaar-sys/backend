@@ -23,6 +23,13 @@ export const WHATSAPP_DEFAULT_TEMPLATES: WhatsAppDefaultTemplateDefinition[] = [
       'Hi from {{1}}. Due reminder: your {{2}} due for this month amounting to {{3}} is pending. Please pay at your earliest convenience.',
   },
   {
+    name: 'byajbazaar_order_created',
+    language: 'en_US',
+    category: 'UTILITY',
+    bodyText:
+      'Thank you for your order at {{1}}! Order {{2}} ({{3}}) has been placed. Expected delivery: {{4}}. Reply if you have any questions.',
+  },
+  {
     name: 'byajbazaar_order_update',
     language: 'en_US',
     category: 'UTILITY',
@@ -37,11 +44,35 @@ export const WHATSAPP_DEFAULT_TEMPLATES: WhatsAppDefaultTemplateDefinition[] = [
     bodyText:
       'Your bill from {{1}} is attached as a PDF. Please review it and contact us if you have any questions.',
   },
+  {
+    name: 'byajbazaar_deposit_receipt_pdf',
+    language: 'en_US',
+    category: 'UTILITY',
+    headerFormat: 'DOCUMENT',
+    bodyText:
+      'Your deposit receipt from {{1}} is attached as a PDF. Thank you for your payment.',
+  },
+  {
+    name: 'byajbazaar_payment_receipt_pdf',
+    language: 'en_US',
+    category: 'UTILITY',
+    headerFormat: 'DOCUMENT',
+    bodyText:
+      'Your payment receipt from {{1}} is attached as a PDF. Thank you for your payment.',
+  },
 ];
 
 export const WHATSAPP_BILL_PDF_TEMPLATE =
   WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_bill_pdf') ??
   WHATSAPP_DEFAULT_TEMPLATES[0];
+
+export const WHATSAPP_DEPOSIT_RECEIPT_PDF_TEMPLATE =
+  WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_deposit_receipt_pdf') ??
+  WHATSAPP_BILL_PDF_TEMPLATE;
+
+export const WHATSAPP_PAYMENT_RECEIPT_PDF_TEMPLATE =
+  WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_payment_receipt_pdf') ??
+  WHATSAPP_DEPOSIT_RECEIPT_PDF_TEMPLATE;
 
 /** Approved template used to re-open conversations outside the 24-hour window (no variables). */
 export const WHATSAPP_REENGAGEMENT_TEMPLATE =

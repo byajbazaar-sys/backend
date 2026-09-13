@@ -18,6 +18,8 @@ import { IRedisService, REDIS_SERVICE } from '../../../shared/services/i-redis.s
 import {
   WHATSAPP_BILL_PDF_TEMPLATE,
   WHATSAPP_DEFAULT_TEMPLATES,
+  WHATSAPP_DEPOSIT_RECEIPT_PDF_TEMPLATE,
+  WHATSAPP_PAYMENT_RECEIPT_PDF_TEMPLATE,
 } from '../constants/whatsapp-default-template.constants';
 import {
   ConnectWhatsAppBusinessData,
@@ -195,6 +197,130 @@ export class WhatsAppService implements IWhatsAppService {
       templateName: billTemplate.name,
     });
     return this.buildMessageResult(result.messageId, 'template', billTemplate.name);
+  }
+
+  async sendDepositPdfDocument(
+    userId: string,
+    businessId: string,
+    to: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    shopName: string,
+    outboundContext?: WhatsAppOutboundContext,
+  ): Promise<WhatsAppMessageResult> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
+      throw new BadRequestException(
+        'WhatsApp is not connected. Connect WhatsApp Business in Account settings before sharing deposit receipts.',
+      );
+    }
+
+    const credentials = await this.resolveCredentials(userId);
+    const recipient = normalizeWhatsAppRecipient(to);
+    await this.assertMessagingAllowed(userId, credentials);
+
+    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, mimeType, filename);
+    const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
+      userId,
+      credentials.wabaId,
+      credentials.phoneNumberId,
+      recipient,
+    );
+
+    const depositContext: WhatsAppOutboundContext = {
+      messageType: EWhatsAppMessageType.Document,
+      contextType: outboundContext?.contextType ?? EWhatsAppMessageContextType.Deposit,
+      contextId: outboundContext?.contextId,
+      contextLabel: outboundContext?.contextLabel ?? this.buildDepositContextLabel(shopName, outboundContext),
+    };
+
+    if (isWithinCustomerServiceWindow(lastInboundAt)) {
+      const result = await this.metaGraphClient.sendDocumentMessage(credentials, recipient, mediaId, filename);
+      await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, depositContext);
+      return this.buildMessageResult(result.messageId, 'document');
+    }
+
+    const depositTemplate = WHATSAPP_DEPOSIT_RECEIPT_PDF_TEMPLATE;
+    await this.assertApprovedTemplateExists(userId, depositTemplate.name, depositTemplate.language);
+    const result = await this.metaGraphClient.sendTemplateDocumentMessage(
+      credentials,
+      recipient,
+      depositTemplate.name,
+      depositTemplate.language,
+      mediaId,
+      filename,
+      [shopName.trim() || 'Your shop'],
+    );
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, {
+      ...depositContext,
+      messageType: EWhatsAppMessageType.Template,
+      templateName: depositTemplate.name,
+    });
+    return this.buildMessageResult(result.messageId, 'template', depositTemplate.name);
+  }
+
+  async sendTransactionPdfDocument(
+    userId: string,
+    businessId: string,
+    to: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    shopName: string,
+    outboundContext?: WhatsAppOutboundContext,
+  ): Promise<WhatsAppMessageResult> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
+      throw new BadRequestException(
+        'WhatsApp is not connected. Connect WhatsApp Business in Account settings before sharing payment receipts.',
+      );
+    }
+
+    const credentials = await this.resolveCredentials(userId);
+    const recipient = normalizeWhatsAppRecipient(to);
+    await this.assertMessagingAllowed(userId, credentials);
+
+    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, mimeType, filename);
+    const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
+      userId,
+      credentials.wabaId,
+      credentials.phoneNumberId,
+      recipient,
+    );
+
+    const transactionContext: WhatsAppOutboundContext = {
+      messageType: EWhatsAppMessageType.Document,
+      contextType: outboundContext?.contextType ?? EWhatsAppMessageContextType.Transaction,
+      contextId: outboundContext?.contextId,
+      contextLabel: outboundContext?.contextLabel ?? this.buildTransactionContextLabel(shopName, outboundContext),
+    };
+
+    if (isWithinCustomerServiceWindow(lastInboundAt)) {
+      const result = await this.metaGraphClient.sendDocumentMessage(credentials, recipient, mediaId, filename);
+      await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, transactionContext);
+      return this.buildMessageResult(result.messageId, 'document');
+    }
+
+    const paymentTemplate = WHATSAPP_PAYMENT_RECEIPT_PDF_TEMPLATE;
+    await this.assertApprovedTemplateExists(userId, paymentTemplate.name, paymentTemplate.language);
+    const result = await this.metaGraphClient.sendTemplateDocumentMessage(
+      credentials,
+      recipient,
+      paymentTemplate.name,
+      paymentTemplate.language,
+      mediaId,
+      filename,
+      [shopName.trim() || 'Your shop'],
+    );
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, {
+      ...transactionContext,
+      messageType: EWhatsAppMessageType.Template,
+      templateName: paymentTemplate.name,
+    });
+    return this.buildMessageResult(result.messageId, 'template', paymentTemplate.name);
   }
 
   /**
@@ -1015,6 +1141,28 @@ export class WhatsAppService implements IWhatsAppService {
       return outboundContext.contextLabel.trim();
     }
     const parts: string[] = ['Bill PDF'];
+    if (shopName?.trim()) {
+      parts.push(shopName.trim());
+    }
+    return parts.join(' · ');
+  }
+
+  private buildDepositContextLabel(shopName: string, outboundContext?: WhatsAppOutboundContext): string {
+    if (outboundContext?.contextLabel?.trim()) {
+      return outboundContext.contextLabel.trim();
+    }
+    const parts: string[] = ['Deposit receipt'];
+    if (shopName?.trim()) {
+      parts.push(shopName.trim());
+    }
+    return parts.join(' · ');
+  }
+
+  private buildTransactionContextLabel(shopName: string, outboundContext?: WhatsAppOutboundContext): string {
+    if (outboundContext?.contextLabel?.trim()) {
+      return outboundContext.contextLabel.trim();
+    }
+    const parts: string[] = ['Payment receipt'];
     if (shopName?.trim()) {
       parts.push(shopName.trim());
     }

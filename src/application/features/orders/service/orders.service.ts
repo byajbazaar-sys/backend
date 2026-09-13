@@ -82,11 +82,22 @@ export class OrdersService implements IOrdersService {
     this.logger.info({ orderId: order.id, createdBy }, 'Order created');
     await this.invalidateOrdersCache(createdBy);
 
+    let result = order;
     if (image?.buffer?.length) {
-      return this.addAttachment(order.id, createdBy, image);
+      result = await this.addAttachment(order.id, createdBy, image);
+    } else {
+      result = await this.enrichOrder(order, createdBy);
     }
 
-    return this.enrichOrder(order, createdBy);
+    if (data.notifyCustomer) {
+      try {
+        await this.notifyCustomer(result.id, createdBy);
+      } catch (err) {
+        this.logger.warn({ err, orderId: order.id }, 'Order created but WhatsApp notification failed');
+      }
+    }
+
+    return result;
   }
 
   async findAll(options: OrdersFilterOptions) {

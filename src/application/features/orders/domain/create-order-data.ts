@@ -40,4 +40,7 @@ export class CreateOrderData {
 
   @Expose()
   notes?: string;
+
+  @Expose()
+  notifyCustomer?: boolean;
 }

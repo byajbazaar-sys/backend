@@ -12,9 +12,13 @@ import { IWhatsAppService, WHATSAPP_SERVICE } from './i-whatsapp.service';
 
 export const WHATSAPP_ORDER_NOTIFICATION_SERVICE = 'WHATSAPP_ORDER_NOTIFICATION_SERVICE';
 
+const ORDER_CREATED_TEMPLATE =
+  WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_order_created') ??
+  WHATSAPP_DEFAULT_TEMPLATES[1];
+
 const ORDER_UPDATE_TEMPLATE =
   WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_order_update') ??
-  WHATSAPP_DEFAULT_TEMPLATES[1];
+  ORDER_CREATED_TEMPLATE;
 
 const STATUS_LABELS: Record<EOrderStatus, string> = {
   [EOrderStatus.NEW]: 'New',
@@ -62,14 +66,20 @@ export class WhatsAppOrderNotificationService {
       : 'TBD';
     const itemTitle = order.title?.trim() || 'Custom order';
 
+    const isNewOrder = order.status === EOrderStatus.NEW;
+    const template = isNewOrder ? ORDER_CREATED_TEMPLATE : ORDER_UPDATE_TEMPLATE;
+    const templateParams = isNewOrder
+      ? [businessName, order.orderNumber ?? '', itemTitle, dueDate]
+      : [businessName, order.orderNumber ?? '', itemTitle, statusLabel, dueDate];
+
     try {
       await this.whatsappService.sendTemplateMessage(
         createdBy,
         createdBy,
         recipient,
-        ORDER_UPDATE_TEMPLATE.name,
-        ORDER_UPDATE_TEMPLATE.language,
-        [businessName, order.orderNumber ?? '', itemTitle, statusLabel, dueDate],
+        template.name,
+        template.language,
+        templateParams,
         {
           contextType: EWhatsAppMessageContextType.Order,
           contextId: order.id,

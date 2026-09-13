@@ -42,6 +42,7 @@ export class PublicCatalogService implements IPublicCatalogService {
     return plainToInstance(
       PublicCatalogItemModel,
       {
+        id: item.id,
         itemName: item.itemName,
         description: item.description,
         categoryName: item.categoryName,

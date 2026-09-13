@@ -20,7 +20,7 @@ export class ListPublicCatalogQueryModel {
   @MaxLength(50)
   metalType?: string;
 
-  @ApiPropertyOptional({ default: 0 })
+  @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Type(() => Number)
   pageNumber?: number;

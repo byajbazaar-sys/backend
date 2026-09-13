@@ -30,6 +30,8 @@ import {
   GetWhatsAppMessageStatusQueryModel,
   ListWhatsAppMessagesQueryModel,
   ListWhatsAppTemplatesQueryModel,
+  SendWhatsAppDepositDocumentMessageRequestModel,
+  SendWhatsAppTransactionDocumentMessageRequestModel,
   SendWhatsAppDocumentMessageRequestModel,
   SendWhatsAppMessageRequestModel,
   SendWhatsAppTemplateMessageRequestModel,
@@ -371,6 +373,144 @@ export class WhatsAppController {
       body.shopName,
       {
         contextLabel: billLabelParts.length > 0 ? billLabelParts.join(' ') : undefined,
+      },
+    );
+    return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
+  }
+
+  @Post('messages/deposit-document')
+  @ApiOperation({ summary: 'Send a deposit receipt PDF to a customer via WhatsApp Cloud API' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['businessId', 'to', 'shopName', 'file'],
+      properties: {
+        businessId: { type: 'string', format: 'uuid' },
+        to: { type: 'string', example: '919827258776' },
+        shopName: { type: 'string', example: 'Shree Jewellers' },
+        depositNumber: { type: 'string', example: 'DEP-1024' },
+        receiptNumber: { type: 'string', example: 'RCP-2048' },
+        customerName: { type: 'string', example: 'Rahul Sharma' },
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOkResponse({ type: WhatsAppMessageResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async sendDepositDocumentMessage(
+    @Body() body: SendWhatsAppDepositDocumentMessageRequestModel,
+    @UploadedFile() file: Express.Multer.File,
+    @Identity() identity: IIdentity,
+  ): Promise<WhatsAppMessageResponseModel> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('PDF file is required');
+    }
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('Only PDF files are supported for deposit receipt sharing');
+    }
+
+    const depositLabelParts: string[] = [];
+    if (body.receiptNumber?.trim()) depositLabelParts.push(body.receiptNumber.trim());
+    if (body.depositNumber?.trim()) {
+      depositLabelParts.push(
+        depositLabelParts.length > 0
+          ? `· ${body.depositNumber.trim()}`
+          : body.depositNumber.trim(),
+      );
+    }
+    if (body.customerName?.trim()) {
+      depositLabelParts.push(
+        depositLabelParts.length > 0
+          ? `→ ${body.customerName.trim()}`
+          : body.customerName.trim(),
+      );
+    }
+
+    const result = await this.whatsappService.sendDepositPdfDocument(
+      identity.userId,
+      body.businessId,
+      body.to,
+      file.buffer,
+      file.originalname || 'deposit-receipt.pdf',
+      file.mimetype,
+      body.shopName,
+      {
+        contextLabel: depositLabelParts.length > 0 ? depositLabelParts.join(' ') : undefined,
+      },
+    );
+    return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
+  }
+
+  @Post('messages/transaction-document')
+  @ApiOperation({ summary: 'Send a loan payment receipt PDF to a customer via WhatsApp Cloud API' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['businessId', 'to', 'shopName', 'file'],
+      properties: {
+        businessId: { type: 'string', format: 'uuid' },
+        to: { type: 'string', example: '919827258776' },
+        shopName: { type: 'string', example: 'Shree Jewellers' },
+        loanNumber: { type: 'string', example: 'LN-1024' },
+        receiptNumber: { type: 'string', example: 'TX-A1B2C3D4' },
+        customerName: { type: 'string', example: 'Rahul Sharma' },
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOkResponse({ type: WhatsAppMessageResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async sendTransactionDocumentMessage(
+    @Body() body: SendWhatsAppTransactionDocumentMessageRequestModel,
+    @UploadedFile() file: Express.Multer.File,
+    @Identity() identity: IIdentity,
+  ): Promise<WhatsAppMessageResponseModel> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('PDF file is required');
+    }
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('Only PDF files are supported for payment receipt sharing');
+    }
+
+    const transactionLabelParts: string[] = [];
+    if (body.receiptNumber?.trim()) transactionLabelParts.push(body.receiptNumber.trim());
+    if (body.loanNumber?.trim()) {
+      transactionLabelParts.push(
+        transactionLabelParts.length > 0
+          ? `· ${body.loanNumber.trim()}`
+          : body.loanNumber.trim(),
+      );
+    }
+    if (body.customerName?.trim()) {
+      transactionLabelParts.push(
+        transactionLabelParts.length > 0
+          ? `→ ${body.customerName.trim()}`
+          : body.customerName.trim(),
+      );
+    }
+
+    const result = await this.whatsappService.sendTransactionPdfDocument(
+      identity.userId,
+      body.businessId,
+      body.to,
+      file.buffer,
+      file.originalname || 'payment-receipt.pdf',
+      file.mimetype,
+      body.shopName,
+      {
+        contextLabel: transactionLabelParts.length > 0 ? transactionLabelParts.join(' ') : undefined,
       },
     );
     return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });

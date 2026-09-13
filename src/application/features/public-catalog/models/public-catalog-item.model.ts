@@ -5,6 +5,10 @@ import { EMetalType } from '../../inventory/enums';
 
 export class PublicCatalogItemModel {
   @Expose()
+  @ApiPropertyOptional({ example: '3f2c1e4a-9b8d-4c2a-a111-0f9e8d7c6b5a' })
+  id?: string;
+
+  @Expose()
   @ApiProperty({ example: '22K Gold Ring' })
   itemName: string;
 
