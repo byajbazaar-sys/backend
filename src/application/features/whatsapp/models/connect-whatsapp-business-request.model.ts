@@ -7,15 +7,21 @@ export class ConnectWhatsAppBusinessRequestModel {
   @IsNotEmpty()
   businessId: string;
 
-  @ApiProperty({ description: 'WhatsApp Business Account ID from Meta Embedded Signup' })
+  @ApiPropertyOptional({
+    description:
+      'WhatsApp Business Account ID from Embedded Signup. Omit when the browser could not receive it — the server resolves it from the granted token.',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  wabaId: string;
+  wabaId?: string;
 
-  @ApiProperty({ description: 'Phone number ID from Meta Embedded Signup' })
+  @ApiPropertyOptional({
+    description:
+      'Phone number ID from Embedded Signup. Omit when the browser could not receive it — the server resolves it from the WABA.',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  phoneNumberId: string;
+  phoneNumberId?: string;
 
   @ApiPropertyOptional({
     description: 'Short-lived OAuth code from Meta Embedded Signup — exchanged server-side',

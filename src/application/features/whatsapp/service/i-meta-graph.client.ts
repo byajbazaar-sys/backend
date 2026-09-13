@@ -39,6 +39,13 @@ export interface MetaRegisterPhoneResult {
   status: string;
 }
 
+export interface MetaWabaPhoneNumber {
+  id: string;
+  displayPhoneNumber?: string;
+  verifiedName?: string;
+  status?: string;
+}
+
 export interface MetaSubscribeAppResult {
   success: boolean;
 }
@@ -86,6 +93,10 @@ export interface IMetaGraphClient {
   listMessageTemplates(credentials: MetaGraphCredentials): Promise<MetaTemplateSummary[]>;
   exchangeCodeForAccessToken(code: string, redirectUri?: string): Promise<string>;
   exchangeShortLivedUserToken(shortLivedToken: string): Promise<string>;
+  /** WABA IDs granted to this token — used when Embedded Signup cannot post waba_id back. */
+  listWabaIdsForToken(accessToken: string): Promise<string[]>;
+  listWabaPhoneNumbers(accessToken: string, wabaId: string): Promise<MetaWabaPhoneNumber[]>;
+  getWabaName(accessToken: string, wabaId: string): Promise<string | undefined>;
   getPhoneNumberStatus(accessToken: string, phoneNumberId: string): Promise<MetaPhoneNumberStatus>;
   getWhatsAppBusinessAccount(accessToken: string, wabaId: string): Promise<MetaWhatsAppBusinessAccountInfo>;
   registerPhoneNumber(accessToken: string, phoneNumberId: string, pin: string): Promise<MetaRegisterPhoneResult>;

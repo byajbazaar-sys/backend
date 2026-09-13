@@ -33,7 +33,12 @@ import {
   WhatsAppTemplateCreateResult,
 } from '../domain';
 import { EWhatsAppConnectionStatus, EWhatsAppMessageDeliveryStatus } from '../enums';
-import { IMetaGraphClient, META_GRAPH_CLIENT, MetaGraphCredentials, MetaTemplateSummary } from './i-meta-graph.client';
+import {
+  IMetaGraphClient,
+  META_GRAPH_CLIENT,
+  MetaGraphCredentials,
+  MetaTemplateSummary,
+} from './i-meta-graph.client';
 import {
   IWhatsAppBusinessConnectionsRepository,
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
@@ -294,8 +299,8 @@ export class WhatsAppService implements IWhatsAppService {
     data: ConnectWhatsAppBusinessData,
   ): Promise<WhatsAppBusinessConnection> {
     this.assertBusinessAccess(userId, businessId);
-    if (!data.wabaId?.trim() || !data.phoneNumberId?.trim()) {
-      throw new BadRequestException('wabaId and phoneNumberId are required');
+    if (!data.accessToken?.trim() && !data.code?.trim()) {
+      throw new BadRequestException('accessToken or code is required');
     }
 
     let accessToken: string | undefined;
@@ -319,17 +324,19 @@ export class WhatsAppService implements IWhatsAppService {
       throw new BadRequestException('accessToken or code is required');
     }
 
-    await this.ensurePhoneNumberRegistered(accessToken, data.phoneNumberId.trim(), data.registrationPin);
-    await this.subscribeAppToWaba(accessToken, data.wabaId.trim());
+    const resolved = await this.resolveWabaAndPhoneNumber(accessToken, data);
+
+    await this.ensurePhoneNumberRegistered(accessToken, resolved.phoneNumberId, data.registrationPin);
+    await this.subscribeAppToWaba(accessToken, resolved.wabaId);
 
     const encryptedToken = this.aesEncrypt.encrypt(accessToken);
     const connectionData = plainToInstance(
       SaveWhatsAppBusinessConnectionData,
       {
-        wabaId: data.wabaId.trim(),
-        phoneNumberId: data.phoneNumberId.trim(),
-        displayPhoneNumber: data.displayPhoneNumber,
-        businessName: data.businessName,
+        wabaId: resolved.wabaId,
+        phoneNumberId: resolved.phoneNumberId,
+        displayPhoneNumber: data.displayPhoneNumber?.trim() || resolved.displayPhoneNumber,
+        businessName: data.businessName?.trim() || resolved.businessName,
       },
       { excludeExtraneousValues: true },
     );
@@ -348,6 +355,76 @@ export class WhatsAppService implements IWhatsAppService {
     await this.provisionDefaultTemplates(accessToken, saved.wabaId, saved.phoneNumberId);
 
     return this.enrichConnectionWithMetaProfile(userId, saved);
+  }
+
+  /**
+   * Mobile browsers often break Embedded Signup's postMessage ("Please close this tab"), so the
+   * client can omit wabaId/phoneNumberId. Derive them from the granted token when missing.
+   */
+  private async resolveWabaAndPhoneNumber(
+    accessToken: string,
+    data: ConnectWhatsAppBusinessData,
+  ): Promise<{ wabaId: string; phoneNumberId: string; displayPhoneNumber?: string; businessName?: string }> {
+    const requestedWabaId = data.wabaId?.trim();
+    const requestedPhoneNumberId = data.phoneNumberId?.trim();
+
+    if (requestedWabaId && requestedPhoneNumberId) {
+      return { wabaId: requestedWabaId, phoneNumberId: requestedPhoneNumberId };
+    }
+
+    const candidateWabaIds = requestedWabaId
+      ? [requestedWabaId]
+      : await this.metaGraphClient.listWabaIdsForToken(accessToken);
+
+    if (candidateWabaIds.length === 0) {
+      throw new BadRequestException(
+        'Meta did not grant access to any WhatsApp Business Account. Please redo WhatsApp onboarding.',
+      );
+    }
+
+    for (const wabaId of candidateWabaIds) {
+      let phoneNumbers: Awaited<ReturnType<IMetaGraphClient['listWabaPhoneNumbers']>>;
+      try {
+        phoneNumbers = await this.metaGraphClient.listWabaPhoneNumbers(accessToken, wabaId);
+      } catch (err) {
+        this.logger.warn(
+          { err, operation: 'resolveWabaAndPhoneNumber', wabaId },
+          'Failed to list phone numbers for WABA; trying next candidate',
+        );
+        continue;
+      }
+
+      const phone =
+        (requestedPhoneNumberId && phoneNumbers.find((item) => item.id === requestedPhoneNumberId)) ||
+        phoneNumbers[0];
+
+      if (!phone) {
+        continue;
+      }
+
+      const businessName = phone.verifiedName ?? (await this.metaGraphClient.getWabaName(accessToken, wabaId));
+
+      this.logger.info(
+        {
+          operation: 'resolveWabaAndPhoneNumber',
+          wabaId,
+          phoneNumberId: phone.id,
+          discovered: !requestedWabaId || !requestedPhoneNumberId,
+        },
+        'Resolved WhatsApp Business Account and phone number from Meta token',
+      );
+
+      return {
+        wabaId,
+        phoneNumberId: phone.id,
+        displayPhoneNumber: phone.displayPhoneNumber,
+        businessName,
+      };
+    }
+
+    throw new BadRequestException(
+      'No WhatsApp phone number was found on your Meta account. Add a number in Meta and try again.',
+    );
   }
 
   async registerWhatsAppPhone(

@@ -15,6 +15,7 @@ import {
   MetaSendMessageResult,
   MetaSubscribeAppResult,
   MetaTemplateSummary,
+  MetaWabaPhoneNumber,
   MetaWhatsAppOptions,
 } from '../../application';
 
@@ -393,6 +394,109 @@ export class MetaGraphClient implements IMetaGraphClient {
     }
 
     mapMetaGraphError(lastError, 'Failed to exchange Meta OAuth code');
+  }
+
+  /**
+   * Embedded Signup normally posts waba_id/phone_number_id via postMessage. Mobile browsers
+   * frequently sever window.opener ("Please close this tab"), so derive the WABA from the token.
+   */
+  async listWabaIdsForToken(accessToken: string): Promise<string[]> {
+    try {
+      const response = await this.http.get<{
+        data?: {
+          granular_scopes?: { scope?: string; target_ids?: string[] }[];
+        };
+        error?: { message?: string; code?: number };
+      }>('/debug_token', {
+        params: { input_token: accessToken.trim() },
+        headers: this.authHeaders(accessToken),
+      });
+
+      const body = assertMetaGraphSuccess(
+        response.status,
+        response.data,
+        'Failed to inspect Meta access token',
+      );
+
+      const scopes = body.data?.granular_scopes ?? [];
+      const wabaIds = new Set<string>();
+      for (const entry of scopes) {
+        if (entry.scope !== 'whatsapp_business_management' && entry.scope !== 'whatsapp_business_messaging') {
+          continue;
+        }
+        for (const targetId of entry.target_ids ?? []) {
+          const normalized = targetId?.trim();
+          if (normalized) wabaIds.add(normalized);
+        }
+      }
+
+      this.logger.info(
+        {
+          operation: 'listWabaIdsForToken',
+          metaEndpoint: '/debug_token',
+          httpStatus: response.status,
+          wabaCount: wabaIds.size,
+        },
+        'Resolved WhatsApp Business Account IDs from Meta token',
+      );
+
+      return [...wabaIds];
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to inspect Meta access token');
+    }
+  }
+
+  async listWabaPhoneNumbers(accessToken: string, wabaId: string): Promise<MetaWabaPhoneNumber[]> {
+    try {
+      const response = await this.http.get<{
+        data?: {
+          id?: string;
+          display_phone_number?: string;
+          verified_name?: string;
+          status?: string;
+        }[];
+        error?: { message?: string; code?: number };
+      }>(`/${wabaId.trim()}/phone_numbers`, {
+        params: { fields: 'id,display_phone_number,verified_name,status', limit: 50 },
+        headers: this.authHeaders(accessToken),
+      });
+
+      const body = assertMetaGraphSuccess(
+        response.status,
+        response.data,
+        'Failed to list WhatsApp phone numbers',
+      );
+
+      return (body.data ?? [])
+        .map((row) => ({
+          id: String(row.id ?? '').trim(),
+          displayPhoneNumber: row.display_phone_number?.trim() || undefined,
+          verifiedName: row.verified_name?.trim() || undefined,
+          status: row.status?.trim() || undefined,
+        }))
+        .filter((row) => Boolean(row.id));
+    } catch (err) {
+      mapMetaGraphError(err, 'Failed to list WhatsApp phone numbers');
+    }
+  }
+
+  async getWabaName(accessToken: string, wabaId: string): Promise<string | undefined> {
+    try {
+      const response = await this.http.get<{
+        name?: string;
+        error?: { message?: string; code?: number };
+      }>(`/${wabaId.trim()}`, {
+        params: { fields: 'name' },
+        headers: this.authHeaders(accessToken),
+      });
+
+      if (response.status >= 400) {
+        return undefined;
+      }
+      return response.data?.name?.trim() || undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   async getWhatsAppBusinessAccount(
