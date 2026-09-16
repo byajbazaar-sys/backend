@@ -216,6 +216,7 @@ export class InventoryItemService implements IInventoryItemService {
     userId: string,
     file?: Express.Multer.File,
     removeImage?: boolean,
+    storeAsUploaded?: boolean,
   ): Promise<InventoryItem> {
     const existing = await this.itemsRepo.findById(id);
     if (!existing) throw new NotFoundException('Inventory item not found');
@@ -246,17 +247,21 @@ export class InventoryItemService implements IInventoryItemService {
     let mimetype = normalized.mimetype;
     let fileExtension = normalized.fileExtension;
 
-    try {
-      const stored = await this.productImageAi.prepareTryOnStorageImage({
-        base64: normalized.buffer.toString('base64'),
-        mimeType: normalized.mimetype,
-      });
-      bufferToStore = Buffer.from(stored.base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
-      mimetype = 'image/png';
-      fileExtension = 'png';
-      this.logger.info({ itemId: id }, 'Inventory image AI transparent cutout stored for try-on');
-    } catch (err) {
-      this.logger.warn({ err, itemId: id }, 'Inventory AI background removal failed; storing original image');
+    if (!storeAsUploaded) {
+      try {
+        const stored = await this.productImageAi.prepareTryOnStorageImage({
+          base64: normalized.buffer.toString('base64'),
+          mimeType: normalized.mimetype,
+        });
+        bufferToStore = Buffer.from(stored.base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
+        mimetype = 'image/png';
+        fileExtension = 'png';
+        this.logger.info({ itemId: id }, 'Inventory image AI transparent cutout stored for try-on');
+      } catch (err) {
+        this.logger.warn({ err, itemId: id }, 'Inventory AI background removal failed; storing original image');
+      }
+    } else {
+      this.logger.info({ itemId: id }, 'Inventory image stored as uploaded (client-selected variant)');
     }
 
     const proposedKey = `inventory/${userId}/${id}/image.${fileExtension}`;

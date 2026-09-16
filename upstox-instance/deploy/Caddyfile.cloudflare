@@ -1,0 +1,13 @@
+# Cloudflare proxied DNS (orange cloud). SSL/TLS: Full (not strict) or Flexible on HTTP-only variant.
+{
+	auto_https disable_redirects
+}
+
+http://market.byajbazaar.com {
+	reverse_proxy 127.0.0.1:8090
+}
+
+https://market.byajbazaar.com {
+	tls internal
+	reverse_proxy 127.0.0.1:8090
+}

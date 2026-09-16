@@ -21,6 +21,7 @@ import {
   WHATSAPP_DEPOSIT_RECEIPT_PDF_TEMPLATE,
   WHATSAPP_PAYMENT_RECEIPT_PDF_TEMPLATE,
 } from '../constants/whatsapp-default-template.constants';
+import { resolveUploadedPdfMimeType } from '../utils/is-uploaded-pdf.util';
 import {
   ConnectWhatsAppBusinessData,
   SaveWhatsAppBusinessConnectionData,
@@ -159,7 +160,8 @@ export class WhatsAppService implements IWhatsAppService {
     const recipient = normalizeWhatsAppRecipient(to);
     await this.assertMessagingAllowed(userId, credentials);
 
-    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, mimeType, filename);
+    const pdfMime = resolveUploadedPdfMimeType(mimeType, filename);
+    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, pdfMime, filename);
     const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
       userId,
       credentials.wabaId,
@@ -221,7 +223,8 @@ export class WhatsAppService implements IWhatsAppService {
     const recipient = normalizeWhatsAppRecipient(to);
     await this.assertMessagingAllowed(userId, credentials);
 
-    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, mimeType, filename);
+    const pdfMime = resolveUploadedPdfMimeType(mimeType, filename);
+    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, pdfMime, filename);
     const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
       userId,
       credentials.wabaId,
@@ -283,7 +286,8 @@ export class WhatsAppService implements IWhatsAppService {
     const recipient = normalizeWhatsAppRecipient(to);
     await this.assertMessagingAllowed(userId, credentials);
 
-    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, mimeType, filename);
+    const pdfMime = resolveUploadedPdfMimeType(mimeType, filename);
+    const mediaId = await this.metaGraphClient.uploadMedia(credentials, fileBuffer, pdfMime, filename);
     const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
       userId,
       credentials.wabaId,

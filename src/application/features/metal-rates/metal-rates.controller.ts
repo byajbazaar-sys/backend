@@ -28,7 +28,10 @@ import {
   BulkDeleteMetalRatesRequestModel,
   BulkDeleteMetalRatesResponseModel,
 } from './models';
-import { IMetalRateService, METAL_RATE_SERVICE } from './service';
+import {
+  IMetalRateService,
+  METAL_RATE_SERVICE,
+} from './service';
 
 @ApiTags('metal-rates')
 @ApiBearerAuth('user')

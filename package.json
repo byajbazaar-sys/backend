@@ -107,6 +107,7 @@
     "@types/pdfkit": "^0.13.5",
     "@types/qrcode": "^1.5.5",
     "@types/uuid": "^9.0.8",
+    "@types/ws": "^8.18.1",
     "esbuild": "^0.24.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.1.8",

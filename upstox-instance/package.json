@@ -1,0 +1,29 @@
+{
+  "name": "byajbazaar-upstox-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Always-on Upstox MCX feed relay with ByajBazaar JWT on WebSocket",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "axios": "^1.12.0",
+    "dotenv": "^16.4.7",
+    "jsonwebtoken": "^9.0.2",
+    "protobufjs": "^8.8.0",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

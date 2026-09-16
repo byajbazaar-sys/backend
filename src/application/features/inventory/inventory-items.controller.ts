@@ -161,6 +161,7 @@ export class InventoryItemsController {
     @Param('id') id: string,
     @UploadedFile() image: Express.Multer.File,
     @Body('removeImage') removeImage: string,
+    @Body('storeAsUploaded') storeAsUploaded: string,
     @Identity() identity: IIdentity,
   ): Promise<InventoryItemResponseModel> {
     const item = await this.itemService.uploadImage(
@@ -168,6 +169,7 @@ export class InventoryItemsController {
       identity.userId,
       image,
       removeImage === 'true' || removeImage === '1',
+      storeAsUploaded === 'true' || storeAsUploaded === '1',
     );
     return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
   }

@@ -21,6 +21,7 @@ import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 
 import { ConnectWhatsAppBusinessData, UpdateWhatsAppSettingsData } from './domain';
+import { isUploadedPdfFile } from './utils/is-uploaded-pdf.util';
 import {
   ConnectWhatsAppBusinessRequestModel,
   CreateWhatsAppTemplateRequestModel,
@@ -346,11 +347,8 @@ export class WhatsAppController {
     @UploadedFile() file: Express.Multer.File,
     @Identity() identity: IIdentity,
   ): Promise<WhatsAppMessageResponseModel> {
-    if (!file?.buffer?.length) {
+    if (!isUploadedPdfFile(file)) {
       throw new BadRequestException('PDF file is required');
-    }
-    if (file.mimetype !== 'application/pdf') {
-      throw new BadRequestException('Only PDF files are supported for bill sharing');
     }
 
     const billLabelParts: string[] = [];
@@ -408,11 +406,8 @@ export class WhatsAppController {
     @UploadedFile() file: Express.Multer.File,
     @Identity() identity: IIdentity,
   ): Promise<WhatsAppMessageResponseModel> {
-    if (!file?.buffer?.length) {
+    if (!isUploadedPdfFile(file)) {
       throw new BadRequestException('PDF file is required');
-    }
-    if (file.mimetype !== 'application/pdf') {
-      throw new BadRequestException('Only PDF files are supported for deposit receipt sharing');
     }
 
     const depositLabelParts: string[] = [];
@@ -477,11 +472,8 @@ export class WhatsAppController {
     @UploadedFile() file: Express.Multer.File,
     @Identity() identity: IIdentity,
   ): Promise<WhatsAppMessageResponseModel> {
-    if (!file?.buffer?.length) {
+    if (!isUploadedPdfFile(file)) {
       throw new BadRequestException('PDF file is required');
-    }
-    if (file.mimetype !== 'application/pdf') {
-      throw new BadRequestException('Only PDF files are supported for payment receipt sharing');
     }
 
     const transactionLabelParts: string[] = [];

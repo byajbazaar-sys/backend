@@ -1,0 +1,8 @@
+# TLS in front of the relay (recommended). Point DNS A record to this VM, then:
+#   sudo apt install -y caddy
+#   sudo cp deploy/Caddyfile.example /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+
+market.byajbazaar.com {
+	reverse_proxy 127.0.0.1:8090
+}
