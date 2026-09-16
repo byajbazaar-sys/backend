@@ -51,6 +51,9 @@ import { TransactionsFilterOptions, TransactionsDownloadFilterOptions, DuesFilte
 
 @Injectable()
 export class TransactionService implements ITransactionService {
+  /** Business calendar for optional payment dates (matches dues cron / loan schedules). */
+  private static readonly BUSINESS_TZ = 'Asia/Kolkata';
+
   constructor(
     @Inject(TRANSACTIONS_REPOSITORY) private readonly transactionsRepo: ITransactionsRepository,
     @Inject(TRANSACTION_LOGS_REPOSITORY) private readonly transactionLogsRepo: ITransactionLogsRepository,
@@ -88,6 +91,13 @@ export class TransactionService implements ITransactionService {
         throw new NotFoundException('Loan not found');
       }
       data.customerId = loan.customerId;
+
+      const resolvedPaidAt = this.resolveOptionalPaidAt(data.paidAt, loan);
+      if (resolvedPaidAt) {
+        data.paidAt = resolvedPaidAt;
+      } else {
+        delete data.paidAt;
+      }
 
       const effect = emptyLoanEffect();
 
@@ -886,6 +896,61 @@ export class TransactionService implements ITransactionService {
       }
     }
     return { loan, due };
+  }
+
+  /**
+   * Optional business date for receipts/lists only — never used for replay, balances, or loan_seq.
+   */
+  private resolveOptionalPaidAt(raw: Date | string | undefined, loan: Loan): Date | undefined {
+    if (raw === undefined || raw === null) {
+      return undefined;
+    }
+    if (typeof raw === 'string' && !raw.trim()) {
+      return undefined;
+    }
+    const paidAt = this.parseBusinessCalendarDate(raw);
+    if (Number.isNaN(paidAt.getTime())) {
+      throw new BadRequestException('Invalid payment date');
+    }
+    const paidKey = this.businessDateKey(paidAt);
+    const todayKey = this.businessDateKey(new Date());
+    if (paidKey > todayKey) {
+      throw new BadRequestException('Payment date cannot be in the future');
+    }
+    if (paidKey === todayKey) {
+      return undefined;
+    }
+    if (loan.createdAt) {
+      const loanKey = this.businessDateKey(new Date(loan.createdAt));
+      if (paidKey < loanKey) {
+        throw new BadRequestException('Payment date cannot be before the loan start date');
+      }
+    }
+    return paidAt;
+  }
+
+  /** Calendar day in Asia/Kolkata as YYYY-MM-DD. */
+  private businessDateKey(value: Date): string {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: TransactionService.BUSINESS_TZ }).format(value);
+  }
+
+  /** Store at noon IST on the chosen calendar day so timestamptz stays stable. */
+  private parseBusinessCalendarDate(input: Date | string): Date {
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return new Date(`${trimmed}T12:00:00+05:30`);
+      }
+      const parsed = new Date(trimmed);
+      if (Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+      return new Date(`${this.businessDateKey(parsed)}T12:00:00+05:30`);
+    }
+    if (Number.isNaN(input.getTime())) {
+      return input;
+    }
+    return new Date(`${this.businessDateKey(input)}T12:00:00+05:30`);
   }
 
   private async recordLog(input: CreateTransactionLogInput): Promise<void> {

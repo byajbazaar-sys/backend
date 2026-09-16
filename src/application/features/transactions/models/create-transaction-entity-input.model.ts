@@ -14,4 +14,5 @@ export interface CreateTransactionEntityInput {
   interestPaidDelta: number;
   periodsAtCreation: number | null;
   loanSeq: number | null;
+  paidAt?: Date | null;
 }

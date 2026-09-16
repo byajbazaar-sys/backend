@@ -68,4 +68,13 @@ export class TransactionResponseModel {
     example: 4,
   })
   loanSeq?: number;
+
+  @Expose()
+  @ApiPropertyOptional({
+    description:
+      'Business payment date when back-dated at entry. Null/absent means use createdAt for display; never affects balances or replay.',
+    type: Date,
+  })
+  @Type(() => Date)
+  paidAt?: Date;
 }

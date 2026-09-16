@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 
 import {
   ETransactionType,
@@ -30,6 +30,29 @@ export class TransactionsRepository implements ITransactionsRepository {
     return TransactionalContext.repositoryFor(TransactionEntity, this.defaultTransactionRepo);
   }
 
+  private static readonly LIST_SORT_FIELDS = new Set([
+    'createdAt',
+    'amount',
+    'paidAt',
+    'transactionType',
+    'paidIn',
+    'loanSeq',
+  ]);
+
+  private applyTransactionListOrdering(
+    qb: SelectQueryBuilder<TransactionEntity>,
+    sortField: string | undefined,
+    sortOrder: 'ASC' | 'DESC',
+  ): void {
+    const field =
+      sortField && TransactionsRepository.LIST_SORT_FIELDS.has(sortField) ? sortField : 'createdAt';
+    if (field === 'paidAt') {
+      qb.orderBy('COALESCE(t.paid_at, t.created_at)', sortOrder);
+      return;
+    }
+    qb.orderBy(`t.${field}`, sortOrder);
+  }
+
   async create(createTransaction: CreateTransactionInput): Promise<Transaction> {
     const entityInput: CreateTransactionEntityInput = {
       loanId: createTransaction.loanId,
@@ -45,6 +68,7 @@ export class TransactionsRepository implements ITransactionsRepository {
       interestPaidDelta: createTransaction.interestPaidDelta ?? 0,
       periodsAtCreation: createTransaction.periodsAtCreation ?? null,
       loanSeq: createTransaction.loanSeq ?? null,
+      paidAt: createTransaction.paidAt ?? null,
     };
     const entity = this.transactionRepo.create(entityInput);
     const created = await this.transactionRepo.save(entity);
@@ -65,7 +89,6 @@ export class TransactionsRepository implements ITransactionsRepository {
     const { loanId, createdBy } = params;
     const { pageNumber, pageSize, skip } = getPaginationValues(params);
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
-    const sortField = params.sortField === 'paidAt' ? 'createdAt' : params.sortField || 'createdAt';
 
     const qb = this.transactionRepo
       .createQueryBuilder('t')
@@ -82,6 +105,7 @@ export class TransactionsRepository implements ITransactionsRepository {
         't.dueId',
         't.loanSeq',
         't.createdAt',
+        't.paidAt',
         'customer.id',
         'customer.firstName',
         'customer.lastName',
@@ -100,8 +124,9 @@ export class TransactionsRepository implements ITransactionsRepository {
     if (loanId) qb.andWhere('t.loan_id = :loanId', { loanId });
     if (createdBy) qb.andWhere('t.created_by = :createdBy', { createdBy });
 
+    this.applyTransactionListOrdering(qb, params.sortField, sortOrder);
+
     const [items, totalCount] = await qb
-      .orderBy(`t.${sortField}`, sortOrder)
       .skip(skip)
       .take(pageSize)
       .getManyAndCount();
@@ -117,7 +142,6 @@ export class TransactionsRepository implements ITransactionsRepository {
   async listAllTransactions(params: TransactionsDownloadFilterOptions): Promise<Transaction[]> {
     const { loanId, createdBy, startDate, endDate } = params;
     const sortOrder = params.sortOrder === ESortOrder.ASC ? 'ASC' : 'DESC';
-    const sortField = params.sortField === 'paidAt' ? 'createdAt' : params.sortField || 'createdAt';
 
     const qb = this.transactionRepo
       .createQueryBuilder('t')
@@ -134,6 +158,7 @@ export class TransactionsRepository implements ITransactionsRepository {
         't.dueId',
         't.loanSeq',
         't.createdAt',
+        't.paidAt',
         'customer.id',
         'customer.firstName',
         'customer.lastName',
@@ -158,7 +183,9 @@ export class TransactionsRepository implements ITransactionsRepository {
       qb.andWhere('t.created_at <= :endDate', { endDate: endOfDay });
     }
 
-    const items = await qb.orderBy(`t.${sortField}`, sortOrder).getMany();
+    this.applyTransactionListOrdering(qb, params.sortField, sortOrder);
+
+    const items = await qb.getMany();
     return plainToInstance(Transaction, items, { excludeExtraneousValues: true });
   }
 

@@ -67,4 +67,9 @@ export class Transaction {
   @Expose()
   @Type(() => Number)
   public loanSeq?: number;
+
+  /** Display-only business date; omit on create to store NULL (same as legacy behavior). */
+  @Expose()
+  @Type(() => Date)
+  public paidAt?: Date;
 }

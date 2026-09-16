@@ -178,7 +178,11 @@ export class TransactionsController {
     const transactions = await this.transactionService.getTransactionsForDownload(filterOptions);
     const items = plainToInstance(TransactionResponseModel, transactions, {
       excludeExtraneousValues: true,
-    });
+    }).map((row) => ({
+      ...row,
+      createdAt: row.paidAt ?? row.createdAt,
+      paidAt: undefined,
+    }));
     const filename = `transactions-${Date.now()}`;
     if (query.format === ExportFormat.CSV) {
       const buffer = Buffer.from(toCSV(items as unknown as Record<string, unknown>[]), 'utf-8');

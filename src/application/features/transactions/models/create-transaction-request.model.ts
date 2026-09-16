@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AMOUNT_MAX } from '@shared-libs';
 import { Expose, Type } from 'class-transformer';
-import { IsString, IsNotEmpty, IsNumber, IsEnum, Min, Max, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsEnum, Min, Max, IsOptional, IsUUID, IsDateString } from 'class-validator';
 
 import { ETransactionType, ETransactionPaidIn } from '../enums';
 
@@ -52,4 +52,14 @@ export class CreateTransactionRequestModel {
   @IsNumber()
   @Min(0)
   expectedLoanVersion?: number;
+
+  @Expose()
+  @ApiPropertyOptional({
+    description:
+      'Optional business payment date (YYYY-MM-DD or ISO). Display/receipts only; does not affect loan balances or replay order. Omit for current behavior.',
+    example: '2024-09-10',
+  })
+  @IsOptional()
+  @IsDateString()
+  paidAt?: string;
 }

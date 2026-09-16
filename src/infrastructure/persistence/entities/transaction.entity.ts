@@ -81,6 +81,13 @@ export class TransactionEntity {
   @Column({ type: 'int', nullable: true })
   loanSeq: number;
 
+  /**
+   * Optional business payment date (receipts, lists). Never used for replay,
+   * balances, loan_seq, or due recalculation. NULL → treat as createdAt in API.
+   */
+  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
+  paidAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
