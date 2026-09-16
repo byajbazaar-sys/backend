@@ -210,6 +210,18 @@ export class TransactionsRepository implements ITransactionsRepository {
     return plainToInstance(Transaction, saved, { excludeExtraneousValues: true });
   }
 
+  async updatePaidAt(id: string, createdBy: string, paidAt: Date | null): Promise<Transaction> {
+    if (!id) return null;
+    const existing = await this.transactionRepo.findOne({
+      where: { id, createdBy },
+      relations: ['customer', 'due'],
+    });
+    if (!existing) return null;
+    existing.paidAt = paidAt;
+    const saved = await this.transactionRepo.save(existing);
+    return plainToInstance(Transaction, saved, { excludeExtraneousValues: true });
+  }
+
   async updateAmount(
     id: string,
     createdBy: string,

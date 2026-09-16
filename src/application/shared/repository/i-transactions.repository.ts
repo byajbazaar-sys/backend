@@ -20,6 +20,7 @@ export interface ITransactionsRepository {
   listAllTransactions(params: TransactionsDownloadFilterOptions): Promise<Transaction[]>;
   findByLoanIdAndTransactionType(loanId: string, transactionType: ETransactionType): Promise<Transaction[]>;
   updatePaidIn(id: string, createdBy: string, paidIn: ETransactionPaidIn): Promise<Transaction>;
+  updatePaidAt(id: string, createdBy: string, paidAt: Date | null): Promise<Transaction>;
   updateAmount(
     id: string,
     createdBy: string,

@@ -2,5 +2,6 @@ export enum ETransactionLogAction {
   CREATE = 'CREATE',
   UPDATE_AMOUNT = 'UPDATE_AMOUNT',
   UPDATE_PAID_IN = 'UPDATE_PAID_IN',
+  UPDATE_PAID_AT = 'UPDATE_PAID_AT',
   DELETE = 'DELETE',
 }

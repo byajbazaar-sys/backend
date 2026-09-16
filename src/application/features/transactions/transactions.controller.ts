@@ -101,12 +101,17 @@ export class TransactionsController {
     @Body() body: UpdateTransactionRequestModel,
     @Identity() identity: IIdentity,
   ): Promise<TransactionResponseModel> {
-    if (body.paidIn === undefined && body.amount === undefined) {
-      throw new BadRequestException('At least one of paidIn or amount is required');
+    if (body.paidIn === undefined && body.amount === undefined && body.paidAt === undefined) {
+      throw new BadRequestException('At least one of paidIn, amount, or paidAt is required');
     }
     const transaction = await this.transactionService.update(
       id,
-      { paidIn: body.paidIn, amount: body.amount, expectedLoanVersion: body.expectedLoanVersion },
+      {
+        paidIn: body.paidIn,
+        amount: body.amount,
+        paidAt: body.paidAt,
+        expectedLoanVersion: body.expectedLoanVersion,
+      },
       identity.userId,
     );
     return plainToInstance(TransactionResponseModel, transaction, {

@@ -295,6 +295,34 @@ export class TransactionService implements ITransactionService {
       current = updated;
     }
 
+    if (updates.paidAt !== undefined) {
+      const loan = await this.loansRepo.findById(current.loanId, createdBy);
+      if (!loan) {
+        throw new NotFoundException('Loan not found');
+      }
+      const resolved = this.resolveOptionalPaidAt(updates.paidAt, loan);
+      const newPaidAt: Date | null = resolved ?? null;
+      const previousPaidAt = current.paidAt ?? null;
+      const paidAtChanged =
+        (previousPaidAt?.getTime() ?? null) !== (newPaidAt?.getTime() ?? null);
+      if (paidAtChanged) {
+        const updated = await this.transactionsRepo.updatePaidAt(id, createdBy, newPaidAt);
+        if (!updated) {
+          throw new NotFoundException('Transaction not found');
+        }
+        await this.recordLog({
+          transactionId: id,
+          loanId: existing.loanId,
+          action: ETransactionLogAction.UPDATE_PAID_AT,
+          transactionType: existing.transactionType,
+          loanVersion: updates.expectedLoanVersion,
+          performedBy: createdBy,
+        });
+        this.logger.info({ transactionId: id }, 'Transaction payment date updated');
+        current = updated;
+      }
+    }
+
     await this.invalidateLoanStatsCache(createdBy);
     return current;
   }

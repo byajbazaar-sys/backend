@@ -11,6 +11,9 @@ export class UpdateTransactionData {
   amount?: number;
 
   @Expose()
+  paidAt?: string;
+
+  @Expose()
   @Type(() => Number)
   expectedLoanVersion?: number;
 }
