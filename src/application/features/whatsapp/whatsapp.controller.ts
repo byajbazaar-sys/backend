@@ -32,7 +32,9 @@ import {
   ListWhatsAppMessagesQueryModel,
   ListWhatsAppTemplatesQueryModel,
   SendWhatsAppDepositDocumentMessageRequestModel,
+  SendWhatsAppDepositMessageRequestModel,
   SendWhatsAppTransactionDocumentMessageRequestModel,
+  SendWhatsAppTransactionMessageRequestModel,
   SendWhatsAppDocumentMessageRequestModel,
   SendWhatsAppMessageRequestModel,
   SendWhatsAppTemplateMessageRequestModel,
@@ -376,6 +378,33 @@ export class WhatsAppController {
     return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
   }
 
+  @Post('messages/deposit')
+  @ApiOperation({ summary: 'Notify a customer about a deposit transaction via WhatsApp (text or approved template)' })
+  @ApiOkResponse({ type: WhatsAppMessageResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async sendDepositMessage(
+    @Body() body: SendWhatsAppDepositMessageRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<WhatsAppMessageResponseModel> {
+    const result = await this.whatsappService.sendDepositNotificationMessage(
+      identity.userId,
+      body.businessId,
+      body.to,
+      body.shopName,
+      {
+        amount: body.amount,
+        depositNumber: body.depositNumber,
+        transactionType: body.transactionType,
+        balanceAfter: body.balanceAfter,
+        receiptNumber: body.receiptNumber,
+        transactionDate: body.transactionDate,
+        customerName: body.customerName,
+        depositAccountId: body.depositAccountId,
+      },
+    );
+    return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
+  }
+
   @Post('messages/deposit-document')
   @ApiOperation({ summary: 'Send a deposit receipt PDF to a customer via WhatsApp Cloud API' })
   @ApiConsumes('multipart/form-data')
@@ -442,6 +471,32 @@ export class WhatsAppController {
     return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
   }
 
+  @Post('messages/transaction')
+  @ApiOperation({ summary: 'Notify a customer about a loan payment via WhatsApp (text or approved template)' })
+  @ApiOkResponse({ type: WhatsAppMessageResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async sendTransactionMessage(
+    @Body() body: SendWhatsAppTransactionMessageRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<WhatsAppMessageResponseModel> {
+    const result = await this.whatsappService.sendTransactionNotificationMessage(
+      identity.userId,
+      body.businessId,
+      body.to,
+      body.shopName,
+      {
+        amount: body.amount,
+        loanNumber: body.loanNumber,
+        transactionType: body.transactionType,
+        paidIn: body.paidIn,
+        paymentDate: body.paymentDate,
+        customerName: body.customerName,
+        transactionId: body.transactionId,
+      },
+    );
+    return plainToInstance(WhatsAppMessageResponseModel, result, { excludeExtraneousValues: true });
+  }
+
   @Post('messages/transaction-document')
   @ApiOperation({ summary: 'Send a loan payment receipt PDF to a customer via WhatsApp Cloud API' })
   @ApiConsumes('multipart/form-data')
@@ -461,6 +516,7 @@ export class WhatsAppController {
         loanNumber: { type: 'string', example: 'LN-1024' },
         receiptNumber: { type: 'string', example: 'TX-A1B2C3D4' },
         customerName: { type: 'string', example: 'Rahul Sharma' },
+        transactionId: { type: 'string', format: 'uuid' },
         file: { type: 'string', format: 'binary' },
       },
     },
@@ -502,6 +558,7 @@ export class WhatsAppController {
       file.mimetype,
       body.shopName,
       {
+        contextId: body.transactionId?.trim() || undefined,
         contextLabel: transactionLabelParts.length > 0 ? transactionLabelParts.join(' ') : undefined,
       },
     );

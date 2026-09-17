@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 
-export class SendWhatsAppTransactionDocumentMessageRequestModel {
+export class SendWhatsAppTransactionMessageRequestModel {
   @ApiProperty({ description: 'Business (tenant) ID — must match authenticated user' })
   @IsUUID()
   @IsNotEmpty()
@@ -12,28 +12,43 @@ export class SendWhatsAppTransactionDocumentMessageRequestModel {
   @Matches(/^\d{8,15}$/)
   to: string;
 
-  @ApiProperty({
-    description: 'Shop or business name used in the payment receipt template body when outside the 24-hour window',
-    example: 'Shree Jewellers',
-  })
+  @ApiProperty({ example: 'Shree Jewellers' })
   @IsString()
   @IsNotEmpty()
   @Matches(/\S/)
   shopName: string;
 
-  @ApiPropertyOptional({ description: 'Loan number shown in message history' })
+  @ApiProperty({ example: '12500.00', description: 'Payment amount (numeric string)' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  amount: string;
+
+  @ApiPropertyOptional({ example: 'LN-1024' })
   @IsOptional()
   @IsString()
   @MaxLength(64)
   loanNumber?: string;
 
-  @ApiPropertyOptional({ description: 'Receipt number shown in message history' })
+  @ApiPropertyOptional({ example: 'Interest payment' })
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  receiptNumber?: string;
+  transactionType?: string;
 
-  @ApiPropertyOptional({ description: 'Customer name shown in message history' })
+  @ApiPropertyOptional({ example: 'UPI' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  paidIn?: string;
+
+  @ApiPropertyOptional({ example: '17 Sep 2026' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  paymentDate?: string;
+
+  @ApiPropertyOptional({ example: 'Rahul Sharma' })
   @IsOptional()
   @IsString()
   @MaxLength(120)

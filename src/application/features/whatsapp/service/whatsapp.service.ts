@@ -20,6 +20,8 @@ import {
   WHATSAPP_DEFAULT_TEMPLATES,
   WHATSAPP_DEPOSIT_RECEIPT_PDF_TEMPLATE,
   WHATSAPP_PAYMENT_RECEIPT_PDF_TEMPLATE,
+  WHATSAPP_PAYMENT_RECEIVED_TEMPLATE,
+  WHATSAPP_DEPOSIT_RECEIVED_TEMPLATE,
 } from '../constants/whatsapp-default-template.constants';
 import { resolveUploadedPdfMimeType } from '../utils/is-uploaded-pdf.util';
 import {
@@ -325,6 +327,201 @@ export class WhatsAppService implements IWhatsAppService {
       templateName: paymentTemplate.name,
     });
     return this.buildMessageResult(result.messageId, 'template', paymentTemplate.name);
+  }
+
+  async sendTransactionNotificationMessage(
+    userId: string,
+    businessId: string,
+    to: string,
+    shopName: string,
+    details: {
+      amount: string;
+      loanNumber?: string;
+      transactionType?: string;
+      paidIn?: string;
+      paymentDate?: string;
+      customerName?: string;
+      transactionId?: string;
+    },
+  ): Promise<WhatsAppMessageResult> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
+      throw new BadRequestException(
+        'WhatsApp is not connected. Connect WhatsApp Business in Account settings before notifying customers.',
+      );
+    }
+
+    const credentials = await this.resolveCredentials(userId);
+    const recipient = normalizeWhatsAppRecipient(to);
+    await this.assertMessagingAllowed(userId, credentials);
+
+    const amountLabel = this.formatTransactionAmountLabel(details.amount);
+    const shop = shopName.trim() || 'Your shop';
+    const loanLabel = details.loanNumber?.trim() || '—';
+    const typeLabel = details.transactionType?.trim() || 'Payment';
+    const paidInLabel = details.paidIn?.trim() || '—';
+    const dateLabel = details.paymentDate?.trim() || '—';
+    const customerLabel = details.customerName?.trim();
+
+    const textLines = [
+      `Thank you for your payment at ${shop}.`,
+      '',
+      `Amount: ₹${amountLabel}`,
+      `Loan: ${loanLabel}`,
+      `Type: ${typeLabel}`,
+      `Paid via: ${paidInLabel}`,
+      `Date: ${dateLabel}`,
+    ];
+    if (customerLabel) {
+      textLines.push(`Customer: ${customerLabel}`);
+    }
+    const textBody = textLines.join('\n');
+
+    const labelParts: string[] = [];
+    if (details.transactionId) labelParts.push(`TX-${details.transactionId.slice(0, 8).toUpperCase()}`);
+    if (loanLabel !== '—') labelParts.push(loanLabel);
+    if (customerLabel) labelParts.push(`→ ${customerLabel}`);
+
+    const transactionContext: WhatsAppOutboundContext = {
+      messageType: EWhatsAppMessageType.Text,
+      contextType: EWhatsAppMessageContextType.Transaction,
+      contextId: details.transactionId,
+      contextLabel: labelParts.length > 0 ? labelParts.join(' ') : `Payment · ${shop}`,
+    };
+
+    const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
+      userId,
+      credentials.wabaId,
+      credentials.phoneNumberId,
+      recipient,
+    );
+
+    if (isWithinCustomerServiceWindow(lastInboundAt)) {
+      return this.sendWhatsAppText(userId, credentials, recipient, textBody, transactionContext);
+    }
+
+    const paymentTemplate = WHATSAPP_PAYMENT_RECEIVED_TEMPLATE;
+    await this.assertApprovedTemplateExists(userId, paymentTemplate.name, paymentTemplate.language);
+    const result = await this.metaGraphClient.sendTemplateMessage(
+      credentials,
+      recipient,
+      paymentTemplate.name,
+      paymentTemplate.language,
+      [`₹${amountLabel}`, shop, loanLabel, dateLabel, paidInLabel],
+    );
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, {
+      ...transactionContext,
+      messageType: EWhatsAppMessageType.Template,
+      templateName: paymentTemplate.name,
+    });
+    return this.buildMessageResult(result.messageId, 'template', paymentTemplate.name);
+  }
+
+  async sendDepositNotificationMessage(
+    userId: string,
+    businessId: string,
+    to: string,
+    shopName: string,
+    details: {
+      amount: string;
+      depositNumber: string;
+      transactionType?: string;
+      balanceAfter?: string;
+      receiptNumber?: string;
+      transactionDate?: string;
+      customerName?: string;
+      depositAccountId?: string;
+    },
+  ): Promise<WhatsAppMessageResult> {
+    this.assertBusinessAccess(userId, businessId);
+    const connection = await this.connectionsRepo.findByUserId(userId);
+    if (!connection || connection.connectionStatus === EWhatsAppConnectionStatus.Disconnected) {
+      throw new BadRequestException(
+        'WhatsApp is not connected. Connect WhatsApp Business in Account settings before notifying customers.',
+      );
+    }
+
+    const credentials = await this.resolveCredentials(userId);
+    const recipient = normalizeWhatsAppRecipient(to);
+    await this.assertMessagingAllowed(userId, credentials);
+
+    const amountLabel = this.formatTransactionAmountLabel(details.amount);
+    const balanceLabel = details.balanceAfter
+      ? this.formatTransactionAmountLabel(details.balanceAfter)
+      : '—';
+    const shop = shopName.trim() || 'Your shop';
+    const depositLabel = details.depositNumber?.trim() || '—';
+    const typeLabel = details.transactionType?.trim() || 'Deposit';
+    const receiptLabel = details.receiptNumber?.trim();
+    const dateLabel = details.transactionDate?.trim() || '—';
+    const customerLabel = details.customerName?.trim();
+
+    const textLines = [
+      `Thank you for your deposit at ${shop}.`,
+      '',
+      `Amount: ₹${amountLabel}`,
+      `Account: ${depositLabel}`,
+      `Type: ${typeLabel}`,
+      `Balance: ₹${balanceLabel}`,
+      `Date: ${dateLabel}`,
+    ];
+    if (receiptLabel) {
+      textLines.push(`Receipt: ${receiptLabel}`);
+    }
+    if (customerLabel) {
+      textLines.push(`Customer: ${customerLabel}`);
+    }
+    const textBody = textLines.join('\n');
+
+    const labelParts: string[] = [];
+    if (receiptLabel) labelParts.push(receiptLabel);
+    if (depositLabel !== '—') {
+      labelParts.push(labelParts.length > 0 ? `· ${depositLabel}` : depositLabel);
+    }
+    if (customerLabel) labelParts.push(`→ ${customerLabel}`);
+
+    const depositContext: WhatsAppOutboundContext = {
+      messageType: EWhatsAppMessageType.Text,
+      contextType: EWhatsAppMessageContextType.Deposit,
+      contextId: details.depositAccountId,
+      contextLabel: labelParts.length > 0 ? labelParts.join(' ') : `Deposit · ${shop}`,
+    };
+
+    const lastInboundAt = await this.conversationWindowsRepo.getLastInboundAt(
+      userId,
+      credentials.wabaId,
+      credentials.phoneNumberId,
+      recipient,
+    );
+
+    if (isWithinCustomerServiceWindow(lastInboundAt)) {
+      return this.sendWhatsAppText(userId, credentials, recipient, textBody, depositContext);
+    }
+
+    const depositTemplate = WHATSAPP_DEPOSIT_RECEIVED_TEMPLATE;
+    await this.assertApprovedTemplateExists(userId, depositTemplate.name, depositTemplate.language);
+    const result = await this.metaGraphClient.sendTemplateMessage(
+      credentials,
+      recipient,
+      depositTemplate.name,
+      depositTemplate.language,
+      [`₹${amountLabel}`, shop, depositLabel, `₹${balanceLabel}`],
+    );
+    await this.persistOutboundMessage(userId, credentials, recipient, result.messageId, {
+      ...depositContext,
+      messageType: EWhatsAppMessageType.Template,
+      templateName: depositTemplate.name,
+    });
+    return this.buildMessageResult(result.messageId, 'template', depositTemplate.name);
+  }
+
+  private formatTransactionAmountLabel(amount: string): string {
+    const parsed = parseFloat(String(amount).replace(/,/g, '').trim());
+    if (!Number.isFinite(parsed)) {
+      return String(amount).trim() || '0.00';
+    }
+    return parsed.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   /**

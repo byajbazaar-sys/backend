@@ -54,6 +54,22 @@ export interface IWhatsAppService {
     shopName: string,
     outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult>;
+  sendDepositNotificationMessage(
+    userId: string,
+    businessId: string,
+    to: string,
+    shopName: string,
+    details: {
+      amount: string;
+      depositNumber: string;
+      transactionType?: string;
+      balanceAfter?: string;
+      receiptNumber?: string;
+      transactionDate?: string;
+      customerName?: string;
+      depositAccountId?: string;
+    },
+  ): Promise<WhatsAppMessageResult>;
   sendTransactionPdfDocument(
     userId: string,
     businessId: string,
@@ -63,6 +79,21 @@ export interface IWhatsAppService {
     mimeType: string,
     shopName: string,
     outboundContext?: WhatsAppOutboundContext,
+  ): Promise<WhatsAppMessageResult>;
+  sendTransactionNotificationMessage(
+    userId: string,
+    businessId: string,
+    to: string,
+    shopName: string,
+    details: {
+      amount: string;
+      loanNumber?: string;
+      transactionType?: string;
+      paidIn?: string;
+      paymentDate?: string;
+      customerName?: string;
+      transactionId?: string;
+    },
   ): Promise<WhatsAppMessageResult>;
   listMessageHistory(
     userId: string,
