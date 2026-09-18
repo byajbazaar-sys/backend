@@ -103,7 +103,7 @@ export class OrdersRepository implements IOrdersRepository {
   async create(order: CreateOrderInput): Promise<Order> {
     const entity = this.orderRepo.create(order);
     const saved = await this.orderRepo.save(entity);
-    return this.findById(saved.id, order.createdBy);
+    return this.mapOrder(saved);
   }
 
   async update(id: string, createdBy: string, data: UpdateOrderPatch): Promise<Order> {

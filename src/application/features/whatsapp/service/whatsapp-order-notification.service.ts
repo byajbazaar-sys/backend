@@ -89,12 +89,6 @@ export class WhatsAppOrderNotificationService {
       };
     }
 
-    try {
-      await this.whatsappService.provisionWhatsAppDefaultTemplates(createdBy, createdBy);
-    } catch (err) {
-      this.logger.warn({ err, createdBy }, 'Could not auto-provision WhatsApp templates before order notify');
-    }
-
     const user = await this.usersRepo.findById(createdBy);
     const businessName = user?.businessName?.trim() || 'Your jeweller';
     const statusLabel = STATUS_LABELS[order.status] ?? order.status;
@@ -114,19 +108,20 @@ export class WhatsAppOrderNotificationService {
       ? [businessName, orderNumber, itemTitle, dueDate]
       : [businessName, orderNumber, itemTitle, statusLabel, dueDate];
 
+    const outboundContext = {
+      contextType: EWhatsAppMessageContextType.Order,
+      contextId: order.id,
+      contextLabel: `Order ${orderNumber !== '—' ? orderNumber : order.id} · ${statusLabel}`,
+    };
+
     try {
-      await this.whatsappService.sendTemplateMessage(
-        createdBy,
+      await this.sendOrderTemplateMessage(
         createdBy,
         recipient,
         template.name,
         template.language,
         templateParams.map((value) => value.trim() || '—'),
-        {
-          contextType: EWhatsAppMessageContextType.Order,
-          contextId: order.id,
-          contextLabel: `Order ${orderNumber !== '—' ? orderNumber : order.id} · ${statusLabel}`,
-        },
+        outboundContext,
       );
 
       const trimmedNote = note?.trim();
@@ -164,5 +159,49 @@ export class WhatsAppOrderNotificationService {
       return err.message;
     }
     return 'WhatsApp delivery failed';
+  }
+
+  private async sendOrderTemplateMessage(
+    createdBy: string,
+    recipient: string,
+    templateName: string,
+    templateLanguage: string,
+    parameters: string[],
+    outboundContext: {
+      contextType: EWhatsAppMessageContextType;
+      contextId?: string;
+      contextLabel?: string;
+    },
+  ): Promise<void> {
+    const send = () =>
+      this.whatsappService.sendTemplateMessage(
+        createdBy,
+        createdBy,
+        recipient,
+        templateName,
+        templateLanguage,
+        parameters,
+        outboundContext,
+        { skipMessagingReadinessCheck: true },
+      );
+
+    try {
+      await send();
+      return;
+    } catch (err) {
+      const reason = this.extractFailureReason(err);
+      if (!/was not found/i.test(reason)) {
+        throw err;
+      }
+      this.logger.warn({ createdBy, templateName }, 'Order template missing; provisioning defaults before retry');
+    }
+
+    try {
+      await this.whatsappService.provisionWhatsAppDefaultTemplates(createdBy, createdBy);
+    } catch (err) {
+      this.logger.warn({ err, createdBy }, 'Could not auto-provision WhatsApp templates before order notify');
+    }
+
+    await send();
   }
 }

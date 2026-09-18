@@ -4,6 +4,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
 
 import { CUSTOMERS_REPOSITORY, ICustomersRepository } from '../../customers/service';
+import { Customer } from '../../customers/domain';
 import { DEPOSIT_SERVICE, IDepositService } from '../../deposits/service';
 import { ETransactionPaidIn } from '../../transactions/enums/e-transaction-paid-in';
 import {
@@ -43,33 +44,38 @@ export class OrdersService implements IOrdersService {
   ) {}
 
   async create(createdBy: string, data: CreateOrderData, image?: Express.Multer.File): Promise<Order> {
-    const customer = await this.customersRepo.findById(data.customerId, createdBy);
+    const [customer, orderNumber] = await Promise.all([
+      this.customersRepo.findById(data.customerId, createdBy),
+      this.ordersRepo.getNextOrderNumber(createdBy),
+    ]);
     if (!customer) throw new NotFoundException('Customer not found');
 
-    const orderNumber = await this.ordersRepo.getNextOrderNumber(createdBy);
     const estimatedAmount = this.normalizeAmount(
       data.estimatedAmount ?? data.totalAmount ?? 0,
       true,
     );
     const finalAmount =
       data.finalAmount != null ? this.normalizeAmount(data.finalAmount, true) : undefined;
-    const order = await this.ordersRepo.create({
-      orderNumber,
-      customerId: data.customerId,
-      createdBy,
-      assignedTo: data.assignedTo,
-      orderType: data.orderType,
-      status: EOrderStatus.NEW,
-      priority: data.priority ?? EOrderPriority.NORMAL,
-      title: data.title,
-      description: data.description,
-      dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
-      estimatedAmount,
-      finalAmount,
-      totalAmount: syncLegacyTotalAmount(estimatedAmount, finalAmount),
-      paidAmount: 0,
-      notes: data.notes,
-    });
+    let order = this.withCustomerSnapshot(
+      await this.ordersRepo.create({
+        orderNumber,
+        customerId: data.customerId,
+        createdBy,
+        assignedTo: data.assignedTo,
+        orderType: data.orderType,
+        status: EOrderStatus.NEW,
+        priority: data.priority ?? EOrderPriority.NORMAL,
+        title: data.title,
+        description: data.description,
+        dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+        estimatedAmount,
+        finalAmount,
+        totalAmount: syncLegacyTotalAmount(estimatedAmount, finalAmount),
+        paidAmount: 0,
+        notes: data.notes,
+      }),
+      customer,
+    );
 
     await this.ordersRepo.addActivity({
       orderId: order.id,
@@ -80,18 +86,31 @@ export class OrdersService implements IOrdersService {
     });
 
     this.logger.info({ orderId: order.id, createdBy }, 'Order created');
+
+    let attachments: OrderAttachment[] | undefined;
+    if (image?.buffer?.length) {
+      const attachment = await this.storeOrderAttachment(order.id, createdBy, image);
+      attachments = [attachment];
+      void this.ordersRepo
+        .addActivity({
+          orderId: order.id,
+          createdBy,
+          activityType: EOrderActivityType.ATTACHMENT_ADDED,
+          message: `Attachment added: ${image.originalname || attachment.id}`,
+          metadata: { attachmentId: attachment.id, filename: image.originalname },
+        })
+        .catch((err) => {
+          this.logger.warn({ err, orderId: order.id, attachmentId: attachment.id }, 'Failed to log attachment activity');
+        });
+    }
+
     await this.invalidateOrdersCache(createdBy);
 
-    let result = order;
-    if (image?.buffer?.length) {
-      result = await this.addAttachment(order.id, createdBy, image);
-    } else {
-      result = await this.enrichOrder(order, createdBy);
-    }
+    const result = attachments ? { ...order, attachments } : order;
 
     if (data.notifyCustomer) {
       try {
-        await this.notifyCustomer(result.id, createdBy);
+        await this.orderNotificationService.notifyCustomer(createdBy, result, customer);
       } catch (err) {
         this.logger.warn({ err, orderId: order.id }, 'Order created but WhatsApp notification failed');
       }
@@ -406,28 +425,7 @@ export class OrdersService implements IOrdersService {
       throw new BadRequestException('Attachment file is required');
     }
 
-    const prepared = await this.prepareAttachment(file);
-    const attachmentId = uuidv4();
-    const storageKey = `orders/${createdBy}/${id}/${attachmentId}.${prepared.fileExtension}`;
-    await this.fileStorage.writeAsync(storageKey, prepared.buffer, prepared.mimetype);
-
-    let attachment: OrderAttachment;
-    try {
-      attachment = await this.ordersRepo.addAttachment({
-        orderId: id,
-        createdBy,
-        storageKey,
-        filename: file.originalname,
-        mimeType: prepared.mimetype,
-      });
-    } catch (err) {
-      try {
-        await this.fileStorage.removeAsync(storageKey);
-      } catch (removeErr) {
-        this.logger.warn({ err: removeErr, storageKey }, 'Failed to rollback orphan attachment upload');
-      }
-      throw err;
-    }
+    const attachment = await this.storeOrderAttachment(id, createdBy, file);
 
     try {
       await this.ordersRepo.addActivity({
@@ -555,6 +553,43 @@ export class OrdersService implements IOrdersService {
       buffer,
       mimeType: attachment.mimeType,
       filename: attachment.filename,
+    };
+  }
+
+  private async storeOrderAttachment(
+    orderId: string,
+    createdBy: string,
+    file: Express.Multer.File,
+  ): Promise<OrderAttachment> {
+    const prepared = await this.prepareAttachment(file);
+    const attachmentId = uuidv4();
+    const storageKey = `orders/${createdBy}/${orderId}/${attachmentId}.${prepared.fileExtension}`;
+    await this.fileStorage.writeAsync(storageKey, prepared.buffer, prepared.mimetype);
+
+    try {
+      return await this.ordersRepo.addAttachment({
+        orderId,
+        createdBy,
+        storageKey,
+        filename: file.originalname,
+        mimeType: prepared.mimetype,
+      });
+    } catch (err) {
+      try {
+        await this.fileStorage.removeAsync(storageKey);
+      } catch (removeErr) {
+        this.logger.warn({ err: removeErr, storageKey }, 'Failed to rollback orphan attachment upload');
+      }
+      throw err;
+    }
+  }
+
+  private withCustomerSnapshot(order: Order, customer: Customer): Order {
+    return {
+      ...order,
+      customerFirstName: customer.firstName,
+      customerLastName: customer.lastName,
+      customerPhone: customer.phone?.trim() || customer.alternativePhone?.trim() || undefined,
     };
   }
 

@@ -28,6 +28,7 @@ import {
   ConnectWhatsAppBusinessData,
   SaveWhatsAppBusinessConnectionData,
   SaveWhatsAppOutboundMessageData,
+  SendWhatsAppTemplateMessageOptions,
   SendWhatsAppTextMessageOptions,
   UpdateWhatsAppSettingsData,
   WhatsAppBusinessConnection,
@@ -71,6 +72,7 @@ const WHATSAPP_MOBILE_RETURN_SESSION_PREFIX = 'whatsapp:mobile-return:';
 const WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS = 600;
 const WHATSAPP_ONBOARDING_SESSION_PREFIX = 'whatsapp:onboarding:';
 const WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS = 1200;
+const WHATSAPP_MESSAGE_TEMPLATES_CACHE_TTL_MS = 60_000;
 
 interface StoredWhatsAppMobileReturnSession {
   userId: string;
@@ -91,6 +93,10 @@ interface StoredWhatsAppOnboardingSession {
 export class WhatsAppService implements IWhatsAppService {
   private readonly fallbackMobileReturnSessions = new Map<string, StoredWhatsAppMobileReturnSession>();
   private readonly fallbackOnboardingSessions = new Map<string, StoredWhatsAppOnboardingSession>();
+  private readonly messageTemplatesCache = new Map<
+    string,
+    { expiresAt: number; templates: MetaTemplateSummary[] }
+  >();
 
   constructor(
     @Inject(META_GRAPH_CLIENT) private readonly metaGraphClient: IMetaGraphClient,
@@ -125,6 +131,7 @@ export class WhatsAppService implements IWhatsAppService {
     languageCode: string,
     parameters: string[],
     outboundContext?: WhatsAppOutboundContext,
+    options?: SendWhatsAppTemplateMessageOptions,
   ): Promise<WhatsAppMessageResult> {
     this.assertBusinessAccess(userId, businessId);
     const credentials = await this.resolveCredentials(userId);
@@ -137,6 +144,7 @@ export class WhatsAppService implements IWhatsAppService {
       languageCode,
       parameters,
       outboundContext,
+      options,
     );
   }
 
@@ -622,9 +630,12 @@ export class WhatsAppService implements IWhatsAppService {
     languageCode: string,
     parameters: string[],
     outboundContext?: WhatsAppOutboundContext,
+    options?: SendWhatsAppTemplateMessageOptions,
   ): Promise<WhatsAppMessageResult> {
-    await this.assertMessagingAllowed(userId, credentials);
-    await this.assertApprovedTemplateExists(userId, templateName, languageCode);
+    if (!options?.skipMessagingReadinessCheck) {
+      await this.assertMessagingAllowed(userId, credentials);
+    }
+    await this.assertApprovedTemplateExists(userId, templateName, languageCode, credentials);
     const result = await this.metaGraphClient.sendTemplateMessage(
       credentials,
       recipient,
@@ -1153,9 +1164,10 @@ export class WhatsAppService implements IWhatsAppService {
     userId: string,
     templateName: string,
     templateLanguage: string,
+    credentials?: MetaGraphCredentials,
   ): Promise<void> {
-    const credentials = await this.resolveCredentials(userId);
-    const templates = await this.metaGraphClient.listMessageTemplates(credentials);
+    const resolvedCredentials = credentials ?? (await this.resolveCredentials(userId));
+    const templates = await this.listMessageTemplatesCached(userId, resolvedCredentials);
     const match = templates.find(
       (template) => template.name === templateName && template.language === templateLanguage,
     );
@@ -1171,6 +1183,23 @@ export class WhatsAppService implements IWhatsAppService {
         `Template "${templateName}" (${templateLanguage}) is ${match.status}. Only approved templates can be used for messaging.`,
       );
     }
+  }
+
+  private async listMessageTemplatesCached(
+    userId: string,
+    credentials: MetaGraphCredentials,
+  ): Promise<MetaTemplateSummary[]> {
+    const now = Date.now();
+    const cached = this.messageTemplatesCache.get(userId);
+    if (cached && cached.expiresAt > now) {
+      return cached.templates;
+    }
+    const templates = await this.metaGraphClient.listMessageTemplates(credentials);
+    this.messageTemplatesCache.set(userId, {
+      templates,
+      expiresAt: now + WHATSAPP_MESSAGE_TEMPLATES_CACHE_TTL_MS,
+    });
+    return templates;
   }
 
   private async assertMessagingAllowed(userId: string, credentials: MetaGraphCredentials): Promise<void> {

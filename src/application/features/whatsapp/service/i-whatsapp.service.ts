@@ -2,6 +2,7 @@ import { Paged } from '@shared-libs';
 
 import {
   ConnectWhatsAppBusinessData,
+  SendWhatsAppTemplateMessageOptions,
   SendWhatsAppTextMessageOptions,
   UpdateWhatsAppSettingsData,
   WhatsAppBusinessConnection,
@@ -33,6 +34,7 @@ export interface IWhatsAppService {
     languageCode: string,
     parameters: string[],
     outboundContext?: WhatsAppOutboundContext,
+    options?: SendWhatsAppTemplateMessageOptions,
   ): Promise<WhatsAppMessageResult>;
   sendBillPdfDocument(
     userId: string,
