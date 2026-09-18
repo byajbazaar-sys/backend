@@ -1,6 +1,9 @@
 import { WHATSAPP_CUSTOMER_SERVICE_WINDOW_MS } from '../constants/whatsapp-messaging.constants';
 
-export function normalizeWhatsAppRecipient(phone: string): string {
+export function normalizeWhatsAppRecipient(phone: string | null | undefined): string {
+  if (!phone?.trim()) {
+    return '';
+  }
   const digits = phone.replace(/\D/g, '');
   if (digits.length === 10) {
     return `91${digits}`;

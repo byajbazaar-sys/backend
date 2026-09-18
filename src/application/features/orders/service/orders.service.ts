@@ -506,10 +506,56 @@ export class OrdersService implements IOrdersService {
     return { ...order, attachments: enrichedAttachments };
   }
 
+  private alternateAttachmentStorageKey(key: string): string | null {
+    if (key.endsWith('.jpeg')) return `${key.slice(0, -5)}.jpg`;
+    if (key.endsWith('.jpg')) return `${key.slice(0, -4)}.jpeg`;
+    return null;
+  }
+
+  private async resolveAttachmentUrl(storageKey: string): Promise<string | null> {
+    let url = await this.fileStorage.getUrlAsync(storageKey);
+    if (url) return url;
+    const alt = this.alternateAttachmentStorageKey(storageKey);
+    if (alt) {
+      url = await this.fileStorage.getUrlAsync(alt);
+    }
+    return url;
+  }
+
   private async enrichAttachment(attachment: OrderAttachment): Promise<OrderAttachment> {
     if (!attachment.storageKey) return attachment;
-    const url = await this.fileStorage.getUrlAsync(attachment.storageKey);
+    const url = await this.resolveAttachmentUrl(attachment.storageKey);
     return { ...attachment, url: url ?? undefined };
+  }
+
+  async readAttachmentContent(
+    orderId: string,
+    attachmentId: string,
+    createdBy: string,
+  ): Promise<{ buffer: Buffer; mimeType?: string; filename?: string }> {
+    await this.requireOrder(orderId, createdBy);
+    const attachments = await this.ordersRepo.getAttachments(orderId, createdBy);
+    const attachment = attachments.find((item) => item.id === attachmentId);
+    if (!attachment?.storageKey) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    let buffer = await this.fileStorage.readAsync(attachment.storageKey);
+    if (!buffer?.length) {
+      const alt = this.alternateAttachmentStorageKey(attachment.storageKey);
+      if (alt) {
+        buffer = await this.fileStorage.readAsync(alt);
+      }
+    }
+    if (!buffer?.length) {
+      throw new NotFoundException('Attachment file not found');
+    }
+
+    return {
+      buffer,
+      mimeType: attachment.mimeType,
+      filename: attachment.filename,
+    };
   }
 
   private async prepareAttachment(file: Express.Multer.File): Promise<{

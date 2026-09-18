@@ -24,4 +24,9 @@ export interface IOrdersService {
   addAttachment(id: string, createdBy: string, file?: Express.Multer.File): Promise<Order>;
   removeAttachment(id: string, attachmentId: string, createdBy: string): Promise<Order>;
   notifyCustomer(id: string, createdBy: string, note?: string): Promise<NotifyOrderResponseModel>;
+  readAttachmentContent(
+    orderId: string,
+    attachmentId: string,
+    createdBy: string,
+  ): Promise<{ buffer: Buffer; mimeType?: string; filename?: string }>;
 }

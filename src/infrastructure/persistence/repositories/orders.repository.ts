@@ -236,7 +236,7 @@ export class OrdersRepository implements IOrdersRepository {
         paidAmount: Number(entity.paidAmount),
         customerFirstName: customer?.firstName,
         customerLastName: customer?.lastName,
-        customerPhone: customer?.phone,
+        customerPhone: customer?.phone?.trim() || customer?.alternativePhone?.trim() || undefined,
         assignedToFirstName: assignee?.firstName,
         assignedToLastName: assignee?.lastName,
         isOverdue: isOrderOverdue(entity.status, entity.dueDate),

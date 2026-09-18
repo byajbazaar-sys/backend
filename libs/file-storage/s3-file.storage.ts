@@ -214,9 +214,11 @@ export abstract class S3FileStorage implements IFileStorage, IFileUrlResolver {
       const cdnBase = this.storageOptions.imageCdnUrl?.trim();
 
       if (cdnBase && isCdnEligibleKey(key)) {
-        // Callers rely on a null result to retry with an alternate extension.
         const version = await this.getObjectVersionAsync(key);
-        return version ? buildImageCdnUrl(key, cdnBase, version) : null;
+        if (version) {
+          return buildImageCdnUrl(key, cdnBase, version);
+        }
+        // Object missing on CDN path or HEAD failed — fall back to signed/public URL below.
       }
 
       if (path.startsWith('http://') || path.startsWith('https://')) {

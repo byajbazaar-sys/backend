@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Inject,
@@ -10,6 +11,7 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -188,6 +190,31 @@ export class OrdersController {
   ): Promise<OrderResponseModel> {
     const order = await this.ordersService.addAttachment(params.id, identity.userId, file);
     return plainToInstance(OrderResponseModel, order, { excludeExtraneousValues: true });
+  }
+
+  @Get(':id/attachments/:attachmentId/content')
+  @ApiOperation({ summary: 'Download or preview an order attachment (inline)' })
+  @ApiOkResponse({ description: 'Attachment bytes' })
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'private, max-age=3600')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async getAttachmentContent(
+    @Param() params: GetOrderParamsModel,
+    @Param('attachmentId') attachmentId: string,
+    @Identity() identity: IIdentity,
+  ): Promise<StreamableFile> {
+    const { buffer, mimeType, filename } = await this.ordersService.readAttachmentContent(
+      params.id,
+      attachmentId,
+      identity.userId,
+    );
+    const type = mimeType?.trim() || 'application/octet-stream';
+    const safeName = (filename?.trim() || 'attachment').replace(/[^\w.-]+/g, '_');
+    return new StreamableFile(buffer, {
+      type,
+      disposition: `inline; filename="${safeName}"`,
+      length: buffer.length,
+    });
   }
 
   @Delete(':id/attachments/:attachmentId')

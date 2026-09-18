@@ -1,5 +1,5 @@
 /** Object-key prefixes safe to expose via the public image CDN Worker. */
-export const IMAGE_CDN_ALLOWED_PREFIXES = ['inventory/', 'users/shop-logos/'] as const;
+export const IMAGE_CDN_ALLOWED_PREFIXES = ['inventory/', 'users/shop-logos/', 'orders/'] as const;
 
 const LEGACY_B2_HOST_SUFFIXES = ['backblazeb2.com', 'amazonaws.com'];
 

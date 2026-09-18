@@ -624,6 +624,7 @@ export class WhatsAppService implements IWhatsAppService {
     outboundContext?: WhatsAppOutboundContext,
   ): Promise<WhatsAppMessageResult> {
     await this.assertMessagingAllowed(userId, credentials);
+    await this.assertApprovedTemplateExists(userId, templateName, languageCode);
     const result = await this.metaGraphClient.sendTemplateMessage(
       credentials,
       recipient,
