@@ -82,7 +82,23 @@ export class OrdersRepository implements IOrdersRepository {
     qb.orderBy(sortField, sortOrder);
 
     const [rows, totalCount] = await qb.skip(skip).take(pageSize).getManyAndCount();
-    const items = rows.map((row) => this.mapOrder(row));
+
+    const orderIds = rows.map((row) => row.id);
+    const attachmentRows = orderIds.length
+      ? await this.attachmentRepo
+          .createQueryBuilder('a')
+          .where('a.orderId IN (:...orderIds)', { orderIds })
+          .orderBy('a.createdAt', 'ASC')
+          .getMany()
+      : [];
+    const attachmentsByOrder = new Map<string, OrderAttachment[]>();
+    for (const row of attachmentRows) {
+      const list = attachmentsByOrder.get(row.orderId) ?? [];
+      list.push(this.mapAttachment(row));
+      attachmentsByOrder.set(row.orderId, list);
+    }
+
+    const items = rows.map((row) => this.mapOrder(row, attachmentsByOrder.get(row.id)));
     return toPaged(Order, { items, page: pageNumber, perPage: pageSize, totalCount });
   }
 
@@ -219,7 +235,7 @@ export class OrdersRepository implements IOrdersRepository {
     );
   }
 
-  private mapOrder(entity: OrderEntity): Order {
+  private mapOrder(entity: OrderEntity, attachments?: OrderAttachment[]): Order {
     const customer = (
       entity as OrderEntity & { customer?: { firstName?: string; lastName?: string; phone?: string } }
     ).customer;
@@ -240,6 +256,7 @@ export class OrdersRepository implements IOrdersRepository {
         assignedToFirstName: assignee?.firstName,
         assignedToLastName: assignee?.lastName,
         isOverdue: isOrderOverdue(entity.status, entity.dueDate),
+        attachments,
       },
       { excludeExtraneousValues: true },
     );
