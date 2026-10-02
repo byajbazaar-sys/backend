@@ -19,13 +19,19 @@ import {
   IUsersFileStorage,
   ITryOnAiService,
   ITryOnOrchestrator,
+  IWebSocketMessageService,
   TRY_ON_AI_SERVICE,
   TRY_ON_ORCHESTRATOR,
+  WEBSOCKET_MESSAGE_SERVICE,
   USERS_FILE_STORAGE,
 } from '../../shared';
 import { ITryOnService } from './service/i-try-on.service';
 import { TryOnLambdaPayload } from './service/try-on-lambda-payload';
 import { UploadTryOnAssetInput } from './service/upload-try-on-asset-input';
+import {
+  IWebSocketConnectionsRepository,
+  WEBSOCKET_CONNECTIONS_REPOSITORY,
+} from '../pos/service/i-websocket-connections.repository';
 
 export const TRY_ON_SERVICE = 'TRY_ON_SERVICE';
 
@@ -48,6 +54,10 @@ export class TryOnService implements ITryOnService {
     @Inject(TRY_ON_ORCHESTRATOR) private readonly tryOnOrchestrator: ITryOnOrchestrator,
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @Inject(TRY_ON_ASSETS_REPOSITORY) private readonly assetsRepo: ITryOnAssetsRepository,
+    @Inject(WEBSOCKET_CONNECTIONS_REPOSITORY)
+    private readonly connectionsRepo: IWebSocketConnectionsRepository,
+    @Inject(WEBSOCKET_MESSAGE_SERVICE)
+    private readonly wsMessage: IWebSocketMessageService,
     @InjectPinoLogger(TryOnService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -91,6 +101,39 @@ export class TryOnService implements ITryOnService {
     }
   }
 
+  private async notifyJobUpdated(record: TryOnJobRecord): Promise<void> {
+    if (!process.env.WEBSOCKET_API_ENDPOINT) return;
+
+    try {
+      const connections = await this.connectionsRepo.findActiveByUserId(record.userId);
+      await Promise.all(
+        connections.map(async (connection) => {
+          try {
+            const delivered = await this.wsMessage.sendToConnection(connection.connectionId, {
+              type: 'tryOnJobUpdated',
+              jobId: record.jobId,
+              status: record.status,
+              updatedAt: record.updatedAt,
+            });
+            if (!delivered) {
+              await this.connectionsRepo.markDisconnected(connection.connectionId);
+            }
+          } catch (err) {
+            this.logger.warn(
+              { err, userId: record.userId, jobId: record.jobId, connectionId: connection.connectionId },
+              'Failed to push try-on job update',
+            );
+          }
+        }),
+      );
+    } catch (err) {
+      this.logger.warn(
+        { err, userId: record.userId, jobId: record.jobId },
+        'Failed to load try-on WebSocket connections',
+      );
+    }
+  }
+
   private async toAssetResponse(record: TryOnAsset): Promise<TryOnAssetResponseModel> {
     const imageUrl = (await this.fileStorage.getUrlAsync(record.imageKey)) ?? record.imageKey;
     return {
@@ -115,7 +158,7 @@ export class TryOnService implements ITryOnService {
     }
 
     const heightInInches = input.heightInInches;
-    if (heightInInches != null) {
+    if (heightInInches !== null && heightInInches !== undefined) {
       if (Number.isNaN(heightInInches) || heightInInches < 0.1 || heightInInches > 24) {
         throw new BadRequestException('heightInInches must be between 0.1 and 24');
       }
@@ -366,6 +409,7 @@ export class TryOnService implements ITryOnService {
         updatedAt: new Date().toISOString(),
       };
       await this.writeJob(completed);
+      await this.notifyJobUpdated(completed);
       this.logger.info(
         {
           jobId: payload.jobId,
@@ -388,6 +432,7 @@ export class TryOnService implements ITryOnService {
         updatedAt: new Date().toISOString(),
       };
       await this.writeJob(failed);
+      await this.notifyJobUpdated(failed);
       this.logger.error(
         {
           err,
