@@ -50,7 +50,7 @@ export const CLOUDFLARE_TRYON_MAX_IMAGE_PX = 512;
 export const CLOUDFLARE_TRYON_MIME = 'image/jpeg';
 
 /** Default Cloudflare Workers AI request timeout (ms). */
-export const CLOUDFLARE_TRYON_TIMEOUT_MS = 180_000;
+export const CLOUDFLARE_TRYON_TIMEOUT_MS = 120_000;
 
 /** Retries per API key before rotating to the next key. */
 export const CLOUDFLARE_TRYON_MAX_RETRIES = 2;
