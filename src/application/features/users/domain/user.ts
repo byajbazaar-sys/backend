@@ -27,6 +27,13 @@ export class User {
   public isEmailVerified?: boolean;
 
   @Expose()
+  public isPhoneVerified?: boolean;
+
+  @Expose()
+  @Type(() => Date)
+  public phoneVerifiedAt?: Date;
+
+  @Expose()
   public emailVerifiedAt?: Date;
 
   @Expose()
@@ -40,6 +47,9 @@ export class User {
 
   @Expose()
   public emailVerificationToken?: string;
+
+  @Expose()
+  public phoneVerificationToken?: string;
 
   @Expose()
   public emailVerificationExpires?: Date;

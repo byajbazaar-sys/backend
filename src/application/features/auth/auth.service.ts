@@ -24,8 +24,18 @@ import { randomBytes } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
 
+import {
+  RegistrationEmailSendResult,
+  RegistrationEmailVerificationResult,
+  RegistrationPhoneOtpSendResult,
+  RegistrationPhoneOtpVerifyResult,
+} from './domain/registration-verification';
 import { IAuthService } from './interfaces';
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
+import {
+  IRegistrationVerificationService,
+  REGISTRATION_VERIFICATION_SERVICE,
+} from './services/i-registration-verification.service';
 import {
   USERS_FILE_STORAGE,
   IUsersFileStorage,
@@ -80,6 +90,8 @@ export class AuthService implements IAuthService {
     @Optional() @Inject(PAYMENTS_SERVICE) private readonly paymentsService: IPaymentsService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @Inject(APP_INTEGRITY_SERVICE) private readonly appIntegrityService: IAppIntegrityService,
+    @Inject(REGISTRATION_VERIFICATION_SERVICE)
+    private readonly registrationVerificationService: IRegistrationVerificationService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -195,6 +207,10 @@ export class AuthService implements IAuthService {
   async signup(body: User): Promise<User> {
     const user = plainToInstance(User, body);
     const email = this.requireEmail(user.email);
+    await this.registrationVerificationService.assertEmailVerification(email, user.emailVerificationToken);
+    await this.registrationVerificationService.assertPhoneVerification(user.phoneNumber, user.phoneVerificationToken);
+    delete user.emailVerificationToken;
+    delete user.phoneVerificationToken;
     const existingUser = await this.usersRepo.findByEmail(email);
     if (existingUser) {
       // User exists - check if it's a Google user
@@ -211,6 +227,10 @@ export class AuthService implements IAuthService {
       const userId = uuidv4();
       user.id = userId;
       user.email = email;
+      user.isEmailVerified = true;
+      user.emailVerifiedAt = new Date();
+      user.isPhoneVerified = true;
+      user.phoneVerifiedAt = new Date();
       this.logger.debug({ userId, email: user.email }, 'Creating new user');
       if (user.profilePhoto && user.profilePhotoContentType) {
         const normalized = await normalizeImageBufferForStorageOrThrow(
@@ -226,9 +246,6 @@ export class AuthService implements IAuthService {
         );
       }
 
-      const emailVerificationToken = randomBytes(32).toString('hex');
-      const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
       let catalogSlug: string = null;
       if (user.businessName?.trim()) {
         catalogSlug = await resolveCatalogSlugForBusinessName(this.usersRepo, user.businessName);
@@ -240,8 +257,6 @@ export class AuthService implements IAuthService {
           ...user,
           catalogSlug,
           catalogEnabled: catalogSlug ? true : undefined,
-          emailVerificationToken,
-          emailVerificationExpires,
           isFirstLogin: true,
         });
       } catch (err) {
@@ -252,20 +267,6 @@ export class AuthService implements IAuthService {
         }
         throw err;
       }
-
-      const verificationUrl = this.webAppOptions.buildVerifyEmailUrl(emailVerificationToken);
-      const html = this.emailTemplateService.renderEmailVerification({
-        userName: user.firstName
-          ? `${user.firstName} ${user.lastName ?? ''}`.trim() || user.email
-          : (user.email ?? 'User'),
-        verificationUrl,
-      });
-      await this.emailService.sendEmail({
-        to: email,
-        subject: 'Verify your email address',
-        body: html,
-        isHtml: true,
-      });
 
       return {
         ...createdUser,
@@ -370,6 +371,22 @@ export class AuthService implements IAuthService {
     } catch (err) {
       throw err;
     }
+  }
+
+  async sendRegistrationEmailVerification(email: string): Promise<RegistrationEmailSendResult> {
+    return this.registrationVerificationService.sendRegistrationEmailVerification(email);
+  }
+
+  async verifyRegistrationEmail(token: string): Promise<RegistrationEmailVerificationResult> {
+    return this.registrationVerificationService.verifyRegistrationEmail(token);
+  }
+
+  async sendRegistrationPhoneOtp(phoneNumber: string): Promise<RegistrationPhoneOtpSendResult> {
+    return this.registrationVerificationService.sendRegistrationPhoneOtp(phoneNumber);
+  }
+
+  async verifyRegistrationPhoneOtp(challengeToken: string, otpCode: string): Promise<RegistrationPhoneOtpVerifyResult> {
+    return this.registrationVerificationService.verifyRegistrationPhoneOtp(challengeToken, otpCode);
   }
 
   async verifyEmail(token: string): Promise<LoginResponseModel> {
@@ -486,14 +503,21 @@ export class AuthService implements IAuthService {
 
       // Create new user if not found
       if (!user) {
+        await this.registrationVerificationService.assertPhoneVerification(
+          request.phoneNumber,
+          request.phoneVerificationToken,
+        );
         const userId = uuidv4();
         user = await this.usersRepo.create({
           id: userId,
           email: googleUser.email.toLowerCase().trim(),
           firstName: googleUser.given_name || '',
           lastName: googleUser.family_name || '',
+          phoneNumber: request.phoneNumber,
           isEmailVerified: true,
           emailVerifiedAt: now,
+          isPhoneVerified: true,
+          phoneVerifiedAt: now,
           userType: EUserType.User,
           googleId: googleUser.sub,
           isGoogleUser: true,

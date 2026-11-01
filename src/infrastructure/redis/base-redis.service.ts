@@ -101,6 +101,37 @@ export abstract class BaseRedisService implements OnApplicationBootstrap, IRedis
     }
   }
 
+  public async consumeRateLimitAsync(
+    key: string,
+    limit: number,
+    windowSeconds: number,
+  ): Promise<{ allowed: boolean; retryAfterSeconds: number; count: number }> {
+    if (!this.enabled || !this.connected || !this.ready) {
+      throw new Error('Redis is required for authentication rate limiting');
+    }
+
+    try {
+      const result = await this.redisClient.eval(
+        'local count = redis.call("INCR", KEYS[1]); if count == 1 then redis.call("EXPIRE", KEYS[1], ARGV[1]); end; local ttl = redis.call("TTL", KEYS[1]); return {count, ttl};',
+        { keys: [key], arguments: [String(windowSeconds)] },
+      );
+      if (!Array.isArray(result) || result.length !== 2) {
+        throw new Error('Redis returned an invalid rate-limit result');
+      }
+
+      const count = Number(result[0]);
+      const retryAfterSeconds = Math.max(1, Number(result[1]));
+      if (!Number.isSafeInteger(count) || !Number.isFinite(retryAfterSeconds)) {
+        throw new Error('Redis returned an invalid rate-limit result');
+      }
+
+      return { allowed: count <= limit, retryAfterSeconds, count };
+    } catch (error) {
+      this.logger.error({ key, error }, 'Redis rate-limit operation failed');
+      throw new Error('Authentication rate limiting is temporarily unavailable');
+    }
+  }
+
   public async deleteAsync(key: string): Promise<boolean> {
     if (!this.enabled) {
       return true;

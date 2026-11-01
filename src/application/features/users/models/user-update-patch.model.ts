@@ -26,6 +26,13 @@ export class UserUpdatePatch {
   emailVerifiedAt?: Date;
 
   @Expose()
+  isPhoneVerified?: boolean;
+
+  @Expose()
+  @Type(() => Date)
+  phoneVerifiedAt?: Date;
+
+  @Expose()
   resetPasswordToken?: string;
 
   @Expose()

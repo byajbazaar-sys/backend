@@ -11,6 +11,8 @@ export interface CreateUserInput {
   userType?: EUserType;
   isEmailVerified?: boolean;
   emailVerifiedAt?: Date;
+  isPhoneVerified?: boolean;
+  phoneVerifiedAt?: Date;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
   isFirstLogin?: boolean;

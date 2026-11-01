@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { PHONE_E164_REGEX } from '@shared-libs';
+import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 export class GoogleSsoRequestModel {
   @ApiPropertyOptional({
@@ -51,4 +52,21 @@ export class GoogleSsoRequestModel {
   @MaxLength(16384)
   @IsOptional()
   integrityAssertion?: string;
+
+  @ApiPropertyOptional({
+    example: '+919876543210',
+    description: 'Required only when this Google identity creates a new account',
+  })
+  @IsString()
+  @Matches(PHONE_E164_REGEX)
+  @IsOptional()
+  phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'Verified phone proof; required only when this Google identity creates a new account',
+  })
+  @IsString()
+  @MaxLength(4096)
+  @IsOptional()
+  phoneVerificationToken?: string;
 }

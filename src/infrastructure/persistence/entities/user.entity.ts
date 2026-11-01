@@ -42,6 +42,12 @@ export class UserEntity {
   @Column({ type: 'timestamptz', nullable: true })
   emailVerifiedAt: Date;
 
+  @Column({ type: 'boolean', default: false, name: 'is_phone_verified' })
+  isPhoneVerified: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'phone_verified_at' })
+  phoneVerifiedAt: Date;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   resetPasswordToken: string;
 

@@ -25,6 +25,7 @@ import {
   CLOUDFLARE_TRYON_MODEL,
   CLOUDFLARE_TRYON_TIMEOUT_MS,
   CLOUDFLARE_TRYON_MAX_RETRIES,
+  StartMessagingOptions,
 } from '../infrastructure';
 
 function resolveTryOnProvider(): TryOnAiProvider {
@@ -141,6 +142,12 @@ export const configFactory = (): IMsConfig => ({
     process.env.META_APP_ID ?? '',
     process.env.META_APP_SECRET ?? '',
     process.env.META_WEBHOOK_VERIFY_TOKEN ?? '',
+  ),
+  startMessaging: new StartMessagingOptions(
+    process.env.STARTMESSAGING_API_KEY?.trim() ?? '',
+    process.env.STARTMESSAGING_TEMPLATE_ID?.trim() ?? '',
+    process.env.STARTMESSAGING_APP_NAME?.trim() || 'ByajBazaar',
+    Number(process.env.STARTMESSAGING_TIMEOUT_MS) || 10_000,
   ),
   faceCompare: new FaceCompareOptions(
     process.env.FACE_COMPARE_API_URL?.trim() ||

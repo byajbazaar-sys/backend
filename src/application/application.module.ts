@@ -17,6 +17,8 @@ import {
   Services,
   AUTH_SERVICE,
   AuthService,
+  RegistrationVerificationService,
+  REGISTRATION_VERIFICATION_SERVICE,
   CUSTOMER_SERVICE,
   CustomerService,
   FACE_SEARCH_SERVICE,
@@ -121,6 +123,10 @@ import {
     {
       provide: AUTH_SERVICE,
       useClass: AuthService,
+    },
+    {
+      provide: REGISTRATION_VERIFICATION_SERVICE,
+      useClass: RegistrationVerificationService,
     },
     {
       provide: CUSTOMER_SERVICE,

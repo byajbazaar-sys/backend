@@ -2,6 +2,12 @@ import { IIdentity } from '@shared-libs';
 
 import { User } from '../../users';
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from '../models';
+import {
+  RegistrationEmailSendResult,
+  RegistrationEmailVerificationResult,
+  RegistrationPhoneOtpSendResult,
+  RegistrationPhoneOtpVerifyResult,
+} from '../domain/registration-verification';
 
 export const AUTH_SERVICE = 'IAuthService';
 
@@ -13,5 +19,9 @@ export interface IAuthService {
   verifyForgotPasswordToken(token: string, newPassword: string): Promise<User>;
   verifyEmail(token: string): Promise<LoginResponseModel>;
   resendVerificationEmail(email: string): Promise<void>;
+  sendRegistrationEmailVerification(email: string): Promise<RegistrationEmailSendResult>;
+  verifyRegistrationEmail(token: string): Promise<RegistrationEmailVerificationResult>;
+  sendRegistrationPhoneOtp(phoneNumber: string): Promise<RegistrationPhoneOtpSendResult>;
+  verifyRegistrationPhoneOtp(challengeToken: string, otpCode: string): Promise<RegistrationPhoneOtpVerifyResult>;
   googleSso(request: GoogleSsoRequestModel): Promise<GoogleSsoResponseModel>;
 }

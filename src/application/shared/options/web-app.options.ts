@@ -13,6 +13,10 @@ export class WebAppOptions {
     return `${this.domain}/verify-email?token=${token}`;
   }
 
+  buildRegistrationEmailVerificationUrl(token: string): string {
+    return `${this.domain}/verify-email?registrationToken=${encodeURIComponent(token)}`;
+  }
+
   buildResetPasswordUrl(token: string): string {
     return `${this.domain}/reset-password?token=${token}`;
   }

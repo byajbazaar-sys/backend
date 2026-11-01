@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiConsumes, ApiHeader } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { readRequestHeader } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { Request } from 'express';
@@ -31,6 +32,14 @@ import {
   GoogleSsoRequestModel,
   GoogleSsoResponseModel,
   AppIntegrityChallengeResponseModel,
+  RegistrationEmailSendRequestModel,
+  RegistrationEmailVerifyRequestModel,
+  RegistrationPhoneOtpSendRequestModel,
+  RegistrationPhoneOtpVerifyRequestModel,
+  RegistrationEmailSendResponseModel,
+  RegistrationEmailVerifyResponseModel,
+  RegistrationPhoneOtpSendResponseModel,
+  RegistrationPhoneOtpVerifyResponseModel,
 } from './models';
 import { APP_INTEGRITY_SERVICE, IAppIntegrityService } from '../../shared';
 import { API_AUTH_SERVICE, IApiAuthService } from '../api-access';
@@ -118,6 +127,50 @@ export class AuthController {
     return plainToInstance(LoginResponseModel, response, {
       excludeExtraneousValues: true,
     });
+  }
+
+  @Post('registration/email/send')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Send a pre-registration email verification link' })
+  @ApiOkResponse({ type: RegistrationEmailSendResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async sendRegistrationEmailVerification(
+    @Body() body: RegistrationEmailSendRequestModel,
+  ): Promise<RegistrationEmailSendResponseModel> {
+    return this.authService.sendRegistrationEmailVerification(body.email);
+  }
+
+  @Post('registration/email/verify')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Verify the email link for pre-registration' })
+  @ApiOkResponse({ type: RegistrationEmailVerifyResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async verifyRegistrationEmail(
+    @Body() body: RegistrationEmailVerifyRequestModel,
+  ): Promise<RegistrationEmailVerifyResponseModel> {
+    return this.authService.verifyRegistrationEmail(body.token);
+  }
+
+  @Post('registration/phone/send-otp')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Send a registration OTP through StartMessaging' })
+  @ApiOkResponse({ type: RegistrationPhoneOtpSendResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async sendRegistrationPhoneOtp(
+    @Body() body: RegistrationPhoneOtpSendRequestModel,
+  ): Promise<RegistrationPhoneOtpSendResponseModel> {
+    return this.authService.sendRegistrationPhoneOtp(body.phoneNumber);
+  }
+
+  @Post('registration/phone/verify-otp')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Verify a registration OTP through StartMessaging' })
+  @ApiOkResponse({ type: RegistrationPhoneOtpVerifyResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async verifyRegistrationPhoneOtp(
+    @Body() body: RegistrationPhoneOtpVerifyRequestModel,
+  ): Promise<RegistrationPhoneOtpVerifyResponseModel> {
+    return this.authService.verifyRegistrationPhoneOtp(body.challengeToken, body.otpCode);
   }
 
   @Post('reset-password')

@@ -18,6 +18,7 @@ import {
   ResendOptions,
   RedisOptions,
   FaceCompareOptions,
+  StartMessagingOptions,
 } from '../infrastructure';
 
 export interface IMsConfig {
@@ -37,5 +38,6 @@ export interface IMsConfig {
   appIntegrity: AppIntegrityOptions;
   metaWhatsApp: MetaWhatsAppOptions;
   faceCompare: FaceCompareOptions;
+  startMessaging: StartMessagingOptions;
   logger: Params;
 }

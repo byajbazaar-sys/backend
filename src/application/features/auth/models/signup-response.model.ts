@@ -27,6 +27,14 @@ export class SignupResponseModel {
   userType: string;
 
   @Expose()
+  @ApiProperty({ example: true })
+  isEmailVerified: boolean;
+
+  @Expose()
+  @ApiProperty({ example: true })
+  isPhoneVerified: boolean;
+
+  @Expose()
   @ApiProperty({ example: 'https://example.com/profile.jpg', nullable: true })
   profilePhotoUrl: string;
 

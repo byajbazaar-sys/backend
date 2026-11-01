@@ -38,14 +38,25 @@ export class SignupRequestModel {
   @Expose()
   @ApiProperty({
     example: '+15550000000',
-    required: false,
-    nullable: true,
-    description: 'User phone number (optional)',
+    description: 'Verified user phone number in international format',
   })
-  @IsOptional()
   @IsString({ message: 'Phone number must be a string' })
   @Matches(PHONE_E164_REGEX, { message: 'Please provide a valid phone number in international format' })
-  phoneNumber?: string;
+  phoneNumber: string;
+
+  @Expose()
+  @ApiProperty({ description: 'Signed proof returned after verifying the registration email link' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  emailVerificationToken: string;
+
+  @Expose()
+  @ApiProperty({ description: 'Signed proof returned after verifying the SMS OTP' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  phoneVerificationToken: string;
 
   @Expose()
   @ApiProperty({

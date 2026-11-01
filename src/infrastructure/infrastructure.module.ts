@@ -56,6 +56,7 @@ import {
   UNIT_OF_WORK,
   APP_INTEGRITY_SERVICE,
   AppIntegrityOptions,
+  STARTMESSAGING_SERVICE,
 } from '../application';
 import { WebAppOptions } from '../application';
 import { AivotService } from './ai/services/aivot.service';
@@ -107,6 +108,7 @@ import Entities from './persistence/entities';
 import Seeds from './persistence/seeds';
 import { generateDataSourceOptions } from './persistence/type-orm.config';
 import { RedisOptions, RedisService, RedisCacheService } from './redis';
+import { StartMessagingOptions, StartMessagingService } from './startmessaging';
 import { FileStorageMock, UsersFileStorage } from './s3';
 import { WebSocketMessageService } from './websocket/websocket-message.service';
 
@@ -394,6 +396,16 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       useClass: GoogleOAuthService,
     },
     {
+      provide: StartMessagingOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('startMessaging'),
+    },
+    StartMessagingService,
+    {
+      provide: STARTMESSAGING_SERVICE,
+      useExisting: StartMessagingService,
+    },
+    {
       provide: RedisOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('redis'),
@@ -455,6 +467,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     GOOGLE_OAUTH_SERVICE,
     APP_INTEGRITY_SERVICE,
     REDIS_SERVICE,
+    STARTMESSAGING_SERVICE,
     CACHE_SERVICE,
     RedisOptions,
     FileStorageOptions,
@@ -463,6 +476,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     AppIntegrityOptions,
     RazorpayOptions,
     MetaWhatsAppOptions,
+    StartMessagingOptions,
     FaceCompareOptions,
     InsightFaceClient,
     QdrantClient,
