@@ -2,8 +2,13 @@ import { config } from './config';
 import type { LiveMarketMetalQuote, LiveMarketMetalRates } from './types';
 
 type LtpcTick = { ltp?: number; cp?: number; ltt?: number | string };
+type MarketQuote = { instrument_token?: string; last_price?: number };
 
 let lastSnapshot: LiveMarketMetalRates = { configured: true };
+
+export function resetLatestRates(): void {
+  lastSnapshot = { configured: true };
+}
 
 export function getLatestRates(): LiveMarketMetalRates {
   return lastSnapshot;
@@ -12,13 +17,22 @@ export function getLatestRates(): LiveMarketMetalRates {
 export function buildRatesFromLtpc(
   goldLtpc?: LtpcTick,
   silverLtpc?: LtpcTick,
+  instrumentKeys = {
+    gold: config.upstox.goldInstrumentKey ?? '',
+    silver: config.upstox.silverInstrumentKey ?? '',
+  },
 ): LiveMarketMetalRates | null {
   const { upstox } = config;
   const gold = goldLtpc
-    ? mapLtpcQuote('GOLD', upstox.goldInstrumentKey, goldLtpc, upstox.goldLtpGrams, false)
+    ? mapLtpcQuote('GOLD', instrumentKeys.gold, goldLtpc, upstox.goldLtpGrams)
     : lastSnapshot.gold;
   const silver = silverLtpc
-    ? mapLtpcQuote('SILVER', upstox.silverInstrumentKey, silverLtpc, 1000, upstox.silverLtpPerKg)
+    ? mapLtpcQuote(
+        'SILVER',
+        instrumentKeys.silver,
+        silverLtpc,
+        upstox.silverLtpPerKg ? 1000 : 1,
+      )
     : lastSnapshot.silver;
 
   if (!gold && !silver) {
@@ -40,14 +54,13 @@ function mapLtpcQuote(
   instrumentKey: string,
   tick: LtpcTick,
   divisor: number,
-  ltpIsPerKg: boolean,
 ): LiveMarketMetalQuote | undefined {
   const contractLtp = tick.ltp;
   if (contractLtp == null || !Number.isFinite(contractLtp)) {
     return undefined;
   }
 
-  const perGram = ltpIsPerKg ? contractLtp / divisor : contractLtp / divisor;
+  const perGram = contractLtp / divisor;
   const previousClose = tick.cp;
   let change: number | undefined;
   let changePercent: number | undefined;
@@ -74,10 +87,17 @@ export function findFeed<T>(feeds: Record<string, T>, instrumentKey: string): T 
   if (feeds[alt]) return feeds[alt];
   const pipe = instrumentKey.replace(':', '|');
   if (feeds[pipe]) return feeds[pipe];
-  const suffix = instrumentKey.split('|').pop() ?? instrumentKey.split(':').pop();
-  if (!suffix) return undefined;
-  const matchKey = Object.keys(feeds).find((key) => key.endsWith(`|${suffix}`) || key.endsWith(`:${suffix}`));
-  return matchKey ? feeds[matchKey] : undefined;
+  return undefined;
+}
+
+export function extractQuoteTick(quotes: Record<string, MarketQuote>, instrumentKey: string): LtpcTick | undefined {
+  const normalizedKey = instrumentKey.replace('|', ':');
+  const entry = Object.entries(quotes).find(
+    ([key, quote]) =>
+      key.replace('|', ':') === normalizedKey || quote.instrument_token?.replace('|', ':') === normalizedKey,
+  );
+  const ltp = entry?.[1].last_price;
+  return ltp != null && Number.isFinite(ltp) && ltp > 0 ? { ltp } : undefined;
 }
 
 export function extractLtpc(

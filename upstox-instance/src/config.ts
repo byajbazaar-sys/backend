@@ -13,8 +13,8 @@ export const config = {
   host: process.env.HOST?.trim() || '0.0.0.0',
   upstox: {
     accessToken: required('UPSTOX_ACCESS_TOKEN'),
-    goldInstrumentKey: process.env.UPSTOX_GOLD_INSTRUMENT_KEY?.trim() || 'MCX_FO|483079',
-    silverInstrumentKey: process.env.UPSTOX_SILVER_INSTRUMENT_KEY?.trim() || 'MCX_FO|495214',
+    goldInstrumentKey: process.env.UPSTOX_GOLD_INSTRUMENT_KEY?.trim() || undefined,
+    silverInstrumentKey: process.env.UPSTOX_SILVER_INSTRUMENT_KEY?.trim() || undefined,
     goldLtpGrams: Number(process.env.UPSTOX_GOLD_LTP_GRAMS ?? 10) || 10,
     silverLtpPerKg: process.env.UPSTOX_SILVER_LTP_PER_KG !== 'false',
   },
