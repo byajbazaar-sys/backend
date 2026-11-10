@@ -3,7 +3,6 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
@@ -99,7 +98,7 @@ export class InventoryItemService implements IInventoryItemService {
     const category = await this.categoriesRepo.findById(data.categoryId);
     if (!category) throw new NotFoundException('Category not found');
 
-    const sku = await this.generateSku(userId);
+    const sku = data.sku?.trim() || (await this.generateSku(userId));
     const item: InventoryItem = {
       ...data,
       sku,
@@ -113,7 +112,7 @@ export class InventoryItemService implements IInventoryItemService {
     const created = await this.itemsRepo.create(item);
     if (created.id) {
       const qrValue = this.barcodeService.buildInventoryQrPayload(created.id, created.sku);
-      const withQr = await this.itemsRepo.update(created.id, { qrValue });
+      const withQr = await this.itemsRepo.update(created.id, { qrValue }, userId);
       this.logger.info({ itemId: withQr.id, sku }, 'Inventory item created');
       await this.invalidateInventoryReportsCache(userId);
       return this.enrichItem(withQr);
@@ -157,9 +156,8 @@ export class InventoryItemService implements IInventoryItemService {
   }
 
   async getById(id: string, userId: string): Promise<InventoryItem> {
-    const item = await this.itemsRepo.findById(id);
+    const item = await this.itemsRepo.findById(id, userId);
     if (!item) throw new NotFoundException('Inventory item not found');
-    if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
     return this.enrichItem(item);
   }
 
@@ -173,9 +171,8 @@ export class InventoryItemService implements IInventoryItemService {
     const qrPayload = this.barcodeService.parseInventoryQrPayload(raw);
 
     if (qrPayload?.inventoryId) {
-      const byId = await this.itemsRepo.findById(qrPayload.inventoryId);
+      const byId = await this.itemsRepo.findById(qrPayload.inventoryId, userId);
       if (byId) {
-        if (byId.createdBy !== userId) throw new ForbiddenException('Access denied');
         return this.enrichItem(byId);
       }
     }
@@ -183,7 +180,6 @@ export class InventoryItemService implements IInventoryItemService {
     const lookupCode = qrPayload?.sku?.trim() || raw;
     const item = await this.itemsRepo.findByScanCode(lookupCode, userId);
     if (!item) throw new NotFoundException('Inventory item not found for barcode');
-    if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
     return this.enrichItem(item);
   }
 
@@ -206,7 +202,7 @@ export class InventoryItemService implements IInventoryItemService {
     if (patch.status === EInventoryItemStatus.Sold || patch.stockQuantity === 0) {
       patch.isCatalogVisible = false;
     }
-    const updated = await this.itemsRepo.update(id, patch);
+    const updated = await this.itemsRepo.update(id, patch, userId);
     await this.invalidateInventoryReportsCache(userId);
     return this.enrichItem(updated);
   }
@@ -218,9 +214,8 @@ export class InventoryItemService implements IInventoryItemService {
     removeImage?: boolean,
     storeAsUploaded?: boolean,
   ): Promise<InventoryItem> {
-    const existing = await this.itemsRepo.findById(id);
+    const existing = await this.itemsRepo.findById(id, userId);
     if (!existing) throw new NotFoundException('Inventory item not found');
-    if (existing.createdBy !== userId) throw new ForbiddenException('Access denied');
 
     const currentKey = existing.imageUrls?.[0];
 
@@ -232,7 +227,7 @@ export class InventoryItemService implements IInventoryItemService {
           this.logger.warn({ err, key: currentKey }, 'Failed to delete inventory image');
         }
       }
-      const updated = await this.itemsRepo.update(id, { imageUrls: [] });
+      const updated = await this.itemsRepo.update(id, { imageUrls: [] }, userId);
       await this.invalidateInventoryReportsCache(userId);
       return this.enrichItem(updated);
     }
@@ -276,7 +271,7 @@ export class InventoryItemService implements IInventoryItemService {
 
     // Persist the key S3 actually wrote (extension may differ from proposed).
     const storageKey = await this.fileStorage.writeAsync(proposedKey, bufferToStore, mimetype);
-    const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] });
+    const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] }, userId);
     this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
     await this.invalidateInventoryReportsCache(userId);
     return this.enrichItem(updated);
@@ -293,9 +288,8 @@ export class InventoryItemService implements IInventoryItemService {
   }
 
   async previewAiImageForItem(id: string, userId: string): Promise<InventoryImageAiPreviewResponseModel> {
-    const existing = await this.itemsRepo.findById(id);
+    const existing = await this.itemsRepo.findById(id, userId);
     if (!existing) throw new NotFoundException('Inventory item not found');
-    if (existing.createdBy !== userId) throw new ForbiddenException('Access denied');
 
     const key = existing.imageUrls?.[0];
     if (!key || !this.isStorageKey(key)) {
@@ -363,9 +357,8 @@ export class InventoryItemService implements IInventoryItemService {
   }
 
   async delete(id: string, userId: string): Promise<void> {
-    const existing = await this.itemsRepo.findById(id);
+    const existing = await this.itemsRepo.findById(id, userId);
     if (!existing) throw new NotFoundException('Inventory item not found');
-    if (existing.createdBy !== userId) throw new ForbiddenException('Access denied');
     const key = existing.imageUrls?.[0];
     if (key && this.isStorageKey(key)) {
       try {
@@ -374,7 +367,7 @@ export class InventoryItemService implements IInventoryItemService {
         this.logger.warn({ err, key }, 'Failed to delete inventory image on item delete');
       }
     }
-    await this.itemsRepo.delete(id);
+    await this.itemsRepo.delete(id, userId);
     await this.invalidateInventoryReportsCache(userId);
   }
 

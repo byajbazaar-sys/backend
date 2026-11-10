@@ -2,6 +2,7 @@ import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../enums';
 
 /** Persistable inventory item columns for repository updates. */
 export interface InventoryItemEntityUpdateInput {
+  sku?: string;
   itemCode?: string;
   itemName?: string;
   description?: string;

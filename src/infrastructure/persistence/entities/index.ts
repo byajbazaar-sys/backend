@@ -11,6 +11,7 @@ import { InventoryCategoryEntity } from './inventory-category.entity';
 import { InventoryItemEntity } from './inventory-item.entity';
 import { ItemEntity } from './item.entity';
 import { JewelleryEventEntity } from './jewellery-event.entity';
+import { LabelDesignerSettingsEntity } from './label-designer-settings.entity';
 import { LoanItemEntity } from './loan-item.entity';
 import { LoanEntity } from './loan.entity';
 import { MetalRateEntity } from './metal-rate.entity';
@@ -66,6 +67,7 @@ export { CouponRedemptionEntity } from './coupon-redemption.entity';
 export { RefundEntity } from './refund.entity';
 export { PlanEntity } from './plan.entity';
 export { JewelleryEventEntity } from './jewellery-event.entity';
+export { LabelDesignerSettingsEntity } from './label-designer-settings.entity';
 export { TryOnAssetEntity } from './try-on-asset.entity';
 export { DepositAccountEntity } from './deposit-account.entity';
 export { DepositTransactionEntity } from './deposit-transaction.entity';
@@ -107,6 +109,7 @@ export default [
   RefundEntity,
   PlanEntity,
   JewelleryEventEntity,
+  LabelDesignerSettingsEntity,
   TryOnAssetEntity,
   DepositAccountEntity,
   DepositTransactionEntity,

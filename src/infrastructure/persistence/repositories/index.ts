@@ -25,6 +25,7 @@ export * from './coupon-redemptions.repository';
 export * from './refunds.repository';
 export * from './plans.repository';
 export * from './jewellery-events.repository';
+export * from './label-designer-settings.repository';
 export * from './try-on-assets.repository';
 export * from './deposits.repository';
 export * from './orders.repository';
