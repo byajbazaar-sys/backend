@@ -5,6 +5,12 @@ import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../enums';
 
 /** Explicit optional update payload — all fields optional for partial inventory item updates. */
 export class UpdateInventoryItemRequestModel {
+  @ApiPropertyOptional({ example: 'RING-001', maxLength: 20 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  sku?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

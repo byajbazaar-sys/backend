@@ -150,9 +150,8 @@ export class SalesBillService implements ISalesBillService {
         throw new BadRequestException('Linked inventory items must have quantity of at least 1');
       }
 
-      const item = await this.inventoryItemsRepo.findById(id);
+      const item = await this.inventoryItemsRepo.findById(id, userId);
       if (!item) throw new NotFoundException(`Inventory item ${id} not found`);
-      if (item.createdBy !== userId) throw new ForbiddenException('Access denied');
       if (item.status !== EInventoryItemStatus.Available) {
         throw new ConflictException(`Item ${item.sku} is not available for sale`);
       }
@@ -192,12 +191,13 @@ export class SalesBillService implements ISalesBillService {
 
   private async resolveLineHsnHuid(
     item: CreateSalesBillRequestModel['items'][number],
+    userId: string,
   ): Promise<Pick<SalesBillLineItem, 'hsnCode' | 'huid'>> {
     let hsnCode = item.hsnCode?.trim() || undefined;
     let huid: string;
 
     if (item.inventoryItemId) {
-      const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId);
+      const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId, userId);
       if (inv) {
         if (!hsnCode && inv.categoryId) {
           const category = await this.categoriesRepo.findById(inv.categoryId);
@@ -229,6 +229,7 @@ export class SalesBillService implements ISalesBillService {
   private async resolveLinePurchaseSnapshot(
     item: CreateSalesBillRequestModel['items'][number],
     lineTotal: number,
+    userId: string,
   ): Promise<Pick<SalesBillLineItem, 'purchaseRatePerGram' | 'purchaseCost' | 'profitAmount'>> {
     let purchaseRatePerGram: number;
     const netWeight = item.netWeight != null ? Number(item.netWeight) : undefined;
@@ -236,7 +237,7 @@ export class SalesBillService implements ISalesBillService {
     let purchasePrice: number;
 
     if (item.inventoryItemId) {
-      const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId);
+      const inv = await this.inventoryItemsRepo.findById(item.inventoryItemId, userId);
       if (inv) {
         const rate = Number(inv.purchaseRatePerGram);
         if (rate > 0) purchaseRatePerGram = rate;
@@ -263,14 +264,14 @@ export class SalesBillService implements ISalesBillService {
   async create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill> {
     const lineItems: SalesBillLineItem[] = [];
     for (const item of data.items) {
-      const hsnHuid = await this.resolveLineHsnHuid(item);
+      const hsnHuid = await this.resolveLineHsnHuid(item, userId);
       const weights = this.resolveBillLineWeights(item);
       const lineTotal = computeBillLineTotal(
         item.sellingPrice,
         item.quantity,
         item.quantityPricingMode,
       );
-      const purchase = await this.resolveLinePurchaseSnapshot(item, lineTotal);
+      const purchase = await this.resolveLinePurchaseSnapshot(item, lineTotal, userId);
       lineItems.push({
         inventoryItemId: item.inventoryItemId,
         itemName: item.itemName,

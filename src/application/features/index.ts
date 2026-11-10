@@ -14,6 +14,7 @@ import {
   BarcodeController,
 } from './inventory';
 import { ItemsController } from './items';
+import { LabelDesignerSettingsController, LabelDesignerSettingsService } from './label-designer';
 import { LoansController } from './loans';
 import { MetalRatesController } from './metal-rates';
 import { NotificationsController } from './notifications';
@@ -33,6 +34,7 @@ export * from './customers';
 export * from './loans';
 export * from './transactions';
 export * from './items';
+export * from './label-designer';
 export * from './notifications';
 export * from './support';
 export * from './inventory';
@@ -55,6 +57,7 @@ export const Controllers = [
   LoansController,
   TransactionsController,
   ItemsController,
+  LabelDesignerSettingsController,
   NotificationsController,
   SupportController,
   InventoryCategoriesController,
@@ -80,4 +83,4 @@ export const Controllers = [
   WhatsAppWebhookController,
 ];
 
-export const Services = [JwtService];
+export const Services = [JwtService, LabelDesignerSettingsService];

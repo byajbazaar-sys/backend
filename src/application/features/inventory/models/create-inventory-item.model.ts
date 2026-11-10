@@ -15,6 +15,12 @@ import {
 import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../enums';
 
 export class CreateInventoryItemRequestModel {
+  @ApiPropertyOptional({ example: 'RING-001', maxLength: 20 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  sku?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -68,14 +68,14 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     const entity = this.repo.create(data);
     const created = await this.repo.save(entity);
     const withCategory = await this.repo.findOne({
-      where: { id: created.id },
+      where: { id: created.id, createdBy: created.createdBy },
       relations: ['category'],
     });
     return this.mapEntity(withCategory);
   }
 
-  async findById(id: string): Promise<InventoryItem> {
-    const entity = await this.repo.findOne({ where: { id }, relations: ['category'] });
+  async findById(id: string, createdBy: string): Promise<InventoryItem> {
+    const entity = await this.repo.findOne({ where: { id, createdBy }, relations: ['category'] });
     if (!entity) return null;
     return this.mapEntity(entity);
   }
@@ -161,17 +161,17 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     return isNaN(seq) ? 1 : seq + 1;
   }
 
-  async update(id: string, data: InventoryItemUpdatePatch): Promise<InventoryItem> {
+  async update(id: string, data: InventoryItemUpdatePatch, createdBy: string): Promise<InventoryItem> {
     const { categoryName: _categoryName, ...rest } = data as InventoryItemUpdatePatch & {
       categoryName?: string;
     };
     const entityUpdate: InventoryItemEntityUpdateInput = rest;
-    await this.repo.update(id, entityUpdate);
-    return this.findById(id);
+    await this.repo.update({ id, createdBy }, entityUpdate);
+    return this.findById(id, createdBy);
   }
 
-  async delete(id: string): Promise<void> {
-    await this.repo.delete(id);
+  async delete(id: string, createdBy: string): Promise<void> {
+    await this.repo.delete({ id, createdBy });
   }
 
   async countByCategory(createdBy: string): Promise<InventoryCategoryBreakdown[]> {

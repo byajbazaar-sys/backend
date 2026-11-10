@@ -39,6 +39,7 @@ import {
   REFUNDS_REPOSITORY,
   PLANS_REPOSITORY,
   JEWELLERY_EVENTS_REPOSITORY,
+  LABEL_DESIGNER_SETTINGS_REPOSITORY,
   TRY_ON_ASSETS_REPOSITORY,
   DEPOSITS_REPOSITORY,
   ORDERS_REPOSITORY,
@@ -96,6 +97,7 @@ import {
   RefundsRepository,
   PlansRepository,
   JewelleryEventsRepository,
+  LabelDesignerSettingsRepository,
   TryOnAssetsRepository,
   DepositsRepository,
   OrdersRepository,
@@ -241,6 +243,10 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     {
       provide: JEWELLERY_EVENTS_REPOSITORY,
       useClass: JewelleryEventsRepository,
+    },
+    {
+      provide: LABEL_DESIGNER_SETTINGS_REPOSITORY,
+      useClass: LabelDesignerSettingsRepository,
     },
     {
       provide: TRY_ON_ASSETS_REPOSITORY,
