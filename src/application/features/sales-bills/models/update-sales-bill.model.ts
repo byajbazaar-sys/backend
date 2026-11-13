@@ -52,6 +52,12 @@ export class UpdateSalesBillRequestModel {
   @Min(0)
   discount?: number;
 
+  @ApiPropertyOptional({ description: 'Cash / UPI etc. received against this bill' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amountReceived?: number;
+
   @ApiPropertyOptional({ enum: EPaymentMode })
   @IsOptional()
   @IsEnum(EPaymentMode)

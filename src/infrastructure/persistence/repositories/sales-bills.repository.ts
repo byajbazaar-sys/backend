@@ -239,6 +239,14 @@ export class SalesBillsRepository implements ISalesBillsRepository {
           if (update.makingCharges != null) line.makingCharges = update.makingCharges;
           if (update.quantity != null) line.quantity = update.quantity;
           if (update.quantityPricingMode != null) line.quantityPricingMode = update.quantityPricingMode;
+          if (typeof update.sku === 'string') line.sku = update.sku.trim();
+          // Optional text fields: an empty string clears the value.
+          if (update.hsnCode !== undefined) line.hsnCode = update.hsnCode?.trim() || null;
+          if (update.huid !== undefined) line.huid = update.huid?.trim() || null;
+          if (update.purity !== undefined) line.purity = update.purity?.trim() || null;
+          if (typeof update.grossWeight === 'number') line.grossWeight = update.grossWeight;
+          if (typeof update.netWeight === 'number') line.netWeight = update.netWeight;
+          if (typeof update.lessWeight === 'number') line.lessWeight = update.lessWeight;
 
           const qty = Number(line.quantity) || 1;
           const price = Number(line.sellingPrice) || 0;

@@ -28,7 +28,15 @@ export function buildProductBackgroundRemovalPrompt(): string {
 
     'Only remove the background.',
 
+    'Keep the jewellery at exactly the same position, scale and rotation in the frame. Do not crop, zoom, re-centre or re-frame the image.',
+
+    'Everything that is not part of the jewellery is background — including hands, fingers, display stands, busts, boxes, cloth, paper, and any flat-coloured border around the photo.',
+
     'Replace it with a solid pure white background (#FFFFFF).',
+
+    'Keep every opening clear to the white background: the inside of rings and hoops, the gaps between chain links, and openings in filigree.',
+
+    'Keep the outline of the jewellery crisp, with no white or grey halo and no blurred edges.',
 
     'Output must be an opaque image on white — no transparency, no checkerboard, no grey, no coloured backdrop.',
 

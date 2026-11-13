@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 
 import { EQuantityPricingMode } from '../enums';
 
@@ -35,4 +35,46 @@ export class UpdateSalesBillLineItemModel {
   @IsOptional()
   @IsEnum(EQuantityPricingMode)
   quantityPricingMode?: EQuantityPricingMode;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  sku?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  hsnCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  huid?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  purity?: string;
+
+  @ApiPropertyOptional({ description: 'Gross weight per piece (g)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  grossWeight?: number;
+
+  @ApiPropertyOptional({ description: 'Net weight per piece (g)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  netWeight?: number;
+
+  @ApiPropertyOptional({ description: 'Less (stone) weight per piece (g)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  lessWeight?: number;
 }

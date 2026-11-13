@@ -21,6 +21,7 @@ export interface UpdateSalesBillPatch {
   sgstAmount?: number;
   roundOff?: number;
   grandTotal?: number;
+  amountReceived?: number;
   totalPurchaseCost?: number;
   totalProfit?: number;
   paymentMode?: EPaymentMode;

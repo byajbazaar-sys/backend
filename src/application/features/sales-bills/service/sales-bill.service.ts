@@ -526,6 +526,13 @@ export class SalesBillService implements ISalesBillService {
           makingCharges: patch.makingCharges,
           quantity: patch.quantity,
           quantityPricingMode: patch.quantityPricingMode,
+          sku: patch.sku,
+          hsnCode: patch.hsnCode,
+          huid: patch.huid,
+          purity: patch.purity,
+          grossWeight: patch.grossWeight,
+          netWeight: patch.netWeight,
+          lessWeight: patch.lessWeight,
           lineTotal,
           purchaseCost: profitCalc.purchaseCost,
           profitAmount: profitCalc.profitAmount,
@@ -589,6 +596,9 @@ export class SalesBillService implements ISalesBillService {
     }
     if (data.customerPropName !== undefined) {
       patch.customerPropName = data.customerPropName.trim() || undefined;
+    }
+    if (data.amountReceived !== undefined) {
+      patch.amountReceived = Math.round(Number(data.amountReceived) * 100) / 100;
     }
     if (data.paymentMode !== undefined) patch.paymentMode = data.paymentMode;
     if (data.status !== undefined) patch.status = data.status;
