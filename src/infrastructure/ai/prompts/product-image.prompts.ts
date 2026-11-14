@@ -1,53 +1,30 @@
-export function buildProductBackgroundRemovalPrompt(): string {
+/**
+ * Background-removal prompt for inventory photos.
+ *
+ * Shop-floor photos usually show the piece inside a plastic pouch, on a velvet display card or stand, held in a
+ * hand, with tags and the counter around it — so the prompt spells out that all of that is background.
+ *
+ * The wording is deliberately short and was validated on real photos: longer, more emphatic variants ("crisp
+ * outline", "no halo", "no checkerboard", long preserve-lists) make FLUX hand back line-art sketches instead of
+ * the photo. Change it only together with a check on real shop photos. Faithfulness is enforced afterwards by
+ * keeping the original photo's pixels wherever the model agrees with it.
+ */
+export function buildProductBackgroundRemovalPrompt(options: { retry?: boolean } = {}): string {
   return [
-    'You are performing background removal only.',
+    'Product photo cleanup for a jewellery catalogue.',
 
-    'The product is immutable and must remain pixel-faithful to the original image.',
+    'The photo shows a single piece of jewellery (chain, necklace, ring, bangle, earrings) that may be sealed inside a transparent plastic pouch, lying on a black velvet display card or stand, held in a hand, with price tags, stickers, rubber bands, labels and a shop counter around it.',
 
-    'Do NOT modify, recreate, redraw, regenerate, retouch, enhance, sharpen, beautify, restore, upscale, color-correct, relight, or reinterpret the product in any way.',
+    'Keep ONLY the jewellery itself. Everything else is background and must be removed: the plastic pouch and its reflections, the display card, stand or bust, hands and fingers, tags, stickers, labels, rubber bands, the counter and all surroundings.',
 
-    'Preserve exactly:',
-    '- shape',
-    '- size',
-    '- proportions',
-    '- orientation',
-    '- position',
-    '- framing',
-    '- perspective',
-    '- metal color',
-    '- gemstones and diamonds (including bright white stones)',
-    '- texture',
-    '- reflections',
-    '- scratches',
-    '- engravings',
-    '- lighting',
-    '- shadows on the product',
-    '- imperfections',
+    ...(options.retry
+      ? [
+          'The previous attempt kept the packaging around the jewellery. Remove it completely this time: only the jewellery may remain.',
+        ]
+      : []),
 
-    'Do not add or remove any jewellery parts, stones, details, or accessories.',
+    'Output the jewellery alone, exactly as photographed — same shape, size, position, orientation, metal colour, stones and details — on a flat, pure white (#FFFFFF) background with no shadows, no halo and no transparency.',
 
-    'Only remove the background.',
-
-    'Keep the jewellery at exactly the same position, scale and rotation in the frame. Do not crop, zoom, re-centre or re-frame the image.',
-
-    'Everything that is not part of the jewellery is background — including hands, fingers, display stands, busts, boxes, cloth, paper, and any flat-coloured border around the photo.',
-
-    'Replace it with a solid pure white background (#FFFFFF).',
-
-    'Keep every opening clear to the white background: the inside of rings and hoops, the gaps between chain links, and openings in filigree.',
-
-    'Keep the outline of the jewellery crisp, with no white or grey halo and no blurred edges.',
-
-    'Output must be an opaque image on white — no transparency, no checkerboard, no grey, no coloured backdrop.',
-
-    'Do NOT add any shadows, contact shadows, drop shadows, ground shadows, or grey halos on or around the product.',
-
-    'The white background must be completely flat and uniform (#FFFFFF) with no gradients, vignettes, or shading.',
-
-    'Remove existing background shadows; do not introduce new ones.',
-
-    'The output should look identical to the input except for the background.',
-
-    'Background replacement only. Zero modifications to the foreground object.',
+    'Do not redraw, stylise, sketch, enhance or reinterpret the jewellery. Keep its openings and gaps clear to the white background.',
   ].join(' ');
 }

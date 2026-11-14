@@ -53,6 +53,9 @@ const AGREE_HIGH = 72;
 const MIN_AGREEMENT_RATIO = 0.6;
 /** Blurred RGB distance at or below which the AI kept a pixel as photographed. */
 const PRESERVED_DISTANCE = 32;
+/** Foreground share + agreement above which the model is judged to have returned the photo unchanged. */
+const UNCHANGED_MIN_FOREGROUND = 0.3;
+const UNCHANGED_MIN_AGREEMENT = 0.75;
 /** Max luma difference to any neighbour for light grey to count as smooth (shadow) rather than an edge. */
 const SMOOTH_STEP = 6;
 
@@ -80,6 +83,16 @@ export interface ProductCutoutStats {
   originalPixels: boolean;
   holesRemoved: number;
   foregroundRatio: number;
+  /** True when the photo's own backdrop is (near) white. */
+  whiteBackdrop: boolean;
+  /** True when the model handed the photo back with its backdrop still in place. */
+  unchangedPhoto: boolean;
+  /** True when the model was skipped and the cutout came from keying the photo's own white backdrop. */
+  keyedOnly: boolean;
+  /** Number of separate opaque pieces (ignoring specks). */
+  fragments: number;
+  /** Share of near-black pixels in the model's foreground: line-art sketches score ≥ 0.09, photo cutouts ≤ 0.05. */
+  darkFraction: number;
 }
 
 export interface ProductCutout {
@@ -89,6 +102,15 @@ export interface ProductCutout {
   rgb: Uint8Array;
   alpha: Uint8Array;
   stats: ProductCutoutStats;
+}
+
+export interface RefineOptions {
+  /**
+   * The white around the product is not the photo's own backdrop (a transparent cutout flattened to white, or a
+   * white photo whose white key still left a large prop), so a high-agreement, large-foreground result counts as
+   * "the model gave the photo back" rather than as a legitimately white photo.
+   */
+  whiteIsForeign?: boolean;
 }
 
 interface RgbImage {
@@ -123,17 +145,34 @@ function isBackdropCandidate(r: number, g: number, b: number): boolean {
   return max >= 175 && min >= 165 && max - min <= 18;
 }
 
-/** Gold, coloured stones, dark metal — never treat as removable backdrop. */
-function isProductPixel(r: number, g: number, b: number): boolean {
+/** Pixels flat enough to be a shadow rather than a metal edge (white-key path only). */
+function shadowGate(data: Uint8Array, width: number, height: number): Uint8Array {
+  const n = width * height;
+  const smooth = smoothMask(lumaPlane(data, n), width, height, SMOOTH_STEP);
+  const std = localLumaStd(data, width, height, 2);
+  const gate = new Uint8Array(n);
+  for (let i = 0; i < n; i++) gate[i] = smooth[i] === 1 && std[i] <= 3 ? 1 : 0;
+  return gate;
+}
+
+/** White backdrop, plus neutral shadow where {@link shadowGate} allows it. */
+function backdropMask(data: Uint8Array, n: number, tolerance: number, gate: Uint8Array): Uint8Array {
+  const out = new Uint8Array(n);
+  for (let i = 0, o = 0; i < n; i++, o += 3) {
+    const r = data[o];
+    const g = data[o + 1];
+    const b = data[o + 2];
+    const shadow = isNeutralShadow(r, g, b) && gate[i] === 1;
+    out[i] = whiteDistance(r, g, b) <= tolerance || shadow ? 1 : 0;
+  }
+  return out;
+}
+
+/** Neutral grey from near-white down to a deep contact shadow (white-key path only). */
+function isNeutralShadow(r: number, g: number, b: number): boolean {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
-  const spread = max - min;
-
-  if (spread >= 10) return true;
-  if (max < 140) return true;
-  if (r > g + 5 && r > b + 5 && max > 85) return true;
-
-  return false;
+  return max >= 110 && max - min <= 14;
 }
 
 /** Original-photo pixel that looks like its own backdrop (same colour, not brighter — shadows only darken). */
@@ -263,6 +302,7 @@ export async function refineProductCutout(
   original: Buffer,
   aiOutput: Buffer,
   layout: ProductModelLayout,
+  options: RefineOptions = {},
 ): Promise<ProductCutout> {
   const aiSize = await orientedSize(aiOutput);
   const crop = layoutToOutputRegion(layout, aiSize.width, aiSize.height);
@@ -287,7 +327,7 @@ export async function refineProductCutout(
 
   const alignment = await estimateAlignment(orig.data, generated.data, width, height);
   const aligned = alignment.applied ? warpRgb(generated.data, width, height, alignment.transform) : generated.data;
-  return segmentProduct(orig.data, aligned, width, height, alignment);
+  return segmentProduct(orig.data, aligned, width, height, alignment, options);
 }
 
 async function gradientLevel(
@@ -531,15 +571,21 @@ function removeFlatWhiteHoles(
   height: number,
   tolerance: number,
   maxStd: number,
+  options: { includeShadows?: boolean } = {},
 ): number {
   const n = width * height;
-  const white = new Uint8Array(n);
+  const candidate = new Uint8Array(n);
   for (let i = 0, o = 0; i < n; i++, o += 3) {
-    white[i] = !background[i] && whiteDistance(rgb[o], rgb[o + 1], rgb[o + 2]) <= tolerance ? 1 : 0;
+    if (background[i]) continue;
+    const backdropLike =
+      whiteDistance(rgb[o], rgb[o + 1], rgb[o + 2]) <= tolerance ||
+      (!!options.includeShadows && isNeutralShadow(rgb[o], rgb[o + 1], rgb[o + 2]));
+    candidate[i] = backdropLike ? 1 : 0;
   }
 
-  const { components, pixels } = labelComponents(white, width, height);
-  const minSize = Math.max(64, Math.round(n * 0.003));
+  const { components, pixels } = labelComponents(candidate, width, height);
+  // Enclosed shadow pools are far smaller than the product, so a low floor is safe once flatness is required.
+  const minSize = Math.max(64, Math.round(n * (options.includeShadows ? 0.0003 : 0.003)));
   let std: Float32Array | undefined;
   let removed = 0;
 
@@ -575,6 +621,7 @@ function segmentProduct(
   width: number,
   height: number,
   alignment: AlignmentResult = { transform: IDENTITY_ALIGNMENT, applied: false },
+  options: RefineOptions = {},
 ): ProductCutout {
   const n = width * height;
   const candidate = new Uint8Array(n);
@@ -630,6 +677,13 @@ function segmentProduct(
   if (foregroundRatio < 0.0005) {
     throw new Error('AI output did not contain a recognisable product');
   }
+  const whiteBackdrop = whiteDistance(backdrop.color[0], backdrop.color[1], backdrop.color[2]) <= 24;
+  // A large foreground that matches the photo closely means the model kept the pouch / card / stand. A photo on a
+  // white backdrop legitimately matches, unless the "backdrop" is just the transparency of an earlier cutout.
+  const unchangedPhoto =
+    (!whiteBackdrop || !!options.whiteIsForeign) &&
+    foregroundRatio > UNCHANGED_MIN_FOREGROUND &&
+    agreement.ratio > UNCHANGED_MIN_AGREEMENT;
 
   let originalWeight: Float32Array | undefined;
   if (agreement.trusted) {
@@ -671,8 +725,37 @@ function segmentProduct(
       originalPixels: agreement.trusted,
       holesRemoved,
       foregroundRatio: Math.round(foregroundRatio * 1000) / 1000,
+      whiteBackdrop,
+      unchangedPhoto,
+      keyedOnly: false,
+      fragments: countFragments(invertMask(background), width, height),
+      darkFraction: Math.round(darkFraction(generated, background) * 1000) / 1000,
     },
   };
+}
+
+/** Share of foreground pixels (not strict white) that are near black. */
+function darkFraction(rgb: Uint8Array, background: Uint8Array): number {
+  let dark = 0;
+  let total = 0;
+  for (let i = 0, o = 0; i < background.length; i++, o += 3) {
+    if (background[i] || whiteDistance(rgb[o], rgb[o + 1], rgb[o + 2]) <= AI_WHITE_TOLERANCE) continue;
+    total++;
+    if (luma(rgb[o], rgb[o + 1], rgb[o + 2]) < 70) dark++;
+  }
+  return total ? dark / total : 0;
+}
+
+/** Separate pieces of a foreground mask, ignoring specks. */
+function countFragments(foreground: Uint8Array, width: number, height: number): number {
+  const minSize = Math.max(16, Math.round(width * height * 0.0001));
+  return labelComponents(foreground, width, height).components.filter((c) => c.size >= minSize).length;
+}
+
+function alphaMask(alpha: Uint8Array): Uint8Array {
+  const out = new Uint8Array(alpha.length);
+  for (let i = 0; i < alpha.length; i++) out[i] = alpha[i] >= 128 ? 1 : 0;
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -982,6 +1065,12 @@ function protectTexturedBrightRegions(rgb: Uint8Array, width: number, height: nu
 
 /** Keep the alpha of uploads that are already transparent cutouts (no AI, no re-keying). */
 export async function extractTransparentCutout(buffer: Buffer): Promise<Buffer | null> {
+  const cutout = await transparentUploadCutout(buffer);
+  return cutout ? encodeTransparentCutoutPng(cutout) : null;
+}
+
+/** An upload that is already a transparent cutout, as a {@link ProductCutout}; null for opaque images. */
+export async function transparentUploadCutout(buffer: Buffer): Promise<ProductCutout | null> {
   const meta = await sharp(buffer).metadata();
   if (!meta.hasAlpha) return null;
 
@@ -1020,7 +1109,7 @@ export async function extractTransparentCutout(buffer: Buffer): Promise<Buffer |
     rgb[i * 3 + 2] = data[i * 4 + 2];
     alpha[i] = data[i * 4 + 3];
   }
-  return encodeTransparentCutoutPng({ width, height, rgb, alpha });
+  return { width, height, rgb, alpha, stats: passthroughStats(alpha, width, height, 0) };
 }
 
 /**
@@ -1031,10 +1120,35 @@ export async function extractTransparentCutout(buffer: Buffer): Promise<Buffer |
 export async function removeWhiteBackground(buffer: Buffer): Promise<Buffer> {
   const existing = await extractTransparentCutout(buffer);
   if (existing) return existing;
+  return encodeTransparentCutoutPng(await whiteBackdropCutout(buffer));
+}
 
+/**
+ * Cutout of a photo that already has a white backdrop, without the model: the model tends to "redraw" such photos
+ * as sketches since there is nothing for it to remove, while the deterministic key keeps the pixels exact.
+ */
+export async function whiteBackdropCutout(buffer: Buffer): Promise<ProductCutout> {
   const { data, width, height } = await loadRgb(buffer);
-  const matte = keyOutWhiteBackdrop(data, width, height);
-  return encodeTransparentCutoutPng({ width, height, ...matte });
+  const { rgb, alpha, holesRemoved } = keyOutWhiteBackdrop(data, width, height);
+  return { width, height, rgb, alpha, stats: passthroughStats(alpha, width, height, holesRemoved) };
+}
+
+/** Stats for a cutout that did not go through the model (white key or an upload kept as-is). */
+function passthroughStats(alpha: Uint8Array, width: number, height: number, holesRemoved: number): ProductCutoutStats {
+  const mask = alphaMask(alpha);
+  return {
+    alignment: IDENTITY_ALIGNMENT,
+    alignmentApplied: false,
+    agreement: 1,
+    originalPixels: true,
+    holesRemoved,
+    foregroundRatio: Math.round((countMask(mask) / alpha.length) * 1000) / 1000,
+    whiteBackdrop: true,
+    unchangedPhoto: false,
+    keyedOnly: true,
+    fragments: countFragments(mask, width, height),
+    darkFraction: 0,
+  };
 }
 
 /** Pure white-key + edge matting step of {@link removeWhiteBackground} (exported for offline verification). */
@@ -1042,7 +1156,7 @@ export function keyOutWhiteBackdrop(
   data: Uint8Array,
   width: number,
   height: number,
-): { rgb: Uint8Array; alpha: Uint8Array } {
+): { rgb: Uint8Array; alpha: Uint8Array; holesRemoved: number } {
   const n = width * height;
   const tolerance = clamp(
     borderWhiteDistanceQuantile(data, width, height, 0.95) + 6,
@@ -1050,21 +1164,16 @@ export function keyOutWhiteBackdrop(
     WHITE_KEY_MAX_TOLERANCE,
   );
 
-  const passable = new Uint8Array(n);
-  const smooth = smoothMask(lumaPlane(data, n), width, height, SMOOTH_STEP);
-  const std = localLumaStd(data, width, height, 2);
-  for (let i = 0, o = 0; i < n; i++, o += 3) {
-    const r = data[o];
-    const g = data[o + 1];
-    const b = data[o + 2];
-    // Soft grey (e.g. a contact shadow) is keyed out too, but only where it is smooth and untextured.
-    const softGrey = isBackdropCandidate(r, g, b) && smooth[i] === 1 && std[i] <= 3;
-    passable[i] = (whiteDistance(r, g, b) <= tolerance || softGrey) && !isProductPixel(r, g, b) ? 1 : 0;
-  }
+  // A contact shadow is neutral grey, but so is silver, and a white stone is neutral too. Local gradients do not
+  // separate them (a soft shadow and an anti-aliased metal edge have the same slope), so grey is only keyed where
+  // it is both smooth and untextured — metal edges and faceted stones fail that test and stay.
+  const background = floodFromBorder(backdropMask(data, n, tolerance, shadowGate(data, width, height)), width, height);
 
-  const background = floodFromBorder(passable, width, height);
   protectTexturedBrightRegions(data, width, height, background);
-  removeFlatWhiteHoles(background, data, width, height, tolerance, 1.2);
+  // Shadow pools and backdrop islands the product cut off from the border go too, provided they are flat.
+  const holesRemoved = removeFlatWhiteHoles(background, data, width, height, tolerance, 1.8, {
+    includeShadows: true,
+  });
   removeSpeckles(background, width, height);
 
   if (countMask(background) === n) {
@@ -1073,13 +1182,14 @@ export function keyOutWhiteBackdrop(
 
   // Our own previews have exact #FFFFFF borders and clean edges; photos need the wider band to absorb ringing.
   const cleanWhite = borderWhiteDistanceQuantile(data, width, height, 0.98) === 0;
-  return composeMatte({
+  const matte = composeMatte({
     width,
     height,
     background,
     generated: data,
     edgeRadius: cleanWhite ? EDGE_BAND_RADIUS : PHOTO_EDGE_BAND_RADIUS,
   });
+  return { ...matte, holesRemoved };
 }
 
 /** True when image borders are mostly white (already AI-processed preview file). */
@@ -1110,6 +1220,15 @@ export async function hasWhiteStudioBackground(buffer: Buffer): Promise<boolean>
   }
 
   return samples > 0 && white / samples >= 0.7;
+}
+
+/**
+ * True when the backdrop is exactly #FFFFFF everywhere along the border — the signature of an image this pipeline
+ * already produced. A photographed white backdrop always carries some sensor noise, so it does not qualify.
+ */
+export async function hasGeneratedWhiteBackdrop(buffer: Buffer): Promise<boolean> {
+  const { data, width, height } = await loadRgb(buffer);
+  return borderWhiteDistanceQuantile(data, width, height, 0.98) === 0;
 }
 
 /** Keep API preview payloads under Lambda's 6MB response limit. */

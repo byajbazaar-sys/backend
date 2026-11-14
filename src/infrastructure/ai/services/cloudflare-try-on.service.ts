@@ -16,19 +16,30 @@ import { CloudflareTryOnOptions, type CloudflareCredential } from '../cloudflare
 import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
 import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.prompts';
 import { buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts/try-on.prompts';
+import { detectDisplayBackdrop, displayBackdropCutout } from '../utils/display-backdrop.util';
 import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
 import {
   type ProductCutout,
+  type RefineOptions,
   compressPngForApiPreview,
   encodeTransparentCutoutPng,
   encodeWhitePreviewPng,
   extractTransparentCutout,
+  hasGeneratedWhiteBackdrop,
   hasWhiteStudioBackground,
   prepareProductModelInput,
   refineProductCutout,
   removeWhiteBackground,
+  whiteBackdropCutout,
 } from '../utils/product-image.util';
 import { buildTryOnImageSequence } from '../utils/try-on-images.util';
+
+type ProductCutoutPurpose = 'white preview' | 'transparent storage';
+
+/** Keyed foreground above this share means a prop (bust, stand, packaging) is still in the picture. */
+const WHITE_KEY_MAX_FOREGROUND = 0.25;
+/** Near-black share of the model's foreground at which the output is a line-art sketch (or a kept dark prop). */
+const SKETCH_DARK_FRACTION = 0.08;
 
 interface CloudflareRunResponse {
   success?: boolean;
@@ -145,7 +156,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
   }
 
   async removeProductBackground(image: ProductImageInput): Promise<GeneratedAiImage> {
-    const cutout = await this.runProductBackgroundRemoval(image, 'white preview');
+    const cutout = await this.resolveProductCutout(image, 'white preview');
     const png = await encodeWhitePreviewPng(cutout);
     return { base64: png.toString('base64'), mimeType: 'image/png' };
   }
@@ -158,17 +169,101 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
 
   async prepareTryOnStorageImage(image: ProductImageInput): Promise<GeneratedAiImage> {
     const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    // The client sends back the preview it chose; a transparent one is already the cutout.
     const existingCutout = await extractTransparentCutout(input);
     if (existingCutout) {
       return { base64: existingCutout.toString('base64'), mimeType: 'image/png' };
     }
-    if (await hasWhiteStudioBackground(input)) {
-      return this.stripWhiteBackground(image);
-    }
-    // Build the transparent cutout straight from the matte instead of round-tripping through a white preview.
-    const cutout = await this.runProductBackgroundRemoval(image, 'transparent storage');
+    const cutout = await this.resolveProductCutout(image, 'transparent storage');
     const png = await encodeTransparentCutoutPng(cutout);
     return { base64: png.toString('base64'), mimeType: 'image/png' };
+  }
+
+  /**
+   * Picks the cheapest reliable route:
+   * - a photo on a dark/grey display tray is keyed from the photo itself (see {@link tryDisplayTrayCutout});
+   * - a photo already on white is keyed without the model (FLUX tends to hand such photos back as a line-art
+   *   sketch), unless the key leaves a large prop (bust, stand, packaging) — then the model runs with the keyed
+   *   image as the fallback should it sketch;
+   * - transparent uploads (earlier cutouts being regenerated) and photos on other backdrops go to the model.
+   */
+  private async resolveProductCutout(image: ProductImageInput, purpose: ProductCutoutPurpose): Promise<ProductCutout> {
+    const input = Buffer.from(stripDataUrl(image.base64), 'base64');
+    const meta = await sharp(input).metadata();
+    if (meta.hasAlpha) {
+      return this.runProductBackgroundRemoval(image, purpose, { whiteIsForeign: true });
+    }
+    const trayCutout = await this.tryDisplayTrayCutout(input, purpose);
+    if (trayCutout) {
+      return trayCutout;
+    }
+    if (!(await hasWhiteStudioBackground(input))) {
+      return this.runProductBackgroundRemoval(image, purpose, {});
+    }
+    // A preview this pipeline already produced (exact #FFFFFF backdrop) is only re-keyed: running it through the
+    // model again risks it coming back redrawn, and there is no backdrop left to remove.
+    if (await hasGeneratedWhiteBackdrop(input)) {
+      return whiteBackdropCutout(input);
+    }
+
+    let keyed: ProductCutout | null = null;
+    try {
+      keyed = await whiteBackdropCutout(input);
+    } catch (err) {
+      this.logger.warn({ err, purpose }, 'White key found no product; using the model');
+    }
+    if (keyed && keyed.stats.foregroundRatio <= WHITE_KEY_MAX_FOREGROUND) {
+      this.logger.info(
+        { provider: 'cloudflare', purpose, size: `${keyed.width}x${keyed.height}`, ...keyed.stats },
+        'Product background removed by white key (model skipped)',
+      );
+      return keyed;
+    }
+
+    try {
+      const generated = await this.runProductBackgroundRemoval(image, purpose, { whiteIsForeign: !!keyed });
+      if (keyed && generated.stats.darkFraction >= SKETCH_DARK_FRACTION) {
+        this.logger.warn(
+          { provider: 'cloudflare', purpose, darkFraction: generated.stats.darkFraction },
+          'Model output looks like a sketch or kept a dark prop; using the white-keyed photo instead',
+        );
+        return keyed;
+      }
+      return generated;
+    } catch (err) {
+      if (!keyed) throw err;
+      this.logger.warn({ err, purpose }, 'Model failed; using the white-keyed photo instead');
+      return keyed;
+    }
+  }
+
+  /**
+   * Jewellery on a dark/grey display tray is keyed straight from the photo: the model repaints onto white and the
+   * white-based refinement then erases silver, which is near-white itself. Returns null (use the usual route) when
+   * the photo is not on a tray or the key does not give a plausible cutout.
+   */
+  private async tryDisplayTrayCutout(input: Buffer, purpose: ProductCutoutPurpose): Promise<ProductCutout | null> {
+    try {
+      const backdrop = await detectDisplayBackdrop(input);
+      if (!backdrop) return null;
+      const started = Date.now();
+      const cutout = await displayBackdropCutout(input, backdrop);
+      this.logger.info(
+        {
+          provider: 'cloudflare',
+          purpose,
+          size: `${cutout.width}x${cutout.height}`,
+          backdrop: backdrop.color,
+          durationMs: Date.now() - started,
+          ...cutout.stats,
+        },
+        'Product background removed by display-tray key (model skipped)',
+      );
+      return cutout;
+    } catch (err) {
+      this.logger.warn({ err, purpose }, 'Display-tray key not usable; using the usual route');
+      return null;
+    }
   }
 
   async compressPngForPreview(image: ProductImageInput): Promise<GeneratedAiImage> {
@@ -179,7 +274,8 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
 
   private async runProductBackgroundRemoval(
     image: ProductImageInput,
-    purpose: 'white preview' | 'transparent storage',
+    purpose: ProductCutoutPurpose,
+    refine: RefineOptions,
   ): Promise<ProductCutout> {
     this.assertConfigured();
     const modelId = CLOUDFLARE_TRYON_MODEL_FAST;
@@ -203,36 +299,76 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     const maxAttempts = credentialCount * Math.max(1, this.options.maxRetries + 1);
     let lastError: unknown;
 
+    const generate = async (credential: CloudflareCredential, retry: boolean): Promise<ProductCutout> => {
+      const started = Date.now();
+      const generated = await withTimeout(
+        this.invokeWorkersAi(
+          retry ? buildProductBackgroundRemovalPrompt({ retry: true }) : prompt,
+          [modelInput.buffer],
+          credential,
+          modelId,
+          retry ? randomInt(1, 2_147_483_647) : undefined,
+        ),
+        Math.min(this.options.timeoutMs, 90_000),
+        modelId,
+      );
+      const modelMs = Date.now() - started;
+      const cutout = await refineProductCutout(
+        original,
+        Buffer.from(stripDataUrl(generated.base64), 'base64'),
+        modelInput.layout,
+        refine,
+      );
+      this.logger.info(
+        {
+          provider: 'cloudflare',
+          model: modelId,
+          purpose,
+          retry,
+          accountId: credential.accountId,
+          modelMs,
+          durationMs: Date.now() - started,
+          size: `${cutout.width}x${cutout.height}`,
+          ...cutout.stats,
+        },
+        'Cloudflare product background removal completed',
+      );
+      return cutout;
+    };
+
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const credential = this.getCredential();
-      const started = Date.now();
       try {
-        const generated = await withTimeout(
-          this.invokeWorkersAi(prompt, [modelInput.buffer], credential, modelId),
-          Math.min(this.options.timeoutMs, 90_000),
-          modelId,
-        );
-        const modelMs = Date.now() - started;
-        const cutout = await refineProductCutout(
-          original,
-          Buffer.from(stripDataUrl(generated.base64), 'base64'),
-          modelInput.layout,
-        );
-        this.logger.info(
-          {
-            provider: 'cloudflare',
-            model: modelId,
-            purpose,
-            attempt,
-            accountId: credential.accountId,
-            modelMs,
-            durationMs: Date.now() - started,
-            size: `${cutout.width}x${cutout.height}`,
-            ...cutout.stats,
-          },
-          'Cloudflare product background removal completed',
-        );
-        return cutout;
+        const first = await generate(credential, false);
+        if (!first.stats.unchangedPhoto) {
+          return first;
+        }
+        // The model kept the pouch / card / stand. Whether it does is largely down to the seed, so retry once
+        // with a stricter prompt and a fresh seed, and keep whichever pass removed more.
+        try {
+          const second = await generate(credential, true);
+          const keepSecond = !second.stats.unchangedPhoto || second.stats.foregroundRatio < first.stats.foregroundRatio;
+          this.logger.info(
+            {
+              provider: 'cloudflare',
+              model: modelId,
+              purpose,
+              kept: keepSecond ? 'retry' : 'first',
+              firstForeground: first.stats.foregroundRatio,
+              retryForeground: second.stats.foregroundRatio,
+            },
+            'Cloudflare product background removal retry compared',
+          );
+          if (keepSecond) {
+            return second;
+          }
+        } catch (err) {
+          this.logger.warn(
+            { provider: 'cloudflare', model: modelId, purpose, failureReason: this.errorMessage(err) },
+            'Cloudflare product background removal retry failed; keeping first result',
+          );
+        }
+        return first;
       } catch (err) {
         lastError = err;
         const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
