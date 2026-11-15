@@ -202,6 +202,7 @@ export class BarcodeController {
       makingCharges: item.makingCharges,
       makingChargeMode: item.makingChargeMode,
       huid: item.huid,
+      size: item.size,
       location: item.location,
       dataUrl: barcodeDataUrl,
       barcodeDataUrl,

@@ -52,6 +52,10 @@ export class InventoryItemEntity {
   @Column({ type: 'varchar', length: 50, nullable: true })
   huid: string;
 
+  /** Free-form size: ring size, bangle size, chain length… */
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  size: string;
+
   @Column({ type: 'varchar', length: 255 })
   itemName: string;
 

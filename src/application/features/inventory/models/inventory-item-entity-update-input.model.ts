@@ -27,5 +27,6 @@ export interface InventoryItemEntityUpdateInput {
   supplierName?: string;
   isCatalogVisible?: boolean;
   huid?: string;
+  size?: string;
   qrValue?: string;
 }

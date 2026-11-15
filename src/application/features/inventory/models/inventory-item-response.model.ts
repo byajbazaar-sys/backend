@@ -129,6 +129,10 @@ export class InventoryItemResponseModel {
   huid?: string;
 
   @Expose()
+  @ApiPropertyOptional({ example: '16', description: 'Size, e.g. ring size 16, bangle 2.6, chain 18 inch' })
+  size?: string;
+
+  @Expose()
   @ApiProperty()
   createdAt: Date;
 

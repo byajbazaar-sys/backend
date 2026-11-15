@@ -28,6 +28,9 @@ export class InventoryItem {
   huid?: string;
 
   @Expose()
+  size?: string;
+
+  @Expose()
   itemName: string;
 
   @Expose()
