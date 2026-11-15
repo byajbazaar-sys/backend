@@ -17,6 +17,7 @@ import {
   CloudflareTryOnOptions,
   ResendOptions,
   RedisOptions,
+  StartMessagingOptions,
   FaceCompareOptions,
 } from '../infrastructure';
 
@@ -30,6 +31,7 @@ export interface IMsConfig {
   aivotTryOn: AivotTryOnOptions;
   cloudflareTryOn: CloudflareTryOnOptions;
   resend: ResendOptions;
+  startMessaging: StartMessagingOptions;
   webApp: WebAppOptions;
   googleOAuth: GoogleOAuthOptions;
   razorpay: RazorpayOptions;

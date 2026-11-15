@@ -24,7 +24,6 @@ import { randomBytes } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
 
-import { IAuthService } from './interfaces';
 import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } from './models';
 import {
   USERS_FILE_STORAGE,
@@ -44,6 +43,9 @@ import {
 } from '../../shared';
 import { EMAIL_TEMPLATE_SERVICE, IEmailTemplateService } from '../notifications';
 import { IPaymentsService, PAYMENTS_SERVICE } from '../payments/service/i-payments.service';
+import { isVerifiedPhoneUniqueViolation, VerificationService } from '../verification';
+import { IAuthService } from './interfaces';
+import { SignupOtpInput } from './interfaces';
 import { IUsersRepository, User, USERS_REPOSITORY } from '../users';
 import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../users';
 
@@ -80,6 +82,7 @@ export class AuthService implements IAuthService {
     @Optional() @Inject(PAYMENTS_SERVICE) private readonly paymentsService: IPaymentsService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @Inject(APP_INTEGRITY_SERVICE) private readonly appIntegrityService: IAppIntegrityService,
+    private readonly verificationService: VerificationService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -173,6 +176,7 @@ export class AuthService implements IAuthService {
           ...resolvedUser,
           lastLoginAt: now,
           isFirstLogin: wasFirstLogin,
+          phoneVerificationRequired: !!resolvedUser.phoneVerificationRequired && !resolvedUser.isPhoneVerified,
           accessToken: tokens.accessToken,
           paymentToken: tokens.paymentToken,
           requiresSubscription: tokens.requiresSubscription,
@@ -192,93 +196,102 @@ export class AuthService implements IAuthService {
     }
   }
 
-  async signup(body: User): Promise<User> {
+  /**
+   * Creates the account only after the email and mobile codes are both right, then signs the
+   * user in. Both are stored as verified; the codes themselves are never stored.
+   */
+  async signup(body: User, codes: SignupOtpInput): Promise<LoginResponseModel> {
     const user = plainToInstance(User, body);
     const email = this.requireEmail(user.email);
     const existingUser = await this.usersRepo.findByEmail(email);
     if (existingUser) {
-      // User exists - check if it's a Google user
       if (existingUser.isGoogleUser) {
         throw new ConflictException(
           'This email is already registered with Google Sign-In. Please sign in with Google or use "Forgot Password" to set a password.',
         );
       }
-      // Regular user already exists
       throw new ConflictException('User with this email already exists');
     }
 
+    const verified = await this.verificationService.verifySignupCodes({
+      email,
+      phoneNumber: user.phoneNumber,
+      ...codes,
+    });
+
+    const userId = uuidv4();
+    const now = new Date();
+    user.id = userId;
+    user.email = verified.email;
+    user.phoneNumber = verified.phoneNumber;
+    this.logger.debug({ userId }, 'Creating new user');
+    if (user.profilePhoto && user.profilePhotoContentType) {
+      const normalized = await normalizeImageBufferForStorageOrThrow(
+        user.profilePhoto,
+        user.profilePhotoContentType,
+        user.profilePhotoFileName,
+      );
+      const proposedRef = `users/profiles/${userId}.${normalized.fileExtension}`;
+      user.profilePhotoRef = await this.usersFileStorage.writeAsync(
+        proposedRef,
+        normalized.buffer,
+        normalized.mimetype,
+      );
+    }
+
+    let catalogSlug: string = null;
+    if (user.businessName?.trim()) {
+      catalogSlug = await resolveCatalogSlugForBusinessName(this.usersRepo, user.businessName);
+    }
+
+    let createdUser: User;
     try {
-      const userId = uuidv4();
-      user.id = userId;
-      user.email = email;
-      this.logger.debug({ userId, email: user.email }, 'Creating new user');
-      if (user.profilePhoto && user.profilePhotoContentType) {
-        const normalized = await normalizeImageBufferForStorageOrThrow(
-          user.profilePhoto,
-          user.profilePhotoContentType,
-          user.profilePhotoFileName,
-        );
-        const proposedRef = `users/profiles/${userId}.${normalized.fileExtension}`;
-        user.profilePhotoRef = await this.usersFileStorage.writeAsync(
-          proposedRef,
-          normalized.buffer,
-          normalized.mimetype,
-        );
-      }
-
-      const emailVerificationToken = randomBytes(32).toString('hex');
-      const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      let catalogSlug: string = null;
-      if (user.businessName?.trim()) {
-        catalogSlug = await resolveCatalogSlugForBusinessName(this.usersRepo, user.businessName);
-      }
-
-      let createdUser: User;
-      try {
-        createdUser = await this.usersRepo.create({
-          ...user,
-          catalogSlug,
-          catalogEnabled: catalogSlug ? true : undefined,
-          emailVerificationToken,
-          emailVerificationExpires,
-          isFirstLogin: true,
-        });
-      } catch (err) {
-        if (isCatalogSlugUniqueViolation(err)) {
-          throw new ConflictException(
-            'This business name is already being used for a catalog URL. Please choose a unique business name.',
-          );
-        }
-        throw err;
-      }
-
-      const verificationUrl = this.webAppOptions.buildVerifyEmailUrl(emailVerificationToken);
-      const html = this.emailTemplateService.renderEmailVerification({
-        userName: user.firstName
-          ? `${user.firstName} ${user.lastName ?? ''}`.trim() || user.email
-          : (user.email ?? 'User'),
-        verificationUrl,
+      createdUser = await this.usersRepo.create({
+        ...user,
+        catalogSlug,
+        catalogEnabled: catalogSlug ? true : undefined,
+        isEmailVerified: true,
+        emailVerifiedAt: now,
+        isPhoneVerified: true,
+        phoneVerifiedAt: now,
+        isFirstLogin: false,
+        lastLoginAt: now,
       });
-      await this.emailService.sendEmail({
-        to: email,
-        subject: 'Verify your email address',
-        body: html,
-        isHtml: true,
-      });
-
-      return {
-        ...createdUser,
-        profilePhotoRef: user.profilePhotoRef
-          ? await this.usersFileStorage.getUrlAsync(user.profilePhotoRef)
-          : undefined,
-      };
     } catch (err) {
-      if (err instanceof BadRequestException || err instanceof ConflictException) {
-        throw err;
+      if (isCatalogSlugUniqueViolation(err)) {
+        throw new ConflictException(
+          'This business name is already being used for a catalog URL. Please choose a unique business name.',
+        );
+      }
+      if (isVerifiedPhoneUniqueViolation(err)) {
+        throw new ConflictException('This mobile number is already registered with another account.');
       }
       throw err;
     }
+
+    const resolvedUser = this.requireResolvedUser(createdUser);
+    const tokens = await this.buildAuthTokens({
+      userId: resolvedUser.id,
+      userType: resolvedUser.userType,
+      email: resolvedUser.email,
+      emailVerified: true,
+    });
+    return plainToInstance(
+      LoginResponseModel,
+      {
+        ...resolvedUser,
+        isFirstLogin: true,
+        phoneVerificationRequired: false,
+        accessToken: tokens.accessToken,
+        paymentToken: tokens.paymentToken,
+        requiresSubscription: tokens.requiresSubscription,
+        subscriptionStatus: tokens.subscriptionStatus,
+        profilePhotoUrl: resolvedUser.profilePhotoRef
+          ? await this.usersFileStorage.getUrlAsync(resolvedUser.profilePhotoRef)
+          : null,
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   async forgotPassword(email: string): Promise<void> {
@@ -331,101 +344,6 @@ export class AuthService implements IAuthService {
         resetPasswordExpires: null,
       });
       return { ...resolvedUser, password: undefined };
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  async resendVerificationEmail(email: string): Promise<void> {
-    try {
-      const user = await this.usersRepo.findByEmail(email.toLowerCase().trim());
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
-      if (user.isEmailVerified) {
-        throw new BadRequestException('Email is already verified');
-      }
-
-      const resolvedUser = this.requireResolvedUser(user);
-      const emailVerificationToken = randomBytes(32).toString('hex');
-      const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await this.usersRepo.update(resolvedUser.id, {
-        emailVerificationToken,
-        emailVerificationExpires,
-      });
-
-      const verificationUrl = this.webAppOptions.buildVerifyEmailUrl(emailVerificationToken);
-      const html = this.emailTemplateService.renderEmailVerification({
-        userName: resolvedUser.firstName
-          ? `${resolvedUser.firstName} ${resolvedUser.lastName ?? ''}`.trim() || resolvedUser.email
-          : resolvedUser.email,
-        verificationUrl,
-      });
-      await this.emailService.sendEmail({
-        to: resolvedUser.email,
-        subject: 'Verify your email address',
-        body: html,
-        isHtml: true,
-      });
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  async verifyEmail(token: string): Promise<LoginResponseModel> {
-    try {
-      const user = await this.usersRepo.findByEmailVerificationToken(token);
-      if (!user) {
-        throw new NotFoundException('Invalid or expired verification token');
-      }
-
-      if (!user.emailVerificationExpires || user.emailVerificationExpires < new Date()) {
-        throw new BadRequestException('Verification token expired');
-      }
-
-      const now = new Date();
-      const wasFirstLogin = user.isFirstLogin === true;
-      const resolvedUser = this.requireResolvedUser(user);
-      await this.usersRepo.update(resolvedUser.id, {
-        isEmailVerified: true,
-        emailVerifiedAt: now,
-        lastLoginAt: now,
-        emailVerificationToken: null,
-        emailVerificationExpires: null,
-        isFirstLogin: false,
-      });
-      await this.invalidateUserDetailsCache(resolvedUser.id);
-
-      const updatedUser: ResolvedUser = {
-        ...resolvedUser,
-        isEmailVerified: true,
-        emailVerifiedAt: now,
-        lastLoginAt: now,
-        isFirstLogin: wasFirstLogin,
-      };
-      const identity: IIdentity = {
-        userId: updatedUser.id,
-        userType: updatedUser.userType,
-        email: updatedUser.email,
-        emailVerified: true,
-      };
-      const tokens = await this.buildAuthTokens(identity);
-      const profilePhotoUrl = updatedUser.profilePhotoRef
-        ? await this.usersFileStorage.getUrlAsync(updatedUser.profilePhotoRef)
-        : null;
-
-      return plainToInstance(
-        LoginResponseModel,
-        {
-          ...updatedUser,
-          accessToken: tokens.accessToken,
-          paymentToken: tokens.paymentToken,
-          requiresSubscription: tokens.requiresSubscription,
-          subscriptionStatus: tokens.subscriptionStatus,
-          profilePhotoUrl,
-        },
-        { excludeExtraneousValues: true },
-      );
     } catch (err) {
       throw err;
     }
@@ -498,6 +416,8 @@ export class AuthService implements IAuthService {
           googleId: googleUser.sub,
           isGoogleUser: true,
           isFirstLogin: true,
+          // Google gives us a verified email but no mobile: ask for one before the app opens.
+          phoneVerificationRequired: true,
           createdAt: now,
           updatedAt: now,
           profilePhoto: Buffer.alloc(0),
@@ -547,6 +467,8 @@ export class AuthService implements IAuthService {
           profilePhotoUrl,
           isNewUser,
           isFirstLogin: wasFirstLogin,
+          phoneVerificationRequired:
+            !!authenticatedUser.phoneVerificationRequired && !authenticatedUser.isPhoneVerified,
           redirectPath: tokens.redirectPath,
         },
         {

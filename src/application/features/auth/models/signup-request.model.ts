@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { NAME_REGEX, PHONE_E164_REGEX, PASSWORD_COMPLEXITY_REGEX } from '@shared-libs';
+import { NAME_REGEX, PASSWORD_COMPLEXITY_REGEX } from '@shared-libs';
 import { Expose } from 'class-transformer';
 import { IsEmail, IsString, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
 
@@ -37,15 +37,39 @@ export class SignupRequestModel {
 
   @Expose()
   @ApiProperty({
-    example: '+15550000000',
-    required: false,
-    nullable: true,
-    description: 'User phone number (optional)',
+    example: '9876543210',
+    description: 'Indian mobile number (10 digits, +91 optional). Must match the number the phone code was sent to.',
   })
-  @IsOptional()
-  @IsString({ message: 'Phone number must be a string' })
-  @Matches(PHONE_E164_REGEX, { message: 'Please provide a valid phone number in international format' })
-  phoneNumber?: string;
+  @IsString({ message: 'Mobile number is required' })
+  @MinLength(10, { message: 'Please enter a valid 10-digit mobile number' })
+  @MaxLength(16, { message: 'Please enter a valid 10-digit mobile number' })
+  phoneNumber: string;
+
+  @Expose()
+  @ApiProperty({ description: 'challengeToken from POST /auth/otp/send (channel email)' })
+  @IsString({ message: 'Please verify your email' })
+  @MaxLength(2048)
+  emailChallenge: string;
+
+  @Expose()
+  @ApiProperty({ example: '123456', description: 'Code sent to the email' })
+  @IsString({ message: 'Enter the code sent to your email' })
+  @MinLength(4)
+  @MaxLength(8)
+  emailCode: string;
+
+  @Expose()
+  @ApiProperty({ description: 'challengeToken from POST /auth/otp/send (channel phone)' })
+  @IsString({ message: 'Please verify your mobile number' })
+  @MaxLength(2048)
+  phoneChallenge: string;
+
+  @Expose()
+  @ApiProperty({ example: '123456', description: 'Code sent to the mobile number by SMS' })
+  @IsString({ message: 'Enter the code sent to your mobile number' })
+  @MinLength(4)
+  @MaxLength(8)
+  phoneCode: string;
 
   @Expose()
   @ApiProperty({

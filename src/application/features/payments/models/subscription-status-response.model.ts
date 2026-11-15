@@ -9,24 +9,28 @@ export class SubscriptionStatusResponseModel {
   hasActiveSubscription: boolean;
 
   @Expose()
-  @ApiProperty({ description: 'Whether the user can access app features (always true for logged-in users)' })
+  @ApiProperty({ description: 'Whether the user can use the app (trial running or a paid plan)' })
   hasAppAccess: boolean;
 
   @Expose()
-  @ApiProperty({ description: 'Whether ads should be shown (false during welcome period or active subscription)' })
+  @ApiProperty({ description: 'Deprecated: ads were removed. Always false.' })
   showAds: boolean;
 
   @Expose()
-  @ApiProperty({ description: 'Whether the user is in the no-ads welcome period (first 7 days)' })
+  @ApiProperty({ description: 'Whether the user is in the 7-day trial (and has no paid plan)' })
   isOnTrial: boolean;
 
   @Expose()
-  @ApiPropertyOptional({ type: Date, nullable: true, description: 'When the no-ads welcome period ends' })
+  @ApiProperty({ description: 'Length of the trial in days', example: 7 })
+  trialDays: number;
+
+  @Expose()
+  @ApiPropertyOptional({ type: Date, nullable: true, description: 'When the trial ends' })
   @Type(() => Date)
   trialEndsAt?: Date;
 
   @Expose()
-  @ApiPropertyOptional({ description: 'Days remaining in the no-ads welcome period', nullable: true })
+  @ApiPropertyOptional({ description: 'Days remaining in the trial', nullable: true })
   trialDaysRemaining?: number;
 
   @Expose()

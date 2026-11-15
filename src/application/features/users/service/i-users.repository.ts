@@ -7,7 +7,8 @@ export interface IUsersRepository {
   create(createUserDto: CreateUserInput): Promise<User>;
   findByEmail(email: string): Promise<User>;
   update(id: string, updateDto: UserUpdatePatch): Promise<User>;
-  findByEmailVerificationToken(token: string): Promise<User>;
+  /** The account that has verified this 10-digit mobile number, if any. */
+  findByVerifiedPhone(phoneNumber: string): Promise<User>;
   findByResetPasswordToken(token: string): Promise<User>;
   findById(id: string): Promise<User>;
   findByGoogleId(googleId: string): Promise<User>;

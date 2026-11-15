@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EUserType } from '@shared-libs';
-import { Expose } from 'class-transformer';
+import { Expose, Transform } from 'class-transformer';
 
 export class UserResponseModel {
   @Expose()
@@ -124,7 +124,23 @@ export class UserResponseModel {
   @Expose()
   @ApiProperty({
     example: false,
-    description: 'Whether the user has not yet completed a first login (password, Google, or verify-email session).',
+    description: 'Whether the user has not yet completed a first login (password or Google session).',
   })
   isFirstLogin?: boolean;
+
+  @Expose()
+  @ApiPropertyOptional({ example: true })
+  isEmailVerified?: boolean;
+
+  @Expose()
+  @ApiPropertyOptional({ example: true, description: 'Mobile number verified by SMS code' })
+  isPhoneVerified?: boolean;
+
+  @Expose()
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Must verify a mobile number before using the app (new Google sign-ups). False once verified.',
+  })
+  @Transform(({ obj }) => !!obj.phoneVerificationRequired && !obj.isPhoneVerified)
+  phoneVerificationRequired?: boolean;
 }

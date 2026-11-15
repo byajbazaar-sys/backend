@@ -11,9 +11,11 @@ export interface CreateUserInput {
   userType?: EUserType;
   isEmailVerified?: boolean;
   emailVerifiedAt?: Date;
-  emailVerificationToken?: string;
-  emailVerificationExpires?: Date;
+  isPhoneVerified?: boolean;
+  phoneVerifiedAt?: Date;
+  phoneVerificationRequired?: boolean;
   isFirstLogin?: boolean;
+  lastLoginAt?: Date;
   googleId?: string;
   isGoogleUser?: boolean;
   profilePhotoRef?: string;

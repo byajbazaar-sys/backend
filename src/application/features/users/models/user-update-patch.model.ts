@@ -33,11 +33,14 @@ export class UserUpdatePatch {
   resetPasswordExpires?: Date;
 
   @Expose()
-  emailVerificationToken?: string;
+  isPhoneVerified?: boolean;
 
   @Expose()
   @Type(() => Date)
-  emailVerificationExpires?: Date;
+  phoneVerifiedAt?: Date;
+
+  @Expose()
+  phoneVerificationRequired?: boolean;
 
   @Expose()
   profilePhotoRef?: string;

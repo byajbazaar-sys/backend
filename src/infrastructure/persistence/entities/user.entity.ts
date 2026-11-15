@@ -42,17 +42,23 @@ export class UserEntity {
   @Column({ type: 'timestamptz', nullable: true })
   emailVerifiedAt: Date;
 
+  /** Verified via SMS OTP. Verified numbers are unique across users (partial unique index). */
+  @Column({ type: 'boolean', default: false })
+  isPhoneVerified: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  phoneVerifiedAt: Date;
+
+  /** New accounts without a verified mobile (Google sign-up) must verify one before using the app. */
+  @Column({ type: 'boolean', default: false })
+  phoneVerificationRequired: boolean;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   resetPasswordToken: string;
 
   @Column({ type: 'timestamptz', nullable: true })
   resetPasswordExpires: Date;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  emailVerificationToken: string;
-
-  @Column({ type: 'timestamptz', nullable: true })
-  emailVerificationExpires: Date;
 
   @Column({ type: 'enum', enum: EUserType, enumName: 'e_user_type_enum', default: EUserType.User })
   userType: EUserType;

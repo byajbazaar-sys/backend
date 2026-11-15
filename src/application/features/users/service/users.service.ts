@@ -16,6 +16,7 @@ import {
   USERS_FILE_STORAGE,
   USER_DETAILS_CACHE_TTL_SECONDS,
 } from '../../../shared';
+import { normalizeIndianMobile } from '../../verification/utils/phone.util';
 import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../utils/catalog-slug.helper';
 
 type CachedUser = User & { profilePhotoUrl?: string; shopLogoUrl?: string };
@@ -53,8 +54,6 @@ export class UsersService implements IUsersService {
       password: _password,
       resetPasswordToken: _resetPasswordToken,
       resetPasswordExpires: _resetPasswordExpires,
-      emailVerificationToken: _emailVerificationToken,
-      emailVerificationExpires: _emailVerificationExpires,
       profilePhoto: _profilePhoto,
       profilePhotoContentType: _profilePhotoContentType,
       profilePhotoFileName: _profilePhotoFileName,
@@ -173,6 +172,20 @@ export class UsersService implements IUsersService {
         plainToInstance(UserUpdatePatch, dataToUpdate, { excludeExtraneousValues: true }),
         { exposeUnsetFields: false },
       ) as UserUpdatePatch;
+
+      // The mobile number is verified by SMS code and unique per account, so it can only be
+      // changed through Account → Verify mobile (POST /users/me/verification).
+      if (definedUpdates.phoneNumber !== undefined) {
+        const current = normalizeIndianMobile(existingUser.phoneNumber) ?? (existingUser.phoneNumber ?? '').trim();
+        const next = normalizeIndianMobile(definedUpdates.phoneNumber) ?? (definedUpdates.phoneNumber ?? '').trim();
+        if (next === current) {
+          delete definedUpdates.phoneNumber;
+        } else {
+          throw new BadRequestException(
+            'To change your mobile number, verify the new number from Account → Mobile number.',
+          );
+        }
+      }
 
       if (definedUpdates.businessName !== undefined) {
         const trimmed = definedUpdates.businessName?.trim() ?? '';

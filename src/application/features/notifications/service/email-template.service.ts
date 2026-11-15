@@ -5,13 +5,22 @@ import { EmailVerificationTemplateData, ForgotPasswordTemplateData } from '../do
 import { IEmailTemplateService } from '../interfaces';
 import { EMAIL_VERIFICATION_TEMPLATE, FORGOT_PASSWORD_TEMPLATE } from '../templates';
 
+function escapeHtml(value: string): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 @Injectable()
 export class EmailTemplateService implements IEmailTemplateService {
   renderEmailVerification(data: EmailVerificationTemplateData): string {
     const html = this.compileTemplate(EMAIL_VERIFICATION_TEMPLATE, {
-      userName: data.userName,
-      verificationUrl: data.verificationUrl,
-      appName: data.appName ?? 'CrowdSay',
+      userName: escapeHtml(data.userName),
+      code: data.code,
+      expiresMinutes: data.expiresMinutes ?? 10,
+      appName: data.appName ?? 'ByajBazaar',
       year: data.year ?? new Date().getFullYear(),
     });
     return html;
@@ -19,9 +28,9 @@ export class EmailTemplateService implements IEmailTemplateService {
 
   renderForgotPassword(data: ForgotPasswordTemplateData): string {
     const html = this.compileTemplate(FORGOT_PASSWORD_TEMPLATE, {
-      userName: data.userName,
+      userName: escapeHtml(data.userName),
       resetUrl: data.resetUrl,
-      appName: data.appName ?? 'CrowdSay',
+      appName: data.appName ?? 'ByajBazaar',
       year: data.year ?? new Date().getFullYear(),
     });
     return html;

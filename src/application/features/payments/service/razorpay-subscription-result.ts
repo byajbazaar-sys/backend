@@ -7,5 +7,6 @@ export interface RazorpaySubscriptionResult {
   current_start?: number;
   current_end?: number;
   charge_at?: number;
+  start_at?: number;
   raw: Record<string, unknown>;
 }

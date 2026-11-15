@@ -26,6 +26,7 @@ import { SupportController } from './support';
 import { TransactionsController } from './transactions';
 import { TryOnController } from './try-on';
 import { UsersController } from './users';
+import { OtpChallengeService, VerificationController, VerificationService } from './verification';
 import { WhatsAppController, WhatsAppWebhookController } from './whatsapp';
 
 export * from './users';
@@ -49,6 +50,7 @@ export * from './deposits';
 export * from './orders';
 export * from './public-catalog';
 export * from './whatsapp';
+export * from './verification';
 
 export const Controllers = [
   UsersController,
@@ -81,6 +83,7 @@ export const Controllers = [
   PublicCatalogController,
   WhatsAppController,
   WhatsAppWebhookController,
+  VerificationController,
 ];
 
-export const Services = [JwtService, LabelDesignerSettingsService];
+export const Services = [JwtService, LabelDesignerSettingsService, OtpChallengeService, VerificationService];

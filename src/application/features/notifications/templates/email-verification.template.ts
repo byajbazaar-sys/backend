@@ -1,37 +1,41 @@
+/** One-time code email for verifying an email address (sign-up and Account → Verify email). */
 export const EMAIL_VERIFICATION_TEMPLATE = `
 <mjml>
   <mj-head>
-    <mj-title>Verify Your Email</mj-title>
-    <mj-preview>Please verify your email address to complete your registration</mj-preview>
+    <mj-title>Your {{appName}} verification code</mj-title>
+    <mj-preview>{{code}} is your {{appName}} verification code. It expires in {{expiresMinutes}} minutes.</mj-preview>
     <mj-attributes>
       <mj-all font-family="Helvetica, Arial, sans-serif" />
       <mj-text color="#333333" font-size="16px" line-height="24px" />
-      <mj-button background-color="#2563eb" color="#ffffff" font-size="16px" />
     </mj-attributes>
   </mj-head>
   <mj-body background-color="#f5f5f5" width="600px">
-    <mj-section background-color="#ffffff" padding="40px 24px">
+    <mj-section background-color="#0f172a" padding="20px 24px">
       <mj-column>
-        <mj-text font-size="24px" font-weight="bold" color="#111827" align="center" padding-bottom="16px">
-          Verify Your Email
+        <mj-text font-size="20px" font-weight="bold" color="#ffad33" align="center" padding="0">
+          {{appName}}
         </mj-text>
-        <mj-text padding-bottom="24px">
-          Hi {{userName}},
+      </mj-column>
+    </mj-section>
+    <mj-section background-color="#ffffff" padding="36px 24px">
+      <mj-column>
+        <mj-text font-size="22px" font-weight="bold" color="#111827" align="center" padding-bottom="12px">
+          Verify your email
         </mj-text>
-        <mj-text padding-bottom="24px">
-          Thanks for signing up! Please verify your email address by clicking the button below.
+        <mj-text padding-bottom="8px">Hi {{userName}},</mj-text>
+        <mj-text padding-bottom="20px">
+          Enter this code in {{appName}} to verify your email address:
         </mj-text>
-        <mj-button href="{{verificationUrl}}" padding="24px 0" border-radius="8px">
-          Verify Email Address
-        </mj-button>
-        <mj-text padding-top="32px" font-size="14px" color="#6b7280">
-          This link will expire in 24 hours. If you didn't create an account, you can safely ignore this email.
+        <mj-text align="center" font-size="34px" font-weight="bold" letter-spacing="10px" color="#111827"
+          padding="18px 0" container-background-color="#fff7ea" css-class="otp-code">
+          {{code}}
         </mj-text>
-        <mj-text padding-top="16px" font-size="14px" color="#6b7280">
-          If the button doesn't work, copy and paste this link into your browser:
+        <mj-text padding-top="20px" font-size="14px" color="#6b7280">
+          The code expires in {{expiresMinutes}} minutes and can be used once. Never share it with anyone —
+          {{appName}} will never ask you for it.
         </mj-text>
-        <mj-text font-size="12px" color="#2563eb" padding-top="8px" padding-bottom="0">
-          {{verificationUrl}}
+        <mj-text padding-top="12px" font-size="14px" color="#6b7280">
+          If you didn't try to sign up or verify your email, you can safely ignore this message.
         </mj-text>
       </mj-column>
     </mj-section>

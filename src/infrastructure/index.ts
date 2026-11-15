@@ -9,3 +9,4 @@ export * from './google-oauth';
 export * from './redis';
 export * from './meta';
 export * from './face-compare';
+export * from './startmessaging';

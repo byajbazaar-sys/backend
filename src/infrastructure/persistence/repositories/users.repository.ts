@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { BCRYPT_SALT_ROUNDS, EUserType } from '@shared-libs';
+import { BCRYPT_SALT_ROUNDS, EUserType, TRIAL_DAYS } from '@shared-libs';
 import { hashSync } from 'bcrypt';
 import { plainToInstance } from 'class-transformer';
 import { Repository, In } from 'typeorm';
@@ -8,8 +8,6 @@ import { Repository, In } from 'typeorm';
 import { IUsersRepository, User, CreateUserInput, UserUpdatePatch } from '../../../application';
 import { defaultTrialEndsAt } from '../../../application/features/payments/utils/trial.util';
 import { UserEntity } from '../entities/user.entity';
-
-const DEFAULT_TRIAL_DAYS = Number(process.env.DEFAULT_TRIAL_DAYS ?? 7);
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {
@@ -21,7 +19,7 @@ export class UsersRepository implements IUsersRepository {
       dto.password = hashSync(dto.password, BCRYPT_SALT_ROUNDS);
     }
     if (!dto.trialEndsAt && dto.userType !== EUserType.Admin) {
-      dto.trialEndsAt = defaultTrialEndsAt(DEFAULT_TRIAL_DAYS);
+      dto.trialEndsAt = defaultTrialEndsAt(TRIAL_DAYS);
     }
     const entity = this.userRepo.create(dto);
     const created = await this.userRepo.save(entity);
@@ -34,8 +32,8 @@ export class UsersRepository implements IUsersRepository {
     return plainToInstance(User, user, { excludeExtraneousValues: true });
   }
 
-  async findByEmailVerificationToken(token: string): Promise<User> {
-    const user = await this.userRepo.findOne({ where: { emailVerificationToken: token } });
+  async findByVerifiedPhone(phoneNumber: string): Promise<User> {
+    const user = await this.userRepo.findOne({ where: { phoneNumber, isPhoneVerified: true } });
     if (!user) return null;
     return plainToInstance(User, user, { excludeExtraneousValues: true });
   }

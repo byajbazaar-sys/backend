@@ -586,7 +586,15 @@ export class WebhookService implements IWebhookService {
       return;
     }
 
-    const status = this.mapSubscriptionStatus(eventName, entity.status ? String(entity.status) : undefined);
+    let status = this.mapSubscriptionStatus(eventName, entity.status ? String(entity.status) : undefined);
+    // Razorpay doesn't guarantee delivery order: a late "authenticated" event must not
+    // move a subscription that is already active back to a pre-payment state.
+    if (
+      local.status === ESubscriptionStatus.Active &&
+      (status === ESubscriptionStatus.Authenticated || status === ESubscriptionStatus.Created)
+    ) {
+      status = ESubscriptionStatus.Active;
+    }
     const patch: SubscriptionPatch = {
       status,
       providerCustomerId: entity.customer_id ? String(entity.customer_id) : local.providerCustomerId,
@@ -607,7 +615,13 @@ export class WebhookService implements IWebhookService {
 
     await this.subscriptionsRepo.update(local.id, patch);
 
-    if (eventName === 'subscription.activated' || eventName === 'subscription.charged') {
+    // With a coupon the discounted first period is paid at authentication, a full period
+    // before activation — record the redemption then so the coupon can't be reused.
+    if (
+      eventName === 'subscription.activated' ||
+      eventName === 'subscription.charged' ||
+      (eventName === 'subscription.authenticated' && local.couponId)
+    ) {
       const refreshed = await this.subscriptionsRepo.findById(local.id);
       if (refreshed) {
         try {

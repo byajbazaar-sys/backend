@@ -1,4 +1,4 @@
-import { generateLoggerConfig, UsersAuthOptions, type Environment } from '@shared-libs';
+import { generateLoggerConfig, TRIAL_DAYS, UsersAuthOptions, type Environment } from '@shared-libs';
 import { Algorithm } from 'jsonwebtoken';
 
 import { IMsConfig } from './i-ms.config';
@@ -17,6 +17,7 @@ import {
   CloudflareTryOnOptions,
   parseCloudflareCredentials,
   ResendOptions,
+  StartMessagingOptions,
   RedisOptions,
   FaceCompareOptions,
   type TryOnAiProvider,
@@ -104,6 +105,11 @@ export const configFactory = (): IMsConfig => ({
     Number(process.env.CLOUDFLARE_TRYON_TIMEOUT_MS) || CLOUDFLARE_TRYON_TIMEOUT_MS,
     Number(process.env.CLOUDFLARE_TRYON_MAX_RETRIES) || CLOUDFLARE_TRYON_MAX_RETRIES,
   ),
+  startMessaging: new StartMessagingOptions(
+    process.env.START_MESSAGING_API_KEY ?? '',
+    process.env.START_MESSAGING_BASE_URL || 'https://api.startmessaging.com',
+    process.env.START_MESSAGING_TEMPLATE_ID || undefined,
+  ),
   resend: new ResendOptions(
     process.env.RESEND_API_KEY ?? '',
     process.env.RESEND_SENDER ?? '',
@@ -124,7 +130,7 @@ export const configFactory = (): IMsConfig => ({
     process.env.RAZORPAY_KEY_SECRET ?? '',
     process.env.RAZORPAY_WEBHOOK_SECRET ?? '',
     'INR',
-    Number(process.env.DEFAULT_TRIAL_DAYS ?? 7),
+    TRIAL_DAYS,
   ),
   redis: resolveRedisOptions(),
   appIntegrity: new AppIntegrityOptions(

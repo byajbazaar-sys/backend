@@ -30,6 +30,15 @@ export class User {
   public emailVerifiedAt?: Date;
 
   @Expose()
+  public isPhoneVerified?: boolean;
+
+  @Expose()
+  public phoneVerifiedAt?: Date;
+
+  @Expose()
+  public phoneVerificationRequired?: boolean;
+
+  @Expose()
   public passwordChangedAt?: Date;
 
   @Expose()
@@ -38,11 +47,6 @@ export class User {
   @Expose()
   public resetPasswordExpires?: Date;
 
-  @Expose()
-  public emailVerificationToken?: string;
-
-  @Expose()
-  public emailVerificationExpires?: Date;
 
   @Expose()
   public createdAt?: Date;

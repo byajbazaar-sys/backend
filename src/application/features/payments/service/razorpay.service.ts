@@ -59,6 +59,7 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
       current_start: typeof raw.current_start === 'number' ? raw.current_start : undefined,
       current_end: typeof raw.current_end === 'number' ? raw.current_end : undefined,
       charge_at: typeof raw.charge_at === 'number' ? raw.charge_at : undefined,
+      start_at: typeof raw.start_at === 'number' ? raw.start_at : undefined,
       raw,
     };
   }
@@ -270,6 +271,21 @@ export class RazorpayService implements IRazorpayService, OnModuleInit {
         customer_notify: true,
         notes: params.notes ?? {},
       };
+      if (params.startAt) {
+        payload.start_at = params.startAt;
+      }
+      if (params.upfrontAmountPaise && params.upfrontAmountPaise > 0) {
+        // Charged once with the checkout authorisation; recurring cycles start at start_at.
+        payload.addons = [
+          {
+            item: {
+              name: params.upfrontLabel || 'First billing period',
+              amount: params.upfrontAmountPaise,
+              currency: params.currency || 'INR',
+            },
+          },
+        ];
+      }
       const notifyInfo: Record<string, string> = {};
       if (params.notifyInfo?.email?.trim()) {
         notifyInfo.notify_email = params.notifyInfo.email.trim();

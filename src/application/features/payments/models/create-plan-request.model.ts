@@ -10,7 +10,7 @@ export class CreatePlanRequestModel {
   name!: string;
 
   @Expose()
-  @ApiProperty({ example: 48, description: 'Price in INR' })
+  @ApiProperty({ example: 499, description: 'Price in INR' })
   @IsNumber()
   @Min(1)
   price!: number;

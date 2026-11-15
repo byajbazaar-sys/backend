@@ -6,7 +6,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { SUBSCRIPTION_PROVIDER_RAZORPAY, DEFAULT_PAGE_NUMBER, DEFAULT_PAGE_SIZE } from '@shared-libs';
+import {
+  SUBSCRIPTION_PROVIDER_RAZORPAY,
+  DEFAULT_PAGE_NUMBER,
+  DEFAULT_PAGE_SIZE,
+  EUserType,
+  TRIAL_DAYS,
+} from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
@@ -33,14 +39,38 @@ import { IPaymentsService } from './i-payments.service';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
 import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
+import { RazorpaySubscriptionResult } from './razorpay-subscription-result';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { resolveCheckoutPlan, subscriptionTotalCount } from '../utils/checkout-plan.util';
-import {
-  isTrialActive,
-  resolveTrialEndsAt,
-  shouldShowAds,
-  trialDaysRemaining,
-} from '../utils/trial.util';
+import { subscriptionGrantsAccess } from '../utils/subscription-access.util';
+import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
+
+/** Same day next month / next year — when recurring billing starts after a paid first period. */
+export function addBillingPeriod(from: Date, period: 'monthly' | 'yearly'): Date {
+  const next = new Date(from);
+  const day = next.getDate();
+  next.setDate(1);
+  if (period === 'yearly') next.setFullYear(next.getFullYear() + 1);
+  else next.setMonth(next.getMonth() + 1);
+  // 31 Jan + 1 month → 28/29 Feb, not 3 Mar.
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(day, lastDay));
+  return next;
+}
+
+/**
+ * Billing dates from a Razorpay subscription. Before recurring billing starts (first period paid
+ * upfront with a coupon) Razorpay has no current_end yet, so the paid period ends at start_at.
+ */
+export function rzpPeriod(rzp: RazorpaySubscriptionResult): { currentStart: Date; currentEnd: Date; nextBillingAt: Date } {
+  const toDate = (sec?: number) => (sec ? new Date(sec * 1000) : null);
+  const notStarted = !rzp.current_end && !!rzp.start_at;
+  return {
+    currentStart: toDate(rzp.current_start),
+    currentEnd: notStarted ? toDate(rzp.start_at) : toDate(rzp.current_end),
+    nextBillingAt: toDate(rzp.charge_at) ?? (notStarted ? toDate(rzp.start_at) : null),
+  };
+}
 
 @Injectable()
 export class PaymentsService implements IPaymentsService {
@@ -60,8 +90,11 @@ export class PaymentsService implements IPaymentsService {
     return !!active;
   }
 
-  async hasAppAccess(_userId: string): Promise<boolean> {
-    return true;
+  async hasAppAccess(userId: string): Promise<boolean> {
+    if (await this.findPayingSubscription(userId)) return true;
+    const user = await this.usersRepo.findById(userId);
+    if (!user) return false;
+    return user.userType === EUserType.Admin || isTrialActive(user, TRIAL_DAYS);
   }
 
   async listCheckoutPlans(): Promise<CheckoutPlanResponseModel[]> {
@@ -97,7 +130,7 @@ export class PaymentsService implements IPaymentsService {
       }
       if (blocking.status === ESubscriptionStatus.Created || blocking.status === ESubscriptionStatus.Authenticated) {
         if (blocking.providerSubscriptionId) {
-          if (!this.checkoutTermsMatch(blocking, couponId, discountAmount, finalAmount)) {
+          if (!this.checkoutTermsMatch(blocking, couponId, discountAmount, originalAmount)) {
             await this.invalidateCheckoutSubscription(blocking);
             blocking = await this.subscriptionsRepo.findById(blocking.id);
           } else {
@@ -125,8 +158,13 @@ export class PaymentsService implements IPaymentsService {
       throw new BadRequestException('Invalid subscription amount');
     }
 
-    const amountPaise = Math.round(finalAmount * 100);
-    const razorpayPlanId = (await this.razorpay.ensureBillingPlan(amountPaise, billingPeriod, currency)).id;
+    // The Razorpay plan always bills the full price. A coupon only lowers the first period:
+    // that period is paid upfront at checkout and recurring billing starts one period later.
+    const razorpayPlanId = (
+      await this.razorpay.ensureBillingPlan(Math.round(originalAmount * 100), billingPeriod, currency)
+    ).id;
+    const firstPeriodDiscounted = discountAmount > 0;
+    const startAt = firstPeriodDiscounted ? addBillingPeriod(new Date(), billingPeriod) : null;
 
     const previousSub = await this.subscriptionsRepo.findLatestByUserId(userId);
     const providerCustomerId = previousSub?.providerCustomerId ?? null;
@@ -145,7 +183,7 @@ export class PaymentsService implements IPaymentsService {
       ? await this.subscriptionsRepo.update(incompleteCheckout.id, {
           planId: razorpayPlanId,
           providerCustomerId,
-          amount: finalAmount,
+          amount: originalAmount,
           currency,
           couponId,
           discountAmount,
@@ -158,7 +196,7 @@ export class PaymentsService implements IPaymentsService {
           providerSubscriptionId: null,
           providerCustomerId,
           status: ESubscriptionStatus.Created,
-          amount: finalAmount,
+          amount: originalAmount,
           currency,
           couponId,
           discountAmount,
@@ -170,6 +208,14 @@ export class PaymentsService implements IPaymentsService {
       plainToInstance(RazorpayCreateSubscriptionData, {
         planId: razorpayPlanId,
         totalCount: subscriptionTotalCount(activePlan),
+        currency,
+        ...(startAt
+          ? {
+              startAt: Math.floor(startAt.getTime() / 1000),
+              upfrontAmountPaise: Math.round(finalAmount * 100),
+              upfrontLabel: `First ${billingPeriod === 'yearly' ? 'year' : 'month'} (coupon ${body.couponCode.trim().toUpperCase()})`,
+            }
+          : {}),
         notes: {
           userId,
           subscriptionId: local.id,
@@ -185,9 +231,7 @@ export class PaymentsService implements IPaymentsService {
     const updated = await this.subscriptionsRepo.update(local.id, {
       providerSubscriptionId: rzpSub.id,
       status: this.mapRzpStatus(rzpSub.status),
-      currentStart: rzpSub.current_start ? new Date(rzpSub.current_start * 1000) : null,
-      currentEnd: rzpSub.current_end ? new Date(rzpSub.current_end * 1000) : null,
-      nextBillingAt: rzpSub.charge_at ? new Date(rzpSub.charge_at * 1000) : null,
+      ...rzpPeriod(rzpSub),
     });
 
     return plainToInstance(
@@ -213,22 +257,28 @@ export class PaymentsService implements IPaymentsService {
     if (latest?.providerSubscriptionId) {
       latest = await this.syncSubscriptionFromRazorpay(latest);
     }
-    const active = latest?.status === ESubscriptionStatus.Active;
+    // A newer abandoned checkout must not hide an older plan that is still paid for.
+    const paying = subscriptionGrantsAccess(latest) ? latest : await this.subscriptionsRepo.findActiveByUserId(userId);
+    if (paying?.id && paying.id !== latest?.id) {
+      latest = paying;
+    }
+    const active = !!paying;
     const activePlan = await this.plansRepo.findActiveDefault();
     const user = await this.usersRepo.findById(userId);
-    const defaultTrialDays = this.razorpayOptions.defaultTrialDays;
-    const onNoAdsTrial = user ? isTrialActive(user, defaultTrialDays) : false;
-    const trialEndsAt = user ? resolveTrialEndsAt(user, defaultTrialDays) : null;
-    const daysRemaining = user ? trialDaysRemaining(user, defaultTrialDays) : 0;
-    const showAds = shouldShowAds(user, !!active, defaultTrialDays);
+    const isAdmin = user?.userType === EUserType.Admin;
+    const onTrial = !active && !!user && !isAdmin && isTrialActive(user, TRIAL_DAYS);
+    const trialEndsAt = user ? resolveTrialEndsAt(user, TRIAL_DAYS) : null;
+    const daysRemaining = user ? trialDaysRemaining(user, TRIAL_DAYS) : 0;
 
     return plainToInstance(
       SubscriptionStatusResponseModel,
       {
         hasActiveSubscription: !!active,
-        hasAppAccess: true,
-        showAds,
-        isOnTrial: onNoAdsTrial,
+        hasAppAccess: active || onTrial || isAdmin,
+        // Ads were removed from the apps; kept false so older app versions never show them.
+        showAds: false,
+        isOnTrial: onTrial,
+        trialDays: TRIAL_DAYS,
         trialEndsAt,
         trialDaysRemaining: daysRemaining,
         status: latest?.status ?? null,
@@ -251,6 +301,17 @@ export class PaymentsService implements IPaymentsService {
     }
 
     const cancelAtPeriodEnd = body.cancelAtPeriodEnd !== false;
+    if (sub.status === ESubscriptionStatus.Authenticated) {
+      // Recurring billing hasn't started (first period was paid upfront). Razorpay can only cancel
+      // it outright; the shop keeps access until the paid period ends (currentEnd).
+      await this.razorpay.cancelSubscription(sub.providerSubscriptionId, false);
+      await this.subscriptionsRepo.update(sub.id, {
+        cancelAtPeriodEnd: true,
+        status: ESubscriptionStatus.Cancelled,
+        cancelledAt: new Date(),
+      });
+      return this.getStatus(userId);
+    }
     await this.razorpay.cancelSubscription(sub.providerSubscriptionId, cancelAtPeriodEnd);
 
     await this.subscriptionsRepo.update(sub.id, {
@@ -272,10 +333,14 @@ export class PaymentsService implements IPaymentsService {
     }
 
     if (latest.cancelAtPeriodEnd && latest.status === ESubscriptionStatus.Active) {
-      // Undo cancel-at-period-end by clearing local flag; Razorpay cancel-at-cycle-end
-      // cannot always be reversed — attempt resume/pause path for halted/paused.
-      await this.subscriptionsRepo.update(latest.id, { cancelAtPeriodEnd: false });
-      return this.getStatus(userId);
+      // Razorpay has no way to undo a cancel-at-cycle-end, so clearing our flag would only
+      // pretend the plan continues while Razorpay still ends it. Be honest instead.
+      const ends = latest.currentEnd ? new Date(latest.currentEnd).toLocaleDateString('en-IN') : null;
+      throw new BadRequestException(
+        ends
+          ? `This plan is already set to end on ${ends}. You can choose a plan again after that date.`
+          : 'This plan is already set to end at the close of the billing period. You can choose a plan again after that.',
+      );
     }
 
     if (latest.status === ESubscriptionStatus.Paused || latest.status === ESubscriptionStatus.Halted) {
@@ -323,6 +388,13 @@ export class PaymentsService implements IPaymentsService {
     return latest;
   }
 
+  /** The subscription that currently pays for access (latest row first, then any active one). */
+  private async findPayingSubscription(userId: string): Promise<Subscription | null> {
+    const latest = await this.subscriptionsRepo.findLatestByUserId(userId);
+    if (subscriptionGrantsAccess(latest)) return latest;
+    return (await this.subscriptionsRepo.findActiveByUserId(userId)) ?? null;
+  }
+
   private mapRzpStatus(status: string): ESubscriptionStatus {
     const mapped = Object.values(ESubscriptionStatus).find((s) => s === status);
     return mapped ?? ESubscriptionStatus.Created;
@@ -341,12 +413,12 @@ export class PaymentsService implements IPaymentsService {
     subscription: Subscription,
     couponId: string,
     discountAmount: number,
-    finalAmount: number,
+    recurringAmount: number,
   ): boolean {
     return (
       (subscription.couponId ?? null) === couponId &&
       Number(subscription.discountAmount ?? 0) === discountAmount &&
-      Number(subscription.amount) === finalAmount
+      Number(subscription.amount) === recurringAmount
     );
   }
 
@@ -377,10 +449,11 @@ export class PaymentsService implements IPaymentsService {
         razorpaySubscriptionId: subscription.providerSubscriptionId,
         razorpayKeyId: this.razorpay.getKeyId(),
         planId: subscription.planId,
-        amount: Number(subscription.amount) + Number(subscription.discountAmount ?? 0),
+        // `amount` is the recurring price; a coupon only reduces the first payment.
+        amount: Number(subscription.amount),
         currency: subscription.currency,
         discountAmount: Number(subscription.discountAmount ?? 0),
-        finalAmount: Number(subscription.amount),
+        finalAmount: Number(subscription.amount) - Number(subscription.discountAmount ?? 0),
         status: subscription.status,
         shortUrl: shortUrl ?? null,
       },
@@ -397,9 +470,7 @@ export class PaymentsService implements IPaymentsService {
       const rzp = await this.razorpay.fetchSubscription(subscription.providerSubscriptionId);
       return this.subscriptionsRepo.update(subscription.id, {
         status: this.mapRzpStatus(rzp.status),
-        currentStart: rzp.current_start ? new Date(rzp.current_start * 1000) : null,
-        currentEnd: rzp.current_end ? new Date(rzp.current_end * 1000) : null,
-        nextBillingAt: rzp.charge_at ? new Date(rzp.charge_at * 1000) : null,
+        ...rzpPeriod(rzp),
       });
     } catch (err) {
       this.logger.warn(
@@ -422,12 +493,11 @@ export class PaymentsService implements IPaymentsService {
       const mappedStatus = this.mapRzpStatus(rzp.status);
       const updated = await this.subscriptionsRepo.update(subscription.id, {
         status: mappedStatus,
-        currentStart: rzp.current_start ? new Date(rzp.current_start * 1000) : null,
-        currentEnd: rzp.current_end ? new Date(rzp.current_end * 1000) : null,
-        nextBillingAt: rzp.charge_at ? new Date(rzp.charge_at * 1000) : null,
+        ...rzpPeriod(rzp),
       });
 
-      if (mappedStatus === ESubscriptionStatus.Active) {
+      // Active, or authenticated with the first period already paid upfront (coupon).
+      if (mappedStatus === ESubscriptionStatus.Active || subscriptionGrantsAccess(updated)) {
         return 'already_active';
       }
 

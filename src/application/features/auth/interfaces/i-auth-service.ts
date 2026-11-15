@@ -5,13 +5,19 @@ import { LoginResponseModel, GoogleSsoResponseModel, GoogleSsoRequestModel } fro
 
 export const AUTH_SERVICE = 'IAuthService';
 
+/** Codes from the sign-up verification page (challenge tokens come from POST /auth/otp/send). */
+export interface SignupOtpInput {
+  emailChallenge: string;
+  emailCode: string;
+  phoneChallenge: string;
+  phoneCode: string;
+}
+
 export interface IAuthService {
   login(email: string, password: string): Promise<LoginResponseModel>;
-  signup(body: User): Promise<User>;
+  signup(body: User, codes: SignupOtpInput): Promise<LoginResponseModel>;
   generateJwtToken(payload: IIdentity): Promise<string>;
   forgotPassword(email: string): Promise<void>;
   verifyForgotPasswordToken(token: string, newPassword: string): Promise<User>;
-  verifyEmail(token: string): Promise<LoginResponseModel>;
-  resendVerificationEmail(email: string): Promise<void>;
   googleSso(request: GoogleSsoRequestModel): Promise<GoogleSsoResponseModel>;
 }

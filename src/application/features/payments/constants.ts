@@ -1,21 +1,25 @@
-/** API routes that previously required subscription (now open to all authenticated users). */
-const PREMIUM_API_PATH_PATTERNS: RegExp[] = [
-  /\/inventory(\/|$)/,
-  /\/bills(\/|$)/,
-  /\/metal-rates(\/|$)/,
-  /\/pos\/sessions(\/|$)/,
-  /\/try-on(\/|$)/,
+/**
+ * API routes a shop can still use after the trial ends without a plan: signing in, paying,
+ * its own profile/account, support and push registration. Everything else needs a trial or plan.
+ */
+const PAYWALL_EXEMPT_PATH_PATTERNS: RegExp[] = [
+  /\/auth(\/|$)/,
+  /\/payments(\/|$)/,
+  /\/users(\/|$)/,
+  /\/support(\/|$)/,
+  /\/notifications(\/|$)/,
+  /\/public\//,
+  /\/webhooks\//,
+  /\/pos\/sessions\/validate(\/|$)/,
 ];
 
-const PREMIUM_API_PUBLIC_EXCEPTIONS: RegExp[] = [/\/pos\/sessions\/validate(\/|$)/];
-
-export function isPremiumApiPath(path: string): boolean {
+export function isPaywallExemptPath(path: string): boolean {
   const normalized = path.split('?')[0];
-  if (PREMIUM_API_PUBLIC_EXCEPTIONS.some((pattern) => pattern.test(normalized))) {
-    return false;
-  }
-  return PREMIUM_API_PATH_PATTERNS.some((pattern) => pattern.test(normalized));
+  return PAYWALL_EXEMPT_PATH_PATTERNS.some((pattern) => pattern.test(normalized));
 }
+
+/** Error code clients look for to open the plans screen. */
+export const SUBSCRIPTION_REQUIRED_CODE = 'SUBSCRIPTION_REQUIRED';
 
 export const RAZORPAY_WEBHOOK_EVENTS = [
   'subscription.authenticated',

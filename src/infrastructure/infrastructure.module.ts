@@ -5,11 +5,13 @@ import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 
 import { AIOptions, AivotTryOnOptions, CloudflareTryOnOptions } from './ai';
 import { ResendOptions, ResendService } from './resend';
+import { StartMessagingOptions, StartMessagingService } from './startmessaging';
 import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import {
   CUSTOMERS_REPOSITORY,
   DUES_REPOSITORY,
   EMAIL_SERVICE,
+  SMS_OTP_SENDER,
   FileStorageOptions,
   GOOGLE_OAUTH_SERVICE,
   GoogleOAuthOptions,
@@ -387,6 +389,16 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     },
     ResendService,
     {
+      provide: StartMessagingOptions,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => configService.get('startMessaging'),
+    },
+    StartMessagingService,
+    {
+      provide: SMS_OTP_SENDER,
+      useExisting: StartMessagingService,
+    },
+    {
       provide: WebAppOptions,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => configService.get('webApp'),
@@ -459,6 +471,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     WEBSOCKET_MESSAGE_SERVICE,
     TRANSACTION_LOGS_REPOSITORY,
     EMAIL_SERVICE,
+    SMS_OTP_SENDER,
     GOOGLE_OAUTH_SERVICE,
     APP_INTEGRITY_SERVICE,
     REDIS_SERVICE,

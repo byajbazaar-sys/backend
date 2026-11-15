@@ -9,25 +9,26 @@ import {
   Inject,
   UnauthorizedException,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiConsumes, ApiHeader } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { readRequestHeader } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { Request } from 'express';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { User } from '../users';
+import { SendOtpResponseModel, SendSignupOtpRequestModel, VerificationService } from '../verification';
 import { IAuthService } from './interfaces';
 import { AUTH_SERVICE } from './interfaces';
 import {
   LoginRequestModel,
   LoginResponseModel,
   SignupRequestModel,
-  SignupResponseModel,
   ForgotPasswordRequestModel,
   ResetPasswordRequestModel,
-  VerifyEmailRequestModel,
   GoogleSsoRequestModel,
   GoogleSsoResponseModel,
   AppIntegrityChallengeResponseModel,
@@ -43,6 +44,7 @@ export class AuthController {
     @Inject(AUTH_SERVICE) private readonly authService: IAuthService,
     @Inject(API_AUTH_SERVICE) private readonly apiAuthService: IApiAuthService,
     @Inject(APP_INTEGRITY_SERVICE) private readonly appIntegrityService: IAppIntegrityService,
+    private readonly verificationService: VerificationService,
     @InjectPinoLogger(AuthController.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -67,12 +69,12 @@ export class AuthController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('profilePhoto'))
   @ApiOperation({ summary: 'Create a new user' })
-  @ApiOkResponse({ type: SignupResponseModel })
+  @ApiOkResponse({ type: LoginResponseModel, description: 'Account created and signed in' })
   @HttpCode(HttpStatus.OK)
   async signup(
     @Body() body: SignupRequestModel,
     @UploadedFile() profilePhoto: Express.Multer.File,
-  ): Promise<SignupResponseModel> {
+  ): Promise<LoginResponseModel> {
     this.logger.info({ email: body.email }, 'signup called');
     const user = plainToInstance(User, body);
     if (profilePhoto) {
@@ -80,15 +82,21 @@ export class AuthController {
       user.profilePhotoFileName = profilePhoto.originalname;
       user.profilePhotoContentType = profilePhoto.mimetype;
     }
-    const response = await this.authService.signup(user);
+    const { emailChallenge, emailCode, phoneChallenge, phoneCode } = body;
+    return this.authService.signup(user, { emailChallenge, emailCode, phoneChallenge, phoneCode });
+  }
 
-    return plainToInstance(
-      SignupResponseModel,
-      { ...response, profilePhotoUrl: response.profilePhotoRef },
-      {
-        excludeExtraneousValues: true,
-      },
-    );
+  @Post('otp/send')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Send a sign-up verification code to an email (Resend) or Indian mobile number (StartMessaging SMS)',
+  })
+  @ApiOkResponse({ type: SendOtpResponseModel })
+  @HttpCode(HttpStatus.OK)
+  async sendSignupOtp(@Body() body: SendSignupOtpRequestModel): Promise<SendOtpResponseModel> {
+    const result = await this.verificationService.sendSignupCode(body.channel, body.target);
+    return plainToInstance(SendOtpResponseModel, result, { excludeExtraneousValues: true });
   }
 
   @Post('forgot-password')
@@ -97,27 +105,6 @@ export class AuthController {
   async forgotPassword(@Body() body: ForgotPasswordRequestModel): Promise<void> {
     this.logger.info({ email: body.email }, 'forgotPassword called');
     await this.authService.forgotPassword(body.email);
-  }
-
-  @Post('resend-verification-email')
-  @ApiOperation({ summary: 'Resend verification email for unverified accounts' })
-  @HttpCode(HttpStatus.OK)
-  async resendVerificationEmail(@Body() body: ForgotPasswordRequestModel): Promise<{ message: string }> {
-    this.logger.info({ email: body.email }, 'resendVerificationEmail called');
-    await this.authService.resendVerificationEmail(body.email);
-    return { message: 'Verification email sent successfully' };
-  }
-
-  @Post('verify-email')
-  @ApiOperation({ summary: 'Verify email using token from verification email' })
-  @ApiOkResponse({ type: LoginResponseModel })
-  @HttpCode(HttpStatus.OK)
-  async verifyEmail(@Body() body: VerifyEmailRequestModel): Promise<LoginResponseModel> {
-    this.logger.info({ hasToken: !!body.token }, 'verifyEmail called');
-    const response = await this.authService.verifyEmail(body.token);
-    return plainToInstance(LoginResponseModel, response, {
-      excludeExtraneousValues: true,
-    });
   }
 
   @Post('reset-password')

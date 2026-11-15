@@ -7,11 +7,11 @@ export class CheckoutPlanResponseModel {
   id!: string;
 
   @Expose()
-  @ApiProperty({ example: 'Ad-Free Monthly' })
+  @ApiProperty({ example: 'Monthly' })
   name!: string;
 
   @Expose()
-  @ApiProperty({ example: 48 })
+  @ApiProperty({ example: 499 })
   price!: number;
 
   @Expose()

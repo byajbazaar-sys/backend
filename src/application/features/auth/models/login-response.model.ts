@@ -58,6 +58,17 @@ export class LoginResponseModel {
   isEmailVerified: boolean;
 
   @Expose()
+  @ApiProperty({ example: true, description: 'Mobile number verified by SMS code' })
+  isPhoneVerified: boolean;
+
+  @Expose()
+  @ApiProperty({
+    example: false,
+    description: 'True when this account must verify a mobile number before using the app (e.g. new Google sign-up).',
+  })
+  phoneVerificationRequired: boolean;
+
+  @Expose()
   @ApiProperty({ example: 'https://example.com/profile.jpg', nullable: true })
   profilePhotoUrl: string;
 
