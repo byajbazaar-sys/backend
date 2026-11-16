@@ -27,6 +27,7 @@ import { MARKETING_STEP_RUNNER, MarketingScheduler } from './application/service
 import { ByajBazaarAiAdapter } from './infrastructure/adapters/byajbazaar-ai.adapter';
 import { ByajBazaarCatalogAdapter } from './infrastructure/adapters/byajbazaar-catalog.adapter';
 import { ByajBazaarNotifierAdapter } from './infrastructure/adapters/byajbazaar-notifier.adapter';
+import { loadMarketingSettings } from './infrastructure/config/marketing-settings.loader';
 import { KaggleWorkerPool } from './infrastructure/kaggle/kaggle-worker-pool';
 import { MarketingDatabase } from './infrastructure/persistence/marketing-database';
 import {
@@ -53,7 +54,13 @@ import { MarketingConfig } from './marketing.config';
 @Module({
   controllers: [MarketingController, MarketingWorkerEventsController, MarketingQueueController],
   providers: [
-    { provide: MarketingConfig, useFactory: () => new MarketingConfig() },
+    {
+      provide: MarketingConfig,
+      useFactory: async (): Promise<MarketingConfig> => {
+        await loadMarketingSettings();
+        return new MarketingConfig();
+      },
+    },
     MarketingDatabase,
     { provide: MARKETING_CAMPAIGNS_REPOSITORY, useClass: MarketingCampaignsRepository },
     { provide: MARKETING_SCENES_REPOSITORY, useClass: MarketingScenesRepository },

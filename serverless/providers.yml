@@ -23,8 +23,6 @@ environment:
   CLOUDFLARE_TRYON_MODEL: ${env:CLOUDFLARE_TRYON_MODEL, '@cf/black-forest-labs/flux-2-klein-9b'}
   CLOUDFLARE_TRYON_TIMEOUT_MS: ${env:CLOUDFLARE_TRYON_TIMEOUT_MS, '120000'}
   CLOUDFLARE_TRYON_MAX_RETRIES: ${env:CLOUDFLARE_TRYON_MAX_RETRIES, '2'}
-  # Cheap text model for marketing prompt writing.
-  CLOUDFLARE_TEXT_MODEL: ${env:CLOUDFLARE_TEXT_MODEL, '@cf/meta/llama-3.2-3b-instruct'}
   TRY_ON_INLINE: ${env:TRY_ON_INLINE, 'false'}
   S3_AWS_ACCESS_KEY_ID: ${env:S3_AWS_ACCESS_KEY_ID, ''}
   S3_AWS_SECRET_ACCESS_KEY: ${env:S3_AWS_SECRET_ACCESS_KEY, ''}
@@ -34,27 +32,8 @@ environment:
   IMAGE_CDN_URL: ${env:IMAGE_CDN_URL, ''}
   # Literal / env only — Ref/GetAtt here creates a circular dependency with WebsocketsApi.
   TRY_ON_LAMBDA_NAME: ${self:service}-${sls:stage}-jewelleryTryOn
-  MARKETING_LAMBDA_NAME: ${self:service}-${sls:stage}-marketingWorker
-  # Kaggle GPU accounts for marketing videos: "user1:key1,user2:key2[:concurrency]"
-  KAGGLE_WORKERS: ${env:KAGGLE_WORKERS, ''}
-  KAGGLE_WORKER_CONCURRENCY: ${env:KAGGLE_WORKER_CONCURRENCY, '1'}
-  MARKETING_WORKER_SECRET: ${env:MARKETING_WORKER_SECRET, ''}
-  MARKETING_API_BASE_URL: ${env:MARKETING_API_BASE_URL, ''}
-  # Marketing has its own database, bucket and queue (falls back to the main DB / bucket when unset).
-  MARKETING_DB_HOST: ${env:MARKETING_DB_HOST, ''}
-  MARKETING_DB_PORT: ${env:MARKETING_DB_PORT, '5432'}
-  MARKETING_DB_NAME: ${env:MARKETING_DB_NAME, ''}
-  MARKETING_DB_USER: ${env:MARKETING_DB_USER, ''}
-  MARKETING_DB_PASS: ${env:MARKETING_DB_PASS, ''}
-  MARKETING_S3_AWS_ACCESS_KEY_ID: ${env:MARKETING_S3_AWS_ACCESS_KEY_ID, ''}
-  MARKETING_S3_AWS_SECRET_ACCESS_KEY: ${env:MARKETING_S3_AWS_SECRET_ACCESS_KEY, ''}
-  MARKETING_S3_BUCKET_NAME: ${env:MARKETING_S3_BUCKET_NAME, ''}
-  MARKETING_S3_BUCKET_REGION: ${env:MARKETING_S3_BUCKET_REGION, 'ap-south-1'}
-  MARKETING_S3_ENDPOINT: ${env:MARKETING_S3_ENDPOINT, ''}
-  MARKETING_QSTASH_URL: ${env:MARKETING_QSTASH_URL, ''}
-  MARKETING_QSTASH_TOKEN: ${env:MARKETING_QSTASH_TOKEN, ''}
-  MARKETING_QSTASH_CURRENT_SIGNING_KEY: ${env:MARKETING_QSTASH_CURRENT_SIGNING_KEY, ''}
-  MARKETING_QSTASH_NEXT_SIGNING_KEY: ${env:MARKETING_QSTASH_NEXT_SIGNING_KEY, ''}
+  # Marketing / Kaggle settings are not Lambda env vars (4 KB cap): they live in the SSM parameter
+  # /byajbazaar/<stage>/marketing-config (serverless.yml resources) and are loaded at cold start.
   WEBSOCKET_API_ENDPOINT: ${env:WEBSOCKET_API_ENDPOINT, ''}
   WEBSOCKET_API_URL: ${env:WEBSOCKET_API_URL, ''}
   REDIS_URL: ${env:REDIS_URL, ''}

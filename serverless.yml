@@ -22,6 +22,29 @@ custom:
     # Large secrets stay out of Lambda env (4 KB limit); loaded at runtime from SSM instead.
     exclude:
       - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+      # Marketing / Kaggle settings go to the SSM parameter below instead (serverless/marketing-config.js).
+      - KAGGLE_WORKERS
+      - KAGGLE_WORKER_CONCURRENCY
+      - KAGGLE_SESSION_HOURS
+      - KAGGLE_MACHINE_SHAPE
+      - MARKETING_WORKER_SECRET
+      - MARKETING_API_BASE_URL
+      - MARKETING_INLINE
+      - MARKETING_DB_HOST
+      - MARKETING_DB_PORT
+      - MARKETING_DB_NAME
+      - MARKETING_DB_USER
+      - MARKETING_DB_PASS
+      - MARKETING_S3_AWS_ACCESS_KEY_ID
+      - MARKETING_S3_AWS_SECRET_ACCESS_KEY
+      - MARKETING_S3_BUCKET_NAME
+      - MARKETING_S3_BUCKET_REGION
+      - MARKETING_S3_ENDPOINT
+      - MARKETING_QSTASH_URL
+      - MARKETING_QSTASH_TOKEN
+      - MARKETING_QSTASH_CURRENT_SIGNING_KEY
+      - MARKETING_QSTASH_NEXT_SIGNING_KEY
+      - CLOUDFLARE_TEXT_MODEL
   serverless-offline:
     httpPort: 3003
     lambdaPort: 3002
@@ -32,6 +55,18 @@ custom:
   includeDependencies:
     enableCaching: true
 functions: ${file(serverless/functions.yml)}
+
+resources:
+  Resources:
+    # Marketing / Kaggle settings, read by every Lambda on cold start (keeps them out of the 4 KB Lambda env).
+    MarketingConfigParameter:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /byajbazaar/${sls:stage}/marketing-config
+        Type: String
+        Tier: Standard
+        Description: Marketing videos settings (JSON) - generated from .env.${sls:stage} on deploy
+        Value: ${file(./serverless/marketing-config.js)}
 
 package:
   patterns:

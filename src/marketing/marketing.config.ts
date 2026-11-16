@@ -35,7 +35,12 @@ export class MarketingConfig {
   readonly publicApiBaseUrl = env('MARKETING_API_BASE_URL')?.replace(/\/+$/, '');
 
   /** Async worker Lambda for long steps (image model). Unset = run in-process. */
-  readonly workerLambdaName = env('MARKETING_INLINE') === 'true' ? undefined : env('MARKETING_LAMBDA_NAME');
+  /** Worker Lambda; on Lambda it defaults to this service's `marketingWorker` function (same name prefix). */
+  readonly workerLambdaName =
+    env('MARKETING_INLINE') === 'true'
+      ? undefined
+      : (env('MARKETING_LAMBDA_NAME') ??
+        env('AWS_LAMBDA_FUNCTION_NAME')?.replace(/-[A-Za-z0-9]+$/, '-marketingWorker'));
 
   /** wss:// URL of the API Gateway WebSocket the notebook streams progress to. */
   readonly websocketUrl = env('WEBSOCKET_API_URL');
