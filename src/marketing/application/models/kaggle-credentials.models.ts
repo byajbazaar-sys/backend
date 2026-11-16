@@ -176,3 +176,67 @@ export class KaggleCredentialVerifyResponseModel {
   @ApiPropertyOptional() @Expose() gpuHoursLeft: number | null;
   @ApiPropertyOptional() @Expose() error?: string;
 }
+
+export class KaggleHealthIssueModel {
+  @ApiProperty({ enum: ['error', 'warning', 'info'] }) @Expose() level: 'error' | 'warning' | 'info';
+  @ApiProperty({ example: 'NO_ACCOUNTS' }) @Expose() code: string;
+  @ApiProperty() @Expose() message: string;
+  @ApiPropertyOptional() @Expose() account?: string;
+  @ApiPropertyOptional() @Expose() jobId?: string;
+}
+
+export class KaggleWaitingJobModel {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() kind: string;
+  @ApiPropertyOptional() @Expose() campaignId: string | null;
+  @ApiProperty() @Expose() attempts: number;
+  @ApiProperty() @Expose() waitingMinutes: number;
+  @ApiPropertyOptional() @Expose() stageMessage: string | null;
+}
+
+/** Is rendering working, and if not, why. */
+export class KaggleHealthResponseModel {
+  @ApiProperty({ enum: ['healthy', 'degraded', 'down'] }) @Expose() status: 'healthy' | 'degraded' | 'down';
+  @ApiProperty() @Expose() checkedAt: Date;
+  @ApiProperty() @Expose() autoRecover: boolean;
+  @ApiProperty({ description: 'Accounts that can take a render right now' }) @Expose() usableAccounts: number;
+  @ApiProperty() @Expose() waiting: number;
+  @ApiPropertyOptional() @Expose() oldestWaitingMinutes: number | null;
+  @ApiProperty({ type: [KaggleHealthIssueModel] })
+  @Expose()
+  @Type(() => KaggleHealthIssueModel)
+  issues: KaggleHealthIssueModel[];
+  @ApiProperty({ type: [KaggleWaitingJobModel] })
+  @Expose()
+  @Type(() => KaggleWaitingJobModel)
+  waitingJobs: KaggleWaitingJobModel[];
+}
+
+export class KaggleRecoveryJobModel {
+  @ApiProperty() @Expose() id: string;
+  @ApiPropertyOptional() @Expose() account: string | null;
+  @ApiProperty() @Expose() reason: string;
+}
+
+export class KaggleRecoveryResponseModel {
+  @ApiProperty({ type: [String] }) @Expose() setupsRestarted: string[];
+  @ApiProperty({ type: [String] }) @Expose() cooldownsCleared: string[];
+  @ApiProperty({ type: [KaggleRecoveryJobModel] })
+  @Expose()
+  @Type(() => KaggleRecoveryJobModel)
+  jobsRestarted: KaggleRecoveryJobModel[];
+}
+
+export class KaggleSettingsModel {
+  @ApiProperty({
+    description:
+      'Fix stuck renders automatically: retry failed account setups after 30 min, move renders Kaggle keeps queued or that never boot to another account',
+  })
+  @Expose()
+  @IsBoolean()
+  autoRecover: boolean;
+}
+
+export class RestartRenderJobResponseModel {
+  @ApiProperty({ enum: ['restarted', 'dispatched'] }) @Expose() result: 'restarted' | 'dispatched';
+}

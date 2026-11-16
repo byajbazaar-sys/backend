@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { EUserType, Roles, RolesGuard, UserAuthGuard } from '@shared-libs';
@@ -9,7 +21,11 @@ import {
   BulkCreateKaggleCredentialsRequestModel,
   CreateKaggleCredentialRequestModel,
   KaggleCredentialResponseModel,
+  KaggleHealthResponseModel,
   KaggleOverviewResponseModel,
+  KaggleRecoveryResponseModel,
+  KaggleSettingsModel,
+  RestartRenderJobResponseModel,
   KaggleCredentialVerifyResponseModel,
   UpdateKaggleCredentialRequestModel,
 } from '../models/kaggle-credentials.models';
@@ -39,6 +55,50 @@ export class MarketingAdminController {
   @ApiOkResponse({ type: KaggleOverviewResponseModel })
   async overview(): Promise<KaggleOverviewResponseModel> {
     return out(KaggleOverviewResponseModel, await this.kaggle.overview());
+  }
+
+  @Get('health')
+  @Roles(EUserType.Admin)
+  @ApiOperation({ summary: 'Is rendering working? Status, problems with each account, and waiting renders' })
+  @ApiOkResponse({ type: KaggleHealthResponseModel })
+  async health(): Promise<KaggleHealthResponseModel> {
+    return out(KaggleHealthResponseModel, await this.kaggle.health());
+  }
+
+  @Post('recover')
+  @Roles(EUserType.Admin)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Restart Kaggle: re-run failed setups, end cool-downs, move stuck renders to other accounts, dispatch',
+  })
+  @ApiOkResponse({ type: KaggleRecoveryResponseModel })
+  async recover(): Promise<KaggleRecoveryResponseModel> {
+    return out(KaggleRecoveryResponseModel, await this.kaggle.recover());
+  }
+
+  @Get('settings')
+  @Roles(EUserType.Admin)
+  @ApiOkResponse({ type: KaggleSettingsModel })
+  async getSettings(): Promise<KaggleSettingsModel> {
+    return out(KaggleSettingsModel, await this.kaggle.getSettings());
+  }
+
+  @Patch('settings')
+  @Roles(EUserType.Admin)
+  @ApiOperation({ summary: 'Turn automatic recovery of stuck renders on or off' })
+  @ApiOkResponse({ type: KaggleSettingsModel })
+  async updateSettings(@Body() body: KaggleSettingsModel): Promise<KaggleSettingsModel> {
+    return out(KaggleSettingsModel, await this.kaggle.updateSettings(body));
+  }
+
+  @Post('jobs/:jobId/restart')
+  @Roles(EUserType.Admin)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restart one render in a fresh Kaggle session (a waiting one is dispatched again)' })
+  @ApiParam({ name: 'jobId' })
+  @ApiOkResponse({ type: RestartRenderJobResponseModel })
+  async restartJob(@Param('jobId', ParseUUIDPipe) jobId: string): Promise<RestartRenderJobResponseModel> {
+    return out(RestartRenderJobResponseModel, await this.kaggle.restartJob(jobId));
   }
 
   @Post('bulk')

@@ -4,6 +4,9 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { KaggleAccount, KaggleCredential } from '../domain';
 import { EKaggleAccountStatus } from '../enums';
 import {
+  KaggleHealthResponseModel,
+  KaggleRecoveryResponseModel,
+  KaggleSettingsModel,
   BulkCreateKaggleCredentialResultModel,
   CreateKaggleCredentialRequestModel,
   KaggleCredentialResponseModel,
@@ -15,10 +18,12 @@ import {
   IKaggleAccountsRepository,
   IKaggleCredentialsRepository,
   IKaggleWorkerPool,
+  IMarketingSettingsRepository,
   IRenderJobsRepository,
   KAGGLE_ACCOUNTS_REPOSITORY,
   KAGGLE_CREDENTIALS_REPOSITORY,
   KAGGLE_WORKER_POOL,
+  MARKETING_SETTINGS_REPOSITORY,
   RENDER_JOBS_REPOSITORY,
 } from '../ports';
 import { MarketingRenderService } from './marketing-render.service';
@@ -41,6 +46,7 @@ export class KaggleCredentialsAdminService {
     @Inject(KAGGLE_ACCOUNTS_REPOSITORY) private readonly accounts: IKaggleAccountsRepository,
     @Inject(KAGGLE_WORKER_POOL) private readonly pool: IKaggleWorkerPool,
     @Inject(RENDER_JOBS_REPOSITORY) private readonly jobs: IRenderJobsRepository,
+    @Inject(MARKETING_SETTINGS_REPOSITORY) private readonly settings: IMarketingSettingsRepository,
     private readonly render: MarketingRenderService,
     private readonly scheduler: MarketingScheduler,
     @InjectPinoLogger(KaggleCredentialsAdminService.name) private readonly logger: PinoLogger,
@@ -108,6 +114,32 @@ export class KaggleCredentialsAdminService {
     await this.accounts.update(row.username, { cooldownUntil: null });
     await this.kickDispatch();
     return this.get(row.username);
+  }
+
+  health(): Promise<KaggleHealthResponseModel> {
+    return this.render.health();
+  }
+
+  /** "Restart Kaggle": re-runs failed setups, ends cool-downs and moves stuck renders to other accounts. */
+  recover(): Promise<KaggleRecoveryResponseModel> {
+    return this.render.recover(true);
+  }
+
+  async restartJob(jobId: string): Promise<{ result: 'restarted' | 'dispatched' }> {
+    const result = await this.render.restartRenderJob(jobId);
+    if (result === 'not-running') throw new BadRequestException('That render is not waiting or running');
+    this.logger.info({ jobId, result }, 'Render job restart requested by an admin');
+    return { result };
+  }
+
+  getSettings(): Promise<KaggleSettingsModel> {
+    return this.settings.kaggle();
+  }
+
+  async updateSettings(patch: KaggleSettingsModel): Promise<KaggleSettingsModel> {
+    const saved = await this.settings.saveKaggle({ autoRecover: patch.autoRecover });
+    this.logger.info(saved, 'Kaggle settings updated');
+    return saved;
   }
 
   /** Capacity, queue length and what each account is running. */

@@ -27,6 +27,7 @@ import {
   MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY,
   MARKETING_PHOTOSHOOTS_REPOSITORY,
   MARKETING_SCENES_REPOSITORY,
+  MARKETING_SETTINGS_REPOSITORY,
   RENDER_JOBS_REPOSITORY,
 } from './application/ports';
 import { KaggleCredentialsAdminService } from './application/services/kaggle-credentials-admin.service';
@@ -61,6 +62,7 @@ import {
   MarketingBrandsRepository,
   MarketingCampaignsRepository,
   MarketingScenesRepository,
+  MarketingSettingsRepository,
   RenderJobsRepository,
 } from './infrastructure/persistence/marketing.repositories';
 import { QStashMarketingQueue } from './infrastructure/queue/qstash-marketing.queue';
@@ -116,6 +118,7 @@ import { MarketingConfig } from './marketing.config';
     { provide: MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY, useClass: MarketingPhotoshootShotsRepository },
     { provide: MARKETING_BRANDS_REPOSITORY, useClass: MarketingBrandsRepository },
     { provide: KAGGLE_ACCOUNTS_REPOSITORY, useClass: KaggleAccountsRepository },
+    { provide: MARKETING_SETTINGS_REPOSITORY, useClass: MarketingSettingsRepository },
     MarketingSecretCipher,
     {
       provide: KAGGLE_CREDENTIALS_REPOSITORY,

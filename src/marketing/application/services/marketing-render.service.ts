@@ -19,17 +19,21 @@ import { buildWorkerNotebook, NotebookClip, WorkerNotebookJob } from '../noteboo
 import {
   IKaggleAccountsRepository,
   IKaggleWorkerPool,
+  IMarketingActivityLog,
   IMarketingBrandsRepository,
   IMarketingCampaignsRepository,
   IMarketingFileStorage,
   IMarketingScenesRepository,
+  IMarketingSettingsRepository,
   IRenderJobsRepository,
   KAGGLE_ACCOUNTS_REPOSITORY,
   KAGGLE_WORKER_POOL,
+  MARKETING_ACTIVITY_LOG,
   MARKETING_BRANDS_REPOSITORY,
   MARKETING_CAMPAIGNS_REPOSITORY,
   MARKETING_FILE_STORAGE,
   MARKETING_SCENES_REPOSITORY,
+  MARKETING_SETTINGS_REPOSITORY,
   RENDER_JOBS_REPOSITORY,
 } from '../ports';
 import { buildSceneVideoPrompt, LOGO_VIDEO_PROMPT, VIDEO_NEGATIVE } from '../prompts/marketing.prompts';
@@ -71,6 +75,53 @@ const SESSION_MARGIN_SECONDS = 20 * 60;
 const QUOTA_CACHE_MS = 10 * 60 * 1000;
 /** An account that failed to start a notebook gets no new jobs for this long (its job goes to another account). */
 const START_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
+/** Auto-recover: a failed account setup is retried after this long (6 hours otherwise). */
+const AUTO_SETUP_RETRY_MS = 30 * 60 * 1000;
+/** Auto-recover: Kaggle kept the session queued (no GPU for the account) this long → move the job elsewhere. */
+const KAGGLE_QUEUED_MAX_MS = 30 * 60 * 1000;
+/** Auto-recover: pushed but the notebook never reported in this long → move the job elsewhere. */
+const STARTING_MAX_MS = 25 * 60 * 1000;
+/** A setup notebook taking longer than this is reported as slow. */
+const SETUP_SLOW_MS = 45 * 60 * 1000;
+/** Renders waiting longer than this are reported as stalled. */
+const QUEUE_STALLED_MS = 15 * 60 * 1000;
+/** "Renders waiting but no account can take them" is logged/alerted at most this often (per server). */
+const NO_CAPACITY_ALERT_MS = 30 * 60 * 1000;
+
+export type KaggleHealthStatus = 'healthy' | 'degraded' | 'down';
+
+export interface KaggleHealthIssue {
+  level: 'error' | 'warning' | 'info';
+  code: string;
+  message: string;
+  account?: string;
+  jobId?: string;
+}
+
+export interface KaggleHealth {
+  status: KaggleHealthStatus;
+  checkedAt: Date;
+  autoRecover: boolean;
+  /** Accounts that can take a render right now. */
+  usableAccounts: number;
+  waiting: number;
+  oldestWaitingMinutes: number | null;
+  issues: KaggleHealthIssue[];
+  waitingJobs: {
+    id: string;
+    kind: string;
+    campaignId: string | null;
+    attempts: number;
+    waitingMinutes: number;
+    stageMessage: string | null;
+  }[];
+}
+
+export interface KaggleRecoveryResult {
+  setupsRestarted: string[];
+  cooldownsCleared: string[];
+  jobsRestarted: { id: string; account: string | null; reason: string }[];
+}
 
 /** A ready account that can take render jobs in this dispatch round. */
 interface DispatchCandidate {
@@ -117,8 +168,19 @@ export class MarketingRenderService {
     @Inject(KAGGLE_WORKER_POOL) private readonly pool: IKaggleWorkerPool,
     private readonly scheduler: MarketingScheduler,
     private readonly events: MarketingEvents,
+    @Inject(MARKETING_SETTINGS_REPOSITORY) private readonly settings: IMarketingSettingsRepository,
+    @Inject(MARKETING_ACTIVITY_LOG) private readonly activity: IMarketingActivityLog,
     @InjectPinoLogger(MarketingRenderService.name) private readonly logger: PinoLogger,
   ) {}
+
+  private lastNoCapacityAlert = 0;
+
+  /** Kaggle health event for the admin activity log (logs service). Never throws. */
+  private async healthEvent(action: string, entityId: string | null, data: Record<string, unknown>): Promise<void> {
+    await this.activity
+      .record({ action, entityType: entityId ? 'kaggle_account' : 'kaggle', entityId, data })
+      .catch(() => undefined);
+  }
 
   // ---------------------------------------------------------------- queueing renders
 
@@ -262,6 +324,8 @@ export class MarketingRenderService {
       });
     }
 
+    if (candidates.length === 0) await this.reportNoCapacity();
+
     let workLeft = true;
     for (;;) {
       const candidate = pickDispatchCandidate(candidates);
@@ -292,6 +356,7 @@ export class MarketingRenderService {
    */
   async syncAccounts(): Promise<void> {
     const configured = await this.pool.workers();
+    const setupRetryMs = (await this.settings.kaggle()).autoRecover ? AUTO_SETUP_RETRY_MS : SETUP_RETRY_MS;
     const known = new Map((await this.accounts.list()).map((a) => [a.username, a]));
 
     for (const worker of configured) {
@@ -316,7 +381,7 @@ export class MarketingRenderService {
 
       const retryFailed =
         account.status === EKaggleAccountStatus.Failed &&
-        (!account.setupAttemptAt || Date.now() - new Date(account.setupAttemptAt).getTime() > SETUP_RETRY_MS);
+        (!account.setupAttemptAt || Date.now() - new Date(account.setupAttemptAt).getTime() > setupRetryMs);
       if (account.status !== EKaggleAccountStatus.New && !retryFailed) continue;
 
       const claimed = await this.accounts.transition(
@@ -348,6 +413,7 @@ export class MarketingRenderService {
           lastError: (err as Error).message,
         });
         this.logger.warn({ account: worker.id, err: (err as Error).message }, 'Kaggle account setup failed');
+        await this.healthEvent('KAGGLE_SETUP_FAILED', worker.id, { error: (err as Error).message });
       }
     }
 
@@ -357,6 +423,211 @@ export class MarketingRenderService {
         await this.accounts.upsert({ username: account.username, status: EKaggleAccountStatus.Disabled });
       }
     }
+  }
+
+  /**
+   * Renders are waiting but no account can take them: log why (CloudWatch) and tell admins (activity log), at most
+   * every NO_CAPACITY_ALERT_MS per server so the 2-minute re-check does not flood either.
+   */
+  private async reportNoCapacity(): Promise<void> {
+    if (Date.now() - this.lastNoCapacityAlert < NO_CAPACITY_ALERT_MS) return;
+    const health = await this.health();
+    if (health.waiting === 0) return;
+    this.lastNoCapacityAlert = Date.now();
+    const reasons = health.issues.filter((i) => i.level !== 'info').map((i) => i.message);
+    this.logger.warn(
+      { waiting: health.waiting, oldestWaitingMinutes: health.oldestWaitingMinutes, reasons },
+      'Kaggle: renders are waiting but no account can take them',
+    );
+    await this.healthEvent('KAGGLE_NO_CAPACITY', null, {
+      waiting: health.waiting,
+      oldestWaitingMinutes: health.oldestWaitingMinutes,
+      reasons,
+    });
+  }
+
+  /** What is wrong (if anything) with rendering right now, for the admin screen and the no-capacity alert. */
+  async health(): Promise<KaggleHealth> {
+    const [workers, accounts, busyJobs, waitingJobs, waiting, settings] = await Promise.all([
+      this.pool.workers(),
+      this.accounts.list(),
+      this.jobs.listBusy(),
+      this.jobs.listWaiting(20),
+      this.jobs.countWaiting(),
+      this.settings.kaggle(),
+    ]);
+    const now = Date.now();
+    const minutes = (d?: Date | null): number => (d ? Math.round((now - new Date(d).getTime()) / 60_000) : 0);
+    const configured = new Set(workers.map((w) => w.id));
+    const byName = new Map(accounts.map((a) => [a.username, a]));
+    const issues: KaggleHealthIssue[] = [];
+    let usable = 0;
+
+    for (const id of configured) {
+      const a = byName.get(id);
+      if (!a || a.status === EKaggleAccountStatus.New) {
+        issues.push({
+          level: 'info',
+          code: 'SETUP_PENDING',
+          account: id,
+          message: `${id}: waiting for its setup to start`,
+        });
+      } else if (a.status === EKaggleAccountStatus.SettingUp) {
+        const slow = minutes(a.setupAttemptAt) * 60_000 > SETUP_SLOW_MS;
+        issues.push({
+          level: slow ? 'warning' : 'info',
+          code: slow ? 'SETUP_SLOW' : 'SETTING_UP',
+          account: id,
+          message: `${id}: setup notebook running for ${minutes(a.setupAttemptAt)} min${slow ? ' (longer than usual)' : ''}`,
+        });
+      } else if (a.status === EKaggleAccountStatus.Failed) {
+        issues.push({
+          level: 'error',
+          code: 'ACCOUNT_FAILED',
+          account: id,
+          message: `${id}: setup failed — ${a.lastError ?? 'unknown error'}`,
+        });
+      } else if (a.status === EKaggleAccountStatus.Ready) {
+        if (this.coolingDown(a)) {
+          issues.push({
+            level: 'warning',
+            code: 'ACCOUNT_COOLING',
+            account: id,
+            message: `${id}: resting until ${new Date(a.cooldownUntil).toISOString()} — ${a.lastError ?? 'could not start a notebook'}`,
+          });
+        } else if (a.gpuHoursLeft !== null && a.gpuHoursLeft !== undefined && a.gpuHoursLeft < MIN_GPU_HOURS) {
+          issues.push({
+            level: 'warning',
+            code: 'LOW_QUOTA',
+            account: id,
+            message: `${id}: only ${a.gpuHoursLeft.toFixed(1)} GPU hours left this week`,
+          });
+        } else {
+          usable += 1;
+        }
+      }
+    }
+    if (configured.size === 0) {
+      issues.unshift({
+        level: 'error',
+        code: 'NO_ACCOUNTS',
+        message: 'No enabled Kaggle account with a readable API key — renders cannot start. Add accounts below.',
+      });
+    } else if (usable === 0) {
+      issues.unshift({
+        level: 'error',
+        code: 'NO_READY_ACCOUNT',
+        message: 'No Kaggle account can take renders right now (all are setting up, failed, resting or out of quota).',
+      });
+    }
+
+    const oldest = waitingJobs[0]?.createdAt ?? null;
+    const oldestWaitingMinutes = oldest ? minutes(oldest) : null;
+    if (waiting > 0 && oldest && now - new Date(oldest).getTime() > QUEUE_STALLED_MS) {
+      issues.push({
+        level: usable === 0 ? 'error' : 'warning',
+        code: 'QUEUE_STALLED',
+        message: `${waiting} render(s) waiting; the oldest for ${oldestWaitingMinutes} min`,
+      });
+    }
+    for (const job of busyJobs) {
+      const silent = minutes(job.updatedAt ?? job.startedAt);
+      if (silent * 60_000 > STARTING_MAX_MS) {
+        issues.push({
+          level: 'warning',
+          code: job.status === ERenderJobStatus.Starting ? 'JOB_NOT_STARTED' : 'JOB_SILENT',
+          account: job.workerId ?? undefined,
+          jobId: job.id,
+          message: `${job.kind.toLowerCase()} job on ${job.workerId ?? '?'}: no progress for ${silent} min${
+            job.status === ERenderJobStatus.Starting ? ' (notebook never reported in)' : ''
+          }`,
+        });
+      }
+    }
+
+    const hasError = issues.some((i) => i.level === 'error');
+    const hasWarning = issues.some((i) => i.level === 'warning');
+    return {
+      status:
+        usable === 0 && (configured.size === 0 || waiting > 0 || hasError)
+          ? 'down'
+          : hasError || hasWarning
+            ? 'degraded'
+            : 'healthy',
+      checkedAt: new Date(),
+      autoRecover: settings.autoRecover,
+      usableAccounts: usable,
+      waiting,
+      oldestWaitingMinutes,
+      issues,
+      waitingJobs: waitingJobs.map((j) => ({
+        id: j.id,
+        kind: j.kind,
+        campaignId: j.campaignId ?? null,
+        attempts: j.attempts,
+        waitingMinutes: minutes(j.createdAt),
+        stageMessage: j.stageMessage ?? null,
+      })),
+    };
+  }
+
+  /**
+   * "Restart Kaggle" (admin) — fixes what can be fixed without touching healthy renders: re-runs failed account
+   * setups, ends cool-downs, moves renders whose Kaggle session ended, stayed queued or never started to another
+   * account, then dispatches.
+   */
+  async recover(byAdmin = true): Promise<KaggleRecoveryResult> {
+    const result: KaggleRecoveryResult = { setupsRestarted: [], cooldownsCleared: [], jobsRestarted: [] };
+    const configured = new Set((await this.pool.workers()).map((w) => w.id));
+    for (const account of await this.accounts.list()) {
+      if (!configured.has(account.username)) continue;
+      if (account.status === EKaggleAccountStatus.Failed) {
+        const moved = await this.accounts.transition(account.username, [EKaggleAccountStatus.Failed], {
+          status: EKaggleAccountStatus.New,
+          lastError: null,
+        });
+        if (moved) result.setupsRestarted.push(account.username);
+      } else if (this.coolingDown(account)) {
+        await this.accounts.update(account.username, { cooldownUntil: null });
+        result.cooldownsCleared.push(account.username);
+      }
+    }
+    for (const job of await this.jobs.listBusy()) {
+      const reason = await this.stuckReason(job, 10 * 60 * 1000);
+      if (!reason) continue;
+      await this.restartJob(job, `${reason} (restarted by an admin)`, false, true);
+      result.jobsRestarted.push({ id: job.id, account: job.workerId ?? null, reason });
+    }
+    this.logger.info({ ...result, byAdmin }, 'Kaggle recovery run');
+    await this.healthEvent('KAGGLE_RECOVERY', null, { ...result, byAdmin });
+    await this.scheduler.schedule({ step: 'dispatch' });
+    return result;
+  }
+
+  /** Restarts one render job in a fresh Kaggle session (admin). Waiting jobs are just dispatched again. */
+  async restartRenderJob(jobId: string): Promise<'restarted' | 'dispatched' | 'not-running'> {
+    const job = await this.jobs.findById(jobId);
+    if (!job) return 'not-running';
+    if (job.status === ERenderJobStatus.Waiting) {
+      await this.scheduler.schedule({ step: 'dispatch' });
+      return 'dispatched';
+    }
+    if (!BUSY_RENDER_STATUSES.includes(job.status)) return 'not-running';
+    await this.restartJob(job, 'Restarted by an admin', false, true);
+    return 'restarted';
+  }
+
+  /** Why a busy job looks stuck (session ended / queued too long / never reported in), or null if it looks fine. */
+  private async stuckReason(job: RenderJob, minSilentMs: number): Promise<string | null> {
+    const silentMs = Date.now() - new Date(job.updatedAt ?? job.startedAt ?? Date.now()).getTime();
+    if (silentMs < minSilentMs) return null;
+    const kernelName = job.kernelRef?.split('/')[1];
+    if (!job.workerId || !kernelName) return 'The GPU worker never started';
+    const { state } = await this.pool.sessionStatus(job.workerId, kernelName);
+    if (state === 'complete' || state === 'error' || state === 'cancelled') return `The Kaggle session ${state}`;
+    if (state === 'queued') return 'Kaggle kept the session queued (no GPU free on the account)';
+    if (job.status === ERenderJobStatus.Starting && state !== 'running') return 'The GPU worker never reported in';
+    return null;
   }
 
   private coolingDown(account: { cooldownUntil?: Date | null }): boolean {
@@ -427,6 +698,11 @@ export class MarketingRenderService {
       await this.accounts.update(workerId, {
         cooldownUntil: new Date(Date.now() + START_FAILURE_COOLDOWN_MS),
         lastError: `Could not start a notebook: ${reason}`.slice(0, 2000),
+      });
+      await this.healthEvent('KAGGLE_ACCOUNT_COOLDOWN', workerId, {
+        reason,
+        minutes: START_FAILURE_COOLDOWN_MS / 60_000,
+        jobId: job.id,
       });
       await this.handBack(job, workerId, reason);
       return false;
@@ -710,6 +986,21 @@ export class MarketingRenderService {
       await this.restartJob(job, why);
       return;
     }
+    if ((await this.settings.kaggle()).autoRecover) {
+      if (state === 'queued' && silentMs > KAGGLE_QUEUED_MAX_MS && job.workerId) {
+        // The account gets no GPU from Kaggle right now: rest it and render elsewhere.
+        await this.accounts.update(job.workerId, {
+          cooldownUntil: new Date(Date.now() + START_FAILURE_COOLDOWN_MS),
+          lastError: 'Kaggle kept the session queued (no GPU free on the account)',
+        });
+        await this.restartJob(job, 'Kaggle kept the session queued for too long');
+        return;
+      }
+      if (job.status === ERenderJobStatus.Starting && state !== 'running' && silentMs > STARTING_MAX_MS) {
+        await this.restartJob(job, 'The GPU worker never reported in');
+        return;
+      }
+    }
     const hung = state === 'running' && silentMs > HUNG_MS;
     const silent = state !== 'running' && state !== 'queued' && silentMs > STALE_JOB_MS;
     if (hung || silent) {
@@ -723,12 +1014,21 @@ export class MarketingRenderService {
    * Continues a job in a fresh Kaggle session (any free account): finished clips are kept and skipped. Gives up after
    * MAX_RESTARTS. Account setup jobs are not continued — they fail and are retried by the account sync.
    */
-  private async restartJob(job: RenderJob, reason: string, planned = false): Promise<void> {
+  private async restartJob(job: RenderJob, reason: string, planned = false, force = false): Promise<void> {
+    if (!planned) {
+      await this.healthEvent('KAGGLE_JOB_RESTARTED', job.workerId ?? null, {
+        jobId: job.id,
+        kind: job.kind,
+        reason,
+        attempt: job.attempts + 1,
+        byAdmin: force,
+      });
+    }
     if (job.kind === ERenderJobKind.Setup) {
       await this.failJob(job, reason);
       return;
     }
-    if (job.attempts >= MAX_RESTARTS) {
+    if (job.attempts >= MAX_RESTARTS && !force) {
       await this.failJob(job, `${reason} (gave up after ${job.attempts} restarts)`);
       await this.scheduler.schedule({ step: 'dispatch' });
       return;

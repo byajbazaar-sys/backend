@@ -14,6 +14,7 @@ import { MarketingConfig } from '../../marketing.config';
 
 /** RPC endpoints used by the official `kaggle` CLI (≥ 2.x). */
 const KAGGLE_API = 'https://api.kaggle.com/v1/kernels.KernelsApiService';
+const KAGGLE_KERNEL_PUSH_API = 'https://www.kaggle.com/api/v1/kernels/push';
 
 interface KaggleAccountCredentials {
   id: string;
@@ -34,7 +35,7 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
     private readonly config: MarketingConfig,
     @Inject(KAGGLE_CREDENTIALS_REPOSITORY) private readonly credentials: IKaggleCredentialsRepository,
     @InjectPinoLogger(KaggleWorkerPool.name) private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   async workers(): Promise<KaggleWorker[]> {
     const rows = await this.credentials.list({ enabled: true });
@@ -124,7 +125,7 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
   ): Promise<KagglePushResult> {
     const account = await this.account(workerId);
     const res = await axios.post(
-      `${KAGGLE_API}/ApiSaveKernel`,
+      KAGGLE_KERNEL_PUSH_API,
       {
         slug: `${account.id}/${kernel.name}`,
         newTitle: kernel.title,

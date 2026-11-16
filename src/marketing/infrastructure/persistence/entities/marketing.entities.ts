@@ -148,6 +148,14 @@ export class MarketingPhotoshootShotEntity {
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 
+/** Admin-editable settings (key → JSON value). */
+@Entity('marketing_settings')
+export class MarketingSettingEntity {
+  @PrimaryColumn({ type: 'varchar', length: 64 }) key: string;
+  @Column({ type: 'jsonb' }) value: unknown;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
 export const MARKETING_ENTITY_CLASSES = [
   MarketingCampaignEntity,
   MarketingSceneEntity,
@@ -157,4 +165,5 @@ export const MARKETING_ENTITY_CLASSES = [
   RenderJobEntity,
   MarketingPhotoshootEntity,
   MarketingPhotoshootShotEntity,
+  MarketingSettingEntity,
 ];

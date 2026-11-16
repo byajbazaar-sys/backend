@@ -7,6 +7,7 @@ import {
   MarketingBrandEntity,
   MarketingCampaignEntity,
   MarketingSceneEntity,
+  MarketingSettingEntity,
   RenderJobEntity,
 } from './entities/marketing.entities';
 import { MarketingDatabase } from './marketing-database';
@@ -26,12 +27,15 @@ import {
   ERenderJobStatus,
 } from '../../application/enums';
 import {
+  DEFAULT_KAGGLE_SETTINGS,
   IKaggleAccountsRepository,
   IKaggleCredentialsRepository,
   IMarketingBrandsRepository,
   IMarketingCampaignsRepository,
   IMarketingScenesRepository,
+  IMarketingSettingsRepository,
   IRenderJobsRepository,
+  KaggleSettings,
 } from '../../application/ports';
 import { MarketingSecretCipher } from '../crypto/marketing-secret.cipher';
 
@@ -310,6 +314,16 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     })) as unknown as RenderJob[];
   }
 
+  async listWaiting(limit: number): Promise<RenderJob[]> {
+    return (await (
+      await this.repo()
+    ).find({
+      where: { status: ERenderJobStatus.Waiting, kind: Not(ERenderJobKind.Setup) },
+      order: { createdAt: 'ASC' },
+      take: limit,
+    })) as unknown as RenderJob[];
+  }
+
   async countWaiting(): Promise<number> {
     return (await this.repo()).count({
       where: { status: ERenderJobStatus.Waiting, kind: Not(ERenderJobKind.Setup) },
@@ -366,5 +380,32 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     if (filter.userId) where.userId = filter.userId;
     if (filter.kind) where.kind = filter.kind;
     return (await (await this.repo()).findOne({ where, order: { createdAt: 'DESC' } })) as unknown as RenderJob | null;
+  }
+}
+
+/** marketing_settings. Read on use (a few ms) so a change made by an admin applies on every server at once. */
+@Injectable()
+export class MarketingSettingsRepository
+  extends MarketingRepositoryBase<MarketingSettingEntity>
+  implements IMarketingSettingsRepository
+{
+  constructor(db: MarketingDatabase) {
+    super(db, MarketingSettingEntity);
+  }
+
+  async kaggle(): Promise<KaggleSettings> {
+    try {
+      const row = await (await this.repo()).findOne({ where: { key: 'kaggle' } });
+      return { ...DEFAULT_KAGGLE_SETTINGS, ...((row?.value as Partial<KaggleSettings>) ?? {}) };
+    } catch {
+      // Table not migrated yet: defaults.
+      return { ...DEFAULT_KAGGLE_SETTINGS };
+    }
+  }
+
+  async saveKaggle(patch: Partial<KaggleSettings>): Promise<KaggleSettings> {
+    const next = { ...(await this.kaggle()), ...patch };
+    await (await this.repo()).upsert({ key: 'kaggle', value: next }, ['key']);
+    return next;
   }
 }

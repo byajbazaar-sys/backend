@@ -72,6 +72,8 @@ export interface IRenderJobsRepository {
   countBusyByWorker(): Promise<Record<string, number>>;
   /** Jobs currently on Kaggle (STARTING / RUNNING), oldest first. */
   listBusy(): Promise<RenderJob[]>;
+  /** Render jobs waiting for a GPU (not account setups), oldest first. */
+  listWaiting(limit: number): Promise<RenderJob[]>;
   countWaiting(): Promise<number>;
   /** Kernel slots held by an account's busy jobs. */
   busySlots(workerId: string): Promise<number[]>;
@@ -102,4 +104,21 @@ export interface IMarketingPhotoshootShotsRepository {
   listFor(photoshootIds: string[]): Promise<PhotoshootShot[]>;
   findByIndex(photoshootId: string, index: number): Promise<PhotoshootShot | null>;
   update(id: string, patch: Partial<PhotoshootShot>): Promise<PhotoshootShot | null>;
+}
+
+/** Kaggle health behaviour, editable by admins. */
+export interface KaggleSettings {
+  /**
+   * Fix stuck renders without an admin: re-run failed account setups after 30 minutes (instead of 6 hours), move a
+   * render that Kaggle keeps queued or that never booted to another account, restart silent sessions sooner.
+   */
+  autoRecover: boolean;
+}
+
+export const DEFAULT_KAGGLE_SETTINGS: KaggleSettings = { autoRecover: true };
+
+export const MARKETING_SETTINGS_REPOSITORY = 'MARKETING_SETTINGS_REPOSITORY';
+export interface IMarketingSettingsRepository {
+  kaggle(): Promise<KaggleSettings>;
+  saveKaggle(patch: Partial<KaggleSettings>): Promise<KaggleSettings>;
 }
