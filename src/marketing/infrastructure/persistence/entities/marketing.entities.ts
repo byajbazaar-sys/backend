@@ -93,6 +93,21 @@ export class KaggleCredentialEntity {
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 
+@Entity('marketing_instagram_connections')
+@Index('UQ_marketing_instagram_connections_state_hash', ['oauthStateHash'], { unique: true })
+export class MarketingInstagramConnectionEntity {
+  @PrimaryColumn({ type: 'uuid' }) userId: string;
+  @Column({ type: 'varchar', length: 64, nullable: true }) instagramUserId: string | null;
+  @Column({ type: 'varchar', length: 255, nullable: true }) username: string | null;
+  @Column({ type: 'text', nullable: true }) accessTokenEncrypted: string | null;
+  @Column({ type: 'timestamptz', nullable: true }) tokenExpiresAt: Date | null;
+  @Column({ type: 'timestamptz', nullable: true }) connectedAt: Date | null;
+  @Column({ type: 'varchar', length: 64, nullable: true }) oauthStateHash: string | null;
+  @Column({ type: 'timestamptz', nullable: true }) oauthStateExpiresAt: Date | null;
+  @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
 @Entity('marketing_render_jobs')
 @Index('IDX_marketing_render_jobs_status_created', ['status', 'createdAt'])
 export class RenderJobEntity {
@@ -162,6 +177,7 @@ export const MARKETING_ENTITY_CLASSES = [
   MarketingBrandEntity,
   KaggleAccountEntity,
   KaggleCredentialEntity,
+  MarketingInstagramConnectionEntity,
   RenderJobEntity,
   MarketingPhotoshootEntity,
   MarketingPhotoshootShotEntity,

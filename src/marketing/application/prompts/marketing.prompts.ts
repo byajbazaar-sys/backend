@@ -35,8 +35,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'gentle push-in towards the piece, reflections shimmering',
     },
     {
-      scene: 'on a white sculpted pedestal with a pastel peach backdrop and soft shadows',
-      motion: 'slow tilt up revealing the full piece, soft light sweep',
+      scene: 'worn by one adult male or female model chosen to suit the piece, against a pastel peach studio backdrop with soft shadows',
+      motion: 'model makes a subtle graceful turn while the jewellery stays unobscured and centered',
     },
     {
       scene: 'on a rotating turntable with a deep blue backdrop and crisp edge lighting',
@@ -61,8 +61,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'slow dolly across, smoke drifting softly',
     },
     {
-      scene: 'on a banana-leaf platter with jasmine strings and temple bells in soft focus',
-      motion: 'slow tilt down onto the piece, petals falling gently',
+      scene: 'worn by one adult male or female model chosen to suit the piece, with jasmine and warm festive lights softly out of focus',
+      motion: 'model makes a gentle turn toward the light while the jewellery stays clearly visible',
     },
     {
       scene: 'against a wall of glowing paper lanterns at dusk, warm and celebratory',
@@ -79,8 +79,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'gentle push-in as the light sweeps across the stones',
     },
     {
-      scene: 'on a marble vanity beside a crystal perfume bottle, moody low-key light',
-      motion: 'slow orbit with soft reflections in the crystal',
+      scene: 'worn by one adult male or female model chosen to suit the piece, against a dark boutique backdrop with a soft spotlight',
+      motion: 'model turns slightly toward camera; the jewellery remains sharp, centered, and unobscured',
     },
     {
       scene: 'on dark rippled water reflecting golden light, mysterious and rich',
@@ -101,8 +101,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'gentle orbit, soft breeze moving the pampas',
     },
     {
-      scene: 'on a pale stone pebble arrangement with soft diffused light',
-      motion: 'slow tilt across the piece, calm and still',
+      scene: 'worn by one adult male or female model chosen to suit the piece, in soft window light against a clean neutral background',
+      motion: 'model makes a small natural turn while the jewellery stays clearly visible',
     },
     {
       scene: 'on a beige ceramic dish beside a sprig of eucalyptus, clean composition',
@@ -120,8 +120,10 @@ export function buildPromptWriterSystem(): string {
     'You write shot lists for short vertical jewellery advertisement videos (Instagram Reels). ' +
     `Reply with ONLY a JSON array of exactly ${CAMPAIGN_SCENES} objects, each {"scene": string, "motion": string}. ` +
     '"scene" describes where and how the jewellery is staged (setting, props, background, lighting) in under 30 words; ' +
-    'never describe or change the jewellery itself, never add people, hands, text or logos. ' +
-    '"motion" describes one slow, smooth camera or light movement in under 15 words. ' +
+    'do not alter the jewellery. Exactly one scene must feature one adult male or female model, chosen to suit the product, ' +
+    'wearing and showcasing it naturally with the jewellery prominent and unobscured; all other scenes have no people or hands. ' +
+    'Do not add text or logos. "motion" describes one slow, smooth camera movement or subtle model gesture in under 20 words; ' +
+    'keep the jewellery in frame and avoid fast movement, sudden zooms, or handling. ' +
     `Make all ${CAMPAIGN_SCENES} scenes clearly different from each other.`
   );
 }
@@ -146,7 +148,7 @@ export function parseScenePrompts(reply: string, style: MarketingStyle): { scene
   }
   const clean = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
   const fromModel = (Array.isArray(parsed) ? parsed : [])
-    .map((p) => ({ scene: clean((p as ScenePrompt)?.scene, 300), motion: clean((p as ScenePrompt)?.motion, 160) }))
+    .map((p) => ({ scene: clean((p as ScenePrompt)?.scene, 300), motion: clean((p as ScenePrompt)?.motion, 240) }))
     .filter((p) => p.scene.length >= 12 && p.motion.length >= 6)
     .slice(0, CAMPAIGN_SCENES);
   const scenes = [...fromModel, ...FALLBACK[style].slice(fromModel.length)].slice(0, CAMPAIGN_SCENES);
@@ -159,20 +161,35 @@ export function fallbackScene(style: MarketingStyle, index: number): ScenePrompt
 
 /** Image-to-image prompt: restage the exact product. */
 export function buildSceneImagePrompt(scene: string, title: string): string {
+  const includesModel = /\b(model|person|woman|man|female|male)\b/i.test(scene);
+  const people = includesModel
+    ? 'Show only the one adult model described in the scene, wearing the jewellery as intended, with natural anatomy and a pose that never covers it.'
+    : 'No people or hands.';
   return (
     `Professional vertical product photograph for a jewellery advertisement. Place the exact jewellery piece from the ` +
     `reference image (${title}) ${scene}. Keep the jewellery identical: same design, shape, metal colour, stones and fine ` +
     `details; do not add, remove or redesign any part. Product centred and fully visible, sharp focus, photorealistic, ` +
-    `high detail, no text, no watermark, no hands, no people.`
+    `high detail, ${people} No text or watermark.`
   );
 }
 
 /** Video prompt for a scene clip. */
 export function buildSceneVideoPrompt(motion: string): string {
   return (
-    `Cinematic vertical jewellery advertisement. Preserve the exact design, shape, colours, material and fine details of ` +
-    `the jewellery from the reference image. ${motion}. Shallow depth of field, premium commercial look, sharp focus, ` +
-    `high detail, stable and consistent geometry.`
+    `Create one photorealistic 5-second, vertical 9:16 luxury jewellery commercial shot from the supplied reference image. ` +
+      `REFERENCE AND SUBJECT: use the image as the exact opening frame and identity reference. Keep the same jewellery and ` +
+      `wearer if present; preserve the wearer's identity, facial features, wardrobe, and background. Preserve the jewellery's silhouette, proportions, ` +
+    `metal colour, stone count, stone placement, setting, and fine craftsmanship exactly; do not redesign or simplify it. ` +
+    `ACTION: ${motion}. Perform only this one action, as a small graceful movement with a clear beginning, a fluid middle, ` +
+    `and a calm settled finish. Ease in and out naturally; maintain realistic speed and avoid sudden changes of direction. ` +
+    `CAMERA AND COMPOSITION: use a steady, controlled camera path that supports the action, with no handheld shake. Keep ` +
+      `the complete jewellery comfortably inside the frame, prominent, unobscured, and in sharp focus for the entire shot. ` +
+      `Allow only the gentle position or scale change required by the requested motion; never crop or obscure the piece. ` +
+      `No sudden reframing, abrupt zoom, extreme close-up, or focus hunting. ` +
+    `LIGHT AND MATERIAL: use soft premium studio lighting, gentle edge highlights, natural skin tones when a model is present, ` +
+    `and physically plausible reflections on metal and stones. Let highlights shift subtly with the motion while the design ` +
+    `remains stable. CONTINUITY: one uninterrupted shot, consistent background and exposure, no cuts, transitions, new people, ` +
+    `hands, props, text, logos, duplicate jewellery, morphing, flicker, or added or missing details.`
   );
 }
 
@@ -190,6 +207,7 @@ export const LOGO_VIDEO_PROMPT =
   'in, the logo stays sharp, perfectly still and unchanged, premium luxury brand intro.';
 
 export const VIDEO_NEGATIVE =
-  'low quality, worst quality, blurry, out of focus, flicker, jitter, frame stutter, deformed, distorted, warped ' +
-  'geometry, melting, extra objects, duplicated objects, text, subtitles, watermark, static frame, overexposed, ' +
-  'oversaturated, jpeg artifacts';
+  'low quality, worst quality, blurry, out of focus, flicker, jitter, judder, jerky movement, frame stutter, deformed, distorted, warped ' +
+  'geometry, melting, changing jewellery design, added or missing stones, extra hands, extra fingers, deformed hands, ' +
+  'extra people, duplicate jewellery, extra objects, abrupt cuts, camera shake, extreme close-up, motion blur, text, ' +
+  'subtitles, watermark, static frame, overexposed, oversaturated, jpeg artifacts';

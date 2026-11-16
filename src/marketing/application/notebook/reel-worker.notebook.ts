@@ -308,8 +308,10 @@ def prepare_image(data, w, h):
 
 def encode_reel(src, dst):
     """1080x1920 @30 fps H.264 (Instagram Reels), silent AAC track."""
-    vf = (f"scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{OUT_H},"
-          f"fps={OUT_FPS},unsharp=5:5:0.4:5:5:0.0,setsar=1,format=yuv420p")
+    smooth_fps = (f"minterpolate=fps={OUT_FPS}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1"
+                  if has_filter("minterpolate") else f"fps={OUT_FPS}")
+    vf = (f"{smooth_fps},scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase:flags=lanczos,"
+          f"crop={OUT_W}:{OUT_H},unsharp=5:5:0.4:5:5:0.0,setsar=1,format=yuv420p")
     subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", src,
                     "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
                     "-map", "0:v:0", "-map", "1:a:0", "-shortest", "-vf", vf,

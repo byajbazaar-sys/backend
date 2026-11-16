@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import { MarketingAdminController } from './application/controllers/marketing-admin.controller';
+import {
+  MarketingInstagramCallbackController,
+  MarketingInstagramController,
+} from './application/controllers/marketing-instagram.controller';
 import { MarketingPhotoshootController } from './application/controllers/marketing-photoshoot.controller';
 import {
   MarketingController,
@@ -22,6 +26,7 @@ import {
   MARKETING_CAMPAIGNS_REPOSITORY,
   MARKETING_CATALOG,
   MARKETING_FILE_STORAGE,
+  MARKETING_INSTAGRAM_REPOSITORY,
   MARKETING_NOTIFIER,
   MARKETING_QUEUE,
   MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY,
@@ -33,6 +38,7 @@ import {
 import { KaggleCredentialsAdminService } from './application/services/kaggle-credentials-admin.service';
 import { MarketingCampaignsService } from './application/services/marketing-campaigns.service';
 import { MarketingEvents } from './application/services/marketing-events';
+import { MarketingInstagramService } from './application/services/marketing-instagram.service';
 import { MarketingPhotoshootService } from './application/services/marketing-photoshoot.service';
 import { MarketingPlannerService } from './application/services/marketing-planner.service';
 import { MarketingQueueConsumer } from './application/services/marketing-queue.consumer';
@@ -52,6 +58,7 @@ import {
   renderJobsWithActivityLog,
 } from './infrastructure/persistence/activity-logged.repositories';
 import { MarketingDatabase } from './infrastructure/persistence/marketing-database';
+import { MarketingInstagramRepository } from './infrastructure/persistence/marketing-instagram.repository';
 import {
   MarketingPhotoshootShotsRepository,
   MarketingPhotoshootsRepository,
@@ -82,6 +89,8 @@ import { MarketingConfig } from './marketing.config';
 @Module({
   controllers: [
     MarketingAdminController,
+    MarketingInstagramController,
+    MarketingInstagramCallbackController,
     MarketingPhotoshootController,
     MarketingController,
     MarketingWorkerEventsController,
@@ -100,6 +109,7 @@ import { MarketingConfig } from './marketing.config';
     { provide: MARKETING_ACTIVITY_LOG, useClass: ByajBazaarActivityLogAdapter },
     MarketingCampaignsRepository,
     MarketingPhotoshootsRepository,
+    { provide: MARKETING_INSTAGRAM_REPOSITORY, useClass: MarketingInstagramRepository },
     KaggleCredentialsRepository,
     RenderJobsRepository,
     {
@@ -142,6 +152,7 @@ import { MarketingConfig } from './marketing.config';
     MarketingRenderService,
     MarketingPlannerService,
     MarketingPhotoshootService,
+    MarketingInstagramService,
     MarketingCampaignsService,
     KaggleCredentialsAdminService,
     MarketingQueueConsumer,

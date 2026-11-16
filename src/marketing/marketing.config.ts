@@ -50,6 +50,13 @@ export class MarketingConfig {
    * endpoints, not env vars). Falls back to TOKEN_SECRET; changing it makes stored keys unreadable.
    */
   readonly credentialsSecret = env('MARKETING_CREDENTIALS_SECRET') ?? env('TOKEN_SECRET');
+  readonly instagram = {
+    appId: env('MARKETING_INSTAGRAM_APP_ID'),
+    appSecret: env('MARKETING_INSTAGRAM_APP_SECRET'),
+    redirectUri: env('MARKETING_INSTAGRAM_REDIRECT_URI'),
+    returnUrl: env('MARKETING_INSTAGRAM_RETURN_URL'),
+    graphApiVersion: env('MARKETING_INSTAGRAM_GRAPH_API_VERSION') ?? 'v27.0',
+  };
   readonly kaggleMachineShape = env('KAGGLE_MACHINE_SHAPE') ?? 'NvidiaTeslaT4';
   /** Kaggle's GPU session limit; the notebook hands over to a new session before reaching it. */
   readonly kaggleSessionHours = Number(env('KAGGLE_SESSION_HOURS') ?? 12) || 12;
