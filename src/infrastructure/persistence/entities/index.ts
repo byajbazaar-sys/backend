@@ -27,6 +27,7 @@ import { PosSessionEntity } from './pos-session.entity';
 import { RefundEntity } from './refund.entity';
 import { SalesBillItemEntity } from './sales-bill-item.entity';
 import { SalesBillEntity } from './sales-bill.entity';
+import { BillLogEntity } from './bill-log.entity';
 import { SeedEntity } from './seed.entity';
 import { SubscriptionEntity } from './subscription.entity';
 import { SupportRequestEntity } from './support-request.entity';
@@ -54,6 +55,7 @@ export { InventoryItemEntity } from './inventory-item.entity';
 export { PosSessionEntity } from './pos-session.entity';
 export { WebSocketConnectionEntity } from './websocket-connection.entity';
 export { SalesBillEntity } from './sales-bill.entity';
+export { BillLogEntity } from './bill-log.entity';
 export { SalesBillItemEntity } from './sales-bill-item.entity';
 export { MetalRateEntity } from './metal-rate.entity';
 export { ApiConfigurationEntity } from './api-configuration.entity';
@@ -96,6 +98,7 @@ export default [
   PosSessionEntity,
   WebSocketConnectionEntity,
   SalesBillEntity,
+  BillLogEntity,
   SalesBillItemEntity,
   MetalRateEntity,
   ApiConfigurationEntity,

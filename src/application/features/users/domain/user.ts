@@ -77,6 +77,12 @@ export class User {
   public catalogEnabled?: boolean;
 
   @Expose()
+  public catalogDisplay?: Record<string, boolean> | null;
+
+  @Expose()
+  public catalogWhatsappNumber?: string | null;
+
+  @Expose()
   public address?: string;
 
   @Expose()

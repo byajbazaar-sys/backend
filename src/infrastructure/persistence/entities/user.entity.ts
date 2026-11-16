@@ -75,6 +75,14 @@ export class UserEntity {
   @Column({ type: 'boolean', default: true, name: 'catalog_enabled' })
   catalogEnabled: boolean;
 
+  /** Which item details the public catalog shows (see CATALOG_DISPLAY_FIELDS). */
+  @Column({ type: 'jsonb', nullable: true, name: 'catalog_display' })
+  catalogDisplay: Record<string, boolean> | null;
+
+  /** WhatsApp number for catalog enquiries; falls back to the shop phone. */
+  @Column({ type: 'varchar', length: 20, nullable: true, name: 'catalog_whatsapp_number' })
+  catalogWhatsappNumber: string | null;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   address: string;
 
@@ -117,7 +125,8 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 7, nullable: true, name: 'try_on_background_color', default: '#1a1520' })
   tryOnBackgroundColor: string;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  /** Unique among active users only (partial index), so a deleted account can sign up again. */
+  @Column({ type: 'varchar', length: 255, nullable: true })
   googleId: string;
 
   @Column({ type: 'boolean', default: false })

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
-import { sanitizeCatalogSlugParam } from '@shared-libs';
+import { CatalogDisplaySettings, resolveCatalogDisplay, sanitizeCatalogSlugParam } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
@@ -37,22 +37,26 @@ export class PublicCatalogService implements IPublicCatalogService {
     );
   }
 
-  private async toPublicItem(item: InventoryItem): Promise<PublicCatalogItemModel> {
+  /** Only the details the shop chose to show leave the server. */
+  private async toPublicItem(item: InventoryItem, show: CatalogDisplaySettings): Promise<PublicCatalogItemModel> {
     const imageUrls = await this.resolveImageUrls(item.imageUrls ?? []);
     return plainToInstance(
       PublicCatalogItemModel,
       {
         id: item.id,
         itemName: item.itemName,
-        description: item.description,
-        categoryName: item.categoryName,
-        metalType: item.metalType,
-        purity: item.purity,
-        grossWeight: item.grossWeight,
-        netWeight: item.netWeight,
-        sellingPrice: item.sellingPrice,
         imageUrls,
-        hallmarked: item.hallmarked,
+        description: show.description ? item.description : undefined,
+        categoryName: show.category ? item.categoryName : undefined,
+        metalType: show.metal ? item.metalType : undefined,
+        purity: show.purity ? item.purity : undefined,
+        grossWeight: show.grossWeight ? item.grossWeight : undefined,
+        netWeight: show.netWeight ? item.netWeight : undefined,
+        sellingPrice: show.price ? item.sellingPrice : undefined,
+        hallmarked: show.hallmark ? item.hallmarked : undefined,
+        size: show.size ? item.size : undefined,
+        sku: show.sku ? item.sku : undefined,
+        makingCharges: show.makingCharges ? item.makingCharges : undefined,
       },
       { excludeExtraneousValues: true },
     );
@@ -77,11 +81,23 @@ export class PublicCatalogService implements IPublicCatalogService {
       shopLogoUrl = (await this.usersFileStorage.getUrlAsync(user.shopLogoRef)) ?? user.shopLogoRef ?? undefined;
     }
 
+    const show = resolveCatalogDisplay(user.catalogDisplay);
+    const showsWeight = show.netWeight || show.grossWeight;
+    const priceSort = query.sort === 'price_asc' || query.sort === 'price_desc';
+    const weightSort = query.sort === 'weight_asc' || query.sort === 'weight_desc';
+    // Filters / sorts on hidden details are ignored, so they can't be used to probe hidden values.
     const paged = catalogActive
       ? await this.itemsRepo.findPublicCatalog(user.id, {
           search: query.search,
-          categoryId: query.categoryId,
-          metalType: query.metalType,
+          categoryId: show.category ? query.categoryId : undefined,
+          metalType: show.metal ? query.metalType : undefined,
+          purity: show.purity ? query.purity : undefined,
+          minWeight: showsWeight ? query.minWeight : undefined,
+          maxWeight: showsWeight ? query.maxWeight : undefined,
+          minPrice: show.price ? query.minPrice : undefined,
+          maxPrice: show.price ? query.maxPrice : undefined,
+          hallmarked: show.hallmark ? query.hallmarked : undefined,
+          sort: (priceSort && !show.price) || (weightSort && !showsWeight) ? 'newest' : query.sort,
           pageNumber: query.pageNumber,
           pageSize: query.pageSize,
         })
@@ -95,7 +111,10 @@ export class PublicCatalogService implements IPublicCatalogService {
           hasPreviousPage: false,
         };
 
-    const publicItems = await Promise.all(paged.items.map((item) => this.toPublicItem(item)));
+    const publicItems = await Promise.all(paged.items.map((item) => this.toPublicItem(item, show)));
+    // Filter options only on the first page (the client keeps them while paging).
+    const firstPage = (query.pageNumber ?? 1) <= 1;
+    const facets = catalogActive && firstPage ? await this.itemsRepo.findPublicCatalogFacets(user.id) : undefined;
 
     this.logger.debug(
       { catalogSlug, itemCount: publicItems.length, totalCount: paged.totalCount },
@@ -113,6 +132,19 @@ export class PublicCatalogService implements IPublicCatalogService {
         catalogEnabled,
         catalogActive,
         tryOnBackgroundColor: user.tryOnBackgroundColor,
+        display: show,
+        whatsappNumber: user.catalogWhatsappNumber || user.phoneNumber || undefined,
+        facets: facets
+          ? {
+              categories: show.category ? facets.categories : [],
+              metals: show.metal ? facets.metals : [],
+              purities: show.purity ? facets.purities : [],
+              minWeight: showsWeight ? facets.minWeight : undefined,
+              maxWeight: showsWeight ? facets.maxWeight : undefined,
+              minPrice: show.price ? facets.minPrice : undefined,
+              maxPrice: show.price ? facets.maxPrice : undefined,
+            }
+          : undefined,
         catalog: {
           items: publicItems,
           pageNumber: paged.page,

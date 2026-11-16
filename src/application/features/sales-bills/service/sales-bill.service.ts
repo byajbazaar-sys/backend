@@ -19,6 +19,13 @@ import {
   queryCacheParts,
   salesAnalyticsCacheParts,
 } from '../../../shared';
+import { Customer } from '../../customers/domain';
+import {
+  CUSTOMER_SERVICE,
+  CUSTOMERS_REPOSITORY,
+  ICustomerService,
+  ICustomersRepository,
+} from '../../customers/service';
 import { EInventoryItemStatus } from '../../inventory/enums';
 import {
   IInventoryCategoriesRepository,
@@ -28,7 +35,7 @@ import {
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
 } from '../../inventory/service/i-inventory-items.repository';
-import { SalesBill, SalesBillLineItem, SalesAnalytics, GstCsvExportResult } from '../domain';
+import { BillLog, SalesBill, SalesBillLineItem, SalesAnalytics, GstCsvExportResult } from '../domain';
 import {
   EBillStatus,
   EPaymentMode,
@@ -36,6 +43,7 @@ import {
   ESalesBillSortOrder,
   EDocumentType,
   BILL_NUMBER_PREFIX,
+  EBillLogAction,
 } from '../enums';
 import {
   CreateSalesBillRequestModel,
@@ -45,16 +53,32 @@ import {
 } from '../models';
 import { SalesAnalyticsFilterOptions, SalesBillsExportFilterOptions, SalesBillsFilterOptions } from '../options';
 import { BillLineUpdate } from './bill-line-update';
+import { BILL_LOGS_REPOSITORY, BillLogsQuery, IBillLogsRepository } from './i-bill-logs.repository';
 import { ISalesBillService } from './i-sales-bill.service';
 import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
 import { InventoryStockDeduction } from './inventory-stock-deduction';
-import { toGstExportCsv } from '../utils/gst-export.util';
 import { computeBillLineTotal } from '../utils/bill-line-total.util';
+import {
+  BillCustomerDetails,
+  billMobileDigits,
+  isRealCustomerName,
+  missingCustomerDetails,
+  newCustomerFromBill,
+} from '../utils/bill-customer.util';
+import { billSnapshot, diffBills } from '../utils/bill-log-diff.util';
+import { toGstExportCsv } from '../utils/gst-export.util';
 import {
   computeUnitPurchaseCost,
   computeLineProfit,
   recalcLineProfitFromExisting,
 } from '../utils/purchase-profit.util';
+
+/** Who did an operation and from where, for the bill history. */
+export interface BillActionContext {
+  performedBy?: string;
+  /** web | mobile | api */
+  channel?: string;
+}
 
 const DEFAULT_CGST_RATE = 1.5;
 const DEFAULT_SGST_RATE = 1.5;
@@ -67,8 +91,97 @@ export class SalesBillService implements ISalesBillService {
     @Inject(INVENTORY_CATEGORIES_REPOSITORY)
     private readonly categoriesRepo: IInventoryCategoriesRepository,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+    @Inject(BILL_LOGS_REPOSITORY) private readonly billLogsRepo: IBillLogsRepository,
+    @Inject(CUSTOMERS_REPOSITORY) private readonly customersRepo: ICustomersRepository,
+    @Inject(CUSTOMER_SERVICE) private readonly customerService: ICustomerService,
     @InjectPinoLogger(SalesBillService.name) private readonly logger: PinoLogger,
   ) {}
+
+  /**
+   * Links a bill to a customer from its mobile number:
+   * - a picked customer, or one already saved with this mobile, is used (missing GSTIN, PAN,
+   *   state, address… are filled in from the bill, nothing saved is overwritten);
+   * - otherwise a new customer is created from the bill's name, mobile and details.
+   * Never fails the bill: on any error the bill is saved without a customer link.
+   */
+  private async resolveBillCustomer(
+    data: BillCustomerDetails & { customerId?: string },
+    userId: string,
+  ): Promise<string | undefined> {
+    try {
+      let customer: Customer | null = null;
+      if (data.customerId) {
+        customer = await this.customersRepo.findById(data.customerId, userId);
+        if (!customer) return undefined;
+      } else {
+        const mobile = billMobileDigits(data.customerMobile);
+        if (!mobile) return undefined;
+        customer = await this.customersRepo.findByMobile(mobile, userId);
+        if (!customer) {
+          if (!isRealCustomerName(data.customerName)) return undefined;
+          const created = await this.customerService.create(newCustomerFromBill(data, mobile, userId));
+          this.logger.info({ customerId: created.id }, 'Customer created from bill');
+          return created.id;
+        }
+      }
+
+      const patch = missingCustomerDetails(customer, data);
+      if (Object.keys(patch).length > 0) {
+        await this.customerService.update(customer.id, { ...patch, createdBy: userId } as Customer);
+      }
+      return customer.id;
+    } catch (err) {
+      this.logger.warn({ err, userId }, 'Could not link bill to a customer');
+      return data.customerId;
+    }
+  }
+
+  /**
+   * Writes one history row. Never fails the bill operation itself: a logging error is reported
+   * to the server log instead.
+   */
+  private async recordLog(
+    bill: Pick<SalesBill, 'id' | 'billNumber' | 'createdBy'>,
+    action: EBillLogAction,
+    context: BillActionContext | undefined,
+    extra: Partial<Pick<BillLog, 'changes' | 'snapshot'>> = {},
+  ): Promise<void> {
+    try {
+      await this.billLogsRepo.create({
+        billId: bill.id ?? null,
+        billNumber: bill.billNumber,
+        userId: bill.createdBy,
+        action,
+        changes: extra.changes ?? [],
+        snapshot: extra.snapshot ?? null,
+        channel: context?.channel ?? null,
+        performedBy: context?.performedBy ?? bill.createdBy ?? null,
+      });
+    } catch (err) {
+      this.logger.error({ err, billId: bill.id, action }, 'Failed to write bill log');
+    }
+  }
+
+  /** History of one bill (also works after the bill is deleted). */
+  async getLogs(billId: string, userId: string, pageNumber?: number, pageSize?: number): Promise<Paged<BillLog>> {
+    return this.billLogsRepo.find({ userId, billId, pageNumber, pageSize });
+  }
+
+  /** All bill activity for the shop, newest first (includes deleted bills). */
+  async getActivity(query: Omit<BillLogsQuery, 'billId'>): Promise<Paged<BillLog>> {
+    return this.billLogsRepo.find(query);
+  }
+
+  /** Print / share events reported by the apps. */
+  async recordClientEvent(
+    billId: string,
+    action: EBillLogAction,
+    userId: string,
+    context?: BillActionContext,
+  ): Promise<void> {
+    const bill = await this.getById(billId, userId);
+    await this.recordLog(bill, action, context);
+  }
 
   private async generateBillNumber(createdBy: string, documentType: EDocumentType): Promise<string> {
     const now = new Date();
@@ -261,16 +374,12 @@ export class SalesBillService implements ISalesBillService {
     };
   }
 
-  async create(data: CreateSalesBillRequestModel, userId: string): Promise<SalesBill> {
+  async create(data: CreateSalesBillRequestModel, userId: string, context?: BillActionContext): Promise<SalesBill> {
     const lineItems: SalesBillLineItem[] = [];
     for (const item of data.items) {
       const hsnHuid = await this.resolveLineHsnHuid(item, userId);
       const weights = this.resolveBillLineWeights(item);
-      const lineTotal = computeBillLineTotal(
-        item.sellingPrice,
-        item.quantity,
-        item.quantityPricingMode,
-      );
+      const lineTotal = computeBillLineTotal(item.sellingPrice, item.quantity, item.quantityPricingMode);
       const purchase = await this.resolveLinePurchaseSnapshot(item, lineTotal, userId);
       lineItems.push({
         inventoryItemId: item.inventoryItemId,
@@ -310,13 +419,14 @@ export class SalesBillService implements ISalesBillService {
     const stockDeductions = await this.resolveInventoryStockDeductions(lineItems, userId, status);
 
     const customerName = data.customerName?.trim() || (documentType === EDocumentType.InformalBill ? '' : 'Walk-in');
+    const customerId = await this.resolveBillCustomer(data, userId);
 
     const bill: SalesBill = {
       billNumber: await this.generateBillNumber(userId, documentType),
       documentType,
       customerName,
       customerMobile: data.customerMobile?.trim() || undefined,
-      customerId: data.customerId,
+      customerId,
       customerAddress: data.customerAddress?.trim() || undefined,
       customerState: data.customerState?.trim() || undefined,
       customerStateCode: data.customerStateCode?.trim() || undefined,
@@ -365,6 +475,7 @@ export class SalesBillService implements ISalesBillService {
       await this.invalidateInventoryReportsCache(userId);
     }
     await this.invalidateSalesBillsCache(userId);
+    await this.recordLog(created, EBillLogAction.Created, context, { snapshot: billSnapshot(created) });
     return created;
   }
 
@@ -458,7 +569,7 @@ export class SalesBillService implements ISalesBillService {
     );
   }
 
-  async convertToNormalBill(id: string, userId: string): Promise<SalesBill> {
+  async convertToNormalBill(id: string, userId: string, context?: BillActionContext): Promise<SalesBill> {
     const bill = await this.getById(id, userId);
     if (bill.documentType !== EDocumentType.InformalBill) {
       throw new BadRequestException('Only informal bills can be converted to a normal bill');
@@ -488,10 +599,16 @@ export class SalesBillService implements ISalesBillService {
     );
 
     await this.invalidateSalesBillsCache(userId);
+    await this.recordLog(updated, EBillLogAction.ConvertedToNormal, context, { changes: diffBills(bill, updated) });
     return updated;
   }
 
-  async update(id: string, data: UpdateSalesBillRequestModel, userId: string): Promise<SalesBill> {
+  async update(
+    id: string,
+    data: UpdateSalesBillRequestModel,
+    userId: string,
+    context?: BillActionContext,
+  ): Promise<SalesBill> {
     const bill = await this.getById(id, userId);
 
     const lineUpdates: BillLineUpdate[] = [];
@@ -615,28 +732,36 @@ export class SalesBillService implements ISalesBillService {
     this.logger.info({ billId: id, billNumber: updated.billNumber }, 'Sales bill updated');
     await this.invalidateInventoryReportsCache(userId);
     await this.invalidateSalesBillsCache(userId);
+    const changes = diffBills(bill, updated);
+    if (changes.length > 0) {
+      await this.recordLog(updated, EBillLogAction.Updated, context, { changes });
+    }
     return updated;
   }
 
-  async delete(id: string, userId: string): Promise<void> {
+  async delete(id: string, userId: string, context?: BillActionContext): Promise<void> {
     const bill = await this.getById(id, userId);
     const restoreStock = bill.status === EBillStatus.Completed;
     await this.billsRepo.deleteBill(id, restoreStock);
     this.logger.info({ billId: id, billNumber: bill.billNumber, restoreStock }, 'Sales bill deleted');
+    // Full copy of the deleted bill, so the record is never lost.
+    await this.recordLog(bill, EBillLogAction.Deleted, context, {
+      snapshot: { ...billSnapshot(bill), stockRestored: restoreStock },
+    });
     if (restoreStock) {
       await this.invalidateInventoryReportsCache(userId);
     }
     await this.invalidateSalesBillsCache(userId);
   }
 
-  async bulkDelete(ids: string[], userId: string): Promise<BulkDeleteResult> {
+  async bulkDelete(ids: string[], userId: string, context?: BillActionContext): Promise<BulkDeleteResult> {
     const uniqueIds = [...new Set(ids)];
     if (!uniqueIds.length) {
       throw new BadRequestException('No bill ids provided');
     }
 
     for (const id of uniqueIds) {
-      await this.delete(id, userId);
+      await this.delete(id, userId, context);
     }
 
     this.logger.info({ count: uniqueIds.length, userId }, 'Sales bills bulk deleted');

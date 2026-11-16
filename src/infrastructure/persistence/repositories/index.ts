@@ -32,3 +32,4 @@ export * from './orders.repository';
 export * from './whatsapp-business-connections.repository';
 export * from './whatsapp-conversation-windows.repository';
 export * from './whatsapp-messages.repository';
+export * from './bill-logs.repository';

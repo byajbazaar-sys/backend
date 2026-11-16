@@ -95,8 +95,10 @@ export class InventoryItemService implements IInventoryItemService {
   }
 
   async create(data: CreateInventoryItemRequestModel, userId: string): Promise<InventoryItem> {
-    const category = await this.categoriesRepo.findById(data.categoryId);
-    if (!category) throw new NotFoundException('Category not found');
+    if (data.categoryId) {
+      const category = await this.categoriesRepo.findById(data.categoryId);
+      if (!category) throw new NotFoundException('Category not found');
+    }
 
     const sku = data.sku?.trim() || (await this.generateSku(userId));
     const item: InventoryItem = {
@@ -133,6 +135,16 @@ export class InventoryItemService implements IInventoryItemService {
       pageNumber: query.pageNumber,
       pageSize: query.pageSize,
       sortOrder: query.sortOrder,
+      sortBy: query.sortBy,
+      purity: query.purity,
+      minWeight: query.minWeight,
+      maxWeight: query.maxWeight,
+      minPrice: query.minPrice,
+      maxPrice: query.maxPrice,
+      addedFrom: query.addedFrom,
+      addedTo: query.addedTo,
+      hallmarked: query.hallmarked,
+      hasPhoto: query.hasPhoto,
     };
   }
 

@@ -8,6 +8,7 @@ import {
   WEBSOCKET_MESSAGE_SERVICE,
   IWebSocketMessageService,
 } from '../application';
+import { MarketingRenderService } from '../marketing';
 import { getTokenFromEvent, getWebSocketApp, getWebSocketHandler, parseBody, wsResponse } from './websocket-bootstrap';
 
 function logWs(level: 'info' | 'warn' | 'error', message: string, meta?: Record<string, unknown>) {
@@ -164,6 +165,13 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
       case 'heartbeat':
         result = await wsHandler.handleHeartbeat(connectionId);
         break;
+      case 'marketingProgress': {
+        // From a Kaggle render notebook; authorised by its per-job token, not a user session.
+        const accepted = await app.get(MarketingRenderService).handleWorkerEvent(body);
+        if (!accepted) throw new Error('Unauthorized: invalid worker token');
+        result = { type: 'marketingProgressAck', jobId: body.jobId };
+        break;
+      }
       default:
         logWs('warn', 'Unknown route', { connectionId, routeKey });
         return wsResponse(400, { error: 'Unknown route' });

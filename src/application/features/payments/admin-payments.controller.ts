@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -18,6 +19,9 @@ import { plainToInstance } from 'class-transformer';
 
 import {
   AdminSubscriptionDetailResponseModel,
+  CouponResponseModel,
+  CreateCouponRequestModel,
+  UpdateCouponRequestModel,
   AdminSubscriptionsPagedResponseModel,
   CreatePlanRequestModel,
   CreateRefundRequestModel,
@@ -27,6 +31,7 @@ import {
   RefundResponseModel,
   UpdatePlanRequestModel,
 } from './models';
+import { CouponAdminService } from './service/coupon-admin.service';
 import { IPlanService, PLAN_SERVICE } from './service/i-plan.service';
 import { ISubscriptionAdminService, SUBSCRIPTION_ADMIN_SERVICE } from './service/i-subscription-admin.service';
 
@@ -40,7 +45,36 @@ export class AdminPaymentsController {
     @Inject(SUBSCRIPTION_ADMIN_SERVICE)
     private readonly subscriptionAdminService: ISubscriptionAdminService,
     @Inject(PLAN_SERVICE) private readonly planService: IPlanService,
+    private readonly couponAdminService: CouponAdminService,
   ) {}
+
+  @Get('coupons')
+  @ApiOperation({ summary: 'List coupons with what Razorpay charges first on each plan (admin)' })
+  @ApiOkResponse({ type: [CouponResponseModel] })
+  listCoupons(): Promise<CouponResponseModel[]> {
+    return this.couponAdminService.list();
+  }
+
+  @Post('coupons')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a coupon (admin). Applied in Razorpay as a discounted first payment.' })
+  @ApiOkResponse({ type: CouponResponseModel })
+  createCoupon(@Body() body: CreateCouponRequestModel): Promise<CouponResponseModel> {
+    return this.couponAdminService.create(body);
+  }
+
+  @Patch('coupons/:id')
+  @ApiOperation({ summary: 'Update a coupon (admin)' })
+  @ApiOkResponse({ type: CouponResponseModel })
+  updateCoupon(@Param('id') id: string, @Body() body: UpdateCouponRequestModel): Promise<CouponResponseModel> {
+    return this.couponAdminService.update(id, body);
+  }
+
+  @Delete('coupons/:id')
+  @ApiOperation({ summary: 'Delete an unused coupon, or switch off a used one (admin)' })
+  removeCoupon(@Param('id') id: string): Promise<{ deleted: boolean; deactivated: boolean }> {
+    return this.couponAdminService.remove(id);
+  }
 
   @Get('plans')
   @ApiOperation({ summary: 'List subscription plans (admin)' })

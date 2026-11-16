@@ -114,6 +114,14 @@ wsLeaveSession:
     - websocket:
         route: leaveSession
 
+wsMarketingProgress:
+  handler: dist/src/lambda-handlers/websocket-message.handler
+  timeout: 29
+  memorySize: 512
+  events:
+    - websocket:
+        route: marketingProgress
+
 wsDefault:
   handler: dist/src/lambda-handlers/websocket-message.handler
   timeout: 29
@@ -127,3 +135,9 @@ jewelleryTryOn:
   description: 'Async jewellery / outfit virtual try-on worker (long timeout)'
   timeout: 900
   memorySize: 2048
+
+marketingWorker:
+  handler: dist/src/lambda-handlers/marketing-worker.handler
+  description: 'Experimental marketing videos: Cloudflare still + Kaggle GPU dispatch (async)'
+  timeout: 300
+  memorySize: 1024

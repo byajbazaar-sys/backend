@@ -54,6 +54,23 @@ export class Customer {
   @Expose()
   public location?: string;
 
+  /** GST number (filled from bills; shown on GST invoices). */
+  @Expose()
+  public gstin?: string;
+
+  @Expose()
+  public panNumber?: string;
+
+  @Expose()
+  public state?: string;
+
+  @Expose()
+  public stateCode?: string;
+
+  /** Proprietor / firm name printed on bills. */
+  @Expose()
+  public propName?: string;
+
   @Expose()
   @Type(() => Date)
   public createdAt?: Date;

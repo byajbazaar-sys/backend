@@ -29,3 +29,4 @@ export * from './webhook.service';
 export * from './i-payments.service';
 export * from './payments.service';
 export * from './refund.service';
+export * from './coupon-admin.service';

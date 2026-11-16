@@ -25,6 +25,37 @@ export class InventoryItemsFilterOptions {
   sortOrder?: EInventoryItemSortOrder;
 
   @Expose()
+  sortBy?: 'createdAt' | 'netWeight' | 'sellingPrice' | 'itemName';
+
+  @Expose()
+  purity?: string;
+
+  @Expose()
+  minWeight?: number;
+
+  @Expose()
+  maxWeight?: number;
+
+  @Expose()
+  minPrice?: number;
+
+  @Expose()
+  maxPrice?: number;
+
+  /** YYYY-MM-DD, India time. */
+  @Expose()
+  addedFrom?: string;
+
+  @Expose()
+  addedTo?: string;
+
+  @Expose()
+  hallmarked?: boolean;
+
+  @Expose()
+  hasPhoto?: boolean;
+
+  @Expose()
   @Type(() => Number)
   pageNumber?: number;
 

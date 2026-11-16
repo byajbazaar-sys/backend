@@ -1,6 +1,7 @@
 import { APIGatewayProxyWebsocketEventV2, APIGatewayProxyWebsocketHandlerV2 } from 'aws-lambda';
 
-import { getTokenFromEvent, getWebSocketHandler, wsResponse } from './websocket-bootstrap';
+import { getTokenFromEvent, getWebSocketApp, getWebSocketHandler, wsResponse } from './websocket-bootstrap';
+import { MarketingRenderService } from '../marketing';
 import { EDeviceType } from '../application/features/pos/enums';
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context) => {
@@ -15,6 +16,15 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
     queryStringParameters: evt.queryStringParameters,
     headers: evt.headers,
   });
+  // Kaggle render notebooks connect with a per-job token (not a user session) to stream progress.
+  const workerJob = evt.queryStringParameters?.workerJob;
+  if (workerJob) {
+    const app = await getWebSocketApp();
+    const ok = app.get(MarketingRenderService).isValidWorkerConnect(workerJob, evt.queryStringParameters?.workerToken);
+    console.log('[WS:connect] Marketing worker', JSON.stringify({ connectionId, workerJob, ok }));
+    return wsResponse(ok ? 200 : 401);
+  }
+
   const deviceTypeParam = evt.queryStringParameters?.deviceType;
   const deviceType = deviceTypeParam === EDeviceType.Mobile ? EDeviceType.Mobile : EDeviceType.Desktop;
 

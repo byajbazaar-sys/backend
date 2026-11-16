@@ -47,4 +47,16 @@ export class PublicCatalogItemModel {
   @Expose()
   @ApiPropertyOptional()
   hallmarked?: boolean;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Ring / bangle size, chain length…' })
+  size?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  sku?: string;
+
+  @Expose()
+  @ApiPropertyOptional()
+  makingCharges?: number;
 }

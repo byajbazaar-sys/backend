@@ -10,3 +10,4 @@ export * from './sales-bills-paged-response.model';
 export * from './bulk-delete-sales-bills-request.model';
 export * from './bulk-delete-sales-bills-response.model';
 export * from './create-sales-bill-entity-input.model';
+export * from './bill-log.models';

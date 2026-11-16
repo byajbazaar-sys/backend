@@ -155,6 +155,143 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
   }
 
+  async generateMarketingImage(
+    image: ProductImageInput,
+    prompt: string,
+    size: { width: number; height: number } = { width: 720, height: 1280 },
+  ): Promise<GeneratedAiImage> {
+    this.assertConfigured();
+    // Whole product kept (no crop): the model restages it, it must not lose parts of the piece.
+    const input = await sharp(Buffer.from(stripDataUrl(image.base64), 'base64'))
+      .rotate()
+      .resize(768, 768, { fit: 'inside', withoutEnlargement: true })
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+    const modelId = resolveCloudflareTryOnModelId(undefined, this.options.modelId);
+    const maxAttempts = this.options.credentials.length * Math.max(1, this.options.maxRetries + 1);
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const credential = this.getCredential();
+      const started = Date.now();
+      try {
+        const generated = await withTimeout(
+          this.invokeWorkersAi(prompt, [input], credential, modelId, randomInt(1, 2_147_483_647), size),
+          this.options.timeoutMs,
+          modelId,
+        );
+        this.logger.info(
+          { provider: 'cloudflare', model: modelId, attempt, durationMs: Date.now() - started, ...size },
+          'Cloudflare marketing image generated',
+        );
+        return generated;
+      } catch (err) {
+        lastError = err;
+        const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
+        this.logger.warn(
+          {
+            provider: 'cloudflare',
+            model: modelId,
+            attempt,
+            maxAttempts,
+            status,
+            failureReason: this.errorMessage(err),
+          },
+          'Cloudflare marketing image attempt failed',
+        );
+        if (this.shouldRotateToken(err, status)) this.rotateApiToken();
+        if (attempt < maxAttempts) await this.delay(1_500 * attempt);
+      }
+    }
+    throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
+  }
+
+  async generateImageFromText(
+    prompt: string,
+    size: { width: number; height: number } = { width: 1024, height: 1024 },
+  ): Promise<GeneratedAiImage> {
+    this.assertConfigured();
+    const modelId = resolveCloudflareTryOnModelId(undefined, this.options.modelId);
+    return this.withCredentialRetries('text-to-image', modelId, (credential) =>
+      this.invokeWorkersAi(prompt, [], credential, modelId, randomInt(1, 2_147_483_647), size),
+    );
+  }
+
+  async generateText(
+    system: string,
+    user: string,
+    options: { maxTokens?: number; temperature?: number } = {},
+  ): Promise<string> {
+    this.assertConfigured();
+    const modelId = process.env.CLOUDFLARE_TEXT_MODEL?.trim() || '@cf/meta/llama-3.2-3b-instruct';
+    return this.withCredentialRetries('text', modelId, async (credential) => {
+      const response = await axios.post<{
+        success?: boolean;
+        result?: { response?: unknown };
+        errors?: { message?: string }[];
+      }>(
+        this.buildRunUrl(credential.accountId, modelId),
+        {
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          max_tokens: options.maxTokens ?? 900,
+          temperature: options.temperature ?? 0.8,
+        },
+        {
+          headers: { Authorization: `Bearer ${credential.apiToken}`, 'Content-Type': 'application/json' },
+          timeout: 60_000,
+          validateStatus: () => true,
+        },
+      );
+      if (response.status < 200 || response.status >= 300 || response.data?.success === false) {
+        const err = new Error(
+          response.data?.errors?.[0]?.message || `Workers AI text request failed (${response.status})`,
+        );
+        (err as Error & { status?: number }).status = response.status;
+        throw err;
+      }
+      const reply = response.data?.result?.response;
+      return typeof reply === 'string' ? reply : JSON.stringify(reply ?? '');
+    });
+  }
+
+  /** Runs a Workers AI call, rotating credentials and retrying like the try-on flows. */
+  private async withCredentialRetries<T>(
+    label: string,
+    modelId: string,
+    run: (credential: CloudflareCredential) => Promise<T>,
+  ): Promise<T> {
+    const maxAttempts = this.options.credentials.length * Math.max(1, this.options.maxRetries + 1);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const credential = this.getCredential();
+      try {
+        return await withTimeout(run(credential), this.options.timeoutMs, modelId);
+      } catch (err) {
+        lastError = err;
+        const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
+        this.logger.warn(
+          {
+            provider: 'cloudflare',
+            label,
+            model: modelId,
+            attempt,
+            maxAttempts,
+            status,
+            failureReason: this.errorMessage(err),
+          },
+          'Cloudflare request attempt failed',
+        );
+        if (this.shouldRotateToken(err, status)) this.rotateApiToken();
+        if (attempt < maxAttempts) await this.delay(1_500 * attempt);
+      }
+    }
+    throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
+  }
+
   async removeProductBackground(image: ProductImageInput): Promise<GeneratedAiImage> {
     const cutout = await this.resolveProductCutout(image, 'white preview');
     const png = await encodeWhitePreviewPng(cutout);
@@ -604,6 +741,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     credential: CloudflareCredential,
     modelId: string,
     seed?: number,
+    size: { width: number; height: number } = { width: 1024, height: 1024 },
   ): Promise<GeneratedAiImage> {
     const form = new FormData();
     form.append('prompt', prompt);
@@ -613,8 +751,8 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
         contentType: 'image/jpeg',
       });
     });
-    form.append('width', '1024');
-    form.append('height', '1024');
+    form.append('width', String(size.width));
+    form.append('height', String(size.height));
     if (this.usesFluxDevModel(modelId)) {
       form.append('steps', '25');
     }

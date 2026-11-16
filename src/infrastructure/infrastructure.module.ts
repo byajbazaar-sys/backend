@@ -29,6 +29,7 @@ import {
   POS_SESSIONS_REPOSITORY,
   WEBSOCKET_CONNECTIONS_REPOSITORY,
   SALES_BILLS_REPOSITORY,
+  BILL_LOGS_REPOSITORY,
   METAL_RATES_REPOSITORY,
   API_CONFIGURATION_REPOSITORY,
   API_ACCESS_TOKEN_REPOSITORY,
@@ -87,6 +88,7 @@ import {
   PosSessionsRepository,
   WebSocketConnectionsRepository,
   SalesBillsRepository,
+  BillLogsRepository,
   MetalRatesRepository,
   ApiConfigurationRepository,
   ApiAccessTokenRepository,
@@ -198,6 +200,11 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       provide: SALES_BILLS_REPOSITORY,
       useClass: SalesBillsRepository,
     },
+    {
+      provide: BILL_LOGS_REPOSITORY,
+      useClass: BillLogsRepository,
+    },
+
     {
       provide: METAL_RATES_REPOSITORY,
       useClass: MetalRatesRepository,
@@ -448,6 +455,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     POS_SESSIONS_REPOSITORY,
     WEBSOCKET_CONNECTIONS_REPOSITORY,
     SALES_BILLS_REPOSITORY,
+    BILL_LOGS_REPOSITORY,
     METAL_RATES_REPOSITORY,
     API_CONFIGURATION_REPOSITORY,
     API_ACCESS_TOKEN_REPOSITORY,

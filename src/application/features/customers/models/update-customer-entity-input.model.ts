@@ -9,4 +9,9 @@ export interface UpdateCustomerEntityInput {
   aadhaarCardRef?: string;
   panCardRef?: string;
   location?: string;
+  gstin?: string;
+  panNumber?: string;
+  state?: string;
+  stateCode?: string;
+  propName?: string;
 }

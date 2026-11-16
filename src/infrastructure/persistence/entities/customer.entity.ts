@@ -58,6 +58,21 @@ export class CustomerEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   location: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  gstin: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  panNumber: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  state: string;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  stateCode: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  propName: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

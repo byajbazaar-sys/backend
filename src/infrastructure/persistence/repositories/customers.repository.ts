@@ -32,6 +32,24 @@ export class CustomersRepository implements ICustomersRepository {
     return plainToInstance(Customer, customer, { excludeExtraneousValues: true });
   }
 
+  async findByMobile(mobileDigits: string, createdBy: string): Promise<Customer | null> {
+    const digits = mobileDigits.replace(/\D/g, '').slice(-10);
+    if (digits.length < 10) return null;
+    // Stored numbers may carry +91, spaces or dashes: compare the last 10 digits only.
+    const customer = await this.customerRepo
+      .createQueryBuilder('c')
+      .where('c.created_by = :createdBy', { createdBy })
+      .andWhere(
+        `(RIGHT(regexp_replace(COALESCE(c.phone, ''), '\\D', '', 'g'), 10) = :digits
+          OR RIGHT(regexp_replace(COALESCE(c.alternative_phone, ''), '\\D', '', 'g'), 10) = :digits)`,
+        { digits },
+      )
+      .orderBy('c.created_at', 'ASC')
+      .getOne();
+    if (!customer) return null;
+    return plainToInstance(Customer, customer, { excludeExtraneousValues: true });
+  }
+
   async update(id: string, updateDto: Customer, createdBy: string): Promise<Customer> {
     const {
       id: _omitId,
@@ -71,9 +89,10 @@ export class CustomersRepository implements ICustomersRepository {
 
     if (name?.trim()) {
       const searchTerm = name.trim();
-      qb.andWhere('(c.first_name ILIKE :search OR c.last_name ILIKE :search OR c.email ILIKE :search)', {
-        search: `%${searchTerm}%`,
-      });
+      qb.andWhere(
+        '(c.first_name ILIKE :search OR c.last_name ILIKE :search OR c.email ILIKE :search OR c.phone ILIKE :search OR c.alternative_phone ILIKE :search)',
+        { search: `%${searchTerm}%` },
+      );
     }
 
     const [items, totalCount] = await qb.getManyAndCount();
@@ -97,9 +116,10 @@ export class CustomersRepository implements ICustomersRepository {
 
     if (name?.trim()) {
       const searchTerm = name.trim();
-      qb.andWhere('(c.first_name ILIKE :search OR c.last_name ILIKE :search OR c.email ILIKE :search)', {
-        search: `%${searchTerm}%`,
-      });
+      qb.andWhere(
+        '(c.first_name ILIKE :search OR c.last_name ILIKE :search OR c.email ILIKE :search OR c.phone ILIKE :search OR c.alternative_phone ILIKE :search)',
+        { search: `%${searchTerm}%` },
+      );
     }
     if (startDate) qb.andWhere('c.created_at >= :startDate', { startDate });
     if (endDate) {

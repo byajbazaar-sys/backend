@@ -13,14 +13,17 @@ import {
   Query,
   StreamableFile,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
+import { Request } from 'express';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { SalesAnalytics } from './domain';
+import { EBillLogAction } from './enums';
 import {
   CreateSalesBillRequestModel,
   ListSalesBillsQueryModel,
@@ -29,8 +32,23 @@ import {
   UpdateSalesBillRequestModel,
   BulkDeleteSalesBillsRequestModel,
   BulkDeleteSalesBillsResponseModel,
+  BillLogsPagedResponseModel,
+  ListBillLogsQueryModel,
+  RecordBillLogRequestModel,
 } from './models';
 import { SALES_BILL_SERVICE, ISalesBillService } from './service';
+import type { BillActionContext } from './service/sales-bill.service';
+
+/** Which app did the operation, from the user agent (no extra header needed from the clients). */
+function billActionContext(req: Request, identity: IIdentity): BillActionContext {
+  const ua = String(req.headers['user-agent'] ?? '').toLowerCase();
+  const channel = /okhttp|expo|reactnative|cfnetwork|darwin/.test(ua)
+    ? 'mobile'
+    : /mozilla|chrome|safari|firefox|edg\//.test(ua)
+      ? 'web'
+      : 'api';
+  return { performedBy: identity.userId, channel };
+}
 
 @ApiTags('bills')
 @ApiBearerAuth('user')
@@ -48,8 +66,9 @@ export class SalesBillsController {
   async create(
     @Body() body: CreateSalesBillRequestModel,
     @Identity() identity: IIdentity,
+    @Req() req: Request,
   ): Promise<SalesBillResponseModel> {
-    const bill = await this.billService.create(body, identity.userId);
+    const bill = await this.billService.create(body, identity.userId, billActionContext(req, identity));
     return plainToInstance(SalesBillResponseModel, bill, { excludeExtraneousValues: true });
   }
 
@@ -62,6 +81,48 @@ export class SalesBillsController {
   ): Promise<SalesBillsPagedResponseModel> {
     const paged = await this.billService.list(identity.userId, query);
     return plainToInstance(SalesBillsPagedResponseModel, paged, { excludeExtraneousValues: true });
+  }
+
+  @Get('logs')
+  @ApiOperation({ summary: 'Activity log of all bills (creates, edits, deletes, prints, shares), newest first' })
+  @ApiOkResponse({ type: BillLogsPagedResponseModel })
+  async activity(
+    @Query() query: ListBillLogsQueryModel,
+    @Identity() identity: IIdentity,
+  ): Promise<BillLogsPagedResponseModel> {
+    const paged = await this.billService.getActivity({ userId: identity.userId, ...query });
+    return plainToInstance(BillLogsPagedResponseModel, paged, { excludeExtraneousValues: true });
+  }
+
+  @Get(':id/logs')
+  @ApiOperation({ summary: 'History of one bill (works for deleted bills too)' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ type: BillLogsPagedResponseModel })
+  async logs(
+    @Param('id') id: string,
+    @Query() query: ListBillLogsQueryModel,
+    @Identity() identity: IIdentity,
+  ): Promise<BillLogsPagedResponseModel> {
+    const paged = await this.billService.getLogs(id, identity.userId, query.pageNumber, query.pageSize);
+    return plainToInstance(BillLogsPagedResponseModel, paged, { excludeExtraneousValues: true });
+  }
+
+  @Post(':id/logs')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Record a print / PDF / WhatsApp share done in the app' })
+  @ApiParam({ name: 'id', type: String })
+  async recordLog(
+    @Param('id') id: string,
+    @Body() body: RecordBillLogRequestModel,
+    @Identity() identity: IIdentity,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.billService.recordClientEvent(
+      id,
+      body.action as EBillLogAction,
+      identity.userId,
+      billActionContext(req, identity),
+    );
   }
 
   @Get('search')
@@ -110,8 +171,9 @@ export class SalesBillsController {
   async bulkDelete(
     @Body() body: BulkDeleteSalesBillsRequestModel,
     @Identity() identity: IIdentity,
+    @Req() req: Request,
   ): Promise<BulkDeleteSalesBillsResponseModel> {
-    const result = await this.billService.bulkDelete(body.ids, identity.userId);
+    const result = await this.billService.bulkDelete(body.ids, identity.userId, billActionContext(req, identity));
     return plainToInstance(BulkDeleteSalesBillsResponseModel, result, {
       excludeExtraneousValues: true,
     });
@@ -133,8 +195,12 @@ export class SalesBillsController {
   @Post(':id/convert-to-normal')
   @ApiOperation({ summary: 'Convert an informal bill to a normal GST bill' })
   @ApiParam({ name: 'id', type: String })
-  async convertToNormal(@Param('id') id: string, @Identity() identity: IIdentity): Promise<SalesBillResponseModel> {
-    const bill = await this.billService.convertToNormalBill(id, identity.userId);
+  async convertToNormal(
+    @Param('id') id: string,
+    @Identity() identity: IIdentity,
+    @Req() req: Request,
+  ): Promise<SalesBillResponseModel> {
+    const bill = await this.billService.convertToNormalBill(id, identity.userId, billActionContext(req, identity));
     return plainToInstance(SalesBillResponseModel, bill, { excludeExtraneousValues: true });
   }
 
@@ -145,8 +211,9 @@ export class SalesBillsController {
     @Param('id') id: string,
     @Body() body: UpdateSalesBillRequestModel,
     @Identity() identity: IIdentity,
+    @Req() req: Request,
   ): Promise<SalesBillResponseModel> {
-    const bill = await this.billService.update(id, body, identity.userId);
+    const bill = await this.billService.update(id, body, identity.userId, billActionContext(req, identity));
     return plainToInstance(SalesBillResponseModel, bill, { excludeExtraneousValues: true });
   }
 
@@ -154,8 +221,8 @@ export class SalesBillsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a sales bill' })
   @ApiParam({ name: 'id', type: String })
-  async delete(@Param('id') id: string, @Identity() identity: IIdentity): Promise<void> {
-    await this.billService.delete(id, identity.userId);
+  async delete(@Param('id') id: string, @Identity() identity: IIdentity, @Req() req: Request): Promise<void> {
+    await this.billService.delete(id, identity.userId, billActionContext(req, identity));
   }
 
   @Get(':id')

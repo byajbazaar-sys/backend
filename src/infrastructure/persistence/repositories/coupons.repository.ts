@@ -48,4 +48,25 @@ export class CouponsRepository implements ICouponsRepository {
     }
     return this.mapEntity(updated);
   }
+
+  async findAll(): Promise<Coupon[]> {
+    const entities = await this.couponRepo.find({ order: { createdAt: 'DESC' } });
+    return entities.map((entity) => this.mapEntity(entity));
+  }
+
+  async insert(data: Partial<Coupon>): Promise<Coupon> {
+    const saved = await this.couponRepo.save(this.couponRepo.create(data as Partial<CouponEntity>));
+    return this.mapEntity(saved);
+  }
+
+  async update(id: string, data: Partial<Coupon>): Promise<Coupon> {
+    await this.couponRepo.update({ id }, data as Partial<CouponEntity>);
+    const updated = await this.couponRepo.findOne({ where: { id } });
+    if (!updated) throw new Error(`Coupon ${id} not found`);
+    return this.mapEntity(updated);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.couponRepo.delete({ id });
+  }
 }

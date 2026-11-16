@@ -38,9 +38,10 @@ export class CreateInventoryItemRequestModel {
   @IsString()
   description?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Optional: items can be saved without a category.' })
+  @IsOptional()
   @IsUUID()
-  categoryId: string;
+  categoryId?: string;
 
   @ApiProperty({ enum: EMetalType })
   @IsEnum(EMetalType)

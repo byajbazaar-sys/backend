@@ -231,6 +231,7 @@ import {
       provide: TRY_ON_SERVICE,
       useClass: TryOnService,
     },
+
     {
       provide: DEPOSIT_SERVICE,
       useClass: DepositService,
@@ -278,6 +279,7 @@ import {
     PAYMENTS_SERVICE,
     JEWELLERY_EVENT_SERVICE,
     TRY_ON_SERVICE,
+    SUBSCRIPTION_ACCESS_CHECKER,
     WHATSAPP_DUE_REMINDER_SERVICE,
   ],
 })

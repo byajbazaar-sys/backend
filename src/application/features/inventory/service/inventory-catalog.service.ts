@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { buildCatalogSlug } from '@shared-libs';
+import { buildCatalogSlug, resolveCatalogDisplay, sanitizeCatalogDisplay } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
@@ -11,6 +11,7 @@ import {
 import { IInventoryCatalogService } from './i-inventory-catalog.service';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import { CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
+import { UserUpdatePatch } from '../../users/models/user-update-patch.model';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
 
 @Injectable()
@@ -50,6 +51,9 @@ export class InventoryCatalogService implements IInventoryCatalogService {
         publishedItemCount,
         businessName: user.businessName,
         slugConflict,
+        display: resolveCatalogDisplay(user.catalogDisplay),
+        whatsappNumber: user.catalogWhatsappNumber ?? undefined,
+        phoneNumber: user.phoneNumber,
       },
       { excludeExtraneousValues: true },
     );
@@ -72,12 +76,25 @@ export class InventoryCatalogService implements IInventoryCatalogService {
       );
     }
 
-    if (body.catalogEnabled !== undefined) {
-      await this.usersRepo.update(userId, { catalogEnabled: body.catalogEnabled });
+    const patch: UserUpdatePatch = {};
+    if (body.catalogEnabled !== undefined) patch.catalogEnabled = body.catalogEnabled;
+    if (body.display !== undefined) {
+      // Merge so a partial update (one toggle) keeps the other choices.
+      patch.catalogDisplay = { ...resolveCatalogDisplay(user.catalogDisplay), ...sanitizeCatalogDisplay(body.display) };
+    }
+    if (body.whatsappNumber !== undefined) {
+      const digits = body.whatsappNumber.replace(/\D/g, '');
+      if (digits && digits.length < 10) {
+        throw new BadRequestException('Enter a valid WhatsApp number (10 digits, or with country code).');
+      }
+      patch.catalogWhatsappNumber = digits ? body.whatsappNumber.trim() : null;
+    }
+    if (Object.keys(patch).length > 0) {
+      await this.usersRepo.update(userId, patch);
       await this.invalidateUserDetailsCache(userId);
     }
 
-    this.logger.info({ userId, catalogEnabled: body.catalogEnabled }, 'Catalog settings updated');
+    this.logger.info({ userId, fields: Object.keys(patch) }, 'Catalog settings updated');
     return this.buildSummary(userId);
   }
 

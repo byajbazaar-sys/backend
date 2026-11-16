@@ -54,6 +54,26 @@ export class CustomerResponseModel {
   location?: string;
 
   @Expose()
+  @ApiPropertyOptional({ description: 'GSTIN of the customer' })
+  gstin?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'PAN number of the customer' })
+  panNumber?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'State of the customer' })
+  state?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'GST state code' })
+  stateCode?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Proprietor / firm name' })
+  propName?: string;
+
+  @Expose()
   @ApiProperty({ description: 'Date when the customer was created', type: Date })
   @Type(() => Date)
   createdAt: Date;

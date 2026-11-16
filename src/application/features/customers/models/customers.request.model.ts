@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
-import { IsString, IsNotEmpty, IsOptional, IsEmail } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEmail, MaxLength } from 'class-validator';
 
 export class CreateCustomerRequestModel {
   @Expose()
@@ -44,6 +44,41 @@ export class CreateCustomerRequestModel {
   @IsString()
   @IsOptional()
   location?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'GSTIN of the customer' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(20)
+  gstin?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'PAN number of the customer' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(20)
+  panNumber?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'State of the customer' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  state?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'GST state code of the customer' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(10)
+  stateCode?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Proprietor / firm name' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(255)
+  propName?: string;
 
   @Expose()
   @ApiProperty({

@@ -62,8 +62,8 @@ export class InventoryItemEntity {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'uuid' })
-  categoryId: string;
+  @Column({ type: 'uuid', nullable: true })
+  categoryId: string | null;
 
   @ManyToOne(() => InventoryCategoryEntity, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'category_id' })

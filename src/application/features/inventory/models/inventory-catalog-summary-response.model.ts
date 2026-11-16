@@ -29,4 +29,16 @@ export class InventoryCatalogSummaryResponseModel {
   @Expose()
   @ApiPropertyOptional()
   slugConflict?: boolean;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Which item details the public catalog shows' })
+  display?: Record<string, boolean>;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'WhatsApp number set for enquiries (blank = shop phone)' })
+  whatsappNumber?: string;
+
+  @Expose()
+  @ApiPropertyOptional({ description: 'Shop phone used when no WhatsApp number is set' })
+  phoneNumber?: string;
 }

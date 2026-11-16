@@ -37,7 +37,7 @@ export class InventoryItem {
   description?: string;
 
   @Expose()
-  categoryId: string;
+  categoryId?: string | null;
 
   @Expose()
   categoryName?: string;

@@ -26,3 +26,4 @@ export * from './refund-response.model';
 export * from './extend-trial-request.model';
 export * from './webhook-ack-response.model';
 export * from './webhook-event-summary.model';
+export * from './admin-coupon.models';

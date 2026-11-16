@@ -15,7 +15,7 @@ export const AUTH_SCOPE_FULL = 'full';
 export const AUTH_SCOPE_PAYMENT = 'payment';
 export const SUBSCRIPTION_PROVIDER_RAZORPAY = 'razorpay';
 export const SUBSCRIPTION_PLAN_AMOUNT_INR = 499;
-export const SUBSCRIPTION_PLAN_YEARLY_AMOUNT_INR = 4999;
+export const SUBSCRIPTION_PLAN_YEARLY_AMOUNT_INR = 5999;
 /** Every new shop gets this many days of full access before a paid plan is required. */
 export const TRIAL_DAYS = 7;
 export const SUBSCRIPTION_CURRENCY = 'INR';

@@ -18,7 +18,7 @@ import { LabelDesignerSettingsController, LabelDesignerSettingsService } from '.
 import { LoansController } from './loans';
 import { MetalRatesController } from './metal-rates';
 import { NotificationsController } from './notifications';
-import { PaymentsController, AdminPaymentsController } from './payments';
+import { PaymentsController, AdminPaymentsController, CouponAdminService } from './payments';
 import { PosSessionsController, PosSessionPublicController, PosSessionLeaveController } from './pos';
 import { PublicCatalogController } from './public-catalog';
 import { SalesBillsController } from './sales-bills';
@@ -86,4 +86,10 @@ export const Controllers = [
   VerificationController,
 ];
 
-export const Services = [JwtService, LabelDesignerSettingsService, OtpChallengeService, VerificationService];
+export const Services = [
+  JwtService,
+  LabelDesignerSettingsService,
+  OtpChallengeService,
+  VerificationService,
+  CouponAdminService,
+];

@@ -58,6 +58,12 @@ export class UserUpdatePatch {
   catalogEnabled?: boolean;
 
   @Expose()
+  catalogDisplay?: Record<string, boolean> | null;
+
+  @Expose()
+  catalogWhatsappNumber?: string | null;
+
+  @Expose()
   address?: string;
 
   @Expose()
