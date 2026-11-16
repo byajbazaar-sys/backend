@@ -2,10 +2,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /** Instagram Business Login state and encrypted account tokens, stored only in the marketing database. */
 export class CreateMarketingInstagramConnections1700000000006 implements MigrationInterface {
-  name = 'CreateMarketingInstagramConnections1700000000006';
+    name = 'CreateMarketingInstagramConnections1700000000006';
 
-  public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "marketing_instagram_connections" (
         "user_id" uuid NOT NULL,
         "instagram_user_id" varchar(64),
@@ -20,12 +20,12 @@ export class CreateMarketingInstagramConnections1700000000006 implements Migrati
         CONSTRAINT "PK_marketing_instagram_connections" PRIMARY KEY ("user_id")
       )
     `);
-    await queryRunner.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_marketing_instagram_connections_state_hash" ON "marketing_instagram_connections" ("oauth_state_hash")`,
-    );
-  }
+        await queryRunner.query(
+            `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_marketing_instagram_connections_state_hash" ON "marketing_instagram_connections" ("oauth_state_hash")`,
+        );
+    }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "marketing_instagram_connections"`);
-  }
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`DROP TABLE IF EXISTS "marketing_instagram_connections"`);
+    }
 }

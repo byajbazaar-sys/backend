@@ -177,15 +177,15 @@ export function buildSceneImagePrompt(scene: string, title: string): string {
 export function buildSceneVideoPrompt(motion: string): string {
   return (
     `Create one photorealistic 5-second, vertical 9:16 luxury jewellery commercial shot from the supplied reference image. ` +
-      `REFERENCE AND SUBJECT: use the image as the exact opening frame and identity reference. Keep the same jewellery and ` +
-      `wearer if present; preserve the wearer's identity, facial features, wardrobe, and background. Preserve the jewellery's silhouette, proportions, ` +
+    `REFERENCE AND SUBJECT: use the image as the exact opening frame and identity reference. Keep the same jewellery and ` +
+    `wearer if present; preserve the wearer's identity, facial features, wardrobe, and background. Preserve the jewellery's silhouette, proportions, ` +
     `metal colour, stone count, stone placement, setting, and fine craftsmanship exactly; do not redesign or simplify it. ` +
     `ACTION: ${motion}. Perform only this one action, as a small graceful movement with a clear beginning, a fluid middle, ` +
     `and a calm settled finish. Ease in and out naturally; maintain realistic speed and avoid sudden changes of direction. ` +
     `CAMERA AND COMPOSITION: use a steady, controlled camera path that supports the action, with no handheld shake. Keep ` +
-      `the complete jewellery comfortably inside the frame, prominent, unobscured, and in sharp focus for the entire shot. ` +
-      `Allow only the gentle position or scale change required by the requested motion; never crop or obscure the piece. ` +
-      `No sudden reframing, abrupt zoom, extreme close-up, or focus hunting. ` +
+    `the complete jewellery comfortably inside the frame, prominent, unobscured, and in sharp focus for the entire shot. ` +
+    `Allow only the gentle position or scale change required by the requested motion; never crop or obscure the piece. ` +
+    `No sudden reframing, abrupt zoom, extreme close-up, or focus hunting. ` +
     `LIGHT AND MATERIAL: use soft premium studio lighting, gentle edge highlights, natural skin tones when a model is present, ` +
     `and physically plausible reflections on metal and stones. Let highlights shift subtly with the motion while the design ` +
     `remains stable. CONTINUITY: one uninterrupted shot, consistent background and exposure, no cuts, transitions, new people, ` +

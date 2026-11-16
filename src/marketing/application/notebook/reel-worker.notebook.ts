@@ -10,35 +10,35 @@
  */
 
 export interface NotebookClip {
-  key: string;
-  imageUrl: string;
-  prompt: string;
-  negative: string;
-  seed: number;
-  uploadUrl: string;
+    key: string;
+    imageUrl: string;
+    prompt: string;
+    negative: string;
+    seed: number;
+    uploadUrl: string;
 }
 
 export interface NotebookMerge {
-  /** Clip keys in play order (scenes); the logo clip is appended at the end. */
-  order: string[];
-  /** Download URLs for clips not rendered in this session. */
-  sources: Record<string, string>;
-  logoKey?: string;
-  logoUrl?: string;
-  uploadUrl: string;
+    /** Clip keys in play order (scenes); the logo clip is appended at the end. */
+    order: string[];
+    /** Download URLs for clips not rendered in this session. */
+    sources: Record<string, string>;
+    logoKey?: string;
+    logoUrl?: string;
+    uploadUrl: string;
 }
 
 export interface WorkerNotebookJob {
-  jobId: string;
-  token: string;
-  wsUrl: string;
-  apiBaseUrl?: string;
-  kind: 'setup' | 'render';
-  preset?: 'reel_fast' | 'reel_hq';
-  clips?: NotebookClip[];
-  merge?: NotebookMerge | null;
-  /** Seconds this session may run before handing over to a new session (Kaggle limit minus a margin). */
-  sessionBudgetSeconds?: number;
+    jobId: string;
+    token: string;
+    wsUrl: string;
+    apiBaseUrl?: string;
+    kind: 'setup' | 'render';
+    preset?: 'reel_fast' | 'reel_hq';
+    clips?: NotebookClip[];
+    merge?: NotebookMerge | null;
+    /** Seconds this session may run before handing over to a new session (Kaggle limit minus a margin). */
+    sessionBudgetSeconds?: number;
 }
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
@@ -517,35 +517,35 @@ except Exception as e:
 
 /** Python string literal holding the job JSON (JSON escapes are valid Python string escapes). */
 function jobLiteral(job: WorkerNotebookJob): string {
-  return JSON.stringify(JSON.stringify(job));
+    return JSON.stringify(JSON.stringify(job));
 }
 
 export function buildWorkerNotebook(job: WorkerNotebookJob): Record<string, unknown> {
-  const cells =
-    job.kind === 'setup'
-      ? [code(CELL_REPORTER.replace('__JOB_JSON__', jobLiteral(job))), code(CELL_SETUP_CHECK)]
-      : [
-          code(CELL_REPORTER.replace('__JOB_JSON__', jobLiteral(job))),
-          code(CELL_INSTALL),
-          code(CELL_MODELS),
-          code(CELL_COMFY),
-          code(CELL_RENDER_AND_MERGE),
-          code(CELL_RUN),
-        ];
-  return {
-    nbformat: 4,
-    nbformat_minor: 5,
-    metadata: {
-      kernelspec: { display_name: 'Python 3', language: 'python', name: 'python3' },
-      language_info: { name: 'python' },
-      kaggle: { accelerator: 'nvidiaTeslaT4', isInternetEnabled: true, isGpuEnabled: true },
-    },
-    cells: [
-      md(
-        `# ByajBazaar marketing ${job.kind === 'setup' ? 'account setup' : 'render'} worker\n\n` +
-          `Auto-generated for job \`${job.jobId}\` — do not edit. Reports live progress to the ByajBazaar WebSocket.`,
-      ),
-      ...cells,
-    ],
-  };
+    const cells =
+        job.kind === 'setup'
+            ? [code(CELL_REPORTER.replace('__JOB_JSON__', jobLiteral(job))), code(CELL_SETUP_CHECK)]
+            : [
+                code(CELL_REPORTER.replace('__JOB_JSON__', jobLiteral(job))),
+                code(CELL_INSTALL),
+                code(CELL_MODELS),
+                code(CELL_COMFY),
+                code(CELL_RENDER_AND_MERGE),
+                code(CELL_RUN),
+            ];
+    return {
+        nbformat: 4,
+        nbformat_minor: 5,
+        metadata: {
+            kernelspec: { display_name: 'Python 3', language: 'python', name: 'python3' },
+            language_info: { name: 'python' },
+            kaggle: { accelerator: 'nvidiaTeslaT4', isInternetEnabled: true, isGpuEnabled: true },
+        },
+        cells: [
+            md(
+                `# ByajBazaar marketing ${job.kind === 'setup' ? 'account setup' : 'render'} worker\n\n` +
+                `Auto-generated for job \`${job.jobId}\` — do not edit. Reports live progress to the ByajBazaar WebSocket.`,
+            ),
+            ...cells,
+        ],
+    };
 }

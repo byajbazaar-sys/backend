@@ -160,4 +160,4 @@ import { MarketingConfig } from './marketing.config';
   ],
   exports: [MarketingRenderService, MarketingQueueConsumer, MarketingDatabase],
 })
-export class MarketingModule {}
+export class MarketingModule { }
