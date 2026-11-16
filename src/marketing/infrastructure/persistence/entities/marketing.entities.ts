@@ -68,6 +68,12 @@ export class KaggleAccountEntity {
   @Column({ type: 'varchar', length: 255, nullable: true }) gpuInfo: string | null;
   @Column({ type: 'timestamptz', nullable: true }) setupAttemptAt: Date | null;
   @Column({ type: 'timestamptz', nullable: true }) readyAt: Date | null;
+  @Column({ type: 'real', nullable: true }) gpuHoursLeft: number | null;
+  @Column({ type: 'timestamptz', nullable: true }) quotaCheckedAt: Date | null;
+  @Column({ type: 'timestamptz', nullable: true }) cooldownUntil: Date | null;
+  @Column({ type: 'timestamptz', nullable: true }) lastAssignedAt: Date | null;
+  @Column({ type: 'integer', default: 0 }) jobsCompleted: number;
+  @Column({ type: 'integer', default: 0 }) jobsFailed: number;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 

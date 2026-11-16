@@ -193,6 +193,17 @@ export class KaggleAccountsRepository
     );
     return (result.affected ?? 0) > 0;
   }
+
+  async update(username: string, patch: Partial<Omit<KaggleAccount, 'username'>>): Promise<void> {
+    await (await this.repo()).update({ username }, patch as Partial<KaggleAccountEntity>);
+  }
+
+  async recordOutcome(username: string, outcome: 'completed' | 'failed'): Promise<void> {
+    const column = outcome === 'completed' ? 'jobs_completed' : 'jobs_failed';
+    await (
+      await this.repo()
+    ).query(`UPDATE "kaggle_accounts" SET "${column}" = "${column}" + 1 WHERE "username" = $1`, [username]);
+  }
 }
 
 @Injectable()
@@ -288,6 +299,15 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
       .groupBy('j.worker_id')
       .getRawMany<{ workerId: string; count: string }>();
     return Object.fromEntries(rows.map((r) => [r.workerId, Number(r.count)]));
+  }
+
+  async listBusy(): Promise<RenderJob[]> {
+    return (await (
+      await this.repo()
+    ).find({
+      where: { status: In(BUSY_RENDER_STATUSES) },
+      order: { startedAt: 'ASC' },
+    })) as unknown as RenderJob[];
   }
 
   async countWaiting(): Promise<number> {

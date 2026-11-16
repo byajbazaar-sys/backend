@@ -4,19 +4,24 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { KaggleAccount, KaggleCredential } from '../domain';
 import { EKaggleAccountStatus } from '../enums';
 import {
+  BulkCreateKaggleCredentialResultModel,
   CreateKaggleCredentialRequestModel,
   KaggleCredentialResponseModel,
   KaggleCredentialVerifyResponseModel,
+  KaggleOverviewResponseModel,
   UpdateKaggleCredentialRequestModel,
 } from '../models/kaggle-credentials.models';
 import {
   IKaggleAccountsRepository,
   IKaggleCredentialsRepository,
   IKaggleWorkerPool,
+  IRenderJobsRepository,
   KAGGLE_ACCOUNTS_REPOSITORY,
   KAGGLE_CREDENTIALS_REPOSITORY,
   KAGGLE_WORKER_POOL,
+  RENDER_JOBS_REPOSITORY,
 } from '../ports';
+import { MarketingRenderService } from './marketing-render.service';
 import { MarketingScheduler } from './marketing-scheduler';
 
 function maskKey(key: string): string {
@@ -35,22 +40,96 @@ export class KaggleCredentialsAdminService {
     @Inject(KAGGLE_CREDENTIALS_REPOSITORY) private readonly credentials: IKaggleCredentialsRepository,
     @Inject(KAGGLE_ACCOUNTS_REPOSITORY) private readonly accounts: IKaggleAccountsRepository,
     @Inject(KAGGLE_WORKER_POOL) private readonly pool: IKaggleWorkerPool,
+    @Inject(RENDER_JOBS_REPOSITORY) private readonly jobs: IRenderJobsRepository,
+    private readonly render: MarketingRenderService,
     private readonly scheduler: MarketingScheduler,
     @InjectPinoLogger(KaggleCredentialsAdminService.name) private readonly logger: PinoLogger,
   ) {}
 
   async list(): Promise<KaggleCredentialResponseModel[]> {
-    const [rows, accounts] = await Promise.all([this.credentials.list(), this.accounts.list()]);
+    const [rows, accounts, busy] = await Promise.all([
+      this.credentials.list(),
+      this.accounts.list(),
+      this.jobs.countBusyByWorker(),
+    ]);
     const byName = new Map(accounts.map((a) => [a.username, a]));
-    return rows.map((row) => this.view(row, byName.get(row.username)));
+    return rows.map((row) => this.view(row, byName.get(row.username), busy[row.username] ?? 0));
   }
 
   async get(username: string): Promise<KaggleCredentialResponseModel> {
     const row = await this.require(username);
-    return this.view(row, await this.accounts.find(row.username));
+    const busy = await this.jobs.countBusyByWorker();
+    return this.view(row, await this.accounts.find(row.username), busy[row.username] ?? 0);
   }
 
-  async create(body: CreateKaggleCredentialRequestModel): Promise<KaggleCredentialResponseModel> {
+  /**
+   * Adds several accounts at once (e.g. pasted "username:key[:concurrency]" lines). Each is verified and saved on its
+   * own; one bad key does not stop the others. A single dispatch then sets up all new accounts in parallel.
+   */
+  async bulkCreate(accounts: CreateKaggleCredentialRequestModel[]): Promise<BulkCreateKaggleCredentialResultModel[]> {
+    const results: BulkCreateKaggleCredentialResultModel[] = [];
+    const seen = new Set<string>();
+    for (const body of accounts) {
+      const username = body.username.trim().toLowerCase();
+      if (seen.has(username) || (await this.credentials.find(username))) {
+        results.push({ username, result: 'exists' });
+        continue;
+      }
+      seen.add(username);
+      try {
+        const created = await this.create({ ...body, username }, false);
+        results.push({ username, result: 'created', gpuHoursLeft: created.gpuHoursLeft ?? null });
+      } catch (err) {
+        results.push({ username, result: 'failed', error: (err as Error).message });
+      }
+    }
+    if (results.some((r) => r.result === 'created')) await this.kickDispatch();
+    return results;
+  }
+
+  /** Runs the one-time setup notebook again now (instead of waiting for the automatic 6-hour retry). */
+  async retrySetup(username: string): Promise<KaggleCredentialResponseModel> {
+    const row = await this.require(username);
+    if (!row.enabled) throw new BadRequestException('Enable the account first');
+    const moved = await this.accounts.transition(
+      row.username,
+      [EKaggleAccountStatus.Failed, EKaggleAccountStatus.Ready, EKaggleAccountStatus.Disabled],
+      { status: EKaggleAccountStatus.New, lastError: null, cooldownUntil: null },
+    );
+    if (!moved) throw new ConflictException('The account is already being set up');
+    this.logger.info({ account: row.username }, 'Kaggle account setup re-run requested');
+    await this.kickDispatch();
+    return this.get(row.username);
+  }
+
+  /** Lets a cooling-down account take jobs again right away. */
+  async clearCooldown(username: string): Promise<KaggleCredentialResponseModel> {
+    const row = await this.require(username);
+    await this.accounts.update(row.username, { cooldownUntil: null });
+    await this.kickDispatch();
+    return this.get(row.username);
+  }
+
+  /** Capacity, queue length and what each account is running. */
+  async overview(): Promise<KaggleOverviewResponseModel> {
+    const [capacity, running] = await Promise.all([this.render.capacity(), this.jobs.listBusy()]);
+    return {
+      ...capacity,
+      running: running.map((job) => ({
+        id: job.id,
+        kind: job.kind,
+        status: job.status,
+        account: job.workerId ?? null,
+        slot: job.slot ?? null,
+        progress: job.progress,
+        stageMessage: job.stageMessage ?? null,
+        attempts: job.attempts,
+        startedAt: job.startedAt ?? null,
+      })),
+    };
+  }
+
+  async create(body: CreateKaggleCredentialRequestModel, dispatch = true): Promise<KaggleCredentialResponseModel> {
     const username = body.username.trim().toLowerCase();
     if (await this.credentials.find(username)) {
       throw new ConflictException(`Kaggle account ${username} already exists`);
@@ -70,7 +149,10 @@ export class KaggleCredentialsAdminService {
       lastError: null,
     });
     this.logger.info({ account: username }, 'Kaggle account added');
-    await this.kickDispatch();
+    if (gpuHoursLeft !== undefined) {
+      await this.accounts.update(username, { gpuHoursLeft, quotaCheckedAt: new Date() });
+    }
+    if (dispatch) await this.kickDispatch();
     return { ...this.view(row, await this.accounts.find(username)), gpuHoursLeft };
   }
 
@@ -119,6 +201,7 @@ export class KaggleCredentialsAdminService {
     }
     try {
       const { hoursLeft } = await this.pool.verifyCredentials(row.username, row.apiKey);
+      await this.accounts.update(row.username, { gpuHoursLeft: hoursLeft, quotaCheckedAt: new Date() });
       return { username: row.username, valid: true, gpuHoursLeft: hoursLeft };
     } catch (err) {
       return { username: row.username, valid: false, gpuHoursLeft: null, error: (err as Error).message };
@@ -148,7 +231,7 @@ export class KaggleCredentialsAdminService {
     }
   }
 
-  private view(row: KaggleCredential, account?: KaggleAccount | null): KaggleCredentialResponseModel {
+  private view(row: KaggleCredential, account?: KaggleAccount | null, busySlots = 0): KaggleCredentialResponseModel {
     return {
       id: row.id,
       username: row.username,
@@ -161,6 +244,14 @@ export class KaggleCredentialsAdminService {
       lastError: account?.lastError ?? null,
       gpuInfo: account?.gpuInfo ?? null,
       readyAt: account?.readyAt ?? null,
+      gpuHoursLeft: account?.gpuHoursLeft ?? null,
+      quotaCheckedAt: account?.quotaCheckedAt ?? null,
+      busySlots,
+      cooldownUntil:
+        account?.cooldownUntil && new Date(account.cooldownUntil).getTime() > Date.now() ? account.cooldownUntil : null,
+      lastAssignedAt: account?.lastAssignedAt ?? null,
+      jobsCompleted: account?.jobsCompleted ?? 0,
+      jobsFailed: account?.jobsFailed ?? 0,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

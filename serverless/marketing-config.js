@@ -6,12 +6,14 @@
  */
 const PREFIXES = ['MARKETING_', 'KAGGLE_'];
 const EXTRA = ['CLOUDFLARE_TEXT_MODEL'];
+/** Old env-based Kaggle accounts: no longer read (admins manage accounts in kaggle_credentials), so never shipped. */
+const RETIRED = ['KAGGLE_WORKERS', 'KAGGLE_WORKER_CONCURRENCY'];
 
 module.exports = async () => {
   const values = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (!value || !value.trim()) continue;
-    if (key === 'MARKETING_CONFIG_SSM') continue;
+    if (key === 'MARKETING_CONFIG_SSM' || RETIRED.includes(key)) continue;
     if (PREFIXES.some((p) => key.startsWith(p)) || EXTRA.includes(key)) values[key] = value.trim();
   }
   const json = JSON.stringify(values);

@@ -24,6 +24,9 @@ custom:
       - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
       # Marketing / Kaggle settings go to the SSM parameter below instead (serverless/marketing-config.js).
       - MARKETING_CREDENTIALS_SECRET
+      # No longer read: Kaggle accounts are managed in the admin screen (kaggle_credentials). Never ship these keys.
+      - KAGGLE_WORKERS
+      - KAGGLE_WORKER_CONCURRENCY
       - KAGGLE_SESSION_HOURS
       - KAGGLE_MACHINE_SHAPE
       - MARKETING_WORKER_SECRET

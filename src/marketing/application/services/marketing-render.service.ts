@@ -67,6 +67,42 @@ const ENDED_GRACE_MS = 5 * 60 * 1000;
 const HUNG_MS = 2 * 60 * 60 * 1000;
 /** The notebook hands over this long before Kaggle's session limit. */
 const SESSION_MARGIN_SECONDS = 20 * 60;
+/** A ready account's cached GPU quota is re-checked with Kaggle after this long. */
+const QUOTA_CACHE_MS = 10 * 60 * 1000;
+/** An account that failed to start a notebook gets no new jobs for this long (its job goes to another account). */
+const START_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
+
+/** A ready account that can take render jobs in this dispatch round. */
+interface DispatchCandidate {
+  username: string;
+  concurrency: number;
+  used: number;
+  /** null = Kaggle reported no limit. */
+  gpuHoursLeft: number | null;
+  lastAssignedAt: number;
+}
+
+/**
+ * Next account to give a job to: the one with the largest share of free slots (an idle account before a half-busy
+ * one), then the most GPU hours left (spreads the weekly quota), then the one that waited longest (round robin).
+ */
+export function pickDispatchCandidate(candidates: DispatchCandidate[]): DispatchCandidate | null {
+  let best: DispatchCandidate | null = null;
+  const free = (c: DispatchCandidate): number => (c.concurrency - c.used) / c.concurrency;
+  const hours = (c: DispatchCandidate): number => c.gpuHoursLeft ?? Number.POSITIVE_INFINITY;
+  for (const c of candidates) {
+    if (c.used >= c.concurrency) continue;
+    if (
+      !best ||
+      free(c) > free(best) ||
+      (free(c) === free(best) && hours(c) > hours(best)) ||
+      (free(c) === free(best) && hours(c) === hours(best) && c.lastAssignedAt < best.lastAssignedAt)
+    ) {
+      best = c;
+    }
+  }
+  return best;
+}
 
 @Injectable()
 export class MarketingRenderService {
@@ -186,40 +222,59 @@ export class MarketingRenderService {
 
   // ---------------------------------------------------------------- dispatch
 
-  /** Sets up new Kaggle accounts and hands waiting jobs to free, ready accounts. Runs one at a time (queue flow control). */
+  /**
+   * Sets up new Kaggle accounts and hands waiting jobs out across the ready accounts, one job at a time to the least
+   * loaded one (pickDispatchCandidate), so parallel renders spread over every account. Runs one at a time (queue flow
+   * control); a job an account fails to start goes to another account in the same round.
+   */
   async dispatch(): Promise<void> {
     await this.failStaleJobs();
     await this.syncAccounts();
 
-    const accounts = await this.accounts.list();
+    const workers = new Map((await this.pool.workers()).map((w) => [w.id, w]));
     const busy = await this.jobs.countBusyByWorker();
-    const configured = new Map((await this.pool.workers()).map((w) => [w.id, w]));
-    let workLeft = true;
+    const accounts = (await this.accounts.list()).filter((a) => workers.has(a.username));
 
+    // New accounts run their one-time setup notebook.
     for (const account of accounts) {
-      const worker = configured.get(account.username);
-      if (!worker) continue;
-      const ready = account.status === EKaggleAccountStatus.Ready;
-      const settingUp = account.status === EKaggleAccountStatus.SettingUp;
-      if (!ready && !settingUp) continue;
+      if (account.status !== EKaggleAccountStatus.SettingUp) continue;
+      if ((busy[account.username] ?? 0) >= workers.get(account.username).concurrency) continue;
+      const job = await this.jobs.claimNext(account.username, false);
+      if (!job) continue;
+      busy[account.username] = (busy[account.username] ?? 0) + 1;
+      await this.startJob(job, account.username, 0);
+    }
 
-      let used = busy[account.username] ?? 0;
-      let quotaChecked = false;
-      while (used < worker.concurrency) {
-        let includeWork = ready && workLeft;
-        if (includeWork && !quotaChecked) {
-          quotaChecked = true;
-          includeWork = await this.hasGpuQuota(account.username);
-        }
-        const job = await this.jobs.claimNext(account.username, includeWork);
-        if (!job) {
-          if (includeWork) workLeft = false;
-          break;
-        }
-        used += 1;
-        const slot = job.kind === ERenderJobKind.Setup ? 0 : await this.freeSlot(account.username, worker.concurrency);
-        await this.startJob(job, account.username, slot);
+    const candidates: DispatchCandidate[] = [];
+    for (const account of accounts) {
+      if (account.status !== EKaggleAccountStatus.Ready || this.coolingDown(account)) continue;
+      const concurrency = workers.get(account.username).concurrency;
+      const used = busy[account.username] ?? 0;
+      if (used >= concurrency) continue;
+      const quota = await this.gpuQuota(account);
+      if (!quota.usable) continue;
+      candidates.push({
+        username: account.username,
+        concurrency,
+        used,
+        gpuHoursLeft: quota.hoursLeft,
+        lastAssignedAt: account.lastAssignedAt ? new Date(account.lastAssignedAt).getTime() : 0,
+      });
+    }
+
+    let workLeft = true;
+    for (;;) {
+      const candidate = pickDispatchCandidate(candidates);
+      if (!candidate) break;
+      const job = await this.jobs.claimNext(candidate.username, true);
+      if (!job) {
+        workLeft = false;
+        break;
       }
+      candidate.used += 1;
+      candidate.lastAssignedAt = Date.now();
+      const slot = await this.freeSlot(candidate.username, candidate.concurrency);
+      if (!(await this.startJob(job, candidate.username, slot))) candidate.used = candidate.concurrency;
     }
 
     if (workLeft && (await this.jobs.countWaiting()) > 0) {
@@ -255,7 +310,8 @@ export class MarketingRenderService {
           concurrency: worker.concurrency,
         });
       } else if (account.concurrency !== worker.concurrency) {
-        account = await this.accounts.upsert({ username: worker.id, concurrency: worker.concurrency });
+        await this.accounts.update(worker.id, { concurrency: worker.concurrency });
+        account = { ...account, concurrency: worker.concurrency };
       }
 
       const retryFailed =
@@ -275,6 +331,7 @@ export class MarketingRenderService {
       if (!claimed) continue;
       try {
         const quota = await this.pool.gpuQuota(worker.id);
+        await this.accounts.update(worker.id, { gpuHoursLeft: quota.hoursLeft, quotaCheckedAt: new Date() });
         this.logger.info({ account: worker.id, gpuHoursLeft: quota.hoursLeft }, 'Kaggle credentials OK');
         await this.jobs.create({
           kind: ERenderJobKind.Setup,
@@ -302,21 +359,38 @@ export class MarketingRenderService {
     }
   }
 
-  private async hasGpuQuota(username: string): Promise<boolean> {
-    try {
-      const { hoursLeft } = await this.pool.gpuQuota(username);
-      if (hoursLeft !== null && hoursLeft < MIN_GPU_HOURS) {
-        this.logger.info({ account: username, hoursLeft }, 'Kaggle GPU quota nearly used — skipping account');
-        return false;
+  private coolingDown(account: { cooldownUntil?: Date | null }): boolean {
+    return !!account.cooldownUntil && new Date(account.cooldownUntil).getTime() > Date.now();
+  }
+
+  /**
+   * GPU hours left on a ready account, from the cache when fresh (one Kaggle API call per account every
+   * QUOTA_CACHE_MS instead of every dispatch). Accounts below MIN_GPU_HOURS, or whose check fails, sit this round out.
+   */
+  private async gpuQuota(account: {
+    username: string;
+    gpuHoursLeft?: number | null;
+    quotaCheckedAt?: Date | null;
+  }): Promise<{ usable: boolean; hoursLeft: number | null }> {
+    let hoursLeft = account.gpuHoursLeft ?? null;
+    const fresh = account.quotaCheckedAt && Date.now() - new Date(account.quotaCheckedAt).getTime() < QUOTA_CACHE_MS;
+    if (!fresh) {
+      try {
+        hoursLeft = (await this.pool.gpuQuota(account.username)).hoursLeft;
+        await this.accounts.update(account.username, { gpuHoursLeft: hoursLeft, quotaCheckedAt: new Date() });
+      } catch (err) {
+        this.logger.warn(
+          { account: account.username, err: (err as Error).message },
+          'Kaggle quota check failed — skipping this round',
+        );
+        return { usable: false, hoursLeft };
       }
-      return true;
-    } catch (err) {
-      this.logger.warn(
-        { account: username, err: (err as Error).message },
-        'Kaggle quota check failed — skipping this round',
-      );
-      return false;
     }
+    if (hoursLeft !== null && hoursLeft < MIN_GPU_HOURS) {
+      this.logger.info({ account: account.username, hoursLeft }, 'Kaggle GPU quota nearly used — skipping account');
+      return { usable: false, hoursLeft };
+    }
+    return { usable: true, hoursLeft };
   }
 
   /** Lowest kernel slot (1…concurrency) not held by another busy job of the account. */
@@ -326,23 +400,71 @@ export class MarketingRenderService {
     return concurrency;
   }
 
-  private async startJob(job: RenderJob, workerId: string, slot: number): Promise<void> {
+  /** Pushes the job's notebook to the account. False when the account could not start it (job handed back). */
+  private async startJob(job: RenderJob, workerId: string, slot: number): Promise<boolean> {
+    let notebook: Record<string, unknown>;
     try {
       if (!this.config.websocketUrl) throw new Error('WEBSOCKET_API_URL is not configured');
-      const notebookJob = await this.notebookJob(job);
-      const kernel =
-        job.kind === ERenderJobKind.Setup
-          ? { name: 'byajbazaar-account-setup', title: 'ByajBazaar Account Setup' }
-          : { name: `byajbazaar-render-${slot}`, title: `ByajBazaar Render ${slot}` };
-      const pushed = await this.pool.pushNotebook(workerId, kernel, buildWorkerNotebook(notebookJob));
-      const booting = job.attempts > 0 ? 'Continuing in a new GPU session' : 'GPU worker booting';
-      const progress = Math.max(1, job.progress);
-      await this.jobs.update(job.id, { kernelRef: pushed.ref, slot, stageMessage: booting, progress });
-      await this.campaignProgress(job, progress, booting, ECampaignStatus.Rendering);
-      await this.scheduleWatch(job.id);
+      notebook = buildWorkerNotebook(await this.notebookJob(job));
     } catch (err) {
+      // Our side (configuration, storage): no other account would do better.
       await this.failJob(job, `Could not start the GPU worker: ${(err as Error).message}`);
+      return true;
     }
+    const kernel =
+      job.kind === ERenderJobKind.Setup
+        ? { name: 'byajbazaar-account-setup', title: 'ByajBazaar Account Setup' }
+        : { name: `byajbazaar-render-${slot}`, title: `ByajBazaar Render ${slot}` };
+    let pushed: { ref: string };
+    try {
+      pushed = await this.pool.pushNotebook(workerId, kernel, notebook);
+    } catch (err) {
+      const reason = (err as Error).message;
+      if (job.kind === ERenderJobKind.Setup) {
+        await this.failJob(job, `Could not start the GPU worker: ${reason}`);
+        return false;
+      }
+      await this.accounts.update(workerId, {
+        cooldownUntil: new Date(Date.now() + START_FAILURE_COOLDOWN_MS),
+        lastError: `Could not start a notebook: ${reason}`.slice(0, 2000),
+      });
+      await this.handBack(job, workerId, reason);
+      return false;
+    }
+    const booting = job.attempts > 0 ? 'Continuing in a new GPU session' : 'GPU worker booting';
+    const progress = Math.max(1, job.progress);
+    await this.jobs.update(job.id, { kernelRef: pushed.ref, slot, stageMessage: booting, progress });
+    if (job.kind !== ERenderJobKind.Setup) {
+      await this.accounts.update(workerId, { lastAssignedAt: new Date(), lastError: null });
+    }
+    await this.campaignProgress(job, progress, booting, ECampaignStatus.Rendering);
+    await this.scheduleWatch(job.id);
+    return true;
+  }
+
+  /**
+   * An account could not start the job (Kaggle refused the push): it goes back to the queue for another account,
+   * while that account cools down. Gives up after MAX_RESTARTS hand-backs/continuations.
+   */
+  private async handBack(job: RenderJob, workerId: string, reason: string): Promise<void> {
+    this.logger.warn(
+      { jobId: job.id, account: workerId, reason },
+      'Kaggle account could not start the job — re-queued',
+    );
+    if (job.attempts >= MAX_RESTARTS) {
+      await this.failJob({ ...job, workerId: null }, `Could not start the GPU worker: ${reason}`);
+      return;
+    }
+    const message = 'Waiting for a free GPU';
+    await this.jobs.update(job.id, {
+      status: ERenderJobStatus.Waiting,
+      workerId: null,
+      slot: null,
+      kernelRef: null,
+      attempts: job.attempts + 1,
+      stageMessage: message,
+    });
+    await this.campaignProgress(job, job.progress, message, ECampaignStatus.WaitingGpu);
   }
 
   private async notebookJob(job: RenderJob): Promise<WorkerNotebookJob> {
@@ -434,6 +556,7 @@ export class MarketingRenderService {
 
     if (event.status === 'completed') {
       for (const key of event.failedClips ?? []) await this.clipFailed(job, key, 'Rendering failed');
+      if (job.workerId) await this.accounts.recordOutcome(job.workerId, 'completed');
       await this.jobs.update(job.id, {
         status: ERenderJobStatus.Done,
         progress: 100,
@@ -643,6 +766,7 @@ export class MarketingRenderService {
       });
       return;
     }
+    if (job.workerId) await this.accounts.recordOutcome(job.workerId, 'failed');
     for (const clip of job.payload.clips) await this.clipFailed(job, clip.key, message);
     await this.settleCampaign(job.campaignId, message);
   }
@@ -706,7 +830,7 @@ export class MarketingRenderService {
     waiting: number;
   }> {
     const accounts = (await this.accounts.list()).filter((a) => a.status !== EKaggleAccountStatus.Disabled);
-    const ready = accounts.filter((a) => a.status === EKaggleAccountStatus.Ready);
+    const ready = accounts.filter((a) => a.status === EKaggleAccountStatus.Ready && !this.coolingDown(a));
     const busy = Object.values(await this.jobs.countBusyByWorker()).reduce((a, b) => a + b, 0);
     return {
       accounts: accounts.length,

@@ -43,6 +43,10 @@ export interface IKaggleAccountsRepository {
   upsert(account: Partial<KaggleAccount> & { username: string }): Promise<KaggleAccount>;
   /** Atomically moves an account between statuses; false if it was not in `from`. */
   transition(username: string, from: EKaggleAccountStatus[], patch: Partial<KaggleAccount>): Promise<boolean>;
+  /** Changes fields of an existing account (no-op when it does not exist). */
+  update(username: string, patch: Partial<Omit<KaggleAccount, 'username'>>): Promise<void>;
+  /** Atomically counts a finished render job on the account. */
+  recordOutcome(username: string, outcome: 'completed' | 'failed'): Promise<void>;
 }
 
 export const KAGGLE_CREDENTIALS_REPOSITORY = 'KAGGLE_CREDENTIALS_REPOSITORY';
@@ -66,6 +70,8 @@ export interface IRenderJobsRepository {
   update(id: string, patch: Partial<RenderJob>): Promise<RenderJob | null>;
   /** Busy slots per account (STARTING / RUNNING). */
   countBusyByWorker(): Promise<Record<string, number>>;
+  /** Jobs currently on Kaggle (STARTING / RUNNING), oldest first. */
+  listBusy(): Promise<RenderJob[]>;
   countWaiting(): Promise<number>;
   /** Kernel slots held by an account's busy jobs. */
   busySlots(workerId: string): Promise<number[]>;

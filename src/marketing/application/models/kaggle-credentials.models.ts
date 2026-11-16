@@ -1,6 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Expose, Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { Expose, Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -96,11 +110,64 @@ export class KaggleCredentialResponseModel {
   @ApiPropertyOptional() @Expose() lastError: string | null;
   @ApiPropertyOptional() @Expose() gpuInfo: string | null;
   @ApiPropertyOptional() @Expose() readyAt: Date | null;
-  @ApiPropertyOptional({ description: 'Weekly GPU hours left (only on create / verify)' })
+  @ApiPropertyOptional({ description: 'Weekly GPU hours left (fresh on create / verify, else the cached value)' })
   @Expose()
   gpuHoursLeft?: number | null;
+  @ApiPropertyOptional({ description: 'When the GPU quota was last checked with Kaggle' })
+  @Expose()
+  quotaCheckedAt: Date | null;
+  @ApiProperty({ description: 'Notebooks running on the account right now' }) @Expose() busySlots: number;
+  @ApiPropertyOptional({ description: 'Given no new jobs until then (it failed to start a notebook)' })
+  @Expose()
+  cooldownUntil: Date | null;
+  @ApiPropertyOptional() @Expose() lastAssignedAt: Date | null;
+  @ApiProperty() @Expose() jobsCompleted: number;
+  @ApiProperty() @Expose() jobsFailed: number;
   @ApiProperty() @Expose() createdAt: Date;
   @ApiProperty() @Expose() updatedAt: Date;
+}
+
+export class BulkCreateKaggleCredentialsRequestModel {
+  @ApiProperty({ type: [CreateKaggleCredentialRequestModel], maxItems: 50 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CreateKaggleCredentialRequestModel)
+  accounts: CreateKaggleCredentialRequestModel[];
+}
+
+export class BulkCreateKaggleCredentialResultModel {
+  @ApiProperty() @Expose() username: string;
+  @ApiProperty({ enum: ['created', 'exists', 'failed'] }) @Expose() result: 'created' | 'exists' | 'failed';
+  @ApiPropertyOptional() @Expose() error?: string;
+  @ApiPropertyOptional() @Expose() gpuHoursLeft?: number | null;
+}
+
+export class KaggleRunningJobModel {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty({ enum: ['CAMPAIGN', 'LOGO', 'SETUP'] }) @Expose() kind: string;
+  @ApiProperty() @Expose() status: string;
+  @ApiPropertyOptional() @Expose() account: string | null;
+  @ApiPropertyOptional() @Expose() slot: number | null;
+  @ApiProperty() @Expose() progress: number;
+  @ApiPropertyOptional() @Expose() stageMessage: string | null;
+  @ApiProperty() @Expose() attempts: number;
+  @ApiPropertyOptional() @Expose() startedAt: Date | null;
+}
+
+/** Queue + capacity at a glance for the admin screen. */
+export class KaggleOverviewResponseModel {
+  @ApiProperty() @Expose() accounts: number;
+  @ApiProperty({ description: 'Ready and not cooling down' }) @Expose() ready: number;
+  @ApiProperty() @Expose() settingUp: number;
+  @ApiProperty({ description: 'Parallel notebooks the ready accounts can run' }) @Expose() slots: number;
+  @ApiProperty() @Expose() busy: number;
+  @ApiProperty({ description: 'Render jobs waiting for a free GPU' }) @Expose() waiting: number;
+  @ApiProperty({ type: [KaggleRunningJobModel] })
+  @Expose()
+  @Type(() => KaggleRunningJobModel)
+  running: KaggleRunningJobModel[];
 }
 
 export class KaggleCredentialVerifyResponseModel {

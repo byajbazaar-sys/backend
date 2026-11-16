@@ -5,8 +5,11 @@ import { EUserType, Roles, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 
 import {
+  BulkCreateKaggleCredentialResultModel,
+  BulkCreateKaggleCredentialsRequestModel,
   CreateKaggleCredentialRequestModel,
   KaggleCredentialResponseModel,
+  KaggleOverviewResponseModel,
   KaggleCredentialVerifyResponseModel,
   UpdateKaggleCredentialRequestModel,
 } from '../models/kaggle-credentials.models';
@@ -28,6 +31,25 @@ export class MarketingAdminController {
   @ApiOkResponse({ type: KaggleCredentialResponseModel, isArray: true })
   async list(): Promise<KaggleCredentialResponseModel[]> {
     return (await this.kaggle.list()).map((c) => out(KaggleCredentialResponseModel, c));
+  }
+
+  @Get('overview')
+  @Roles(EUserType.Admin)
+  @ApiOperation({ summary: 'Render capacity, queue length and the jobs running on each account' })
+  @ApiOkResponse({ type: KaggleOverviewResponseModel })
+  async overview(): Promise<KaggleOverviewResponseModel> {
+    return out(KaggleOverviewResponseModel, await this.kaggle.overview());
+  }
+
+  @Post('bulk')
+  @Roles(EUserType.Admin)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Add several Kaggle accounts at once; each is verified and saved on its own' })
+  @ApiOkResponse({ type: BulkCreateKaggleCredentialResultModel, isArray: true })
+  async bulkCreate(
+    @Body() body: BulkCreateKaggleCredentialsRequestModel,
+  ): Promise<BulkCreateKaggleCredentialResultModel[]> {
+    return (await this.kaggle.bulkCreate(body.accounts)).map((r) => out(BulkCreateKaggleCredentialResultModel, r));
   }
 
   @Get(':username')
@@ -67,6 +89,26 @@ export class MarketingAdminController {
   @ApiOkResponse({ type: KaggleCredentialVerifyResponseModel })
   async verify(@Param('username') username: string): Promise<KaggleCredentialVerifyResponseModel> {
     return out(KaggleCredentialVerifyResponseModel, await this.kaggle.verify(username));
+  }
+
+  @Post(':username/retry-setup')
+  @Roles(EUserType.Admin)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Run the account setup notebook again now' })
+  @ApiParam({ name: 'username' })
+  @ApiOkResponse({ type: KaggleCredentialResponseModel })
+  async retrySetup(@Param('username') username: string): Promise<KaggleCredentialResponseModel> {
+    return out(KaggleCredentialResponseModel, await this.kaggle.retrySetup(username));
+  }
+
+  @Post(':username/clear-cooldown')
+  @Roles(EUserType.Admin)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Let an account that failed to start a notebook take jobs again right away' })
+  @ApiParam({ name: 'username' })
+  @ApiOkResponse({ type: KaggleCredentialResponseModel })
+  async clearCooldown(@Param('username') username: string): Promise<KaggleCredentialResponseModel> {
+    return out(KaggleCredentialResponseModel, await this.kaggle.clearCooldown(username));
   }
 
   @Delete(':username')
