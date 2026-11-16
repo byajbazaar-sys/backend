@@ -20,6 +20,9 @@ import {
 import { ITransactionService } from './i-transaction.service';
 import { LoanReplayService } from './loan-replay.service';
 import {
+  ACTIVITY_LOGGER,
+  EActivityLogCategory,
+  IActivityLogger,
   DUES_REPOSITORY,
   EDueType,
   IDuesRepository,
@@ -63,6 +66,7 @@ export class TransactionService implements ITransactionService {
     @Inject(UNIT_OF_WORK) private readonly unitOfWork: IUnitOfWork,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     private readonly replayService: LoanReplayService,
+    @Inject(ACTIVITY_LOGGER) private readonly activityLogger: IActivityLogger,
     @InjectPinoLogger(TransactionService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -198,6 +202,9 @@ export class TransactionService implements ITransactionService {
         loanVersion: loanAfterCreate?.version,
         performedBy: data.createdBy,
       });
+      if (data.dueId) {
+        await this.recordDueActivity('PAID', data.dueId, transaction, data.createdBy);
+      }
 
       this.logger.info({ transactionId: transaction.id, loanId: loan.id }, 'Transaction created successfully');
       await this.invalidateLoanStatsCache(data.createdBy);
@@ -221,7 +228,13 @@ export class TransactionService implements ITransactionService {
     createdBy: string,
   ): Promise<{ transaction: Transaction; logs: TransactionLog[] }> {
     const transaction = await this.getById(id, createdBy);
-    const logs = await this.transactionLogsRepo.findByTransactionId(id, createdBy);
+    let logs: TransactionLog[] = [];
+    try {
+      logs = await this.transactionLogsRepo.findByTransactionId(id, createdBy);
+    } catch (err) {
+      // History lives in the logs database; its outage must not hide the transaction itself.
+      this.logger.error({ err, transactionId: id }, 'Could not load transaction history');
+    }
     logs.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     return { transaction, logs };
   }
@@ -533,6 +546,9 @@ export class TransactionService implements ITransactionService {
           loanVersion: loan.version,
           performedBy: createdBy,
         });
+        if (existing.dueId) {
+          await this.recordDueActivity('PAYMENT_DELETED', existing.dueId, existing, createdBy);
+        }
         await this.rollbackTransactionEffects(existing, loan, createdBy);
         await this.transactionsRepo.delete(id);
         this.logger.info({ transactionId: id, loanId: existing.loanId }, 'Transaction deleted with rollback');
@@ -554,6 +570,9 @@ export class TransactionService implements ITransactionService {
         loanVersion: loanBeforeReplay?.version,
         performedBy: createdBy,
       });
+      if (existing.dueId) {
+        await this.recordDueActivity('PAYMENT_DELETED', existing.dueId, existing, createdBy);
+      }
       await this.replayService.replay(existing.loanId, createdBy, {
         kind: 'delete',
         transactionId: id,
@@ -874,9 +893,21 @@ export class TransactionService implements ITransactionService {
   async updateDues(): Promise<number> {
     try {
       this.logger.info('Updating past dues');
-      const updatedCount = await this.duesRepo.updatePastDues();
-      this.logger.info({ updatedCount }, 'Past dues updated successfully');
-      return updatedCount;
+      const marked = await this.duesRepo.markPastDues();
+      this.logger.info({ updatedCount: marked.length }, 'Past dues updated successfully');
+      await this.activityLogger.recordMany(
+        marked.map((due) => ({
+          category: EActivityLogCategory.Due,
+          action: 'MARKED_PAST_DUE',
+          entityType: 'due',
+          entityId: due.dueId,
+          userId: due.userId,
+          performedBy: null,
+          channel: 'system',
+          data: { loanId: due.loanId, customerId: due.customerId, dueAmount: due.dueAmount, dueDate: due.dueDate },
+        })),
+      );
+      return marked.length;
     } catch (err) {
       this.logger.error({ err }, 'Error updating past dues');
       throw err;
@@ -983,6 +1014,29 @@ export class TransactionService implements ITransactionService {
 
   private async recordLog(input: CreateTransactionLogInput): Promise<void> {
     await this.transactionLogsRepo.create(input);
+  }
+
+  /** Due history (activity log). Written once the surrounding transaction commits; never fails the payment. */
+  private async recordDueActivity(
+    action: 'PAID' | 'PAYMENT_DELETED',
+    dueId: string,
+    transaction: Transaction,
+    createdBy: string,
+  ): Promise<void> {
+    await this.activityLogger.record({
+      category: EActivityLogCategory.Due,
+      action,
+      entityType: 'due',
+      entityId: dueId,
+      userId: createdBy,
+      data: {
+        transactionId: transaction.id,
+        loanId: transaction.loanId,
+        customerId: transaction.customerId,
+        amount: Number(transaction.amount),
+        paidIn: transaction.paidIn,
+      },
+    });
   }
 
   private async invalidateLoanStatsCache(userId?: string): Promise<void> {

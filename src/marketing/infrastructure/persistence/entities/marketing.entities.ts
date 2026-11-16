@@ -71,6 +71,22 @@ export class KaggleAccountEntity {
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 
+/** Kaggle API credentials (source of truth for which accounts render); runtime state lives in kaggle_accounts. */
+@Entity('kaggle_credentials')
+export class KaggleCredentialEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Index('UQ_kaggle_credentials_username', { unique: true })
+  @Column({ type: 'varchar', length: 100 })
+  username: string;
+  @Column({ type: 'varchar', length: 255, nullable: true }) label: string | null;
+  /** AES-256-GCM ciphertext of the API key / access token. */
+  @Column({ type: 'text' }) apiKeyEncrypted: string;
+  @Column({ type: 'smallint', default: 1 }) concurrency: number;
+  @Column({ type: 'boolean', default: true }) enabled: boolean;
+  @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
 @Entity('marketing_render_jobs')
 @Index('IDX_marketing_render_jobs_status_created', ['status', 'createdAt'])
 export class RenderJobEntity {
@@ -93,10 +109,46 @@ export class RenderJobEntity {
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 
+@Entity('marketing_photoshoots')
+@Index('IDX_marketing_photoshoots_user_created', ['userId', 'createdAt'])
+export class MarketingPhotoshootEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column({ type: 'uuid' }) userId: string;
+  @Column({ type: 'varchar', length: 255 }) title: string;
+  @Column({ type: 'uuid', nullable: true }) inventoryItemId: string | null;
+  @Column({ type: 'varchar', length: 500 }) sourceImageKey: string;
+  @Column({ type: 'jsonb' }) piece: Record<string, unknown>;
+  @Column({ type: 'varchar', length: 20 }) setting: string;
+  @Column({ type: 'varchar', length: 10 }) model: string;
+  @Column({ type: 'varchar', length: 20 }) outfit: string;
+  @Column({ type: 'varchar', length: 8 }) aspect: string;
+  @Column({ type: 'varchar', length: 20 }) status: string;
+  @Column({ type: 'text', nullable: true }) error: string | null;
+  @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
+@Entity('marketing_photoshoot_shots')
+@Index('UQ_marketing_photoshoot_shots_index', ['photoshootId', 'index'], { unique: true })
+export class MarketingPhotoshootShotEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column({ type: 'uuid' }) photoshootId: string;
+  @Column({ type: 'smallint' }) index: number;
+  @Column({ type: 'varchar', length: 20 }) kind: string;
+  @Column({ type: 'text' }) prompt: string;
+  @Column({ type: 'varchar', length: 500, nullable: true }) imageKey: string | null;
+  @Column({ type: 'varchar', length: 20 }) status: string;
+  @Column({ type: 'text', nullable: true }) error: string | null;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
 export const MARKETING_ENTITY_CLASSES = [
   MarketingCampaignEntity,
   MarketingSceneEntity,
   MarketingBrandEntity,
   KaggleAccountEntity,
+  KaggleCredentialEntity,
   RenderJobEntity,
+  MarketingPhotoshootEntity,
+  MarketingPhotoshootShotEntity,
 ];

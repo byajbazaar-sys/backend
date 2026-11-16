@@ -1,7 +1,7 @@
 runPostDeploy:
   handler: dist/src/lambda-handlers/post-deploy.handler
-  description: 'Runs migrations + seeds - invoked after deployment'
-  timeout: 120
+  description: 'Runs migrations + seeds (+ logs DB migrations and log copy) - invoked after deployment'
+  timeout: 300
   memorySize: 512
 
 api:
@@ -48,6 +48,23 @@ closeExpiredLoansCron:
           'detail-type': 'Scheduled Event'
           detail:
             job: 'closeExpiredLoans'
+            stage: '${self:provider.stage}'
+
+relayLogsCron:
+  handler: dist/src/lambda-handlers/cron.handler
+  description: 'Logs service: moves outbox logs to the logs DB and finishes copying old log tables'
+  timeout: 300
+  memorySize: 1024
+  events:
+    - schedule:
+        rate: rate(30 minutes)
+        enabled: true
+        description: 'Logs outbox relay + catch-up copy every 30 minutes (no-op without LOGS_DB_HOST)'
+        input:
+          source: '${self:service}'
+          'detail-type': 'Scheduled Event'
+          detail:
+            job: 'relayLogs'
             stage: '${self:provider.stage}'
 
 wsConnect:

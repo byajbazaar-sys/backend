@@ -9,6 +9,7 @@ import { LoggerModule, Params } from 'nestjs-pino';
 import { ApplicationModule } from './application';
 import { configFactory, IMsConfig } from './configurations';
 import { InfrastructureModule } from './infrastructure';
+import { LogsModule } from './logs';
 import { MarketingModule } from './marketing';
 
 @Module({
@@ -29,6 +30,7 @@ import { MarketingModule } from './marketing';
     ]),
     ApplicationModule,
     InfrastructureModule,
+    LogsModule,
     MarketingModule,
     ScheduleModule.forRoot(),
   ],

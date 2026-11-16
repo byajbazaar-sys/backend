@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 
 import { AppModule } from '../app.module';
 import { SeedingService } from '../infrastructure/persistence/seeds/seeding.service';
+import { LogsDatabase, LogsMaintenanceService } from '../logs';
 import { MarketingDatabase } from '../marketing';
 
 export const handler: Handler = async (_event: unknown, context: Context) => {
@@ -36,12 +37,28 @@ export const handler: Handler = async (_event: unknown, context: Context) => {
     await seedingService.runAsync();
     console.log('[PostDeploy] Seeds completed');
 
+    // 3. Logs database (separate DB, own migrations table), then move outbox rows and continue copying the old
+    //    main-database log tables (whatever is left is finished by the relayLogs cron). Must not block ByajBazaar.
+    let logsMigrations: number | string = 0;
+    let logsMaintenance: unknown = null;
+    try {
+      logsMigrations = await app.get(LogsDatabase).runMigrations();
+      console.log(`[PostDeploy] Logs migrations: ${logsMigrations} run`);
+      logsMaintenance = await app.get(LogsMaintenanceService).run(45_000);
+      console.log('[PostDeploy] Logs maintenance:', JSON.stringify(logsMaintenance));
+    } catch (err) {
+      logsMigrations = `failed: ${err instanceof Error ? err.message : String(err)}`;
+      console.error('[PostDeploy] Logs migrations failed:', err);
+    }
+
     return {
       statusCode: 200,
       body: JSON.stringify({
         message: 'Post-deploy completed',
         migrationsRun: migrations.length,
         marketingMigrations,
+        logsMigrations,
+        logsMaintenance,
         timestamp: new Date().toISOString(),
       }),
     };

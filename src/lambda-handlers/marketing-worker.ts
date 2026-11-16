@@ -12,7 +12,7 @@ async function bootstrap() {
   return cachedApp;
 }
 
-const STEPS = ['plan', 'image', 'logo', 'dispatch', 'watch'];
+const STEPS = ['plan', 'image', 'logo', 'dispatch', 'watch', 'photoshoot'];
 
 /**
  * Marketing worker (async invoke): the long Cloudflare steps — scene prompts + images, logo — and dispatch.

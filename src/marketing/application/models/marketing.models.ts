@@ -135,9 +135,9 @@ export class MarketingCapacityResponseModel {
 
 /** Message delivered by the marketing queue (QStash). */
 export class MarketingQueueMessageModel {
-  @ApiProperty({ enum: ['plan', 'image', 'logo', 'dispatch', 'watch'] })
-  @IsIn(['plan', 'image', 'logo', 'dispatch', 'watch'])
-  step: 'plan' | 'image' | 'logo' | 'dispatch' | 'watch';
+  @ApiProperty({ enum: ['plan', 'image', 'logo', 'dispatch', 'watch', 'photoshoot'] })
+  @IsIn(['plan', 'image', 'logo', 'dispatch', 'watch', 'photoshoot'])
+  step: 'plan' | 'image' | 'logo' | 'dispatch' | 'watch' | 'photoshoot';
 
   @ApiPropertyOptional() @IsOptional() @IsUUID() campaignId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() userId?: string;
@@ -145,6 +145,8 @@ export class MarketingQueueMessageModel {
   @ApiPropertyOptional() @IsOptional() render?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsIn(['image', 'video', 'both']) target?: 'image' | 'video' | 'both';
   @ApiPropertyOptional() @IsOptional() @IsUUID() renderJobId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() photoshootId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(3) shotIndex?: number;
 }
 
 /** Progress event from a Kaggle worker notebook (HTTPS fallback of the WebSocket route). */

@@ -20,6 +20,7 @@ import { SubscriptionPatch } from '../models';
 import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
 import { IWebhookService } from './i-webhook.service';
 import { REFUND_SERVICE, RefundService } from './refund.service';
+import { ACTIVITY_LOGGER, EActivityLogCategory, IActivityLogger } from '../../../shared';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 
 @Injectable()
@@ -33,6 +34,7 @@ export class WebhookService implements IWebhookService {
     @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
     @Inject(COUPON_SERVICE) private readonly couponService: ICouponService,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
+    @Inject(ACTIVITY_LOGGER) private readonly activityLogger: IActivityLogger,
     @InjectPinoLogger(WebhookService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -101,13 +103,84 @@ export class WebhookService implements IWebhookService {
     try {
       await this.dispatch(eventName, payload);
       await this.linkPaymentEventFromPayload(eventRow.id, payload);
-      await this.eventsRepo.markProcessed(eventRow.id);
+      const processed = await this.eventsRepo.markProcessed(eventRow.id);
+      await this.recordWebhookActivity(
+        `RAZORPAY_${eventName.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`,
+        eventId,
+        processed?.userId ?? eventContext.userId,
+        payload,
+      );
     } catch (err) {
       this.logger.error({ err, eventName, eventId }, 'Webhook processing failed');
+      await this.recordWebhookActivity('RAZORPAY_WEBHOOK_FAILED', eventId, eventContext.userId, payload, err);
       throw err;
     }
 
     return this.ackWebhook(true, false);
+  }
+
+  /**
+   * Payment history (activity log): a compact summary of a processed (or failed) Razorpay event. The full payload
+   * stays in payment_events. Never throws.
+   */
+  private async recordWebhookActivity(
+    action: string,
+    eventId: string,
+    userId: string | null | undefined,
+    payload: Record<string, unknown>,
+    error?: unknown,
+  ): Promise<void> {
+    try {
+      await this.recordWebhookActivityUnsafe(action, eventId, userId, payload, error);
+    } catch (err) {
+      this.logger.warn({ err, eventId }, 'Could not record webhook activity');
+    }
+  }
+
+  private recordWebhookActivityUnsafe(
+    action: string,
+    eventId: string,
+    userId: string | null | undefined,
+    payload: Record<string, unknown>,
+    error?: unknown,
+  ): Promise<void> {
+    const inner = (payload.payload ?? {}) as Record<string, { entity?: Record<string, unknown> } | undefined>;
+    const entity = (name: string): Record<string, unknown> | undefined => inner[name]?.entity;
+    const payment = entity('payment');
+    const subscription = entity('subscription');
+    const refund = entity('refund');
+    const invoice = entity('invoice');
+    const order = entity('order');
+    return this.activityLogger.record({
+      category: EActivityLogCategory.Payment,
+      action,
+      entityType: 'razorpay_event',
+      entityId: eventId,
+      userId: userId ?? null,
+      performedBy: null,
+      channel: 'webhook',
+      data: {
+        eventName: typeof payload.event === 'string' ? payload.event : '',
+        ...(payment && {
+          paymentId: payment.id,
+          paymentStatus: payment.status,
+          amountPaise: payment.amount,
+          currency: payment.currency,
+          method: payment.method,
+        }),
+        ...(subscription && {
+          subscriptionId: subscription.id,
+          subscriptionStatus: subscription.status,
+          planId: subscription.plan_id,
+        }),
+        ...(refund && { refundId: refund.id, refundStatus: refund.status, refundAmountPaise: refund.amount }),
+        ...(invoice && { invoiceId: invoice.id, invoiceStatus: invoice.status }),
+        ...(order && { orderId: order.id, orderStatus: order.status }),
+        ...(error !== undefined && {
+          error: (error instanceof Error ? error.message : (JSON.stringify(error) ?? 'unknown error')).slice(0, 500),
+        }),
+      },
+    });
   }
 
   private ackWebhook(received: boolean, duplicate?: boolean): WebhookAckResult {

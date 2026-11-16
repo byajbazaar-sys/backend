@@ -23,8 +23,7 @@ custom:
     exclude:
       - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
       # Marketing / Kaggle settings go to the SSM parameter below instead (serverless/marketing-config.js).
-      - KAGGLE_WORKERS
-      - KAGGLE_WORKER_CONCURRENCY
+      - MARKETING_CREDENTIALS_SECRET
       - KAGGLE_SESSION_HOURS
       - KAGGLE_MACHINE_SHAPE
       - MARKETING_WORKER_SECRET
@@ -45,6 +44,13 @@ custom:
       - MARKETING_QSTASH_CURRENT_SIGNING_KEY
       - MARKETING_QSTASH_NEXT_SIGNING_KEY
       - CLOUDFLARE_TEXT_MODEL
+      # Logs database settings go to their own SSM parameter (serverless/logs-config.js).
+      - LOGS_DB_HOST
+      - LOGS_DB_PORT
+      - LOGS_DB_NAME
+      - LOGS_DB_USER
+      - LOGS_DB_PASS
+      - LOGS_DB_CONNECT_TIMEOUT_MS
   serverless-offline:
     httpPort: 3003
     lambdaPort: 3002
@@ -67,6 +73,15 @@ resources:
         Tier: Standard
         Description: Marketing videos settings (JSON) - generated from .env.${sls:stage} on deploy
         Value: ${file(./serverless/marketing-config.js)}
+    # Logs database settings (LOGS_DB_*), read by every Lambda on cold start. Empty JSON = logs stay in the main DB.
+    LogsConfigParameter:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /byajbazaar/${sls:stage}/logs-config
+        Type: String
+        Tier: Standard
+        Description: Logs database settings (JSON) - generated from .env.${sls:stage} on deploy
+        Value: ${file(./serverless/logs-config.js)}
 
 package:
   patterns:

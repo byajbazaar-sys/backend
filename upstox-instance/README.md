@@ -1,7 +1,8 @@
 # ByajBazaar Upstox relay
 
 Always-on service on your **upstox-instance** VM:
-
+	
+150.230.4.7
 1. Connects to **Upstox Market Data Feed V3** (server-side token).
 2. Selects the nearest unexpired standard MCX gold and silver futures from Upstox's instrument master; current valid instrument-key env vars can override selection.
 3. Exposes **WebSocket** for web/mobile with **ByajBazaar user JWT** (`?token=`).

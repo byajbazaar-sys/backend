@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { MarketingQueueMessage } from '../ports';
+import { MarketingPhotoshootService } from './marketing-photoshoot.service';
 import { MarketingPlannerService } from './marketing-planner.service';
 import { MarketingRenderService } from './marketing-render.service';
 import { MarketingScheduler, MarketingStepRunner } from './marketing-scheduler';
@@ -11,6 +12,7 @@ export class MarketingQueueConsumer implements MarketingStepRunner {
   constructor(
     private readonly planner: MarketingPlannerService,
     private readonly render: MarketingRenderService,
+    private readonly photoshoots: MarketingPhotoshootService,
     private readonly scheduler: MarketingScheduler,
   ) {}
 
@@ -46,6 +48,9 @@ export class MarketingQueueConsumer implements MarketingStepRunner {
         return;
       case 'watch':
         if (message.renderJobId) await this.render.watch(message.renderJobId);
+        return;
+      case 'photoshoot':
+        if (message.photoshootId) await this.photoshoots.run(message.photoshootId, message.shotIndex);
         return;
     }
   }

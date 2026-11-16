@@ -50,6 +50,15 @@ Defines scheduled Lambda functions triggered by AWS EventBridge.
 - **Timeout**: 300 seconds (5 minutes)
 - **Behavior**: Sets `status` to `Closed` for all **Open** loans where `created_at + tenure` (days / months / years per `tenure_type`) is on or before now.
 
+#### Relay Logs Cron (`relayLogsCron`)
+
+- **Handler**: `dist/src/lambda-handlers/cron.handler` (job selected via `detail.job` = `relayLogs`)
+- **Schedule**: Every 30 minutes (`rate(30 minutes)`)
+- **Memory / Timeout**: 1024 MB / 300 seconds (works within a 4-minute budget; the next run continues)
+- **Behavior**: Logs service upkeep (`src/logs`). Moves logs waiting in the main-database `log_outbox` to the logs
+  database, then continues copying the old main-database log tables (`bill_logs`, `transaction_logs`,
+  `activity_logs`, `whatsapp_messages`). No-op when `LOGS_DB_HOST` is not set.
+
 ## Providers
 
 ### AWS (`providers.yml`)
@@ -138,3 +147,19 @@ environment:
 4. **Environment-specific configs**: Use stages to manage different environments
 5. **Resource organization**: Keep related resources together in the same file
 
+## Logs database (`LOGS_DB_*`)
+
+Bill history, transaction edit history, the WhatsApp message log and the dues / payments / marketing activity log live in their own PostgreSQL
+database (`src/logs`, migrations table `logs_migrations`). Like the marketing settings, `LOGS_DB_*` are kept out of the
+Lambda env: the deploy writes them to the SSM parameter `/byajbazaar/<stage>/logs-config` (`serverless/logs-config.js`)
+and every Lambda loads it on cold start. Without `LOGS_DB_HOST`, logs stay in the main database exactly as before.
+
+Moving existing logs (safe to repeat; the main database is only read):
+
+```bash
+yarn logs:migrate-data --env=.env.production            # dry run: row counts
+yarn logs:migrate-data --env=.env.production --confirm  # logs DB migrations + copy + field-by-field verify
+```
+
+Each stream (bill / transaction / activity / whatsapp) switches to the logs database only after all its rows are copied;
+post-deploy and `relayLogsCron` finish an interrupted copy and pick up rows written during the switch.

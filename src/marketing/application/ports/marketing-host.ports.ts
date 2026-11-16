@@ -43,3 +43,23 @@ export interface IMarketingAi {
   /** Returns the model's text reply. */
   generateText(system: string, user: string, options?: { maxTokens?: number; temperature?: number }): Promise<string>;
 }
+
+/**
+ * Activity log (ByajBazaar logs service, separate logs database): campaign / photoshoot lifecycle, render jobs and
+ * Kaggle account changes. Implementations never throw.
+ */
+export const MARKETING_ACTIVITY_LOG = 'MARKETING_ACTIVITY_LOG';
+export interface MarketingActivity {
+  /** e.g. CAMPAIGN_CREATED, RENDER_JOB_FAILED, KAGGLE_ACCOUNT_ADDED */
+  action: string;
+  /** campaign | photoshoot | render_job | kaggle_account */
+  entityType: string;
+  entityId?: string | null;
+  /** The business (ByajBazaar user) it belongs to, if any. */
+  userId?: string | null;
+  /** Never secrets (Kaggle keys). */
+  data?: Record<string, unknown>;
+}
+export interface IMarketingActivityLog {
+  record(activity: MarketingActivity): Promise<void>;
+}

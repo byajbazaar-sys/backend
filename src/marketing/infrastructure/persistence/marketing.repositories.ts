@@ -3,13 +3,21 @@ import { FindOptionsWhere, In, LessThan, Not, ObjectLiteral, Repository } from '
 
 import {
   KaggleAccountEntity,
+  KaggleCredentialEntity,
   MarketingBrandEntity,
   MarketingCampaignEntity,
   MarketingSceneEntity,
   RenderJobEntity,
 } from './entities/marketing.entities';
 import { MarketingDatabase } from './marketing-database';
-import { KaggleAccount, MarketingBrand, MarketingCampaign, MarketingScene, RenderJob } from '../../application/domain';
+import {
+  KaggleAccount,
+  KaggleCredential,
+  MarketingBrand,
+  MarketingCampaign,
+  MarketingScene,
+  RenderJob,
+} from '../../application/domain';
 import {
   BUSY_RENDER_STATUSES,
   ECampaignStatus,
@@ -19,11 +27,13 @@ import {
 } from '../../application/enums';
 import {
   IKaggleAccountsRepository,
+  IKaggleCredentialsRepository,
   IMarketingBrandsRepository,
   IMarketingCampaignsRepository,
   IMarketingScenesRepository,
   IRenderJobsRepository,
 } from '../../application/ports';
+import { MarketingSecretCipher } from '../crypto/marketing-secret.cipher';
 
 /** UPDATE … RETURNING through TypeORM on Postgres returns [rows, affectedCount]. */
 function returnedRows(result: unknown): Record<string, unknown>[] {
@@ -181,6 +191,69 @@ export class KaggleAccountsRepository
       { username, status: In(from) } as FindOptionsWhere<KaggleAccountEntity>,
       patch as Partial<KaggleAccountEntity>,
     );
+    return (result.affected ?? 0) > 0;
+  }
+}
+
+@Injectable()
+export class KaggleCredentialsRepository
+  extends MarketingRepositoryBase<KaggleCredentialEntity>
+  implements IKaggleCredentialsRepository
+{
+  constructor(
+    db: MarketingDatabase,
+    private readonly cipher: MarketingSecretCipher,
+  ) {
+    super(db, KaggleCredentialEntity);
+  }
+
+  /** A key that can't be decrypted (secret changed) comes back as '' so one bad row never breaks the pool. */
+  private toDomain(row: KaggleCredentialEntity): KaggleCredential {
+    const { apiKeyEncrypted, ...rest } = row;
+    let apiKey = '';
+    try {
+      apiKey = this.cipher.decrypt(apiKeyEncrypted);
+    } catch {
+      // Left empty: the worker pool skips it and the admin list reports it as unreadable.
+    }
+    return { ...rest, apiKey };
+  }
+
+  async list(filter: { enabled?: boolean } = {}): Promise<KaggleCredential[]> {
+    const where: FindOptionsWhere<KaggleCredentialEntity> = {};
+    if (filter.enabled !== undefined) where.enabled = filter.enabled;
+    const rows = await (await this.repo()).find({ where, order: { username: 'ASC' } });
+    return rows.map((row) => this.toDomain(row));
+  }
+
+  async find(username: string): Promise<KaggleCredential | null> {
+    const row = await (await this.repo()).findOne({ where: { username } });
+    return row ? this.toDomain(row) : null;
+  }
+
+  async create(credential: Omit<KaggleCredential, 'id' | 'createdAt' | 'updatedAt'>): Promise<KaggleCredential> {
+    const repo = await this.repo();
+    const { apiKey, ...rest } = credential;
+    const saved = await repo.save(repo.create({ ...rest, apiKeyEncrypted: this.cipher.encrypt(apiKey) }));
+    return this.toDomain(saved);
+  }
+
+  async update(
+    username: string,
+    patch: Partial<Pick<KaggleCredential, 'apiKey' | 'concurrency' | 'enabled' | 'label'>>,
+  ): Promise<KaggleCredential | null> {
+    const repo = await this.repo();
+    const { apiKey, ...rest } = patch;
+    const changes = Object.fromEntries(
+      Object.entries(rest).filter(([, value]) => value !== undefined),
+    ) as Partial<KaggleCredentialEntity>;
+    if (apiKey !== undefined) changes.apiKeyEncrypted = this.cipher.encrypt(apiKey);
+    if (Object.keys(changes).length) await repo.update({ username }, changes);
+    return this.find(username);
+  }
+
+  async delete(username: string): Promise<boolean> {
+    const result = await (await this.repo()).delete({ username });
     return (result.affected ?? 0) > 0;
   }
 }

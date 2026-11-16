@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 
+import { ACTIVITY_LOGGER, EActivityLogCategory, IActivityLogger } from '../../../shared';
 import { Coupon, ECouponType, Plan } from '../domain';
 import {
   CouponPlanPreviewModel,
@@ -27,7 +28,19 @@ export class CouponAdminService {
     @Inject(COUPONS_REPOSITORY) private readonly couponsRepo: ICouponsRepository,
     @Inject(PLANS_REPOSITORY) private readonly plansRepo: IPlansRepository,
     @Inject(COUPON_SERVICE) private readonly couponService: ICouponService,
+    @Inject(ACTIVITY_LOGGER) private readonly activityLogger: IActivityLogger,
   ) {}
+
+  /** Coupon changes go to the activity log; the admin is taken from the request. Never throws. */
+  private audit(action: string, coupon: Pick<Coupon, 'id' | 'code'>, data: Record<string, unknown>): Promise<void> {
+    return this.activityLogger.record({
+      category: EActivityLogCategory.Payment,
+      action,
+      entityType: 'coupon',
+      entityId: coupon.id,
+      data: { code: coupon.code, byAdmin: true, ...data },
+    });
+  }
 
   async list(): Promise<CouponResponseModel[]> {
     const [coupons, plans] = await Promise.all([this.couponsRepo.findAll(), this.plansRepo.findActiveCheckoutPlans()]);
@@ -57,7 +70,9 @@ export class CouponAdminService {
     if (draft.expiry && draft.expiry.getTime() <= Date.now()) {
       throw new BadRequestException('Expiry must be in the future');
     }
-    return this.toResponse(await this.couponsRepo.insert(draft), plans);
+    const created = await this.couponsRepo.insert(draft);
+    await this.audit('COUPON_CREATED', created, { coupon: draft });
+    return this.toResponse(created, plans);
   }
 
   async update(id: string, body: UpdateCouponRequestModel): Promise<CouponResponseModel> {
@@ -89,7 +104,10 @@ export class CouponAdminService {
       throw new BadRequestException('A percentage coupon can be at most 99% off');
     }
     this.assertChargeable(next, plans);
-    return this.toResponse(await this.couponsRepo.update(id, patch), plans);
+    const updated = await this.couponsRepo.update(id, patch);
+    const before = Object.fromEntries(Object.keys(patch).map((key) => [key, existing[key as keyof Coupon]]));
+    await this.audit('COUPON_UPDATED', existing, { before, after: patch });
+    return this.toResponse(updated, plans);
   }
 
   /** Unused coupons are deleted; used ones are switched off so past bills keep their history. */
@@ -99,12 +117,14 @@ export class CouponAdminService {
     if (Number(existing.usedCount) === 0) {
       try {
         await this.couponsRepo.delete(id);
+        await this.audit('COUPON_DELETED', existing, { coupon: existing });
         return { deleted: true, deactivated: false };
       } catch {
         // Referenced by a checkout that was started with it: keep the row.
       }
     }
     await this.couponsRepo.update(id, { active: false });
+    await this.audit('COUPON_DEACTIVATED', existing, { usedCount: Number(existing.usedCount) });
     return { deleted: false, deactivated: true };
   }
 

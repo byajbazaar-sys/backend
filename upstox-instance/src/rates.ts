@@ -2,7 +2,7 @@ import { config } from './config';
 import type { LiveMarketMetalQuote, LiveMarketMetalRates } from './types';
 
 type LtpcTick = { ltp?: number; cp?: number; ltt?: number | string };
-type MarketQuote = { instrument_token?: string; last_price?: number };
+type MarketQuote = { instrument_token?: string; last_price?: number; cp?: number };
 
 let lastSnapshot: LiveMarketMetalRates = { configured: true };
 
@@ -24,7 +24,7 @@ export function buildRatesFromLtpc(
 ): LiveMarketMetalRates | null {
   const { upstox } = config;
   const gold = goldLtpc
-    ? mapLtpcQuote('GOLD', instrumentKeys.gold, goldLtpc, upstox.goldLtpGrams)
+    ? mapLtpcQuote('GOLD', instrumentKeys.gold, goldLtpc, upstox.goldLtpGrams, lastSnapshot.gold)
     : lastSnapshot.gold;
   const silver = silverLtpc
     ? mapLtpcQuote(
@@ -32,6 +32,7 @@ export function buildRatesFromLtpc(
         instrumentKeys.silver,
         silverLtpc,
         upstox.silverLtpPerKg ? 1000 : 1,
+        lastSnapshot.silver,
       )
     : lastSnapshot.silver;
 
@@ -54,14 +55,23 @@ function mapLtpcQuote(
   instrumentKey: string,
   tick: LtpcTick,
   divisor: number,
+  prev?: LiveMarketMetalQuote,
 ): LiveMarketMetalQuote | undefined {
   const contractLtp = tick.ltp;
   if (contractLtp == null || !Number.isFinite(contractLtp)) {
     return undefined;
   }
 
+  // Ticks that carry only LTP (REST snapshot, sparse feed frames) must not wipe the
+  // previous close / last-trade time we already know for the same contract.
+  const sameContract = prev?.instrumentKey === instrumentKey;
   const perGram = contractLtp / divisor;
-  const previousClose = tick.cp;
+  const previousClose =
+    tick.cp != null && Number.isFinite(tick.cp) && tick.cp > 0
+      ? tick.cp
+      : sameContract
+        ? prev?.previousClose
+        : undefined;
   let change: number | undefined;
   let changePercent: number | undefined;
   if (previousClose != null && Number.isFinite(previousClose) && previousClose > 0) {
@@ -76,7 +86,7 @@ function mapLtpcQuote(
     previousClose,
     change,
     changePercent: changePercent != null ? Math.round(changePercent * 100) / 100 : undefined,
-    lastTradedAt: tick.ltt != null ? String(tick.ltt) : undefined,
+    lastTradedAt: tick.ltt != null ? String(tick.ltt) : sameContract ? prev?.lastTradedAt : undefined,
     instrumentKey,
   };
 }
@@ -97,7 +107,9 @@ export function extractQuoteTick(quotes: Record<string, MarketQuote>, instrument
       key.replace('|', ':') === normalizedKey || quote.instrument_token?.replace('|', ':') === normalizedKey,
   );
   const ltp = entry?.[1].last_price;
-  return ltp != null && Number.isFinite(ltp) && ltp > 0 ? { ltp } : undefined;
+  if (ltp == null || !Number.isFinite(ltp) || ltp <= 0) return undefined;
+  const cp = entry?.[1].cp;
+  return cp != null && Number.isFinite(cp) && cp > 0 ? { ltp, cp } : { ltp };
 }
 
 export function extractLtpc(

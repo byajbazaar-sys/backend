@@ -23,7 +23,15 @@ import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
 import { ISubscriptionAdminService } from './i-subscription-admin.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { REFUND_SERVICE, RefundService } from './refund.service';
-import { RazorpayOptions, CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
+import {
+  ACTIVITY_LOGGER,
+  EActivityLogCategory,
+  IActivityLogger,
+  RazorpayOptions,
+  CACHE_NAMESPACE,
+  CACHE_SERVICE,
+  ICacheService,
+} from '../../../shared';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { isPaymentRefundable, remainingRefundableAmount } from '../utils/refund.util';
 import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
@@ -42,7 +50,26 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     private readonly razorpayOptions: RazorpayOptions,
+    @Inject(ACTIVITY_LOGGER) private readonly activityLogger: IActivityLogger,
   ) {}
+
+  /** Admin actions on billing go to the activity log; the admin is taken from the request. Never throws. */
+  private audit(
+    action: string,
+    entityType: string,
+    entityId: string,
+    userId: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    return this.activityLogger.record({
+      category: EActivityLogCategory.Payment,
+      action,
+      entityType,
+      entityId,
+      userId,
+      data: { byAdmin: true, ...data },
+    });
+  }
 
   async list(query: ListAdminSubscriptionsQueryModel): Promise<AdminSubscriptionsPagedResponseModel> {
     const page = query.pageNumber ?? DEFAULT_PAGE_NUMBER;
@@ -85,6 +112,10 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     const updated = await this.subscriptionsRepo.update(sub.id, {
       cancelAtPeriodEnd: false,
     });
+    await this.audit('SUBSCRIPTION_CANCELLED', 'subscription', sub.id, sub.userId, {
+      providerSubscriptionId: sub.providerSubscriptionId,
+      previousStatus: sub.status,
+    });
     const userRow = await this.loadUserRow(updated.userId);
     return this.toDetail(updated, null, userRow);
   }
@@ -97,6 +128,11 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
 
     if (sub.cancelAtPeriodEnd && sub.status === ESubscriptionStatus.Active) {
       const updated = await this.subscriptionsRepo.update(sub.id, { cancelAtPeriodEnd: false });
+      await this.audit('SUBSCRIPTION_RESUMED', 'subscription', sub.id, sub.userId, {
+        providerSubscriptionId: sub.providerSubscriptionId,
+        previousStatus: sub.status,
+        undidCancelAtPeriodEnd: true,
+      });
       const userRow = await this.loadUserRow(updated.userId);
       return this.toDetail(updated, null, userRow);
     }
@@ -106,6 +142,10 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
       const updated = await this.subscriptionsRepo.update(sub.id, {
         status: ESubscriptionStatus.Active,
         cancelAtPeriodEnd: false,
+      });
+      await this.audit('SUBSCRIPTION_RESUMED', 'subscription', sub.id, sub.userId, {
+        providerSubscriptionId: sub.providerSubscriptionId,
+        previousStatus: sub.status,
       });
       const userRow = await this.loadUserRow(updated.userId);
       return this.toDetail(updated, null, userRow);
@@ -173,6 +213,14 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
       reason: body.reason ?? null,
       rawJson: rzpRefund.raw,
     });
+    await this.audit('REFUND_CREATED', 'payment', payment.id, payment.userId, {
+      providerPaymentId: payment.providerPaymentId,
+      providerRefundId: rzpRefund.id,
+      amount: refundAmountInr,
+      currency: payment.currency ?? 'INR',
+      status: rzpRefund.status,
+      reason: body.reason ?? null,
+    });
 
     return plainToInstance(RefundResponseModel, saved, { excludeExtraneousValues: true });
   }
@@ -204,6 +252,11 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
 
     await this.usersRepo.update(user.id, { trialEndsAt: newTrialEndsAt });
     await this.cache.bumpUserCache(CACHE_NAMESPACE.USER_DETAILS, user.id);
+    await this.audit('TRIAL_EXTENDED', 'subscription', sub.id, user.id, {
+      previousTrialEndsAt: resolveTrialEndsAt(user, this.razorpayOptions.defaultTrialDays) ?? null,
+      trialEndsAt: newTrialEndsAt,
+      days: body.days ?? null,
+    });
     const userRow = await this.loadUserRow(sub.userId);
     return this.toDetail(sub, null, userRow);
   }

@@ -1,32 +1,23 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import axios, { AxiosRequestConfig } from 'axios';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { IKaggleWorkerPool, KagglePushResult, KaggleSessionState, KaggleWorker } from '../../application/ports';
+import {
+  IKaggleCredentialsRepository,
+  IKaggleWorkerPool,
+  KAGGLE_CREDENTIALS_REPOSITORY,
+  KagglePushResult,
+  KaggleSessionState,
+  KaggleWorker,
+} from '../../application/ports';
 import { MarketingConfig } from '../../marketing.config';
 
 /** RPC endpoints used by the official `kaggle` CLI (≥ 2.x). */
 const KAGGLE_API = 'https://api.kaggle.com/v1/kernels.KernelsApiService';
 
-interface KaggleAccountCredentials extends KaggleWorker {
+interface KaggleAccountCredentials {
+  id: string;
   key: string;
-}
-
-/**
- * Parses `KAGGLE_WORKERS`: comma-separated `username:key[:concurrency]` entries, one per Kaggle account.
- * `key` is the legacy API key (kaggle.json) or a new `KGAT_…` access token.
- */
-export function parseKaggleWorkers(raw: string | undefined, defaultConcurrency = 1): KaggleAccountCredentials[] {
-  const seen = new Set<string>();
-  return (raw ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      const [id, key, concurrency] = entry.split(':').map((p) => p.trim());
-      return { id, key, concurrency: Math.min(4, Math.max(1, Number(concurrency) || defaultConcurrency)) };
-    })
-    .filter((a) => a.id && a.key && !seen.has(a.id) && seen.add(a.id));
 }
 
 /** "123.5s" (protobuf Duration JSON) → seconds. */
@@ -37,24 +28,30 @@ function durationSeconds(value: unknown): number | null {
 }
 
 @Injectable()
+/** Kaggle accounts come from kaggle_credentials (managed by admins), read on every call so changes apply at once. */
 export class KaggleWorkerPool implements IKaggleWorkerPool {
-  private readonly accounts: KaggleAccountCredentials[];
-
   constructor(
     private readonly config: MarketingConfig,
+    @Inject(KAGGLE_CREDENTIALS_REPOSITORY) private readonly credentials: IKaggleCredentialsRepository,
     @InjectPinoLogger(KaggleWorkerPool.name) private readonly logger: PinoLogger,
-  ) {
-    this.accounts = parseKaggleWorkers(config.kaggleWorkers, config.kaggleDefaultConcurrency);
+  ) {}
+
+  async workers(): Promise<KaggleWorker[]> {
+    const rows = await this.credentials.list({ enabled: true });
+    for (const row of rows.filter((r) => !r.apiKey)) {
+      this.logger.warn({ account: row.username }, 'Kaggle API key could not be decrypted — account skipped');
+    }
+    return rows
+      .filter((r) => r.apiKey)
+      .map((r) => ({ id: r.username, concurrency: Math.min(4, Math.max(1, r.concurrency || 1)) }));
   }
 
-  workers(): KaggleWorker[] {
-    return this.accounts.map(({ id, concurrency }) => ({ id, concurrency }));
-  }
-
-  private account(workerId: string): KaggleAccountCredentials {
-    const account = this.accounts.find((a) => a.id === workerId);
-    if (!account) throw new ServiceUnavailableException(`Kaggle account ${workerId} is not configured`);
-    return account;
+  private async account(workerId: string): Promise<KaggleAccountCredentials> {
+    const row = await this.credentials.find(workerId);
+    if (!row || !row.enabled || !row.apiKey) {
+      throw new ServiceUnavailableException(`Kaggle account ${workerId} is not configured`);
+    }
+    return { id: row.username, key: row.apiKey };
   }
 
   private request(account: KaggleAccountCredentials): AxiosRequestConfig {
@@ -65,7 +62,15 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
   }
 
   async gpuQuota(workerId: string): Promise<{ hoursLeft: number | null }> {
-    const account = this.account(workerId);
+    return this.quota(await this.account(workerId));
+  }
+
+  async verifyCredentials(username: string, apiKey: string): Promise<{ hoursLeft: number | null }> {
+    return this.quota({ id: username, key: apiKey });
+  }
+
+  private async quota(account: KaggleAccountCredentials): Promise<{ hoursLeft: number | null }> {
+    const workerId = account.id;
     const res = await axios.post(`${KAGGLE_API}/GetAcceleratorQuotaStatistics`, {}, this.request(account));
     if (res.status === 401 || res.status === 403) {
       throw new ServiceUnavailableException(`Kaggle rejected the credentials for ${workerId} (HTTP ${res.status})`);
@@ -84,7 +89,7 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
     kernelName: string,
   ): Promise<{ state: KaggleSessionState; failureMessage?: string }> {
     try {
-      const account = this.account(workerId);
+      const account = await this.account(workerId);
       const res = await axios.post(
         `${KAGGLE_API}/GetKernelSessionStatus`,
         { userName: account.id, kernelSlug: kernelName },
@@ -117,7 +122,7 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
     kernel: { name: string; title: string },
     notebook: Record<string, unknown>,
   ): Promise<KagglePushResult> {
-    const account = this.account(workerId);
+    const account = await this.account(workerId);
     const res = await axios.post(
       `${KAGGLE_API}/ApiSaveKernel`,
       {

@@ -1,4 +1,13 @@
-import { KaggleAccount, MarketingBrand, MarketingCampaign, MarketingScene, RenderJob } from '../domain';
+import {
+  KaggleAccount,
+  KaggleCredential,
+  MarketingBrand,
+  MarketingCampaign,
+  MarketingScene,
+  Photoshoot,
+  PhotoshootShot,
+  RenderJob,
+} from '../domain';
 import { EKaggleAccountStatus, ERenderJobStatus } from '../enums';
 
 export const MARKETING_CAMPAIGNS_REPOSITORY = 'MARKETING_CAMPAIGNS_REPOSITORY';
@@ -36,6 +45,20 @@ export interface IKaggleAccountsRepository {
   transition(username: string, from: EKaggleAccountStatus[], patch: Partial<KaggleAccount>): Promise<boolean>;
 }
 
+export const KAGGLE_CREDENTIALS_REPOSITORY = 'KAGGLE_CREDENTIALS_REPOSITORY';
+/** Kaggle API credentials, managed by admins. Implementations encrypt `apiKey` at rest. */
+export interface IKaggleCredentialsRepository {
+  list(filter?: { enabled?: boolean }): Promise<KaggleCredential[]>;
+  find(username: string): Promise<KaggleCredential | null>;
+  create(credential: Omit<KaggleCredential, 'id' | 'createdAt' | 'updatedAt'>): Promise<KaggleCredential>;
+  update(
+    username: string,
+    patch: Partial<Pick<KaggleCredential, 'apiKey' | 'concurrency' | 'enabled' | 'label'>>,
+  ): Promise<KaggleCredential | null>;
+  /** False when no such account. */
+  delete(username: string): Promise<boolean>;
+}
+
 export const RENDER_JOBS_REPOSITORY = 'RENDER_JOBS_REPOSITORY';
 export interface IRenderJobsRepository {
   create(job: Omit<RenderJob, 'id'>): Promise<RenderJob>;
@@ -54,4 +77,23 @@ export interface IRenderJobsRepository {
   findStale(statuses: ERenderJobStatus[], olderThan: Date): Promise<RenderJob[]>;
   /** Waiting / busy job for a campaign or brand logo, to avoid queuing duplicates. */
   findOpenFor(filter: { campaignId?: string; userId?: string; kind?: string }): Promise<RenderJob | null>;
+}
+
+export const MARKETING_PHOTOSHOOTS_REPOSITORY = 'MARKETING_PHOTOSHOOTS_REPOSITORY';
+export interface IMarketingPhotoshootsRepository {
+  create(shoot: Omit<Photoshoot, 'id'>): Promise<Photoshoot>;
+  findById(id: string): Promise<Photoshoot | null>;
+  findForUser(id: string, userId: string): Promise<Photoshoot | null>;
+  listForUser(userId: string, limit: number): Promise<Photoshoot[]>;
+  update(id: string, patch: Partial<Photoshoot>): Promise<Photoshoot | null>;
+  delete(id: string): Promise<void>;
+  countActiveForUser(userId: string): Promise<number>;
+}
+
+export const MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY = 'MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY';
+export interface IMarketingPhotoshootShotsRepository {
+  createMany(shots: Omit<PhotoshootShot, 'id'>[]): Promise<PhotoshootShot[]>;
+  listFor(photoshootIds: string[]): Promise<PhotoshootShot[]>;
+  findByIndex(photoshootId: string, index: number): Promise<PhotoshootShot | null>;
+  update(id: string, patch: Partial<PhotoshootShot>): Promise<PhotoshootShot | null>;
 }

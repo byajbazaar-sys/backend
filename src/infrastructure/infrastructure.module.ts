@@ -21,7 +21,6 @@ import {
   NOTIFICATIONS_REPOSITORY,
   SUPPORT_REQUESTS_REPOSITORY,
   TRANSACTIONS_REPOSITORY,
-  TRANSACTION_LOGS_REPOSITORY,
   USERS_FILE_STORAGE,
   USERS_REPOSITORY,
   INVENTORY_CATEGORIES_REPOSITORY,
@@ -29,7 +28,6 @@ import {
   POS_SESSIONS_REPOSITORY,
   WEBSOCKET_CONNECTIONS_REPOSITORY,
   SALES_BILLS_REPOSITORY,
-  BILL_LOGS_REPOSITORY,
   METAL_RATES_REPOSITORY,
   API_CONFIGURATION_REPOSITORY,
   API_ACCESS_TOKEN_REPOSITORY,
@@ -48,7 +46,6 @@ import {
   ORDERS_REPOSITORY,
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
   WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
-  WHATSAPP_MESSAGES_REPOSITORY,
   META_GRAPH_CLIENT,
   RazorpayOptions,
   MetaWhatsAppOptions,
@@ -164,10 +161,9 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       provide: TRANSACTIONS_REPOSITORY,
       useClass: TransactionsRepository,
     },
-    {
-      provide: TRANSACTION_LOGS_REPOSITORY,
-      useClass: TransactionLogsRepository,
-    },
+    // Main-database bill_logs / transaction_logs. The repository tokens are provided by LogsModule (src/logs), which
+    // uses these as its fallback store until a stream has moved to the logs database.
+    TransactionLogsRepository,
     {
       provide: DUES_REPOSITORY,
       useClass: DuesRepository,
@@ -200,11 +196,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       provide: SALES_BILLS_REPOSITORY,
       useClass: SalesBillsRepository,
     },
-    {
-      provide: BILL_LOGS_REPOSITORY,
-      useClass: BillLogsRepository,
-    },
-
+    BillLogsRepository,
     {
       provide: METAL_RATES_REPOSITORY,
       useClass: MetalRatesRepository,
@@ -277,10 +269,8 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       provide: WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
       useClass: WhatsAppConversationWindowsRepository,
     },
-    {
-      provide: WHATSAPP_MESSAGES_REPOSITORY,
-      useClass: WhatsAppMessagesRepository,
-    },
+    // Main-database whatsapp_messages; WHATSAPP_MESSAGES_REPOSITORY is provided by LogsModule (src/logs).
+    WhatsAppMessagesRepository,
     {
       provide: WEBSOCKET_MESSAGE_SERVICE,
       useClass: WebSocketMessageService,
@@ -455,7 +445,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     POS_SESSIONS_REPOSITORY,
     WEBSOCKET_CONNECTIONS_REPOSITORY,
     SALES_BILLS_REPOSITORY,
-    BILL_LOGS_REPOSITORY,
+    BillLogsRepository,
     METAL_RATES_REPOSITORY,
     API_CONFIGURATION_REPOSITORY,
     API_ACCESS_TOKEN_REPOSITORY,
@@ -471,13 +461,13 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     ORDERS_REPOSITORY,
     WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
     WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
-    WHATSAPP_MESSAGES_REPOSITORY,
+    WhatsAppMessagesRepository,
     LABEL_DESIGNER_SETTINGS_REPOSITORY,
     META_GRAPH_CLIENT,
     COUPON_REDEMPTIONS_REPOSITORY,
     REFUNDS_REPOSITORY,
     WEBSOCKET_MESSAGE_SERVICE,
-    TRANSACTION_LOGS_REPOSITORY,
+    TransactionLogsRepository,
     EMAIL_SERVICE,
     SMS_OTP_SENDER,
     GOOGLE_OAUTH_SERVICE,

@@ -4,7 +4,14 @@ import { ESortOrder, getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { In, Repository } from 'typeorm';
 
-import { Due, DuesFilterOptions, IDuesRepository, EDueType, WhatsAppDueReminderCandidate } from '../../../application';
+import {
+  Due,
+  DuesFilterOptions,
+  IDuesRepository,
+  EDueType,
+  PastDueMarked,
+  WhatsAppDueReminderCandidate,
+} from '../../../application';
 import { UpdateDueEntityInput } from '../../../application/features/transactions/models/update-due-entity-input.model';
 import { EWhatsAppConnectionStatus } from '../../../application/features/whatsapp/enums';
 import { DueEntity } from '../entities/due.entity';
@@ -98,14 +105,24 @@ export class DuesRepository implements IDuesRepository {
   }
 
   async updatePastDues(): Promise<number> {
+    return (await this.markPastDues()).length;
+  }
+
+  async markPastDues(): Promise<PastDueMarked[]> {
     const result = await this.dueRepo
       .createQueryBuilder()
       .update(DueEntity)
       .set({ type: EDueType.PAST_DUE })
       .where('dueDate < :now', { now: new Date() })
       .andWhere('type = :type', { type: EDueType.UPCOMING_DUE })
+      .updateEntity(false)
+      .returning(
+        'id AS "dueId", created_by AS "userId", loan_id AS "loanId", customer_id AS "customerId", ' +
+          'due_amount AS "dueAmount", due_date AS "dueDate"',
+      )
       .execute();
-    return result.affected ?? 0;
+    const rows = (Array.isArray(result.raw) ? result.raw : []) as PastDueMarked[];
+    return rows.map((row) => ({ ...row, dueAmount: Number(row.dueAmount) }));
   }
 
   async findById(id: string, createdBy: string): Promise<Due> {

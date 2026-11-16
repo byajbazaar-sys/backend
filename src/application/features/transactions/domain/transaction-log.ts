@@ -55,4 +55,6 @@ export interface CreateTransactionLogInput {
   newPaidIn?: ETransactionPaidIn;
   loanVersion?: number;
   performedBy: string;
+  /** The shop that owns the loan; defaults to performedBy (owners make their own changes). */
+  userId?: string;
 }

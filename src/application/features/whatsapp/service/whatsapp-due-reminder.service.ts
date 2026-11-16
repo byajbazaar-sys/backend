@@ -4,6 +4,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { IWhatsAppDueReminderService, WhatsAppDueReminderRunResult } from './i-whatsapp-due-reminder.service';
 import { IWhatsAppService, WHATSAPP_SERVICE } from './i-whatsapp.service';
 import { DUES_REPOSITORY, IDuesRepository } from '../../../shared/repository/i-due.repository';
+import { ACTIVITY_LOGGER, EActivityLogCategory, IActivityLogger } from '../../../shared/services/i-activity-logger';
 import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
 import { EWhatsAppMessageContextType } from '../enums';
 import { normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
@@ -17,6 +18,7 @@ export class WhatsAppDueReminderService implements IWhatsAppDueReminderService {
   constructor(
     @Inject(DUES_REPOSITORY) private readonly duesRepo: IDuesRepository,
     @Inject(WHATSAPP_SERVICE) private readonly whatsappService: IWhatsAppService,
+    @Inject(ACTIVITY_LOGGER) private readonly activityLogger: IActivityLogger,
     @InjectPinoLogger(WhatsAppDueReminderService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -59,6 +61,9 @@ export class WhatsAppDueReminderService implements IWhatsAppDueReminderService {
         );
         await this.duesRepo.markWhatsAppReminderSent(candidate.dueId);
         result.sent += 1;
+        await this.recordReminder('REMINDER_SENT', candidate.dueId, candidate.userId, {
+          dueAmount: Number(candidate.dueAmount),
+        });
         this.logger.info(
           {
             operation: 'sendPendingDueReminders',
@@ -74,6 +79,10 @@ export class WhatsAppDueReminderService implements IWhatsAppDueReminderService {
           { err, operation: 'sendPendingDueReminders', dueId: candidate.dueId, userId: candidate.userId },
           'Failed to send WhatsApp due reminder',
         );
+        await this.recordReminder('REMINDER_FAILED', candidate.dueId, candidate.userId, {
+          dueAmount: Number(candidate.dueAmount),
+          error: String((err as Error)?.message ?? err).slice(0, 500),
+        });
       }
     }
 
@@ -82,6 +91,25 @@ export class WhatsAppDueReminderService implements IWhatsAppDueReminderService {
     }
 
     return result;
+  }
+
+  /** Due history (activity log). Never throws. */
+  private recordReminder(
+    action: 'REMINDER_SENT' | 'REMINDER_FAILED',
+    dueId: string,
+    userId: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    return this.activityLogger.record({
+      category: EActivityLogCategory.Due,
+      action,
+      entityType: 'due',
+      entityId: dueId,
+      userId,
+      performedBy: null,
+      channel: 'system',
+      data: { via: 'whatsapp', template: DUE_REMINDER_TEMPLATE.name, ...data },
+    });
   }
 
   private formatInrAmount(amount: number): string {

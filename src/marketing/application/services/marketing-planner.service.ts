@@ -72,7 +72,7 @@ export class MarketingPlannerService {
       }
 
       await this.update(campaign, 8, 'Designing 5 scenes');
-      const source = await this.storage.readAsync(campaign.sourceImageKey);
+      const source = await this.readSource(campaign);
       let done = 0;
       const pending = scenes.filter((s) => s.imageStatus !== EAssetStatus.Ready);
       for (let i = 0; i < pending.length; i += IMAGE_CONCURRENCY) {
@@ -84,7 +84,7 @@ export class MarketingPlannerService {
               campaign,
               8 + Math.round((22 * done) / pending.length),
               `Designing scenes (${done}/${pending.length})`,
-              true,
+              false, // a scene image changed: clients refetch so it appears right away
             );
           }),
         );
@@ -111,8 +111,15 @@ export class MarketingPlannerService {
     const campaign = await this.campaigns.findById(campaignId);
     const scene = campaign ? await this.scenes.findByIndex(campaignId, index) : null;
     if (!campaign || !scene) return;
-    const source = await this.storage.readAsync(campaign.sourceImageKey);
-    const ok = await this.generateSceneImage(campaign, scene, source);
+    let ok = false;
+    try {
+      ok = await this.generateSceneImage(campaign, scene, await this.readSource(campaign));
+    } catch (err) {
+      await this.scenes.update(scene.id, {
+        imageStatus: EAssetStatus.Failed,
+        error: `Image: ${(err as Error).message}`.slice(0, 500),
+      });
+    }
     if (ok && renderVideo) {
       await this.render.queueCampaignRender(campaignId, [index]);
       return;
@@ -178,8 +185,12 @@ export class MarketingPlannerService {
         buildSceneImagePrompt(scene.imagePrompt, campaign.title),
         SCENE_SIZE,
       );
-      const key = MarketingKeys.sceneImage(campaign.userId, campaign.id, scene.index);
-      await this.storage.writeAsync(key, Buffer.from(image.base64, 'base64'), image.mimeType || 'image/png');
+      // The storage may change the extension to the real image type (Cloudflare returns JPEG): keep the stored key.
+      const key = await this.storage.writeAsync(
+        MarketingKeys.sceneImage(campaign.userId, campaign.id, scene.index),
+        Buffer.from(image.base64, 'base64'),
+        image.mimeType || 'image/png',
+      );
       if (scene.imageKey && scene.imageKey !== key) await this.storage.removeAsync(scene.imageKey).catch(() => false);
       await this.scenes.update(scene.id, { imageKey: key, imageStatus: EAssetStatus.Ready });
       return true;
@@ -194,6 +205,29 @@ export class MarketingPlannerService {
       });
       return false;
     }
+  }
+
+  /** The campaign's product photo. Fails with a clear message (not a null crash) when it is missing. */
+  private async readSource(campaign: MarketingCampaign): Promise<Buffer> {
+    const key = campaign.sourceImageKey ? await this.findStored(campaign.sourceImageKey) : null;
+    const data = key ? await this.storage.readAsync(key) : null;
+    if (!data?.length) throw new Error('The product photo could not be found. Please create the campaign again.');
+    if (key !== campaign.sourceImageKey) await this.campaigns.update(campaign.id, { sourceImageKey: key });
+    return data;
+  }
+
+  /**
+   * The key an object is actually stored under. File storage replaces the extension with the detected image type, so
+   * keys recorded by older versions (e.g. source.png for a JPEG photo) are found under their real extension.
+   */
+  private async findStored(key: string): Promise<string | null> {
+    if (await this.storage.existsAsync(key)) return key;
+    const base = key.replace(/\.[a-z0-9]+$/i, '');
+    for (const ext of ['jpg', 'png', 'webp', 'jpeg']) {
+      const candidate = `${base}.${ext}`;
+      if (candidate !== key && (await this.storage.existsAsync(candidate))) return candidate;
+    }
+    return null;
   }
 
   private async brandFor(userId: string): Promise<MarketingBrand> {
@@ -212,7 +246,15 @@ export class MarketingPlannerService {
   /** Brand logo image, generated once per business and reused by every campaign. */
   private async ensureLogo(userId: string): Promise<void> {
     const brand = await this.brandFor(userId);
-    if (brand.logoImageStatus === EAssetStatus.Ready && brand.logoImageKey) return;
+    if (brand.logoImageStatus === EAssetStatus.Ready && brand.logoImageKey) {
+      // Older logos were recorded with a .png key while the file was stored as .jpg: repair the key.
+      const stored = await this.findStored(brand.logoImageKey);
+      if (stored === brand.logoImageKey) return;
+      if (stored) {
+        await this.brands.upsert({ userId, logoImageKey: stored });
+        return;
+      }
+    }
     await this.generateLogoImage(brand);
   }
 
@@ -221,8 +263,11 @@ export class MarketingPlannerService {
     await this.events.brand(brand.userId);
     try {
       const image = await this.ai.textToImage(buildLogoImagePrompt(brand.businessName), LOGO_SIZE);
-      const key = MarketingKeys.logoImage(brand.userId);
-      await this.storage.writeAsync(key, Buffer.from(image.base64, 'base64'), image.mimeType || 'image/png');
+      const key = await this.storage.writeAsync(
+        MarketingKeys.logoImage(brand.userId),
+        Buffer.from(image.base64, 'base64'),
+        image.mimeType || 'image/png',
+      );
       if (brand.logoImageKey && brand.logoImageKey !== key)
         await this.storage.removeAsync(brand.logoImageKey).catch(() => false);
       // A new logo image makes the old logo video stale: it is re-rendered with the next campaign (or on request).

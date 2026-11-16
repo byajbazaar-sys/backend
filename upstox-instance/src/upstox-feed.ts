@@ -165,8 +165,11 @@ export class UpstoxFeedClient {
   private async refreshRestSnapshot(): Promise<void> {
     if (!this.running || !this.instrumentKeys) return;
     try {
-      const response = await axios.get<{ data?: Record<string, { instrument_token?: string; last_price?: number }> }>(
-        'https://api.upstox.com/v2/market-quote/ltp',
+      // v3 LTP includes `cp` (previous close) so REST-sourced quotes keep change / change%.
+      const response = await axios.get<{
+        data?: Record<string, { instrument_token?: string; last_price?: number; cp?: number }>;
+      }>(
+        'https://api.upstox.com/v3/market-quote/ltp',
         {
           headers: upstoxAuthorizationHeaders(),
           params: {

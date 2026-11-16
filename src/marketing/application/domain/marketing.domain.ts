@@ -59,6 +59,22 @@ export interface KaggleAccount {
   gpuInfo?: string | null;
 }
 
+/** API credentials of one Kaggle account (kaggle_credentials). `apiKey` is plain text here; it is encrypted at rest. */
+export interface KaggleCredential {
+  id: string;
+  /** Kaggle username (lower-case); also the worker id used in kernel refs and kaggle_accounts. */
+  username: string;
+  /** Legacy API key (kaggle.json) or a `KGAT_…` access token. */
+  apiKey: string;
+  /** Parallel notebooks this account may run (1–4). */
+  concurrency: number;
+  /** Disabled accounts are kept but not used for renders. */
+  enabled: boolean;
+  label?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 export interface RenderClipSpec {
   /** "scene-0" … "scene-4", or "logo". */
   key: string;
@@ -100,4 +116,46 @@ export interface RenderJob {
   updatedAt?: Date;
   startedAt?: Date | null;
   finishedAt?: Date | null;
+}
+
+/** One product photo → a set of AI ad photos. */
+export interface Photoshoot {
+  id: string;
+  userId: string;
+  title: string;
+  inventoryItemId: string | null;
+  sourceImageKey: string;
+  /** What the piece is, used to describe it to the image model (keeps metal / design faithful). */
+  piece: PhotoshootPiece;
+  setting: string;
+  model: string;
+  outfit: string;
+  aspect: string;
+  status: string;
+  error?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface PhotoshootPiece {
+  /** e.g. "bracelet", "necklace", "pair of earrings". */
+  noun: string;
+  metal: string;
+  /** Where it is worn: neck | ears | finger | wrist | ankle | forehead | nose | hand. */
+  wornOn: string;
+  /** Extra words from the item (name, purity, stones) to anchor the design. */
+  detail?: string;
+}
+
+export interface PhotoshootShot {
+  id: string;
+  photoshootId: string;
+  index: number;
+  /** present | closeup | hands | worn */
+  kind: string;
+  prompt: string;
+  imageKey: string | null;
+  status: string;
+  error?: string | null;
+  updatedAt?: Date;
 }

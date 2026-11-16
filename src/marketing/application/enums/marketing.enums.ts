@@ -39,12 +39,12 @@ export enum ERenderJobStatus {
 export const BUSY_RENDER_STATUSES = [ERenderJobStatus.Starting, ERenderJobStatus.Running];
 
 export enum EKaggleAccountStatus {
-  /** Listed in KAGGLE_WORKERS, setup not run yet. */
+  /** Enabled in kaggle_credentials, setup not run yet. */
   New = 'NEW',
   SettingUp = 'SETTING_UP',
   Ready = 'READY',
   Failed = 'FAILED',
-  /** Removed from KAGGLE_WORKERS. */
+  /** Credentials removed or disabled in kaggle_credentials. */
   Disabled = 'DISABLED',
 }
 
@@ -56,3 +56,36 @@ export type MarketingStyle = (typeof MARKETING_STYLES)[number];
 /** fast = 480×832 render (quicker on free GPUs), hd = 704×1280. Both upscaled to 1080×1920. */
 export const MARKETING_QUALITIES = ['fast', 'hd'] as const;
 export type MarketingQuality = (typeof MARKETING_QUALITIES)[number];
+
+// ---------------------------------------------------------------- AI photoshoots
+
+/** A photoshoot = one product photo → a set of ad photos (on a model, close-up, hands, worn). */
+export enum EPhotoshootStatus {
+  Generating = 'GENERATING',
+  Ready = 'READY',
+  Partial = 'PARTIAL',
+  Failed = 'FAILED',
+}
+
+/** Where the shoot happens. */
+export const PHOTOSHOOT_SETTINGS = ['showroom', 'studio', 'wedding', 'festive'] as const;
+export type PhotoshootSetting = (typeof PHOTOSHOOT_SETTINGS)[number];
+
+/** The model's outfit (women) — men always wear a kurta / sherwani look. */
+export const PHOTOSHOOT_OUTFITS = ['kurta', 'saree', 'lehenga', 'western'] as const;
+export type PhotoshootOutfit = (typeof PHOTOSHOOT_OUTFITS)[number];
+
+export const PHOTOSHOOT_MODELS = ['woman', 'man'] as const;
+export type PhotoshootModel = (typeof PHOTOSHOOT_MODELS)[number];
+
+/** Output shape → pixel size sent to the image model. */
+export const PHOTOSHOOT_ASPECTS = {
+  '3:4': { width: 768, height: 1024 },
+  '1:1': { width: 1024, height: 1024 },
+  '4:5': { width: 864, height: 1080 },
+  '9:16': { width: 720, height: 1280 },
+} as const;
+export type PhotoshootAspect = keyof typeof PHOTOSHOOT_ASPECTS;
+
+export const PHOTOSHOOT_METALS = ['gold', 'silver', 'rose_gold', 'platinum', 'diamond'] as const;
+export type PhotoshootMetal = (typeof PHOTOSHOOT_METALS)[number];

@@ -104,7 +104,10 @@ export class MarketingCampaignsService {
       if (!item) throw new NotFoundException('Inventory item not found');
       if (!item.imageKey)
         throw new BadRequestException('This item has no photo yet. Add one or upload a photo instead.');
-      image = { data: await this.catalog.readImage(item.imageKey), ext: 'png' };
+      const data = await this.catalog.readImage(item.imageKey);
+      if (!data?.length)
+        throw new BadRequestException("This item's photo could not be loaded. Re-upload it or upload a photo instead.");
+      image = { data, ext: 'png' }; // the storage corrects the extension to the real image type
       title = input.title?.trim() || item.itemName;
       inventoryItemId = item.id;
     } else {
@@ -129,9 +132,15 @@ export class MarketingCampaignsService {
       progress: 1,
       stageMessage: 'Queued',
     });
-    const sourceImageKey = MarketingKeys.source(userId, campaign.id, image.ext);
+    let sourceImageKey: string;
     try {
-      await this.storage.writeAsync(sourceImageKey, image.data, `image/${image.ext === 'jpg' ? 'jpeg' : image.ext}`);
+      // writeAsync stores under the real image type's extension (an inventory JPEG becomes source.jpg) and returns
+      // that key — record it, or the photo can't be read back later.
+      sourceImageKey = await this.storage.writeAsync(
+        MarketingKeys.source(userId, campaign.id, image.ext),
+        image.data,
+        `image/${image.ext === 'jpg' ? 'jpeg' : image.ext}`,
+      );
     } catch (err) {
       await this.campaigns.delete(campaign.id);
       throw err;

@@ -193,7 +193,7 @@ export class MarketingRenderService {
 
     const accounts = await this.accounts.list();
     const busy = await this.jobs.countBusyByWorker();
-    const configured = new Map(this.pool.workers().map((w) => [w.id, w]));
+    const configured = new Map((await this.pool.workers()).map((w) => [w.id, w]));
     let workLeft = true;
 
     for (const account of accounts) {
@@ -232,11 +232,11 @@ export class MarketingRenderService {
   }
 
   /**
-   * Keeps kaggle_accounts in line with KAGGLE_WORKERS. A new (or re-added) account is checked (credentials + GPU quota)
+   * Keeps kaggle_accounts in line with the enabled rows of kaggle_credentials. A new (or re-added) account is checked (credentials + GPU quota)
    * and gets a one-time SETUP notebook; it is used for renders only once that reports back READY.
    */
   async syncAccounts(): Promise<void> {
-    const configured = this.pool.workers();
+    const configured = await this.pool.workers();
     const known = new Map((await this.accounts.list()).map((a) => [a.username, a]));
 
     for (const worker of configured) {
@@ -526,6 +526,9 @@ export class MarketingRenderService {
     // Only scenes this job was still making; keeps the first (most specific) error message.
     if (scene?.videoStatus === EAssetStatus.Generating) {
       await this.scenes.update(scene.id, { videoStatus: EAssetStatus.Failed, error: message?.slice(0, 500) ?? null });
+      // Show the failed scene right away (not only when the whole campaign settles).
+      const campaign = await this.campaigns.findById(job.campaignId);
+      if (campaign) await this.events.campaign(campaign, true);
     }
   }
 

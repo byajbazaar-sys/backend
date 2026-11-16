@@ -19,8 +19,9 @@ export interface IMarketingFileStorage {
  *  - dispatch: sync Kaggle accounts (setting up new ones) and hand waiting render jobs to free accounts
  *  - watch:    watchdog for a running render job: restarts it in a new session when the Kaggle session expired,
  *              crashed or hung
+ *  - photoshoot: generate an AI photoshoot's photos (or one photo again)
  */
-export type MarketingQueueStep = 'plan' | 'image' | 'logo' | 'dispatch' | 'watch';
+export type MarketingQueueStep = 'plan' | 'image' | 'logo' | 'dispatch' | 'watch' | 'photoshoot';
 
 export interface MarketingQueueMessage {
   step: MarketingQueueStep;
@@ -33,6 +34,9 @@ export interface MarketingQueueMessage {
   target?: 'image' | 'video' | 'both';
   /** watch step: the render job to check. */
   renderJobId?: string;
+  /** photoshoot step: the shoot, and optionally the one photo to make again. */
+  photoshootId?: string;
+  shotIndex?: number;
 }
 
 /** Marketing job queue (Upstash QStash). Keeps Kaggle from being flooded: dispatches run one at a time. */

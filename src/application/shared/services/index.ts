@@ -12,3 +12,4 @@ export * from './i-redis.service';
 export * from './i-cache.service';
 export * from './i-app-integrity.service';
 export * from './i-sms-otp.sender';
+export * from './i-activity-logger';

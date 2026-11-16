@@ -45,9 +45,11 @@ export class MarketingConfig {
   /** wss:// URL of the API Gateway WebSocket the notebook streams progress to. */
   readonly websocketUrl = env('WEBSOCKET_API_URL');
 
-  /** Kaggle accounts: "username:key[:concurrency]", comma-separated. */
-  readonly kaggleWorkers = env('KAGGLE_WORKERS') ?? '';
-  readonly kaggleDefaultConcurrency = Number(env('KAGGLE_WORKER_CONCURRENCY') ?? 1) || 1;
+  /**
+   * Encrypts secrets stored in the marketing database (Kaggle API keys — accounts are managed through the admin
+   * endpoints, not env vars). Falls back to TOKEN_SECRET; changing it makes stored keys unreadable.
+   */
+  readonly credentialsSecret = env('MARKETING_CREDENTIALS_SECRET') ?? env('TOKEN_SECRET');
   readonly kaggleMachineShape = env('KAGGLE_MACHINE_SHAPE') ?? 'NvidiaTeslaT4';
   /** Kaggle's GPU session limit; the notebook hands over to a new session before reaching it. */
   readonly kaggleSessionHours = Number(env('KAGGLE_SESSION_HOURS') ?? 12) || 12;
