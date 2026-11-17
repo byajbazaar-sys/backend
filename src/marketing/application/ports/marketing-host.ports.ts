@@ -26,24 +26,6 @@ export interface IMarketingNotifier {
   notifyUser(userId: string, payload: Record<string, unknown>): Promise<void>;
 }
 
-export interface GeneratedImageData {
-  base64: string;
-  mimeType: string;
-}
-
-/** Cloudflare Workers AI: image-to-image (existing FLUX model), text-to-image (logos) and a cheap text model. */
-export const MARKETING_AI = 'MARKETING_AI';
-export interface IMarketingAi {
-  imageToImage(
-    image: GeneratedImageData,
-    prompt: string,
-    size: { width: number; height: number },
-  ): Promise<GeneratedImageData>;
-  textToImage(prompt: string, size: { width: number; height: number }): Promise<GeneratedImageData>;
-  /** Returns the model's text reply. */
-  generateText(system: string, user: string, options?: { maxTokens?: number; temperature?: number }): Promise<string>;
-}
-
 /**
  * Activity log (ByajBazaar logs service, separate logs database): campaign / photoshoot lifecycle, render jobs and
  * Kaggle account changes. Implementations never throw.

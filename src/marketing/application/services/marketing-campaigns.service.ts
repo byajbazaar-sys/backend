@@ -85,7 +85,7 @@ export class MarketingCampaignsService {
       : 'studio';
     const quality = (MARKETING_QUALITIES as readonly string[]).includes(input.quality ?? '')
       ? (input.quality as MarketingQuality)
-      : 'fast';
+      : 'hd';
     if (!input.inventoryItemId && !input.image?.base64) {
       throw new BadRequestException('Choose an inventory item or upload a photo.');
     }
@@ -177,7 +177,7 @@ export class MarketingCampaignsService {
   }
 
   /**
-   * Regenerate one scene: `image` = new scene image (Cloudflare) then a new video; `video` = new video from the
+   * Regenerate one scene: `image` = new Kaggle-generated scene image then a new video; `video` = new video from the
    * current image. Both re-merge the film.
    */
   async regenerateScene(userId: string, id: string, index: number, target: 'image' | 'video'): Promise<CampaignView> {
@@ -191,6 +191,10 @@ export class MarketingCampaignsService {
     const job = await this.jobs.findOpenFor({ campaignId: id, kind: ERenderJobKind.Campaign });
     if (job && BUSY_RENDER_STATUSES.includes(job.status)) {
       throw new ConflictException('This campaign is rendering right now. Try again when it finishes.');
+    }
+    const imageJob = await this.jobs.findOpenFor({ campaignId: id, kind: ERenderJobKind.Images });
+    if (imageJob) {
+      throw new ConflictException('This campaign is generating images right now. Try again when it finishes.');
     }
 
     if (target === 'image') {

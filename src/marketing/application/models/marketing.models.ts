@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 import {
   IsIn,
+  IsArray,
   IsInt,
   IsNumber,
   IsOptional,
@@ -173,4 +174,14 @@ export class MarketingWorkerEventModel {
   @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^(scene-\d|logo)$/) clipKey?: string;
   @ApiPropertyOptional() @IsOptional() @IsString({ each: true }) failedClips?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) gpuInfo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(4) imageIndex?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4000) imagePrompt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) motionPrompt?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(4, { each: true })
+  failedImages?: number[];
 }

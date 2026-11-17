@@ -117,16 +117,21 @@ def find_ffmpeg():
     return exe
 `;
 
-/** One-time account check: GPU T4 × 2, internet to Hugging Face, ffmpeg, and the callback channel. */
+/** One-time account check: Kaggle GPU access, model hosting, ffmpeg, and the callback channel. */
 const CELL_SETUP_CHECK = `
 try:
     gpus = gpu_names()
     if not gpus:
         raise RuntimeError("No GPU in this session. Kaggle needs a verified phone number for GPU access.")
-    r = requests.head("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors",
-                      allow_redirects=True, timeout=30)
-    if r.status_code >= 400:
-        raise RuntimeError(f"Model host not reachable (HTTP {r.status_code}). Turn on Internet for this account.")
+    model_checks = [
+        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors",
+        "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct/resolve/main/config.json",
+        "https://huggingface.co/segmind/SSD-1B/resolve/main/model_index.json",
+    ]
+    for model_url in model_checks:
+        r = requests.head(model_url, allow_redirects=True, timeout=30)
+        if r.status_code >= 400:
+            raise RuntimeError(f"Model host not reachable: {model_url} (HTTP {r.status_code}). Check Kaggle Internet access.")
     ffmpeg = find_ffmpeg()
     disk = shutil.disk_usage("/tmp").free / 1e9
     if disk < 25:
@@ -251,10 +256,11 @@ except Exception as e:
 /** Clip rendering + Reel encode + upload, and the crossfade merge. merge_clips() is also unit-tested locally. */
 export const CELL_RENDER_AND_MERGE = `
 PRESETS = {
-    "reel_hq":   {"width": 704, "height": 1280, "frames": 121, "fps": 24, "steps": 20},
-    "reel_fast": {"width": 480, "height": 832,  "frames": 121, "fps": 24, "steps": 20},
+    "reel_hq":   {"width": 960, "height": 1728, "frames": 121, "fps": 24, "steps": 40},
+    "reel_fast": {"width": 768, "height": 1344, "frames": 121, "fps": 24, "steps": 24},
 }
-CFG, SHIFT = 5.0, 8.0
+# Higher denoise and a gentler shift preserve jewellery detail without making the motion too mechanical.
+CFG, SHIFT = 4.5, 6.0
 VIDEO_EXT = (".mp4", ".webm", ".mov", ".mkv")
 OUT_W, OUT_H, OUT_FPS = 1080, 1920, 30
 # Transitions between scenes (smooth / diffusion-like), and into the logo.
@@ -317,6 +323,29 @@ def encode_reel(src, dst):
                     "-map", "0:v:0", "-map", "1:a:0", "-shortest", "-vf", vf,
                     "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high", "-level", "4.2",
                     "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", dst], check=True)
+
+
+def validate_render(path, width=OUT_W, height=OUT_H, fps=OUT_FPS, min_duration=4.5, min_bytes=1_000_000):
+    """Reject bad or under-rendered outputs before upload so the reel pipeline stays production-safe."""
+    if not os.path.exists(path):
+        raise RuntimeError(f"Rendered output missing: {path}")
+    info = subprocess.run([FFMPEG, "-hide_banner", "-i", path], capture_output=True, text=True, check=False)
+    out = (info.stderr or info.stdout or "")
+    m = re.search(r"Stream.*Video:.*?(\d+)x(\d+).*?(\d+(?:\.\d+)?)\s+fps", out, re.S | re.I)
+    if not m:
+        raise RuntimeError(f"Could not inspect render metadata for {path}")
+    video_w, video_h, video_fps = map(float, m.groups())
+    duration = video_duration(path)
+    size = os.path.getsize(path)
+    if duration < min_duration:
+        raise RuntimeError(f"Clip too short for reel upload: {duration:.2f}s < {min_duration:.2f}s")
+    if video_w < width * 0.9 or video_h < height * 0.9:
+        raise RuntimeError(f"Video resolution too low: {int(video_w)}x{int(video_h)} < {width}x{height}")
+    if abs(video_fps - fps) > 2:
+        raise RuntimeError(f"Video fps too far from target: {video_fps} != {fps}")
+    if size < min_bytes:
+        raise RuntimeError(f"Video too small for production output: {size} bytes")
+    return {"width": int(video_w), "height": int(video_h), "fps": float(video_fps), "duration": duration, "size": size}
 
 
 def video_duration(path):
@@ -428,6 +457,7 @@ def render_clip(clip, p, idx, count, base=32, span=56):
         raw = found[-1]
     reel = os.path.join(OUT_DIR, f"{clip['key']}.mp4")
     encode_reel(raw, reel)
+    validate_render(reel, OUT_W, OUT_H, OUT_FPS, min_duration=4.5, min_bytes=1_000_000)
     with open(reel, "rb") as fh:
         requests.put(clip["uploadUrl"], data=fh, headers={"Content-Type": "video/mp4"}, timeout=600).raise_for_status()
     report.send("clipDone", hi, f"{label.capitalize()} ready", force=True, clipKey=clip["key"])
@@ -453,7 +483,7 @@ def run():
     p = PRESETS.get(JOB.get("preset") or "reel_fast", PRESETS["reel_fast"])
     clips = JOB.get("clips") or []
     local, failed, clip_seconds = {}, [], []
-    default_clip = 2700 if JOB.get("preset") == "reel_hq" else 1500  # first-clip guess on T4 x2
+    default_clip = 3600 if JOB.get("preset") == "reel_hq" else 1800  # first-clip guess on T4 x2; premium jobs need more time budget to stay stable
     for i, clip in enumerate(clips):
         estimate = (sum(clip_seconds) / len(clip_seconds)) if clip_seconds else default_clip
         if time_left() < estimate * 1.2 + 300:

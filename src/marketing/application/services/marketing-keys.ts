@@ -2,11 +2,11 @@
 export const MarketingKeys = {
   source: (userId: string, campaignId: string, ext: string) => `campaigns/${userId}/${campaignId}/source.${ext}`,
   sceneImage: (userId: string, campaignId: string, index: number) =>
-    `campaigns/${userId}/${campaignId}/scene-${index}-${Date.now()}.png`,
+    `campaigns/${userId}/${campaignId}/scene-${index}-${Date.now()}.jpg`,
   sceneVideo: (userId: string, campaignId: string, index: number) =>
     `campaigns/${userId}/${campaignId}/scene-${index}-${Date.now()}.mp4`,
   merged: (userId: string, campaignId: string) => `campaigns/${userId}/${campaignId}/merged-${Date.now()}.mp4`,
-  logoImage: (userId: string) => `brands/${userId}/logo-${Date.now()}.png`,
+  logoImage: (userId: string) => `brands/${userId}/logo-${Date.now()}.jpg`,
   logoVideo: (userId: string) => `brands/${userId}/logo-${Date.now()}.mp4`,
   campaignPrefix: (userId: string, campaignId: string) => `campaigns/${userId}/${campaignId}/`,
 };

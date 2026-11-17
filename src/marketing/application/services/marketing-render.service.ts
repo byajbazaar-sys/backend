@@ -12,10 +12,14 @@ import {
   EKaggleAccountStatus,
   ERenderJobKind,
   ERenderJobStatus,
+  EPhotoshootStatus,
+  PHOTOSHOOT_ASPECTS,
+  PhotoshootAspect,
 } from '../enums';
 import { MarketingEvents } from './marketing-events';
 import { LOGO_CLIP_KEY, MarketingKeys, sceneClipKey, sceneIndexFromClipKey } from './marketing-keys';
 import { buildWorkerNotebook, NotebookClip, WorkerNotebookJob } from '../notebook/reel-worker.notebook';
+import { buildImageWorkerNotebook, ImageNotebookJob } from '../notebook/image-worker.notebook';
 import {
   IKaggleAccountsRepository,
   IKaggleWorkerPool,
@@ -23,7 +27,10 @@ import {
   IMarketingBrandsRepository,
   IMarketingCampaignsRepository,
   IMarketingFileStorage,
+  IMarketingNotifier,
   IMarketingScenesRepository,
+  IMarketingPhotoshootsRepository,
+  IMarketingPhotoshootShotsRepository,
   IMarketingSettingsRepository,
   IRenderJobsRepository,
   KAGGLE_ACCOUNTS_REPOSITORY,
@@ -32,11 +39,19 @@ import {
   MARKETING_BRANDS_REPOSITORY,
   MARKETING_CAMPAIGNS_REPOSITORY,
   MARKETING_FILE_STORAGE,
+  MARKETING_NOTIFIER,
   MARKETING_SCENES_REPOSITORY,
+  MARKETING_PHOTOSHOOTS_REPOSITORY,
+  MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY,
   MARKETING_SETTINGS_REPOSITORY,
   RENDER_JOBS_REPOSITORY,
 } from '../ports';
-import { buildSceneVideoPrompt, LOGO_VIDEO_PROMPT, VIDEO_NEGATIVE } from '../prompts/marketing.prompts';
+import {
+  buildLogoImagePrompt,
+  buildSceneVideoPrompt,
+  LOGO_VIDEO_PROMPT,
+  VIDEO_NEGATIVE,
+} from '../prompts/marketing.prompts';
 import { signMarketingWorkerToken, verifyMarketingWorkerToken } from '../worker-token.util';
 import { MarketingScheduler } from './marketing-scheduler';
 
@@ -51,6 +66,10 @@ export interface MarketingWorkerEvent {
   clipKey?: string;
   failedClips?: string[];
   gpuInfo?: string;
+  imageIndex?: number;
+  imagePrompt?: string;
+  motionPrompt?: string;
+  failedImages?: number[];
 }
 
 /** No progress for this long while on a worker → the Kaggle session died. */
@@ -163,8 +182,12 @@ export class MarketingRenderService {
     @Inject(KAGGLE_ACCOUNTS_REPOSITORY) private readonly accounts: IKaggleAccountsRepository,
     @Inject(MARKETING_CAMPAIGNS_REPOSITORY) private readonly campaigns: IMarketingCampaignsRepository,
     @Inject(MARKETING_SCENES_REPOSITORY) private readonly scenes: IMarketingScenesRepository,
+    @Inject(MARKETING_PHOTOSHOOTS_REPOSITORY) private readonly photoshoots: IMarketingPhotoshootsRepository,
+    @Inject(MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY)
+    private readonly photoshootShots: IMarketingPhotoshootShotsRepository,
     @Inject(MARKETING_BRANDS_REPOSITORY) private readonly brands: IMarketingBrandsRepository,
     @Inject(MARKETING_FILE_STORAGE) private readonly storage: IMarketingFileStorage,
+    @Inject(MARKETING_NOTIFIER) private readonly notifier: IMarketingNotifier,
     @Inject(KAGGLE_WORKER_POOL) private readonly pool: IKaggleWorkerPool,
     private readonly scheduler: MarketingScheduler,
     private readonly events: MarketingEvents,
@@ -183,6 +206,205 @@ export class MarketingRenderService {
   }
 
   // ---------------------------------------------------------------- queueing renders
+
+  /** Queues Qwen3-VL analysis and SDXL generation in the dedicated Kaggle image notebook. */
+  async queueCampaignImages(
+    campaignId: string,
+    sceneIndexes?: number[],
+    renderAfter = true,
+  ): Promise<RenderJob | null> {
+    const campaign = await this.campaigns.findById(campaignId);
+    if (!campaign) return null;
+    const scenes = await this.scenes.listForCampaign(campaignId);
+    const targets = scenes.filter((s) => sceneIndexes?.includes(s.index) ?? s.imageStatus !== EAssetStatus.Ready);
+    if (!targets.length) return null;
+
+    const open = await this.jobs.findOpenFor({ campaignId, kind: ERenderJobKind.Images });
+    if (open?.status !== ERenderJobStatus.Waiting) {
+      if (open) return null;
+      const job = await this.jobs.create({
+        kind: ERenderJobKind.Images,
+        userId: campaign.userId,
+        campaignId,
+        status: ERenderJobStatus.Waiting,
+        payload: {
+          clips: [],
+          imageGeneration: {
+            type: 'campaign',
+            sourceImageKey: campaign.sourceImageKey,
+            title: campaign.title,
+            style: campaign.style,
+            renderAfter,
+            targets: targets.map((s) => ({
+              index: s.index,
+              kind: 'scene',
+              prompt: s.imagePrompt,
+              motionPrompt: s.motionPrompt,
+              outputKey: MarketingKeys.sceneImage(campaign.userId, campaign.id, s.index),
+              width: 720,
+              height: 1280,
+            })),
+          },
+        },
+        progress: 0,
+        attempts: 0,
+      });
+      for (const scene of targets) {
+        await this.scenes.update(scene.id, {
+          imageStatus: EAssetStatus.Generating,
+          videoStatus: EAssetStatus.Pending,
+          error: null,
+        });
+      }
+      await this.setCampaign(campaign, {
+        status: ECampaignStatus.WaitingGpu,
+        progress: Math.max(campaign.progress, 8),
+        stageMessage: 'Waiting for Kaggle image generation',
+        completedAt: null,
+      });
+      await this.scheduler.schedule({ step: 'dispatch' });
+      return job;
+    }
+
+    const existing = open.payload.imageGeneration;
+    if (!existing || existing.type !== 'campaign') return null;
+    const known = new Set(existing.targets.map((t) => t.index));
+    const updated = await this.jobs.update(open.id, {
+      payload: {
+        ...open.payload,
+        imageGeneration: {
+          ...existing,
+          renderAfter: existing.renderAfter || renderAfter,
+          targets: [
+            ...existing.targets,
+            ...targets
+              .filter((scene) => !known.has(scene.index))
+              .map((s) => ({
+                index: s.index,
+                kind: 'scene',
+                prompt: s.imagePrompt,
+                motionPrompt: s.motionPrompt,
+                outputKey: MarketingKeys.sceneImage(campaign.userId, campaign.id, s.index),
+                width: 720,
+                height: 1280,
+              })),
+          ],
+        },
+      },
+    });
+    for (const scene of targets) {
+      await this.scenes.update(scene.id, {
+        imageStatus: EAssetStatus.Generating,
+        videoStatus: EAssetStatus.Pending,
+        error: null,
+      });
+    }
+    await this.setCampaign(campaign, {
+      status: ECampaignStatus.WaitingGpu,
+      progress: Math.max(campaign.progress, 8),
+      stageMessage: 'Waiting for Kaggle image generation',
+      completedAt: null,
+    });
+    await this.scheduler.schedule({ step: 'dispatch' });
+    return updated;
+  }
+
+  /** Queues one or more AI photoshoot shots on the same Kaggle image-only notebook. */
+  async queuePhotoshootImages(photoshootId: string, onlyIndex?: number): Promise<RenderJob | null> {
+    const shoot = await this.photoshoots.findById(photoshootId);
+    if (!shoot) return null;
+    const allShots = await this.photoshootShots.listFor([shoot.id]);
+    const selected = allShots.filter((s) =>
+      typeof onlyIndex === 'number' ? s.index === onlyIndex : s.status !== EAssetStatus.Ready,
+    );
+    if (!selected.length) return null;
+    const open = await this.jobs.findOpenFor({ userId: shoot.userId, kind: ERenderJobKind.Images });
+    if (open?.payload.imageGeneration?.photoshootId === shoot.id) return null;
+    const size = PHOTOSHOOT_ASPECTS[shoot.aspect as PhotoshootAspect] ?? PHOTOSHOOT_ASPECTS['3:4'];
+    const targets = selected.map((shot) => ({
+      index: shot.index,
+      kind: shot.kind,
+      prompt: shot.prompt,
+      outputKey: `photoshoots/${shoot.userId}/${shoot.id}/shot-${shot.index}-${Date.now()}.jpg`,
+      width: size.width,
+      height: size.height,
+    }));
+    const job = await this.jobs.create({
+      kind: ERenderJobKind.Images,
+      userId: shoot.userId,
+      status: ERenderJobStatus.Waiting,
+      payload: {
+        clips: [],
+        imageGeneration: {
+          type: 'photoshoot',
+          sourceImageKey: shoot.sourceImageKey,
+          title: shoot.title,
+          style: `${shoot.setting}; ${shoot.model}; ${shoot.outfit}`,
+          photoshootId: shoot.id,
+          targets,
+        },
+      },
+      progress: 0,
+      attempts: 0,
+    });
+    for (const shot of selected) {
+      await this.photoshootShots.update(shot.id, { status: EAssetStatus.Generating, error: null });
+    }
+    await this.scheduler.schedule({ step: 'dispatch' });
+    return job;
+  }
+
+  /** Generates the business logo with SDXL in the Kaggle image notebook. */
+  async queueLogoImage(userId: string, businessName: string, renderVideo = false): Promise<RenderJob | null> {
+    const open = await this.jobs.findOpenFor({ userId, kind: ERenderJobKind.Images });
+    if (open?.payload.imageGeneration?.type === 'logo') {
+      if (renderVideo && !open.payload.imageGeneration.renderAfter) {
+        return this.jobs.update(open.id, {
+          payload: {
+            ...open.payload,
+            imageGeneration: { ...open.payload.imageGeneration, renderAfter: true },
+          },
+        });
+      }
+      return open;
+    }
+    const brand = await this.brands.find(userId);
+    if (!brand) return null;
+    const outputKey = MarketingKeys.logoImage(userId);
+    const job = await this.jobs.create({
+      kind: ERenderJobKind.Images,
+      userId,
+      status: ERenderJobStatus.Waiting,
+      payload: {
+        clips: [],
+        imageGeneration: {
+          type: 'logo',
+          title: businessName,
+          renderAfter: renderVideo,
+          targets: [
+            {
+              index: 0,
+              kind: 'logo',
+              prompt: buildLogoImagePrompt(businessName),
+              outputKey,
+              width: 720,
+              height: 1280,
+            },
+          ],
+        },
+      },
+      progress: 0,
+      attempts: 0,
+    });
+    await this.brands.upsert({
+      userId,
+      logoImageStatus: EAssetStatus.Generating,
+      error: null,
+    });
+    await this.events.brand(userId);
+    await this.scheduler.schedule({ step: 'dispatch' });
+    return job;
+  }
 
   /**
    * Queues a Kaggle render for a campaign: the given scenes (default all with a ready image), the brand logo clip when
@@ -676,7 +898,10 @@ export class MarketingRenderService {
     let notebook: Record<string, unknown>;
     try {
       if (!this.config.websocketUrl) throw new Error('WEBSOCKET_API_URL is not configured');
-      notebook = buildWorkerNotebook(await this.notebookJob(job));
+      notebook =
+        job.kind === ERenderJobKind.Images
+          ? buildImageWorkerNotebook(await this.imageNotebookJob(job))
+          : buildWorkerNotebook(await this.notebookJob(job));
     } catch (err) {
       // Our side (configuration, storage): no other account would do better.
       await this.failJob(job, `Could not start the GPU worker: ${(err as Error).message}`);
@@ -685,7 +910,9 @@ export class MarketingRenderService {
     const kernel =
       job.kind === ERenderJobKind.Setup
         ? { name: 'byajbazaar-account-setup', title: 'ByajBazaar Account Setup' }
-        : { name: `byajbazaar-render-${slot}`, title: `ByajBazaar Render ${slot}` };
+        : job.kind === ERenderJobKind.Images
+          ? { name: `byajbazaar-images-${slot}`, title: `ByajBazaar Images ${slot}` }
+          : { name: `byajbazaar-render-${slot}`, title: `ByajBazaar Render ${slot}` };
     let pushed: { ref: string };
     try {
       pushed = await this.pool.pushNotebook(workerId, kernel, notebook);
@@ -713,7 +940,12 @@ export class MarketingRenderService {
     if (job.kind !== ERenderJobKind.Setup) {
       await this.accounts.update(workerId, { lastAssignedAt: new Date(), lastError: null });
     }
-    await this.campaignProgress(job, progress, booting, ECampaignStatus.Rendering);
+    await this.campaignProgress(
+      job,
+      progress,
+      booting,
+      job.kind === ERenderJobKind.Images ? ECampaignStatus.Planning : ECampaignStatus.Rendering,
+    );
     await this.scheduleWatch(job.id);
     return true;
   }
@@ -751,6 +983,7 @@ export class MarketingRenderService {
       apiBaseUrl: this.config.publicApiBaseUrl,
     };
     if (job.kind === ERenderJobKind.Setup) return { ...base, kind: 'setup' };
+    if (job.kind === ERenderJobKind.Images) throw new Error('Image jobs require the image notebook');
 
     const campaign = job.campaignId ? await this.campaigns.findById(job.campaignId) : null;
     // On a continuation, clips finished by an earlier session are skipped (they are merged from the bucket).
@@ -790,6 +1023,7 @@ export class MarketingRenderService {
         uploadUrl: await this.storage.generateUploadUrlAsync(job.payload.merge.outputKey, EAttachmentMimeType.VideoMp4),
       };
     }
+
     return {
       ...base,
       kind: 'render',
@@ -797,6 +1031,40 @@ export class MarketingRenderService {
       clips,
       merge,
       sessionBudgetSeconds: Math.max(3600, this.config.kaggleSessionHours * 3600 - SESSION_MARGIN_SECONDS),
+    };
+  }
+
+  private async imageNotebookJob(job: RenderJob): Promise<ImageNotebookJob> {
+    const generation = job.payload.imageGeneration;
+    if (!generation) throw new Error('The image job payload is missing its generation details');
+    const done = new Set(generation.doneImages ?? []);
+    const sourceImageUrl = generation.sourceImageKey
+      ? await this.storage.getUrlAsync(generation.sourceImageKey)
+      : undefined;
+    const targets = await Promise.all(
+      generation.targets
+        .filter((target) => !done.has(target.index))
+        .map(async (target) => ({
+          index: target.index,
+          kind: target.kind,
+          prompt: target.prompt,
+          motionPrompt: target.motionPrompt,
+          uploadUrl: await this.storage.generateUploadUrlAsync(target.outputKey, EAttachmentMimeType.ImageJpeg),
+          width: target.width,
+          height: target.height,
+        })),
+    );
+    if (!targets.length) throw new Error('The image job has no unfinished images');
+    return {
+      jobId: job.id,
+      token: signMarketingWorkerToken(job.id),
+      wsUrl: this.config.websocketUrl,
+      apiBaseUrl: this.config.publicApiBaseUrl,
+      sourceImageUrl,
+      type: generation.type,
+      title: generation.title,
+      style: generation.style,
+      targets,
     };
   }
 
@@ -814,15 +1082,17 @@ export class MarketingRenderService {
 
     if (job.kind === ERenderJobKind.Setup) return this.handleSetupEvent(job, event);
 
-    if (event.status === 'failed') {
-      await this.failJob(job, event.message || 'Rendering failed');
-      await this.scheduler.schedule({ step: 'dispatch' });
-      return true;
-    }
-
     if (event.stage === 'sessionExpiring') {
       const progress = Math.max(job.progress ?? 0, Math.min(99, Math.round(Number(event.progress) || 0)));
       await this.restartJob({ ...job, progress }, 'The Kaggle session reached its time limit', true);
+      return true;
+    }
+
+    if (job.kind === ERenderJobKind.Images) return this.handleImageWorkerEvent(job, event);
+
+    if (event.status === 'failed') {
+      await this.failJob(job, event.message || 'Rendering failed');
+      await this.scheduler.schedule({ step: 'dispatch' });
       return true;
     }
 
@@ -852,6 +1122,243 @@ export class MarketingRenderService {
     });
     await this.campaignProgress(job, progress, event.message, ECampaignStatus.Rendering);
     return true;
+  }
+
+  private async handleImageWorkerEvent(job: RenderJob, event: MarketingWorkerEvent): Promise<boolean> {
+    if (event.stage === 'imageDone' && typeof event.imageIndex === 'number') {
+      await this.imageDone(job, event.imageIndex, event.imagePrompt, event.motionPrompt);
+    } else if (event.stage === 'imageFailed' && typeof event.imageIndex === 'number') {
+      await this.imageFailed(job, event.imageIndex, event.message || 'Image generation failed');
+    }
+
+    const progress = Math.max(job.progress ?? 0, Math.min(99, Math.round(Number(event.progress) || 0)));
+    if (event.status === 'failed') {
+      await this.failImageTargets(job, event.message || 'Image generation failed');
+      await this.jobs.update(job.id, {
+        status: ERenderJobStatus.Failed,
+        error: (event.message || 'Image generation failed').slice(0, 2000),
+        finishedAt: new Date(),
+      });
+      if (job.workerId) await this.accounts.recordOutcome(job.workerId, 'failed');
+      await this.finishImageJob(job, false);
+      await this.scheduler.schedule({ step: 'dispatch' });
+      return true;
+    }
+
+    if (event.status === 'completed') {
+      for (const index of event.failedImages ?? []) {
+        await this.imageFailed(job, index, 'Image generation failed');
+      }
+      await this.failImageTargets(job, 'The image worker finished without returning this image');
+      if (job.workerId) await this.accounts.recordOutcome(job.workerId, 'completed');
+      await this.jobs.update(job.id, {
+        status: ERenderJobStatus.Done,
+        progress: 100,
+        stageMessage: event.message || 'Images ready',
+        finishedAt: new Date(),
+      });
+      await this.finishImageJob(job, true);
+      await this.scheduler.schedule({ step: 'dispatch' });
+      return true;
+    }
+
+    await this.jobs.update(job.id, {
+      status: ERenderJobStatus.Running,
+      progress,
+      stageMessage: (event.message || job.stageMessage || 'Generating images').slice(0, 250),
+    });
+    await this.campaignProgress(job, progress, event.message, ECampaignStatus.Planning);
+    return true;
+  }
+
+  private async imageDone(job: RenderJob, index: number, imagePrompt?: string, motionPrompt?: string): Promise<void> {
+    const generation = job.payload.imageGeneration;
+    const target = generation?.targets.find((item) => item.index === index);
+    if (!generation || !target || !(await this.storage.existsAsync(target.outputKey))) {
+      await this.imageFailed(job, index, 'The worker reported an image but its upload is missing');
+      return;
+    }
+    if (generation.type === 'campaign' && job.campaignId) {
+      const scene = await this.scenes.findByIndex(job.campaignId, index);
+      if (!scene) return;
+      await this.scenes.update(scene.id, {
+        imageKey: target.outputKey,
+        imagePrompt: imagePrompt?.slice(0, 4000) || scene.imagePrompt,
+        motionPrompt: motionPrompt?.slice(0, 2000) || scene.motionPrompt,
+        imageStatus: EAssetStatus.Ready,
+        error: null,
+      });
+      const campaign = await this.campaigns.findById(job.campaignId);
+      if (campaign) await this.events.campaign(campaign, true);
+    } else if (generation.photoshootId) {
+      const shots = await this.photoshootShots.listFor([generation.photoshootId]);
+      const shot = shots.find((item) => item.index === index);
+      if (shot) {
+        if (shot.imageKey && shot.imageKey !== target.outputKey) await this.removeQuietly(shot.imageKey);
+        await this.photoshootShots.update(shot.id, {
+          imageKey: target.outputKey,
+          prompt: imagePrompt?.slice(0, 4000) || shot.prompt,
+          status: EAssetStatus.Ready,
+          error: null,
+        });
+        await this.notifyPhotoshoot(generation.photoshootId);
+      }
+    } else if (generation.type === 'logo' && job.userId) {
+      const brand = await this.brands.find(job.userId);
+      if (brand?.logoImageKey && brand.logoImageKey !== target.outputKey) {
+        await this.removeQuietly(brand.logoImageKey);
+      }
+      await this.brands.upsert({
+        userId: job.userId,
+        logoImageKey: target.outputKey,
+        logoImageStatus: EAssetStatus.Ready,
+        logoVideoStatus: brand?.logoVideoKey ? EAssetStatus.Pending : brand?.logoVideoStatus,
+        error: null,
+      });
+      await this.events.brand(job.userId);
+    }
+    const fresh = await this.jobs.findById(job.id);
+    const done = new Set(fresh?.payload.imageGeneration?.doneImages ?? generation.doneImages ?? []);
+    done.add(index);
+    await this.jobs.update(job.id, {
+      payload: {
+        ...(fresh ?? job).payload,
+        imageGeneration: { ...generation, doneImages: [...done] },
+      },
+    });
+  }
+
+  private async imageFailed(job: RenderJob, index: number, message: string): Promise<void> {
+    const generation = job.payload.imageGeneration;
+    const target = generation?.targets.find((item) => item.index === index);
+    if (!generation || !target) return;
+    if (generation.type === 'campaign' && job.campaignId) {
+      const scene = await this.scenes.findByIndex(job.campaignId, index);
+      if (scene?.imageStatus === EAssetStatus.Generating) {
+        await this.scenes.update(scene.id, { imageStatus: EAssetStatus.Failed, error: message.slice(0, 500) });
+        const campaign = await this.campaigns.findById(job.campaignId);
+        if (campaign) await this.events.campaign(campaign, true);
+      }
+    } else if (generation.photoshootId) {
+      const shots = await this.photoshootShots.listFor([generation.photoshootId]);
+      const shot = shots.find((item) => item.index === index);
+      if (shot?.status === EAssetStatus.Generating) {
+        await this.photoshootShots.update(shot.id, {
+          status: EAssetStatus.Failed,
+          error: message.slice(0, 500),
+        });
+        await this.notifyPhotoshoot(generation.photoshootId);
+      }
+    } else if (generation.type === 'logo' && job.userId) {
+      await this.brands.upsert({
+        userId: job.userId,
+        logoImageStatus: EAssetStatus.Failed,
+        error: message.slice(0, 500),
+      });
+      await this.events.brand(job.userId);
+    }
+  }
+
+  private async failImageTargets(job: RenderJob, message: string): Promise<void> {
+    const generation = job.payload.imageGeneration;
+    if (!generation) return;
+    const done = new Set(generation.doneImages ?? []);
+    for (const target of generation.targets) {
+      if (done.has(target.index)) continue;
+      if (await this.storage.existsAsync(target.outputKey)) {
+        await this.imageDone(job, target.index);
+      } else {
+        await this.imageFailed(job, target.index, message);
+      }
+    }
+  }
+
+  private async finishImageJob(job: RenderJob, success: boolean): Promise<void> {
+    const generation = job.payload.imageGeneration;
+    if (!generation) return;
+    if (generation.type === 'campaign' && job.campaignId) {
+      const campaign = await this.campaigns.findById(job.campaignId);
+      if (!campaign) return;
+      const scenes = await this.scenes.listForCampaign(job.campaignId);
+      const ready = scenes.filter((scene) => scene.imageStatus === EAssetStatus.Ready);
+      if (ready.length && generation.renderAfter) {
+        await this.renderCampaignImages(generation, job.campaignId);
+      } else if (!ready.length || !success) {
+        await this.setCampaign(campaign, {
+          status: campaign.mergedVideoKey ? ECampaignStatus.Partial : ECampaignStatus.Failed,
+          stageMessage: ready.length ? 'Some images failed — try again' : 'Image generation failed',
+          error: ready.length ? 'Some scene images could not be generated' : 'No scene images could be generated',
+        });
+      } else {
+        await this.setCampaign(campaign, {
+          status: campaign.mergedVideoKey ? ECampaignStatus.Partial : ECampaignStatus.Failed,
+          stageMessage: 'Scene images ready',
+          error: null,
+        });
+      }
+    } else if (generation.photoshootId) {
+      const shots = await this.photoshootShots.listFor([generation.photoshootId]);
+      const ready = shots.filter((shot) => shot.status === EAssetStatus.Ready).length;
+      const status =
+        ready === shots.length
+          ? EPhotoshootStatus.Ready
+          : ready > 0
+            ? EPhotoshootStatus.Partial
+            : EPhotoshootStatus.Failed;
+      await this.photoshoots.update(generation.photoshootId, {
+        status,
+        error: status === EPhotoshootStatus.Ready ? null : (shots.find((shot) => shot.error)?.error ?? null),
+      });
+      await this.notifyPhotoshoot(generation.photoshootId);
+    } else if (generation.type === 'logo' && job.userId) {
+      if (generation.renderAfter) await this.queueLogoRender(job.userId);
+      await this.events.brand(job.userId);
+      await this.continueCampaignsAfterLogo(job.userId);
+    }
+  }
+
+  private async renderCampaignImages(
+    generation: NonNullable<RenderJob['payload']['imageGeneration']>,
+    campaignId: string,
+  ): Promise<void> {
+    const campaign = await this.campaigns.findById(campaignId);
+    if (!campaign) return;
+    const brand = await this.brands.find(campaign.userId);
+    if (brand?.logoImageStatus === EAssetStatus.Generating) {
+      await this.setCampaign(campaign, {
+        status: ECampaignStatus.WaitingGpu,
+        stageMessage: 'Waiting for brand logo generation',
+      });
+      return;
+    }
+    const ready = (await this.scenes.listForCampaign(campaignId))
+      .filter((scene) => scene.imageStatus === EAssetStatus.Ready && scene.videoStatus !== EAssetStatus.Ready)
+      .map((scene) => scene.index);
+    const queueIndexes = generation.targets.map((target) => target.index);
+    for (const index of ready) if (!queueIndexes.includes(index)) queueIndexes.push(index);
+    if (queueIndexes.length) await this.queueCampaignRender(campaignId, queueIndexes);
+  }
+
+  private async continueCampaignsAfterLogo(userId: string): Promise<void> {
+    const campaigns = await this.campaigns.listForUser(userId, 30);
+    for (const campaign of campaigns) {
+      if (campaign.status !== ECampaignStatus.Planning && campaign.status !== ECampaignStatus.WaitingGpu) continue;
+      const scenes = await this.scenes.listForCampaign(campaign.id);
+      if (scenes.some((scene) => scene.imageStatus !== EAssetStatus.Ready)) continue;
+      const unfinished = scenes.filter((scene) => scene.videoStatus !== EAssetStatus.Ready).map((scene) => scene.index);
+      if (unfinished.length) await this.queueCampaignRender(campaign.id, unfinished);
+    }
+  }
+
+  private async notifyPhotoshoot(photoshootId: string): Promise<void> {
+    const shoot = await this.photoshoots.findById(photoshootId);
+    if (!shoot) return;
+    await this.notifier.notifyUser(shoot.userId, {
+      type: 'marketingPhotoshootUpdated',
+      photoshoot: { id: shoot.id, status: shoot.status },
+      refresh: true,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   private async handleSetupEvent(job: RenderJob, event: MarketingWorkerEvent): Promise<boolean> {
@@ -1067,6 +1574,11 @@ export class MarketingRenderService {
       return;
     }
     if (job.workerId) await this.accounts.recordOutcome(job.workerId, 'failed');
+    if (job.kind === ERenderJobKind.Images) {
+      await this.failImageTargets(job, message);
+      await this.finishImageJob(job, false);
+      return;
+    }
     for (const clip of job.payload.clips) await this.clipFailed(job, clip.key, message);
     await this.settleCampaign(job.campaignId, message);
   }

@@ -35,7 +35,7 @@ export class QStashMarketingQueue implements IMarketingQueue {
       'Content-Type': 'application/json',
       'Upstash-Retries': '3',
       'Upstash-Flow-Control-Key': `byajbazaar-marketing-${message.step}`,
-      // Kaggle dispatch strictly one at a time (no two dispatches racing for a slot); Cloudflare steps a few at once.
+      // Kaggle dispatch runs strictly one at a time (no two dispatches racing for a slot).
       'Upstash-Flow-Control-Value': message.step === 'dispatch' ? 'parallelism=1' : 'parallelism=3',
     };
     if (options.delaySeconds) headers['Upstash-Delay'] = `${Math.round(options.delaySeconds)}s`;

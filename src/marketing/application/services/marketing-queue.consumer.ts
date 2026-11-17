@@ -6,7 +6,7 @@ import { MarketingPlannerService } from './marketing-planner.service';
 import { MarketingRenderService } from './marketing-render.service';
 import { MarketingScheduler, MarketingStepRunner } from './marketing-scheduler';
 
-/** Routes queue deliveries. Long Cloudflare steps go to the worker Lambda; dispatch (a few Kaggle calls) runs here. */
+/** Routes queue deliveries. Long Kaggle AI steps run in the worker Lambda; queue dispatch runs here. */
 @Injectable()
 export class MarketingQueueConsumer implements MarketingStepRunner {
   constructor(
