@@ -158,3 +158,13 @@ marketingWorker:
   description: 'Experimental marketing videos: Cloudflare still + Kaggle GPU dispatch (async)'
   timeout: 300
   memorySize: 1024
+
+marketingPublisher:
+  handler: dist/src/lambda-handlers/marketing-publisher.handler
+  description: 'Publishes scheduled Instagram marketing posts'
+  timeout: 300
+  memorySize: 512
+  events:
+    - schedule:
+        rate: rate(1 minute)
+        enabled: true

@@ -117,6 +117,22 @@ export interface KaggleHealthIssue {
   jobId?: string;
 }
 
+export interface KaggleNotebookHealth {
+  jobId: string | null;
+  status: string;
+  kernelRef: string | null;
+  progress: number | null;
+  stageMessage: string | null;
+  failureMessage: string | null;
+}
+
+export interface KaggleAccountNotebookHealth {
+  account: string;
+  accountStatus: string;
+  video: KaggleNotebookHealth;
+  image: KaggleNotebookHealth;
+}
+
 export interface KaggleHealth {
   status: KaggleHealthStatus;
   checkedAt: Date;
@@ -125,6 +141,7 @@ export interface KaggleHealth {
   usableAccounts: number;
   waiting: number;
   oldestWaitingMinutes: number | null;
+  notebooks: KaggleAccountNotebookHealth[];
   issues: KaggleHealthIssue[];
   waitingJobs: {
     id: string;
@@ -681,9 +698,63 @@ export class MarketingRenderService {
     const now = Date.now();
     const minutes = (d?: Date | null): number => (d ? Math.round((now - new Date(d).getTime()) / 60_000) : 0);
     const configured = new Set(workers.map((w) => w.id));
+    const accountNames = new Set([...configured, ...accounts.map((account) => account.username)]);
     const byName = new Map(accounts.map((a) => [a.username, a]));
     const issues: KaggleHealthIssue[] = [];
     let usable = 0;
+    const notebooks = await Promise.all(
+      [...accountNames].map(async (username) => {
+        const account = byName.get(username);
+        const activeJobs = busyJobs.filter((job) => job.workerId === username);
+        const notebookStatus = async (kinds: ERenderJobKind[]): Promise<KaggleNotebookHealth> => {
+          const job = activeJobs.find((item) => kinds.includes(item.kind));
+          if (!job) {
+            return {
+              jobId: null,
+              status:
+                account?.status === EKaggleAccountStatus.Ready
+                  ? this.coolingDown(account)
+                    ? 'COOLDOWN'
+                    : 'IDLE'
+                  : (account?.status ?? 'UNCONFIGURED'),
+              kernelRef: null,
+              progress: null,
+              stageMessage: null,
+              failureMessage: account?.lastError ?? null,
+            };
+          }
+          const kernelName = job.kernelRef?.split('/')[1];
+          const session =
+            kernelName && job.workerId
+              ? await this.pool.sessionStatus(job.workerId, kernelName)
+              : {
+                  state:
+                    job.status === ERenderJobStatus.Starting ? ('queued' as const) : ('unknown' as const),
+                };
+          return {
+            jobId: job.id,
+            status:
+              session.state === 'unknown' && job.status === ERenderJobStatus.Starting
+                ? 'STARTING'
+                : session.state.toUpperCase(),
+            kernelRef: job.kernelRef ?? null,
+            progress: job.progress,
+            stageMessage: job.stageMessage ?? null,
+            failureMessage: session.failureMessage ?? null,
+          };
+        };
+        const [video, image] = await Promise.all([
+          notebookStatus([ERenderJobKind.Campaign, ERenderJobKind.Logo]),
+          notebookStatus([ERenderJobKind.Images]),
+        ]);
+        return {
+          account: username,
+          accountStatus: account?.status ?? 'UNCONFIGURED',
+          video,
+          image,
+        };
+      }),
+    );
 
     for (const id of configured) {
       const a = byName.get(id);
@@ -781,6 +852,7 @@ export class MarketingRenderService {
       usableAccounts: usable,
       waiting,
       oldestWaitingMinutes,
+      notebooks,
       issues,
       waitingJobs: waitingJobs.map((j) => ({
         id: j.id,

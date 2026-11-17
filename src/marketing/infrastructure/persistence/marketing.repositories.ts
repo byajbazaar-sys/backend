@@ -8,6 +8,7 @@ import {
   MarketingCampaignEntity,
   MarketingSceneEntity,
   MarketingSettingEntity,
+  MarketingScheduledPostEntity,
   RenderJobEntity,
 } from './entities/marketing.entities';
 import { MarketingDatabase } from './marketing-database';
@@ -17,6 +18,7 @@ import {
   MarketingBrand,
   MarketingCampaign,
   MarketingScene,
+  MarketingScheduledPost,
   RenderJob,
 } from '../../application/domain';
 import {
@@ -34,6 +36,7 @@ import {
   IMarketingCampaignsRepository,
   IMarketingScenesRepository,
   IMarketingSettingsRepository,
+  IMarketingScheduledPostsRepository,
   IRenderJobsRepository,
   KaggleSettings,
 } from '../../application/ports';
@@ -43,6 +46,32 @@ import { MarketingSecretCipher } from '../crypto/marketing-secret.cipher';
 function returnedRows(result: unknown): Record<string, unknown>[] {
   if (Array.isArray(result) && Array.isArray(result[0])) return result[0] as Record<string, unknown>[];
   return (Array.isArray(result) ? result : []) as Record<string, unknown>[];
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Unexpected scheduled-post database row');
+  }
+  return value as Record<string, unknown>;
+}
+
+function requiredString(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  if (typeof value !== 'string') throw new Error(`Scheduled-post row is missing ${key}`);
+  return value;
+}
+
+function optionalString(row: Record<string, unknown>, key: string): string | null {
+  const value = row[key];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') throw new Error(`Scheduled-post row has an invalid ${key}`);
+  return value;
+}
+
+function dateValue(value: unknown, key: string): Date {
+  const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
+  if (!date || !Number.isFinite(date.getTime())) throw new Error(`Scheduled-post row has an invalid ${key}`);
+  return date;
 }
 
 abstract class MarketingRepositoryBase<E extends ObjectLiteral> {
@@ -137,6 +166,105 @@ export class MarketingScenesRepository
 
   async deleteForCampaign(campaignId: string): Promise<void> {
     await (await this.repo()).delete({ campaignId });
+  }
+}
+
+@Injectable()
+export class MarketingScheduledPostsRepository implements IMarketingScheduledPostsRepository {
+  constructor(private readonly db: MarketingDatabase) {}
+
+  private repo(): Promise<Repository<MarketingScheduledPostEntity>> {
+    return this.db.repository(MarketingScheduledPostEntity);
+  }
+
+  async create(post: Omit<MarketingScheduledPost, 'id'>): Promise<MarketingScheduledPost> {
+    const repo = await this.repo();
+    return (await repo.save(repo.create(post as Partial<MarketingScheduledPostEntity>))) as MarketingScheduledPost;
+  }
+
+  async findForUser(id: string, userId: string): Promise<MarketingScheduledPost | null> {
+    return (await (await this.repo()).findOne({ where: { id, userId } })) as MarketingScheduledPost | null;
+  }
+
+  async listForUser(userId: string, limit: number): Promise<MarketingScheduledPost[]> {
+    return (await (
+      await this.repo()
+    ).find({ where: { userId }, order: { scheduledAt: 'DESC' }, take: limit })) as MarketingScheduledPost[];
+  }
+
+  async update(id: string, patch: Partial<MarketingScheduledPost>): Promise<MarketingScheduledPost | null> {
+    const repo = await this.repo();
+    await repo.update({ id }, patch as Partial<MarketingScheduledPostEntity>);
+    return (await repo.findOne({ where: { id } })) as MarketingScheduledPost | null;
+  }
+
+  async cancelForUser(id: string, userId: string): Promise<boolean> {
+    const result = await (await this.repo()).update({ id, userId, status: 'SCHEDULED' }, { status: 'CANCELLED' });
+    return !!result.affected;
+  }
+
+  async hasOpenForSource(
+    userId: string,
+    sourceType: 'campaign' | 'photoshoot',
+    sourceId: string,
+    sourceIndex?: number,
+  ): Promise<boolean> {
+    return (await this.repo()).exists({
+      where: {
+        userId,
+        sourceType,
+        sourceId,
+        ...(sourceIndex === undefined ? {} : { sourceIndex }),
+        status: In(['SCHEDULED', 'PUBLISHING']),
+      },
+    });
+  }
+
+  async claimDue(now: Date, limit: number): Promise<MarketingScheduledPost[]> {
+    const result: unknown = await (
+      await this.db.connection()
+    ).query(
+      `WITH due AS (
+         SELECT "id" FROM "marketing_scheduled_posts"
+         WHERE "status" = 'SCHEDULED' AND "scheduled_at" <= $1
+         ORDER BY "scheduled_at" ASC
+         LIMIT $2
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE "marketing_scheduled_posts" AS posts
+       SET "status" = 'PUBLISHING', "updated_at" = $1
+       FROM due
+       WHERE posts."id" = due."id"
+       RETURNING posts.*`,
+      [now, limit],
+    );
+    if (!Array.isArray(result)) throw new Error('Unexpected scheduled-post query result');
+    return result.map((raw) => {
+      const row = recordOf(raw);
+      return {
+        id: requiredString(row, 'id'),
+        userId: requiredString(row, 'user_id'),
+        mediaType: requiredString(row, 'media_type') as MarketingScheduledPost['mediaType'],
+        sourceType: requiredString(row, 'source_type') as MarketingScheduledPost['sourceType'],
+        sourceId: requiredString(row, 'source_id'),
+        sourceIndex: row.source_index === null || row.source_index === undefined ? null : Number(row.source_index),
+        sourceTitle: requiredString(row, 'source_title'),
+        assetKey: requiredString(row, 'asset_key'),
+        caption: requiredString(row, 'caption'),
+        scheduledAt: dateValue(row.scheduled_at, 'scheduled_at'),
+        status: requiredString(row, 'status') as MarketingScheduledPost['status'],
+        instagramMediaId: optionalString(row, 'instagram_media_id'),
+        error: optionalString(row, 'error'),
+        publishedAt:
+          row.published_at !== null && row.published_at !== undefined
+            ? dateValue(row.published_at, 'published_at')
+            : null,
+        createdAt:
+          row.created_at !== null && row.created_at !== undefined ? dateValue(row.created_at, 'created_at') : undefined,
+        updatedAt:
+          row.updated_at !== null && row.updated_at !== undefined ? dateValue(row.updated_at, 'updated_at') : undefined,
+      };
+    });
   }
 }
 

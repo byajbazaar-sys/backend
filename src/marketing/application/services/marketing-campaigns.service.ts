@@ -25,6 +25,8 @@ import {
   MARKETING_CATALOG,
   MARKETING_FILE_STORAGE,
   MARKETING_SCENES_REPOSITORY,
+  IMarketingScheduledPostsRepository,
+  MARKETING_SCHEDULED_POSTS_REPOSITORY,
   RENDER_JOBS_REPOSITORY,
 } from '../ports';
 import { MarketingEvents } from './marketing-events';
@@ -54,6 +56,7 @@ export interface CampaignView extends MarketingCampaign {
   mergedVideoUrl?: string;
   /** First ready scene image, for lists. */
   coverImageUrl?: string;
+  coverSceneIndex?: number;
   scenes?: SceneView[];
 }
 
@@ -69,6 +72,7 @@ export class MarketingCampaignsService {
     @Inject(MARKETING_SCENES_REPOSITORY) private readonly scenes: IMarketingScenesRepository,
     @Inject(MARKETING_BRANDS_REPOSITORY) private readonly brands: IMarketingBrandsRepository,
     @Inject(RENDER_JOBS_REPOSITORY) private readonly jobs: IRenderJobsRepository,
+    @Inject(MARKETING_SCHEDULED_POSTS_REPOSITORY) private readonly scheduledPosts: IMarketingScheduledPostsRepository,
     @Inject(MARKETING_FILE_STORAGE) private readonly storage: IMarketingFileStorage,
     @Inject(MARKETING_CATALOG) private readonly catalog: IMarketingCatalog,
     private readonly render: MarketingRenderService,
@@ -162,6 +166,9 @@ export class MarketingCampaignsService {
 
   async remove(userId: string, id: string): Promise<void> {
     const campaign = await this.owned(userId, id);
+    if (await this.scheduledPosts.hasOpenForSource(userId, 'campaign', id)) {
+      throw new ConflictException('Cancel this campaign’s scheduled Instagram posts before deleting it.');
+    }
     const job = await this.jobs.findOpenFor({ campaignId: id });
     if (job && BUSY_RENDER_STATUSES.includes(job.status)) {
       throw new ConflictException('This campaign is rendering right now. Delete it once it finishes.');
@@ -182,6 +189,9 @@ export class MarketingCampaignsService {
    */
   async regenerateScene(userId: string, id: string, index: number, target: 'image' | 'video'): Promise<CampaignView> {
     const campaign = await this.owned(userId, id);
+    if (await this.scheduledPosts.hasOpenForSource(userId, 'campaign', id)) {
+      throw new ConflictException('Cancel this campaign’s scheduled Instagram posts before regenerating its media.');
+    }
     if (!Number.isInteger(index) || index < 0 || index >= CAMPAIGN_SCENES)
       throw new BadRequestException('Unknown scene');
     if (campaign.status === ECampaignStatus.Planning)
@@ -263,7 +273,13 @@ export class MarketingCampaignsService {
       this.url(campaign.mergedVideoKey),
       this.url(cover?.imageKey),
     ]);
-    const view: CampaignView = { ...campaign, sourceImageUrl, mergedVideoUrl, coverImageUrl };
+    const view: CampaignView = {
+      ...campaign,
+      sourceImageUrl,
+      mergedVideoUrl,
+      coverImageUrl,
+      coverSceneIndex: cover?.index,
+    };
     if (withScenes) {
       view.scenes = await Promise.all(
         scenes.map(async (s) => ({
@@ -284,7 +300,7 @@ export class MarketingCampaignsService {
     return { ...brand, logoImageUrl, logoVideoUrl };
   }
 
-  capacity() {
+  capacity(): ReturnType<MarketingRenderService['capacity']> {
     return this.render.capacity();
   }
 }

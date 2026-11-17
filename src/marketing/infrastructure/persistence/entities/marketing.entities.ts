@@ -163,6 +163,28 @@ export class MarketingPhotoshootShotEntity {
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 
+@Entity('marketing_scheduled_posts')
+@Index('IDX_marketing_scheduled_posts_user_date', ['userId', 'scheduledAt'])
+@Index('IDX_marketing_scheduled_posts_due', ['status', 'scheduledAt'])
+export class MarketingScheduledPostEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column({ type: 'uuid' }) userId: string;
+  @Column({ type: 'varchar', length: 10 }) mediaType: string;
+  @Column({ type: 'varchar', length: 20 }) sourceType: string;
+  @Column({ type: 'uuid' }) sourceId: string;
+  @Column({ type: 'smallint', nullable: true }) sourceIndex: number | null;
+  @Column({ type: 'varchar', length: 255 }) sourceTitle: string;
+  @Column({ type: 'varchar', length: 500 }) assetKey: string;
+  @Column({ type: 'text' }) caption: string;
+  @Column({ type: 'timestamptz' }) scheduledAt: Date;
+  @Column({ type: 'varchar', length: 20, default: 'SCHEDULED' }) status: string;
+  @Column({ type: 'varchar', length: 64, nullable: true }) instagramMediaId: string | null;
+  @Column({ type: 'text', nullable: true }) error: string | null;
+  @Column({ type: 'timestamptz', nullable: true }) publishedAt: Date | null;
+  @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
 /** Admin-editable settings (key → JSON value). */
 @Entity('marketing_settings')
 export class MarketingSettingEntity {
@@ -181,5 +203,6 @@ export const MARKETING_ENTITY_CLASSES = [
   RenderJobEntity,
   MarketingPhotoshootEntity,
   MarketingPhotoshootShotEntity,
+  MarketingScheduledPostEntity,
   MarketingSettingEntity,
 ];

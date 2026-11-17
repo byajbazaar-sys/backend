@@ -1,0 +1,23 @@
+import { INestApplicationContext } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { Context, Handler } from 'aws-lambda';
+
+import { AppModule } from '../app.module';
+import { MarketingPublishingService } from '../marketing/application/services/marketing-publishing.service';
+
+let cachedApp: INestApplicationContext;
+
+async function bootstrap(): Promise<INestApplicationContext> {
+  if (cachedApp) return cachedApp;
+  cachedApp = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });
+  return cachedApp;
+}
+
+export const handler: Handler = async (
+  _event: unknown,
+  context: Context,
+): Promise<Awaited<ReturnType<MarketingPublishingService['publishDuePosts']>>> => {
+  context.callbackWaitsForEmptyEventLoop = false;
+  const app = await bootstrap();
+  return app.get(MarketingPublishingService).publishDuePosts();
+};

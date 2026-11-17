@@ -194,6 +194,30 @@ export class KaggleWaitingJobModel {
   @ApiPropertyOptional() @Expose() stageMessage: string | null;
 }
 
+export class KaggleNotebookHealthModel {
+  @ApiPropertyOptional() @Expose() jobId: string | null;
+  @ApiProperty({ description: 'IDLE, COOLDOWN, STARTING, QUEUED, RUNNING, COMPLETE, ERROR, CANCELLED, or UNKNOWN' })
+  @Expose()
+  status: string;
+  @ApiPropertyOptional() @Expose() kernelRef: string | null;
+  @ApiPropertyOptional() @Expose() progress: number | null;
+  @ApiPropertyOptional() @Expose() stageMessage: string | null;
+  @ApiPropertyOptional() @Expose() failureMessage: string | null;
+}
+
+export class KaggleAccountNotebookHealthModel {
+  @ApiProperty() @Expose() account: string;
+  @ApiProperty() @Expose() accountStatus: string;
+  @ApiProperty({ type: KaggleNotebookHealthModel })
+  @Expose()
+  @Type(() => KaggleNotebookHealthModel)
+  video: KaggleNotebookHealthModel;
+  @ApiProperty({ type: KaggleNotebookHealthModel })
+  @Expose()
+  @Type(() => KaggleNotebookHealthModel)
+  image: KaggleNotebookHealthModel;
+}
+
 /** Is rendering working, and if not, why. */
 export class KaggleHealthResponseModel {
   @ApiProperty({ enum: ['healthy', 'degraded', 'down'] }) @Expose() status: 'healthy' | 'degraded' | 'down';
@@ -202,6 +226,10 @@ export class KaggleHealthResponseModel {
   @ApiProperty({ description: 'Accounts that can take a render right now' }) @Expose() usableAccounts: number;
   @ApiProperty() @Expose() waiting: number;
   @ApiPropertyOptional() @Expose() oldestWaitingMinutes: number | null;
+  @ApiProperty({ type: [KaggleAccountNotebookHealthModel] })
+  @Expose()
+  @Type(() => KaggleAccountNotebookHealthModel)
+  notebooks: KaggleAccountNotebookHealthModel[];
   @ApiProperty({ type: [KaggleHealthIssueModel] })
   @Expose()
   @Type(() => KaggleHealthIssueModel)

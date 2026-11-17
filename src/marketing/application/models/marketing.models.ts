@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsDateString,
   Matches,
   Max,
   MaxLength,
@@ -102,6 +103,7 @@ export class MarketingCampaignResponseModel {
   @Expose() @ApiPropertyOptional() error?: string;
   @Expose() @ApiPropertyOptional() sourceImageUrl?: string;
   @Expose() @ApiPropertyOptional() coverImageUrl?: string;
+  @Expose() @ApiPropertyOptional() coverSceneIndex?: number;
   @Expose()
   @ApiPropertyOptional({ description: 'All scenes merged with transitions, ending on the logo' })
   mergedVideoUrl?: string;
@@ -145,6 +147,51 @@ export class MarketingInstagramConnectionResponseModel {
   @Expose() @Type(() => Date) @ApiPropertyOptional({ nullable: true }) tokenExpiresAt: Date | null;
   @Expose() @Type(() => Date) @ApiPropertyOptional({ nullable: true }) connectedAt: Date | null;
   @Expose() @ApiProperty() requiresReconnect: boolean;
+}
+
+export class ScheduleMarketingPostRequestModel {
+  @ApiProperty({ enum: ['campaign', 'photoshoot'] })
+  @IsIn(['campaign', 'photoshoot'])
+  sourceType: 'campaign' | 'photoshoot';
+
+  @ApiProperty()
+  @IsUUID()
+  sourceId: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 4 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(4)
+  sourceIndex?: number;
+
+  @ApiProperty({ enum: ['IMAGE', 'REEL'] })
+  @IsIn(['IMAGE', 'REEL'])
+  mediaType: 'IMAGE' | 'REEL';
+
+  @ApiProperty({ maxLength: 2200 })
+  @IsString()
+  @MaxLength(2200)
+  caption: string;
+
+  @ApiProperty({ format: 'date-time' })
+  @IsDateString()
+  scheduledAt: string;
+}
+
+export class MarketingScheduledPostResponseModel {
+  @Expose() @ApiProperty() id: string;
+  @Expose() @ApiProperty() mediaType: string;
+  @Expose() @ApiProperty() sourceType: string;
+  @Expose() @ApiProperty() sourceId: string;
+  @Expose() @ApiPropertyOptional() sourceIndex?: number | null;
+  @Expose() @ApiProperty() sourceTitle: string;
+  @Expose() @ApiProperty() caption: string;
+  @Expose() @Type(() => Date) @ApiProperty() scheduledAt: Date;
+  @Expose() @ApiProperty() status: string;
+  @Expose() @ApiPropertyOptional() error?: string | null;
+  @Expose() @Type(() => Date) @ApiPropertyOptional() publishedAt?: Date | null;
+  @Expose() @Type(() => Date) @ApiProperty() createdAt: Date;
 }
 
 /** Message delivered by the marketing queue (QStash). */

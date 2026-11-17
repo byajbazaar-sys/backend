@@ -20,14 +20,16 @@ import {
   IMarketingNotifier,
   IMarketingPhotoshootShotsRepository,
   IMarketingPhotoshootsRepository,
+  IMarketingScheduledPostsRepository,
   MARKETING_CATALOG,
   MARKETING_FILE_STORAGE,
   MARKETING_NOTIFIER,
   MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY,
   MARKETING_PHOTOSHOOTS_REPOSITORY,
+  MARKETING_SCHEDULED_POSTS_REPOSITORY,
 } from '../ports';
-import { MarketingScheduler } from './marketing-scheduler';
 import { MarketingRenderService } from './marketing-render.service';
+import { MarketingScheduler } from './marketing-scheduler';
 import { buildShotPrompt, describePiece, PHOTOSHOOT_SHOT_KINDS } from '../prompts/photoshoot.prompts';
 
 const MAX_ACTIVE_PER_USER = 3;
@@ -36,7 +38,7 @@ const UPLOAD_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png':
 const LIST_LIMIT = 40;
 
 const keys = {
-  source: (userId: string, id: string, ext: string) => `photoshoots/${userId}/${id}/source.${ext}`,
+  source: (userId: string, id: string, ext: string): string => `photoshoots/${userId}/${id}/source.${ext}`,
 };
 
 export interface CreatePhotoshootInput {
@@ -81,6 +83,7 @@ export class MarketingPhotoshootService {
   constructor(
     @Inject(MARKETING_PHOTOSHOOTS_REPOSITORY) private readonly shoots: IMarketingPhotoshootsRepository,
     @Inject(MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY) private readonly shots: IMarketingPhotoshootShotsRepository,
+    @Inject(MARKETING_SCHEDULED_POSTS_REPOSITORY) private readonly scheduledPosts: IMarketingScheduledPostsRepository,
     @Inject(MARKETING_FILE_STORAGE) private readonly storage: IMarketingFileStorage,
     @Inject(MARKETING_CATALOG) private readonly catalog: IMarketingCatalog,
     @Inject(MARKETING_NOTIFIER) private readonly notifier: IMarketingNotifier,
@@ -195,6 +198,9 @@ export class MarketingPhotoshootService {
 
   async remove(userId: string, id: string): Promise<void> {
     const shoot = await this.owned(userId, id);
+    if (await this.scheduledPosts.hasOpenForSource(userId, 'photoshoot', id)) {
+      throw new BadRequestException('Cancel this photoshoot’s scheduled Instagram posts before deleting it.');
+    }
     const shots = await this.shots.listFor([shoot.id]);
     if (shots.some((shot) => is(shot.status, EAssetStatus.Generating))) {
       throw new BadRequestException('This photoshoot is generating right now. Delete it once generation finishes.');
@@ -210,6 +216,11 @@ export class MarketingPhotoshootService {
   /** New take of one photo (new seed, same brief). */
   async regenerateShot(userId: string, id: string, index: number): Promise<PhotoshootView> {
     const shoot = await this.owned(userId, id);
+    if (await this.scheduledPosts.hasOpenForSource(userId, 'photoshoot', id, index)) {
+      throw new BadRequestException(
+        'Cancel this photoshoot’s scheduled Instagram posts before regenerating its photos.',
+      );
+    }
     const shot = await this.shots.findByIndex(shoot.id, index);
     if (!shot) throw new NotFoundException('Photo not found');
     if (is(shot.status, EAssetStatus.Generating)) throw new BadRequestException('This photo is already being made.');

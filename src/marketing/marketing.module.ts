@@ -31,6 +31,7 @@ import {
   MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY,
   MARKETING_PHOTOSHOOTS_REPOSITORY,
   MARKETING_SCENES_REPOSITORY,
+  MARKETING_SCHEDULED_POSTS_REPOSITORY,
   MARKETING_SETTINGS_REPOSITORY,
   RENDER_JOBS_REPOSITORY,
 } from './application/ports';
@@ -40,6 +41,7 @@ import { MarketingEvents } from './application/services/marketing-events';
 import { MarketingInstagramService } from './application/services/marketing-instagram.service';
 import { MarketingPhotoshootService } from './application/services/marketing-photoshoot.service';
 import { MarketingPlannerService } from './application/services/marketing-planner.service';
+import { MarketingPublishingService } from './application/services/marketing-publishing.service';
 import { MarketingQueueConsumer } from './application/services/marketing-queue.consumer';
 import { MarketingRenderService } from './application/services/marketing-render.service';
 import { MARKETING_STEP_RUNNER, MarketingScheduler } from './application/services/marketing-scheduler';
@@ -67,6 +69,7 @@ import {
   MarketingBrandsRepository,
   MarketingCampaignsRepository,
   MarketingScenesRepository,
+  MarketingScheduledPostsRepository,
   MarketingSettingsRepository,
   RenderJobsRepository,
 } from './infrastructure/persistence/marketing.repositories';
@@ -117,6 +120,7 @@ import { MarketingConfig } from './marketing.config';
         campaignsWithActivityLog(repo, log),
     },
     { provide: MARKETING_SCENES_REPOSITORY, useClass: MarketingScenesRepository },
+    { provide: MARKETING_SCHEDULED_POSTS_REPOSITORY, useClass: MarketingScheduledPostsRepository },
     {
       provide: MARKETING_PHOTOSHOOTS_REPOSITORY,
       inject: [MarketingPhotoshootsRepository, MARKETING_ACTIVITY_LOG],
@@ -150,6 +154,7 @@ import { MarketingConfig } from './marketing.config';
     MarketingPlannerService,
     MarketingPhotoshootService,
     MarketingInstagramService,
+    MarketingPublishingService,
     MarketingCampaignsService,
     KaggleCredentialsAdminService,
     MarketingQueueConsumer,
