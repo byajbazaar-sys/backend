@@ -13,6 +13,8 @@ export interface Photoshoot {
   model: string;
   outfit: string;
   aspect: string;
+  /** 'exact' (cut-out product, new background) or 'ai' (full AI scene). */
+  imageMode: string;
   status: string;
   error?: string | null;
   createdAt?: Date;

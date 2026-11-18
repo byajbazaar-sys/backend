@@ -31,6 +31,7 @@ import {
   IRenderJobsRepository,
   RENDER_JOBS_REPOSITORY,
   MarketingScheduler,
+  resolveImageMode,
 } from '../../../shared';
 import { MarketingRenderService, kaggleJobStatus } from '../../kaggle';
 import { buildShotPrompt, describePiece, PHOTOSHOOT_SHOT_KINDS } from '../utils';
@@ -84,6 +85,7 @@ export class MarketingPhotoshootService {
     const setting = pick<PhotoshootSetting>(input.setting, PHOTOSHOOT_SETTINGS, 'showroom');
     const model = pick<PhotoshootModel>(input.model, PHOTOSHOOT_MODELS, 'woman');
     const outfit = pick<PhotoshootOutfit>(input.outfit, PHOTOSHOOT_OUTFITS, 'kurta');
+    const imageMode = resolveImageMode(input.imageMode);
     const aspect = pick<PhotoshootAspect>(input.aspect, Object.keys(PHOTOSHOOT_ASPECTS) as PhotoshootAspect[], '3:4');
 
     let image: { data: Buffer; ext: string };
@@ -128,6 +130,7 @@ export class MarketingPhotoshootService {
       model,
       outfit,
       aspect,
+      imageMode,
       status: EPhotoshootStatus.Generating,
     });
     try {

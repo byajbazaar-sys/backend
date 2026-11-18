@@ -18,6 +18,18 @@ const REEL_STATUS_POLL_MS = 5_000;
 
 type InstagramOAuthOutcome = 'connected' | 'cancelled' | 'failed';
 
+/** A null expiry means the Unified Login configuration issues tokens that never expire. */
+function isExpired(expiresAt: Date | null): boolean {
+  return !!expiresAt && expiresAt.getTime() <= Date.now();
+}
+
+/** Graph API error details (never the token) for the log. */
+function describeError(err: unknown): unknown {
+  const response = (err as { response?: { status?: number; data?: unknown } })?.response;
+  if (response) return { status: response.status, body: response.data };
+  return err instanceof Error ? err.message : 'Unknown error';
+}
+
 function stateDigest(state: string): string {
   return createHash('sha256').update(state).digest('hex');
 }
@@ -49,7 +61,7 @@ export class MarketingInstagramService {
     requiresReconnect: boolean;
   }> {
     const connection = await this.connections.findConnection(userId);
-    const requiresReconnect = !!connection && connection.tokenExpiresAt.getTime() <= Date.now();
+    const requiresReconnect = !!connection && isExpired(connection.tokenExpiresAt);
     return {
       connected: !!connection && !requiresReconnect,
       instagramUserId: connection?.instagramUserId ?? null,
@@ -66,7 +78,7 @@ export class MarketingInstagramService {
 
   async publishMedia(userId: string, mediaType: 'IMAGE' | 'REEL', mediaUrl: string, caption: string): Promise<string> {
     const connection = await this.connections.findConnection(userId);
-    if (!connection || connection.tokenExpiresAt.getTime() <= Date.now()) {
+    if (!connection || isExpired(connection.tokenExpiresAt)) {
       throw new ConflictException('Reconnect your Instagram account to publish scheduled posts.');
     }
     const accessToken = this.cipher.decrypt(connection.accessTokenEncrypted);
@@ -107,34 +119,38 @@ export class MarketingInstagramService {
 
     try {
       this.requireConfiguration();
-      const shortToken = await this.instagram.exchangeCode(code.replace(/#_$/, ''));
-      const longToken = await this.instagram.exchangeLongLivedToken(shortToken.accessToken);
-      const profile = await this.instagram.getProfile(longToken.accessToken);
-      const instagramUserId = profile.user_id ?? profile.id ?? shortToken.userId;
-      const username = profile.username;
-      if (!instagramUserId || !username) throw new Error('Instagram profile response was incomplete');
+      const token = await this.instagram.exchangeCode(code.replace(/#_$/, ''));
+      const accounts = await this.instagram.getAssignedAccounts(token.accessToken);
+      const account = accounts[0];
+      if (!account) throw new Error('No Instagram professional account was assigned to the app during login');
+      if (accounts.length > 1) {
+        this.logger.info(
+          { userId, accounts: accounts.map((a) => a.username) },
+          'Several Instagram accounts assigned; using the first',
+        );
+      }
 
       const now = new Date();
       await this.connections.saveConnection({
         userId,
-        instagramUserId: String(instagramUserId),
-        username: String(username),
-        accessTokenEncrypted: this.cipher.encrypt(longToken.accessToken),
-        tokenExpiresAt: new Date(now.getTime() + longToken.expiresIn * 1000),
+        instagramUserId: account.id,
+        username: account.username,
+        accessTokenEncrypted: this.cipher.encrypt(token.accessToken),
+        tokenExpiresAt: token.expiresIn ? new Date(now.getTime() + token.expiresIn * 1000) : null,
         connectedAt: now,
       });
       return 'connected';
-    } catch {
-      this.logger.warn({ userId }, 'Instagram Business Login could not be completed');
+    } catch (err) {
+      this.logger.warn({ userId, err: describeError(err) }, 'Instagram Unified Login could not be completed');
       return 'failed';
     }
   }
 
   private requireConfiguration(): void {
-    const { appId, appSecret, redirectUri } = this.config.instagram;
-    if (!appId || !appSecret || !redirectUri) {
+    const { appId, appSecret, configId, redirectUri } = this.config.instagram;
+    if (!appId || !appSecret || !configId || !redirectUri) {
       throw new ServiceUnavailableException(
-        'Instagram Business Login is not configured. Set MARKETING_INSTAGRAM_APP_ID, MARKETING_INSTAGRAM_APP_SECRET, and MARKETING_INSTAGRAM_REDIRECT_URI.',
+        'Instagram Unified Login is not configured. Set MARKETING_INSTAGRAM_APP_ID and MARKETING_INSTAGRAM_APP_SECRET (the Meta app ID / secret), MARKETING_INSTAGRAM_CONFIG_ID, and MARKETING_INSTAGRAM_REDIRECT_URI.',
       );
     }
     if (!this.config.credentialsSecret) {

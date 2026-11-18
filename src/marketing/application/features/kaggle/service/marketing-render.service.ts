@@ -6,6 +6,7 @@ import { KaggleHealthService } from './kaggle-health.service';
 import { KaggleRecoveryResult } from './kaggle-recovery-result';
 import { MarketingConfig } from '../../../../marketing.config';
 import {
+  resolveImageMode,
   MarketingCampaign,
   MarketingScene,
   RenderClipSpec,
@@ -234,6 +235,7 @@ export class MarketingRenderService {
           clips: [],
           imageGeneration: {
             type: 'campaign',
+            mode: resolveImageMode(campaign.imageMode),
             sourceImageKey: campaign.sourceImageKey,
             title: campaign.title,
             style: campaign.style,
@@ -291,6 +293,7 @@ export class MarketingRenderService {
         clips: [],
         imageGeneration: {
           type: 'photoshoot',
+          mode: resolveImageMode(shoot.imageMode),
           sourceImageKey: shoot.sourceImageKey,
           title: shoot.title,
           style: `${shoot.setting}; ${shoot.model}; ${shoot.outfit}`,
@@ -894,6 +897,7 @@ export class MarketingRenderService {
       apiBaseUrl: this.config.publicApiBaseUrl,
       sourceImageUrl,
       type: generation.type,
+      mode: generation.mode ?? 'exact',
       title: generation.title,
       style: generation.style,
       targets,

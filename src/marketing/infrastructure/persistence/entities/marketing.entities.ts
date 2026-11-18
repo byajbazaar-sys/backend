@@ -21,6 +21,7 @@ export class MarketingCampaignEntity {
   @Column({ type: 'varchar', length: 500 }) sourceImageKey: string;
   @Column({ type: 'varchar', length: 30 }) style: string;
   @Column({ type: 'varchar', length: 10 }) quality: string;
+  @Column({ type: 'varchar', length: 10, default: 'exact' }) imageMode: string;
   @Column({ type: 'varchar', length: 20 }) status: string;
   @Column({ type: 'smallint', default: 0 }) progress: number;
   @Column({ type: 'varchar', length: 255, nullable: true }) stageMessage: string | null;
@@ -143,6 +144,7 @@ export class MarketingPhotoshootEntity {
   @Column({ type: 'varchar', length: 10 }) model: string;
   @Column({ type: 'varchar', length: 20 }) outfit: string;
   @Column({ type: 'varchar', length: 8 }) aspect: string;
+  @Column({ type: 'varchar', length: 10, default: 'exact' }) imageMode: string;
   @Column({ type: 'varchar', length: 20 }) status: string;
   @Column({ type: 'text', nullable: true }) error: string | null;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;

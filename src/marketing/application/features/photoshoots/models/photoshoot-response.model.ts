@@ -14,6 +14,7 @@ export class PhotoshootResponseModel {
   @Expose() @ApiProperty() model: string;
   @Expose() @ApiProperty() outfit: string;
   @Expose() @ApiProperty() aspect: string;
+  @Expose() @ApiProperty({ enum: ['exact', 'ai'] }) imageMode: string;
   @Expose()
   @Type(() => PhotoshootPieceResponseModel)
   @ApiProperty({ type: PhotoshootPieceResponseModel })

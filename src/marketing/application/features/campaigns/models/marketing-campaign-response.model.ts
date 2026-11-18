@@ -11,6 +11,7 @@ export class MarketingCampaignResponseModel {
   @Expose() @ApiPropertyOptional() inventoryItemId?: string;
   @Expose() @ApiProperty() style: string;
   @Expose() @ApiProperty() quality: string;
+  @Expose() @ApiProperty({ enum: ['exact', 'ai'] }) imageMode: string;
   @Expose() @ApiProperty() status: string;
   @Expose() @ApiProperty() progress: number;
   @Expose() @ApiPropertyOptional() stageMessage?: string;

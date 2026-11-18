@@ -2,7 +2,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 
-import { MARKETING_QUALITIES, MARKETING_STYLES, MarketingImageInputModel } from '../../../shared';
+import {
+  MARKETING_IMAGE_MODES,
+  MARKETING_QUALITIES,
+  MARKETING_STYLES,
+  MarketingImageInputModel,
+} from '../../../shared';
 
 export class CreateCampaignRequestModel {
   @ApiPropertyOptional({ description: 'Use this inventory item’s photo' })
@@ -31,4 +36,13 @@ export class CreateCampaignRequestModel {
   @IsOptional()
   @IsIn(MARKETING_QUALITIES)
   quality?: string;
+
+  @ApiPropertyOptional({
+    enum: MARKETING_IMAGE_MODES,
+    default: 'exact',
+    description: 'exact = cut out the real product and only change the background; ai = full AI scene',
+  })
+  @IsOptional()
+  @IsIn(MARKETING_IMAGE_MODES)
+  imageMode?: string;
 }

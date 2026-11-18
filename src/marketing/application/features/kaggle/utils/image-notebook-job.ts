@@ -7,6 +7,8 @@ export interface ImageNotebookJob {
   apiBaseUrl?: string;
   sourceImageUrl?: string;
   type: 'campaign' | 'photoshoot' | 'logo';
+  /** exact = cut-out product + new background; ai = full AI scene (FLUX.2 [klein]). */
+  mode: 'exact' | 'ai';
   title: string;
   style?: string;
   targets: ImageNotebookTarget[];

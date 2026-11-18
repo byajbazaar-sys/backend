@@ -16,7 +16,7 @@ export class MarketingInstagramCallbackController {
   ) {}
 
   @Get('callback')
-  @ApiOperation({ summary: 'Instagram Business Login callback; validates and consumes one-time OAuth state' })
+  @ApiOperation({ summary: 'Instagram Unified Login callback; validates and consumes one-time OAuth state' })
   async callback(
     @Query('state') state: string | undefined,
     @Query('code') code: string | undefined,

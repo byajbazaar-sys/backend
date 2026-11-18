@@ -4,6 +4,8 @@ export interface RenderJobPayload {
   clips: RenderClipSpec[];
   imageGeneration?: {
     type: 'campaign' | 'photoshoot' | 'logo';
+    /** exact = cut-out product + new background; ai = full AI scene (logos ignore it). */
+    mode?: 'exact' | 'ai';
     sourceImageKey?: string;
     title: string;
     style?: string;

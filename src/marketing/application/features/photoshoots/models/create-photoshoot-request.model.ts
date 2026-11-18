@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 
 import {
+  MARKETING_IMAGE_MODES,
   PHOTOSHOOT_ASPECTS,
   PHOTOSHOOT_METALS,
   PHOTOSHOOT_MODELS,
@@ -59,4 +60,13 @@ export class CreatePhotoshootRequestModel {
   @IsOptional()
   @IsIn(Object.keys(PHOTOSHOOT_ASPECTS))
   aspect?: string;
+
+  @ApiPropertyOptional({
+    enum: MARKETING_IMAGE_MODES,
+    default: 'exact',
+    description: 'exact = cut out the real product and only change the background; ai = full AI scene',
+  })
+  @IsOptional()
+  @IsIn(MARKETING_IMAGE_MODES)
+  imageMode?: string;
 }

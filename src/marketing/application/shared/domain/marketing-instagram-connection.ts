@@ -3,6 +3,7 @@ export interface MarketingInstagramConnection {
   instagramUserId: string;
   username: string;
   accessTokenEncrypted: string;
-  tokenExpiresAt: Date;
+  /** Null when the token never expires. */
+  tokenExpiresAt: Date | null;
   connectedAt: Date;
 }

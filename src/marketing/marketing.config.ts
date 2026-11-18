@@ -50,9 +50,14 @@ export class MarketingConfig {
    * endpoints, not env vars). Falls back to TOKEN_SECRET; changing it makes stored keys unreadable.
    */
   readonly credentialsSecret = env('MARKETING_CREDENTIALS_SECRET') ?? env('TOKEN_SECRET');
+  /**
+   * Instagram API with Unified Login (Facebook Login for Business + an "Instagram Login Compatible" configuration).
+   * Uses the Meta app ID / secret (not the Instagram app ID) and the configuration ID from the App Dashboard.
+   */
   readonly instagram = {
-    appId: env('MARKETING_INSTAGRAM_APP_ID'),
-    appSecret: env('MARKETING_INSTAGRAM_APP_SECRET'),
+    appId: env('MARKETING_INSTAGRAM_APP_ID') ?? env('META_APP_ID'),
+    appSecret: env('MARKETING_INSTAGRAM_APP_SECRET') ?? env('META_APP_SECRET'),
+    configId: env('MARKETING_INSTAGRAM_CONFIG_ID'),
     webhookVerifyToken: env('MARKETING_INSTAGRAM_WEBHOOK_VERIFY_TOKEN'),
     redirectUri: env('MARKETING_INSTAGRAM_REDIRECT_URI'),
     returnUrl: env('MARKETING_INSTAGRAM_RETURN_URL'),

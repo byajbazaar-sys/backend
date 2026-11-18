@@ -1,5 +1,5 @@
-import { IMAGE_MODELS } from "./image-worker.notebook";
-import { WorkerNotebookJob } from "./worker-notebook-job";
+import { IMAGE_MODELS } from './image-worker.notebook';
+import { WorkerNotebookJob } from './worker-notebook-job';
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
 const code = (source: string) => ({ cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source });
@@ -191,7 +191,7 @@ try:
     COMFY_LOG = f"{BIG_DIR}/comfyui.log"
     comfy_proc = subprocess.Popen(
         [sys.executable, f"{COMFY_DIR}/main.py", "--listen", "127.0.0.1", "--port", "8188",
-         "--disable-pinned-memory", "--reserve-vram", "0.6", "--preview-method", "none"],
+         "--disable-pinned-memory", "--reserve-vram", "1.0", "--preview-method", "none"],
         cwd=COMFY_DIR, env=env, stdout=open(COMFY_LOG, "w"), stderr=subprocess.STDOUT)
     COMFY = "http://127.0.0.1:8188"
     for _ in range(180):
@@ -205,7 +205,8 @@ try:
         time.sleep(2)
     if comfy_proc.poll() is not None:
         raise RuntimeError("ComfyUI exited: " + open(COMFY_LOG).read()[-1500:])
-    NODES = set(requests.get(f"{COMFY}/object_info", timeout=60).json().keys())
+    OBJECT_INFO = requests.get(f"{COMFY}/object_info", timeout=60).json()
+    NODES = set(OBJECT_INFO.keys())
     report.send("rendering", 32, "Video engine ready", force=True)
 except Exception as e:
     report.send("failed", 0, f"Video engine failed to start: {e}", status="failed", force=True)
@@ -215,9 +216,12 @@ except Exception as e:
 /** Clip rendering + Reel encode + upload, and the crossfade merge. merge_clips() is also unit-tested locally. */
 export const CELL_RENDER_AND_MERGE = `
 PRESETS = {
-    "reel_hq":   {"width": 960, "height": 1728, "frames": 121, "fps": 24, "steps": 40},
-    "reel_fast": {"width": 768, "height": 1344, "frames": 121, "fps": 24, "steps": 24},
+    # Wan 2.2 TI2V-5B is trained at 1280x704 (portrait 704x1280); everything is upscaled to 1080x1920 afterwards.
+    "reel_hq":   {"width": 704, "height": 1280, "frames": 121, "fps": 24, "steps": 30},
+    "reel_fast": {"width": 480, "height": 832, "frames": 121, "fps": 24, "steps": 20},
 }
+# Smaller sizes tried, in order, when a clip runs out of GPU memory (all multiples of 32, 9:16-ish).
+SIZE_LADDER = [(704, 1280), (608, 1088), (544, 960), (480, 832)]
 # Higher denoise and a gentler shift preserve jewellery detail without making the motion too mechanical.
 CFG, SHIFT = 4.5, 6.0
 VIDEO_EXT = (".mp4", ".webm", ".mov", ".mkv")
@@ -226,6 +230,50 @@ OUT_W, OUT_H, OUT_FPS = 1080, 1920, 30
 SCENE_TRANSITIONS = ["fade", "smoothleft", "dissolve", "circleopen", "smoothup"]
 LOGO_TRANSITION = "fadewhite"
 TRANSITION_SECONDS = 0.7
+
+
+def decode_node(samples, vae):
+    """Tiled VAE decode (121 frames at once does not fit a T4); plain decode on old ComfyUI checkouts."""
+    info = OBJECT_INFO.get("VAEDecodeTiled")
+    if not info:
+        return {"class_type": "VAEDecode", "inputs": {"samples": samples, "vae": vae}}
+    inputs = {"samples": samples, "vae": vae}
+    preferred = {"tile_size": 256, "overlap": 64, "temporal_size": 32, "temporal_overlap": 8}
+    for name, item in info.get("input", {}).get("required", {}).items():
+        if name in inputs:
+            continue
+        cfg = item[1] if len(item) > 1 and isinstance(item[1], dict) else {}
+        inputs[name] = preferred.get(name, cfg.get("default"))
+    return {"class_type": "VAEDecodeTiled", "inputs": inputs}
+
+
+def is_oom(error):
+    text = str(error).lower()
+    return "out of memory" in text or "allocation on device" in text or "outofmemory" in text
+
+
+def free_comfy_memory():
+    try:
+        requests.post(f"{COMFY}/free", json={"unload_models": True, "free_memory": True}, timeout=60)
+        time.sleep(5)
+    except requests.RequestException as exc:
+        print("could not free ComfyUI memory:", exc, flush=True)
+
+
+def render_clip_safely(clip, p, idx, count):
+    """render_clip, stepping down SIZE_LADDER when the GPU runs out of memory instead of failing the clip."""
+    start = next((i for i, (w, h) in enumerate(SIZE_LADDER) if w <= p["width"] and h <= p["height"]), 0)
+    for rung in range(start, len(SIZE_LADDER)):
+        width, height = SIZE_LADDER[rung]
+        try:
+            return render_clip(clip, dict(p, width=width, height=height), idx, count)
+        except Exception as exc:
+            if not is_oom(exc) or rung == len(SIZE_LADDER) - 1:
+                raise
+            free_comfy_memory()
+            smaller = SIZE_LADDER[rung + 1]
+            report.send("rendering", 32 + 56 * idx / count, f"Out of GPU memory at {width}x{height} — retrying at "
+                        f"{smaller[0]}x{smaller[1]}", force=True, clipKey=clip["key"])
 
 
 def make_workflow(prompt, negative, seed, p, image_name, prefix):
@@ -239,7 +287,7 @@ def make_workflow(prompt, negative, seed, p, image_name, prefix):
         "7":  {"class_type": "CLIPTextEncode", "inputs": {"clip": ["38", 0], "text": negative}},
         "48": {"class_type": "ModelSamplingSD3", "inputs": {"model": ["37", 0], "shift": SHIFT}},
         "55": {"class_type": "Wan22ImageToVideoLatent", "inputs": latent},
-        "8":  {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["39", 0]}},
+        "8":  decode_node(["3", 0], ["39", 0]),
         "57": {"class_type": "CreateVideo", "inputs": {"images": ["8", 0], "fps": p["fps"]}},
         "58": {"class_type": "SaveVideo", "inputs": {"video": ["57", 0], "filename_prefix": prefix, "format": "auto", "codec": "auto"}},
     }
@@ -465,7 +513,7 @@ def run():
             handover(32 + 56 * i / max(1, len(clips)), f"clip {clip['key']}")
         started = time.time()
         try:
-            local[clip["key"]] = render_clip(clip, p, i, len(clips))
+            local[clip["key"]] = render_clip_safely(clip, p, i, len(clips))
             clip_seconds.append(time.time() - started)
         except Exception as e:  # keep going: one bad scene must not lose the others
             traceback.print_exc()
@@ -522,47 +570,50 @@ except Exception as e:
 
 /** Image-notebook models the setup check makes sure the account can download. */
 const IMAGE_MODEL_CHECKS = [
-    `https://huggingface.co/${IMAGE_MODELS.generator}/resolve/main/model_index.json`,
-    `https://huggingface.co/${IMAGE_MODELS.vae}/resolve/main/config.json`,
-    `https://huggingface.co/${IMAGE_MODELS.segmenter}/resolve/main/config.json`,
-    `https://huggingface.co/${IMAGE_MODELS.analystLarge}/resolve/main/config.json`,
+  `https://huggingface.co/${IMAGE_MODELS.generator}/resolve/main/model_index.json`,
+  `https://huggingface.co/${IMAGE_MODELS.vae}/resolve/main/config.json`,
+  `https://huggingface.co/${IMAGE_MODELS.segmenter}/resolve/main/config.json`,
+  `https://huggingface.co/${IMAGE_MODELS.analystLarge}/resolve/main/config.json`,
+  IMAGE_MODELS.kleinDiffusion,
+  IMAGE_MODELS.kleinTextEncoder,
+  IMAGE_MODELS.kleinVae,
 ]
-    .map((url) => JSON.stringify(url) + ',')
-    .join('\n        ');
+  .map((url) => JSON.stringify(url) + ',')
+  .join('\n        ');
 
 /** Python string literal holding the job JSON (JSON escapes are valid Python string escapes). */
 function jobLiteral(job: WorkerNotebookJob): string {
-    return JSON.stringify(JSON.stringify(job));
+  return JSON.stringify(JSON.stringify(job));
 }
 
 export function buildWorkerNotebook(job: WorkerNotebookJob): Record<string, unknown> {
-    // Function replacement: a `$` in the job (titles, presigned URLs) must not be read as a replacement pattern.
-    const reporter = CELL_REPORTER.replace('__JOB_JSON__', () => jobLiteral(job));
-    const cells =
-        job.kind === 'setup'
-            ? [code(reporter), code(CELL_SETUP_CHECK.replace('__IMAGE_MODEL_CHECKS__', () => IMAGE_MODEL_CHECKS))]
-            : [
-                code(reporter),
-                code(CELL_INSTALL),
-                code(CELL_MODELS),
-                code(CELL_COMFY),
-                code(CELL_RENDER_AND_MERGE),
-                code(CELL_RUN),
-            ];
-    return {
-        nbformat: 4,
-        nbformat_minor: 5,
-        metadata: {
-            kernelspec: { display_name: 'Python 3', language: 'python', name: 'python3' },
-            language_info: { name: 'python' },
-            kaggle: { accelerator: 'nvidiaTeslaT4', isInternetEnabled: true, isGpuEnabled: true },
-        },
-        cells: [
-            md(
-                `# ByajBazaar marketing ${job.kind === 'setup' ? 'account setup' : 'render'} worker\n\n` +
-                `Auto-generated for job \`${job.jobId}\` — do not edit. Reports live progress to the ByajBazaar WebSocket.`,
-            ),
-            ...cells,
-        ],
-    };
+  // Function replacement: a `$` in the job (titles, presigned URLs) must not be read as a replacement pattern.
+  const reporter = CELL_REPORTER.replace('__JOB_JSON__', () => jobLiteral(job));
+  const cells =
+    job.kind === 'setup'
+      ? [code(reporter), code(CELL_SETUP_CHECK.replace('__IMAGE_MODEL_CHECKS__', () => IMAGE_MODEL_CHECKS))]
+      : [
+          code(reporter),
+          code(CELL_INSTALL),
+          code(CELL_MODELS),
+          code(CELL_COMFY),
+          code(CELL_RENDER_AND_MERGE),
+          code(CELL_RUN),
+        ];
+  return {
+    nbformat: 4,
+    nbformat_minor: 5,
+    metadata: {
+      kernelspec: { display_name: 'Python 3', language: 'python', name: 'python3' },
+      language_info: { name: 'python' },
+      kaggle: { accelerator: 'nvidiaTeslaT4', isInternetEnabled: true, isGpuEnabled: true },
+    },
+    cells: [
+      md(
+        `# ByajBazaar marketing ${job.kind === 'setup' ? 'account setup' : 'render'} worker\n\n` +
+          `Auto-generated for job \`${job.jobId}\` — do not edit. Reports live progress to the ByajBazaar WebSocket.`,
+      ),
+      ...cells,
+    ],
+  };
 }

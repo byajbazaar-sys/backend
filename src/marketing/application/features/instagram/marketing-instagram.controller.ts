@@ -41,7 +41,7 @@ export class MarketingInstagramController {
 
   @Post('connect')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Start Instagram Business Login for this marketing account' })
+  @ApiOperation({ summary: 'Start Instagram Unified Login for this marketing account' })
   @ApiOkResponse({ type: MarketingInstagramConnectResponseModel })
   async connect(@Identity() identity: IIdentity): Promise<MarketingInstagramConnectResponseModel> {
     return plainToInstance(

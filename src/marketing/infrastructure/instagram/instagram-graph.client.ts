@@ -4,20 +4,16 @@ import axios from 'axios';
 import { InstagramProfile, IInstagramGraphClient } from '../../application';
 import { MarketingConfig } from '../../marketing.config';
 
-const INSTAGRAM_AUTHORIZE_URL = 'https://www.instagram.com/oauth/authorize';
-const INSTAGRAM_TOKEN_URL = 'https://api.instagram.com/oauth/access_token';
-const INSTAGRAM_GRAPH_URL = 'https://graph.instagram.com';
-const LONG_LIVED_TOKEN_SECONDS = 60 * 24 * 60 * 60;
+/**
+ * Instagram API with Unified Login: the client logs in with Instagram or Facebook through the Facebook Login for
+ * Business dialog (an "Instagram Login Compatible" configuration), and every API call goes to graph.facebook.com with
+ * a Business Integration System User token and the client's Instagram account ID.
+ */
+const FACEBOOK_DIALOG_URL = 'https://www.facebook.com';
+const FACEBOOK_GRAPH_URL = 'https://graph.facebook.com';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
-
-function responseRecord(value: unknown): Record<string, unknown> {
-  const outer = asRecord(value);
-  const data = outer.data;
-  if (Array.isArray(data)) return asRecord(data[0]);
-  return data && typeof data === 'object' ? asRecord(data) : outer;
 }
 
 function asString(value: unknown): string | undefined {
@@ -26,76 +22,57 @@ function asString(value: unknown): string | undefined {
   return undefined;
 }
 
-/** Instagram Business Login + Graph API over HTTPS (axios). */
+/** Instagram Unified Login + Instagram content publishing over graph.facebook.com (axios). */
 @Injectable()
 export class InstagramGraphClient implements IInstagramGraphClient {
   constructor(private readonly config: MarketingConfig) {}
 
   private get graphUrl(): string {
-    return `${INSTAGRAM_GRAPH_URL}/${this.config.instagram.graphApiVersion}`;
+    return `${FACEBOOK_GRAPH_URL}/${this.config.instagram.graphApiVersion}`;
   }
 
   authorizationUrl(state: string): string {
     const params = new URLSearchParams({
-      client_id: this.config.instagram.appId,
-      redirect_uri: this.config.instagram.redirectUri,
+      client_id: this.config.instagram.appId ?? '',
+      config_id: this.config.instagram.configId ?? '',
+      redirect_uri: this.config.instagram.redirectUri ?? '',
       response_type: 'code',
-      scope: 'instagram_business_basic,instagram_business_content_publish',
+      override_default_response_type: 'true',
+      display: 'page',
       state,
-      enable_fb_login: 'true',
     });
-    return `${INSTAGRAM_AUTHORIZE_URL}?${params.toString()}`;
+    return `${FACEBOOK_DIALOG_URL}/${this.config.instagram.graphApiVersion}/dialog/oauth?${params.toString()}`;
   }
 
-  async exchangeCode(code: string): Promise<{ accessToken: string; userId: string }> {
-    const response = await axios.post(
-      INSTAGRAM_TOKEN_URL,
-      new URLSearchParams({
+  async exchangeCode(code: string): Promise<{ accessToken: string; expiresIn: number | null }> {
+    const response = await axios.get(`${this.graphUrl}/oauth/access_token`, {
+      params: {
         client_id: this.config.instagram.appId,
         client_secret: this.config.instagram.appSecret,
-        grant_type: 'authorization_code',
         redirect_uri: this.config.instagram.redirectUri,
         code,
-      }).toString(),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15_000 },
-    );
-    const data = responseRecord(response.data);
-    const accessToken = typeof data.access_token === 'string' ? data.access_token : '';
-    const userId = asString(data.user_id) ?? '';
-    if (response.status >= 300 || !accessToken || !userId) throw new Error('Instagram code exchange failed');
-    return { accessToken, userId };
-  }
-
-  async exchangeLongLivedToken(accessToken: string): Promise<{ accessToken: string; expiresIn: number }> {
-    const response = await axios.get(`${INSTAGRAM_GRAPH_URL}/access_token`, {
-      params: {
-        grant_type: 'ig_exchange_token',
-        client_secret: this.config.instagram.appSecret,
-        access_token: accessToken,
       },
       timeout: 15_000,
     });
-    const data = responseRecord(response.data);
-    const token = typeof data.access_token === 'string' ? data.access_token : '';
-    const expiresIn = Number(data.expires_in ?? LONG_LIVED_TOKEN_SECONDS);
-    if (response.status >= 300 || !token || !Number.isFinite(expiresIn) || expiresIn <= 0) {
-      throw new Error('Instagram long-lived token exchange failed');
-    }
-    return { accessToken: token, expiresIn };
+    const data = asRecord(response.data);
+    const accessToken = asString(data.access_token);
+    if (!accessToken) throw new Error('Instagram code exchange failed');
+    const expiresIn = Number(data.expires_in);
+    return { accessToken, expiresIn: Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : null };
   }
 
-  async getProfile(accessToken: string): Promise<InstagramProfile> {
-    const response = await axios.get(`${this.graphUrl}/me`, {
-      params: { fields: 'user_id,username', access_token: accessToken },
+  async getAssignedAccounts(accessToken: string): Promise<InstagramProfile[]> {
+    const response = await axios.get(`${this.graphUrl}/me/assigned_instagram_accounts`, {
+      params: { fields: 'id,username', access_token: accessToken },
       timeout: 15_000,
     });
-    const data = responseRecord(response.data);
-    if (response.status >= 300) throw new Error('Instagram profile request failed');
-    return {
-      user_id: asString(data.user_id),
-      id: asString(data.id),
-      username: asString(data.username),
-    };
+    const data = asRecord(response.data).data;
+    return (Array.isArray(data) ? data : [])
+      .map((item) => {
+        const record = asRecord(item);
+        return { id: asString(record.id), username: asString(record.username) };
+      })
+      .filter((account): account is InstagramProfile => !!account.id && !!account.username);
   }
 
   async createMediaContainer(input: {

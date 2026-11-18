@@ -1,5 +1,5 @@
+/** An Instagram professional account the client assigned to the app during Unified Login. */
 export interface InstagramProfile {
-  user_id?: string;
-  id?: string;
-  username?: string;
+  id: string;
+  username: string;
 }

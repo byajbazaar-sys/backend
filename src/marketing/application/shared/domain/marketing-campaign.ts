@@ -10,6 +10,8 @@ export interface MarketingCampaign {
   sourceImageKey: string;
   style: string;
   quality: string;
+  /** 'exact' (cut-out product, new background) or 'ai' (full AI scene). */
+  imageMode: string;
   status: ECampaignStatus;
   progress: number;
   stageMessage?: string | null;

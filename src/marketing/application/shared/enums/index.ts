@@ -4,6 +4,7 @@ export * from './e-kaggle-account-status.enum';
 export * from './e-photoshoot-status.enum';
 export * from './e-render-job-kind.enum';
 export * from './e-render-job-status.enum';
+export * from './marketing-image-mode';
 export * from './marketing-quality';
 export * from './marketing-style';
 export * from './marketing.constants';

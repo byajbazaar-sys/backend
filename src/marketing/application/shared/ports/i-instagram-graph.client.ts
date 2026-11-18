@@ -1,13 +1,17 @@
 import { InstagramProfile } from '../domain';
 
-/** Instagram Business Login (OAuth) and the Instagram Graph content-publishing API. */
+/** Instagram API with Unified Login (OAuth via Facebook Login for Business) and content publishing. */
 export const INSTAGRAM_GRAPH_CLIENT = 'INSTAGRAM_GRAPH_CLIENT';
 
 export interface IInstagramGraphClient {
   authorizationUrl(state: string): string;
-  exchangeCode(code: string): Promise<{ accessToken: string; userId: string }>;
-  exchangeLongLivedToken(accessToken: string): Promise<{ accessToken: string; expiresIn: number }>;
-  getProfile(accessToken: string): Promise<InstagramProfile>;
+  /**
+   * Exchanges the OAuth code for a Business Integration System User access token. `expiresIn` (seconds) is null
+   * when the configuration issues tokens that never expire.
+   */
+  exchangeCode(code: string): Promise<{ accessToken: string; expiresIn: number | null }>;
+  /** The Instagram professional accounts the client assigned to the app (`/me/assigned_instagram_accounts`). */
+  getAssignedAccounts(accessToken: string): Promise<InstagramProfile[]>;
   /** Creates a media container for an image or a reel; returns its ID. */
   createMediaContainer(input: {
     accessToken: string;

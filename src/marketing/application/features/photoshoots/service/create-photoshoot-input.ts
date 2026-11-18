@@ -10,4 +10,6 @@ export interface CreatePhotoshootInput {
   model?: string;
   outfit?: string;
   aspect?: string;
+  /** exact = keep the real product, new background (default); ai = full AI scene. */
+  imageMode?: string;
 }

@@ -34,6 +34,7 @@ import {
   MarketingEvents,
   MarketingScheduler,
   MarketingKeys,
+  resolveImageMode,
 } from '../../../shared';
 import { MarketingRenderService, kaggleJobStatus } from '../../kaggle';
 
@@ -66,6 +67,7 @@ export class MarketingCampaignsService {
     const quality = (MARKETING_QUALITIES as readonly string[]).includes(input.quality ?? '')
       ? (input.quality as MarketingQuality)
       : 'hd';
+    const imageMode = resolveImageMode(input.imageMode);
     if (!input.inventoryItemId && !input.image?.base64) {
       throw new BadRequestException('Choose an inventory item or upload a photo.');
     }
@@ -108,6 +110,7 @@ export class MarketingCampaignsService {
       sourceImageKey: '',
       style,
       quality,
+      imageMode,
       status: ECampaignStatus.Planning,
       progress: 1,
       stageMessage: 'Queued',

@@ -44,7 +44,6 @@ export class MarketingInstagramRepository implements IMarketingInstagramReposito
       !connection?.instagramUserId ||
       !connection.username ||
       !connection.accessTokenEncrypted ||
-      !connection.tokenExpiresAt ||
       !connection.connectedAt
     ) {
       return null;
