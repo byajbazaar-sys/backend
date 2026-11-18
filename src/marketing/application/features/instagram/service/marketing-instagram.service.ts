@@ -110,12 +110,30 @@ export class MarketingInstagramService {
     state: string | undefined,
     code: string | undefined,
     providerError?: string,
+    providerErrorDetail?: string,
   ): Promise<InstagramOAuthOutcome> {
-    if (!state) return 'failed';
+    // Never log the code or state themselves: only whether they arrived.
+    const received = { hasState: !!state, hasCode: !!code, error: providerError, errorDetail: providerErrorDetail };
+    if (!state) {
+      this.logger.warn(received, 'Instagram callback without state');
+      return 'failed';
+    }
     const userId = await this.connections.consumeOAuthState(stateDigest(state), new Date());
-    if (!userId) return 'failed';
-    if (providerError) return 'cancelled';
-    if (!code) return 'failed';
+    if (!userId) {
+      this.logger.warn(
+        received,
+        'Instagram callback state is unknown or expired (older than 10 min, or Connect was clicked again)',
+      );
+      return 'failed';
+    }
+    if (providerError) {
+      this.logger.info({ userId, ...received }, 'Instagram login was cancelled or refused at Meta');
+      return 'cancelled';
+    }
+    if (!code) {
+      this.logger.warn({ userId, ...received }, 'Instagram callback without code');
+      return 'failed';
+    }
 
     try {
       this.requireConfiguration();
@@ -139,6 +157,10 @@ export class MarketingInstagramService {
         tokenExpiresAt: token.expiresIn ? new Date(now.getTime() + token.expiresIn * 1000) : null,
         connectedAt: now,
       });
+      this.logger.info(
+        { userId, username: account.username, expiresIn: token.expiresIn },
+        'Instagram connected via Unified Login',
+      );
       return 'connected';
     } catch (err) {
       this.logger.warn({ userId, err: describeError(err) }, 'Instagram Unified Login could not be completed');

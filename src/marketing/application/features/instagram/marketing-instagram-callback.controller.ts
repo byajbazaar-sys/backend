@@ -21,9 +21,16 @@ export class MarketingInstagramCallbackController {
     @Query('state') state: string | undefined,
     @Query('code') code: string | undefined,
     @Query('error') error: string | undefined,
+    @Query('error_reason') errorReason: string | undefined,
+    @Query('error_description') errorDescription: string | undefined,
+    // Facebook dialogs sometimes report failures as error_code / error_message instead of error.
+    @Query('error_code') errorCode: string | undefined,
+    @Query('error_message') errorMessage: string | undefined,
     @Res() response: Response,
   ): Promise<void> {
-    const outcome = await this.instagram.finishConnection(state, code, error);
+    const providerError = error ?? (errorCode ? `error_code ${errorCode}` : undefined);
+    const detail = [errorReason, errorDescription, errorMessage].filter(Boolean).join(' — ') || undefined;
+    const outcome = await this.instagram.finishConnection(state, code, providerError, detail);
     if (this.config.instagram.returnUrl) {
       const returnUrl = new URL(this.config.instagram.returnUrl);
       returnUrl.searchParams.set('instagram_connection', outcome);
