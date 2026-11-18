@@ -53,7 +53,6 @@ export class MarketingConfig {
   readonly instagram = {
     appId: env('MARKETING_INSTAGRAM_APP_ID'),
     appSecret: env('MARKETING_INSTAGRAM_APP_SECRET'),
-    configId: env('MARKETING_INSTAGRAM_CONFIG_ID'),
     webhookVerifyToken: env('MARKETING_INSTAGRAM_WEBHOOK_VERIFY_TOKEN'),
     redirectUri: env('MARKETING_INSTAGRAM_REDIRECT_URI'),
     returnUrl: env('MARKETING_INSTAGRAM_RETURN_URL'),

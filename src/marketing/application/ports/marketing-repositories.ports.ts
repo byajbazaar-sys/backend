@@ -86,6 +86,12 @@ export interface IRenderJobsRepository {
   findStale(statuses: ERenderJobStatus[], olderThan: Date): Promise<RenderJob[]>;
   /** Waiting / busy job for a campaign or brand logo, to avoid queuing duplicates. */
   findOpenFor(filter: { campaignId?: string; userId?: string; kind?: string }): Promise<RenderJob | null>;
+  /** Newest IMAGES and CAMPAIGN (video) job of each campaign, for the image / video notebook status. */
+  latestForCampaigns(campaignIds: string[]): Promise<RenderJob[]>;
+  /** Most recently finished (DONE / FAILED) non-setup jobs, newest first. */
+  listRecentFinished(limit: number): Promise<RenderJob[]>;
+  /** Newest IMAGES job of each photoshoot. */
+  latestForPhotoshoots(photoshootIds: string[]): Promise<RenderJob[]>;
 }
 
 export const MARKETING_PHOTOSHOOTS_REPOSITORY = 'MARKETING_PHOTOSHOOTS_REPOSITORY';

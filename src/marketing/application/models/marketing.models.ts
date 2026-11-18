@@ -90,6 +90,21 @@ export class MarketingSceneResponseModel {
   @Expose() @ApiPropertyOptional() error?: string;
 }
 
+/** Status of one Kaggle notebook run (image notebook or video notebook). */
+export class KaggleJobStatusResponseModel {
+  @Expose() @ApiProperty() id: string;
+  @Expose() @ApiProperty({ enum: ['image', 'video', 'setup'] }) notebook: string;
+  @Expose() @ApiProperty({ enum: ['WAITING', 'STARTING', 'RUNNING', 'DONE', 'FAILED'] }) status: string;
+  @Expose() @ApiProperty() progress: number;
+  @Expose() @ApiPropertyOptional() stageMessage: string | null;
+  @Expose() @ApiPropertyOptional() error: string | null;
+  @Expose() @ApiProperty({ description: 'Automatic continuations in new Kaggle sessions' }) attempts: number;
+  @Expose() @Type(() => Date) @ApiPropertyOptional() queuedAt: Date | null;
+  @Expose() @Type(() => Date) @ApiPropertyOptional() startedAt: Date | null;
+  @Expose() @Type(() => Date) @ApiPropertyOptional() finishedAt: Date | null;
+  @Expose() @Type(() => Date) @ApiPropertyOptional() updatedAt: Date | null;
+}
+
 export class MarketingCampaignResponseModel {
   @Expose() @ApiProperty() id: string;
   @Expose() @ApiProperty() title: string;
@@ -111,6 +126,14 @@ export class MarketingCampaignResponseModel {
   @Type(() => MarketingSceneResponseModel)
   @ApiPropertyOptional({ type: [MarketingSceneResponseModel] })
   scenes?: MarketingSceneResponseModel[];
+  @Expose()
+  @Type(() => KaggleJobStatusResponseModel)
+  @ApiPropertyOptional({ type: KaggleJobStatusResponseModel, description: 'Latest Kaggle image-notebook run' })
+  imageJob?: KaggleJobStatusResponseModel;
+  @Expose()
+  @Type(() => KaggleJobStatusResponseModel)
+  @ApiPropertyOptional({ type: KaggleJobStatusResponseModel, description: 'Latest Kaggle video-notebook run' })
+  videoJob?: KaggleJobStatusResponseModel;
   @Expose() @Type(() => Date) @ApiProperty() createdAt: Date;
   @Expose() @Type(() => Date) @ApiProperty() updatedAt: Date;
   @Expose() @Type(() => Date) @ApiPropertyOptional() completedAt?: Date;

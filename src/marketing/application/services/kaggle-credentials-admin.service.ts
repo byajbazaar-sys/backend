@@ -26,6 +26,7 @@ import {
   MARKETING_SETTINGS_REPOSITORY,
   RENDER_JOBS_REPOSITORY,
 } from '../ports';
+import { jobTarget, notebookOf } from './kaggle-job-status';
 import { MarketingRenderService } from './marketing-render.service';
 import { MarketingScheduler } from './marketing-scheduler';
 
@@ -150,6 +151,9 @@ export class KaggleCredentialsAdminService {
       running: running.map((job) => ({
         id: job.id,
         kind: job.kind,
+        notebook: notebookOf(job.kind),
+        target: jobTarget(job),
+        kernelRef: job.kernelRef ?? null,
         status: job.status,
         account: job.workerId ?? null,
         slot: job.slot ?? null,
@@ -157,6 +161,7 @@ export class KaggleCredentialsAdminService {
         stageMessage: job.stageMessage ?? null,
         attempts: job.attempts,
         startedAt: job.startedAt ?? null,
+        updatedAt: job.updatedAt ?? null,
       })),
     };
   }

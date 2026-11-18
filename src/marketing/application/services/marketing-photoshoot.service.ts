@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { Photoshoot, PhotoshootPiece, PhotoshootShot } from '../domain';
+import { Photoshoot, PhotoshootPiece, PhotoshootShot, RenderJob } from '../domain';
 import {
   EAssetStatus,
   EPhotoshootStatus,
@@ -21,13 +21,16 @@ import {
   IMarketingPhotoshootShotsRepository,
   IMarketingPhotoshootsRepository,
   IMarketingScheduledPostsRepository,
+  IRenderJobsRepository,
   MARKETING_CATALOG,
   MARKETING_FILE_STORAGE,
   MARKETING_NOTIFIER,
   MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY,
   MARKETING_PHOTOSHOOTS_REPOSITORY,
   MARKETING_SCHEDULED_POSTS_REPOSITORY,
+  RENDER_JOBS_REPOSITORY,
 } from '../ports';
+import { KaggleJobStatusView, kaggleJobStatus } from './kaggle-job-status';
 import { MarketingRenderService } from './marketing-render.service';
 import { MarketingScheduler } from './marketing-scheduler';
 import { buildShotPrompt, describePiece, PHOTOSHOOT_SHOT_KINDS } from '../prompts/photoshoot.prompts';
@@ -66,6 +69,8 @@ export interface PhotoshootShotView {
 export interface PhotoshootView extends Omit<Photoshoot, 'sourceImageKey'> {
   sourceImageUrl?: string;
   shots: PhotoshootShotView[];
+  /** Latest run of the Kaggle image notebook for this shoot. */
+  imageJob?: KaggleJobStatusView;
 }
 
 /** Statuses are stored as plain strings. */
@@ -87,6 +92,7 @@ export class MarketingPhotoshootService {
     @Inject(MARKETING_FILE_STORAGE) private readonly storage: IMarketingFileStorage,
     @Inject(MARKETING_CATALOG) private readonly catalog: IMarketingCatalog,
     @Inject(MARKETING_NOTIFIER) private readonly notifier: IMarketingNotifier,
+    @Inject(RENDER_JOBS_REPOSITORY) private readonly jobs: IRenderJobsRepository,
     private readonly scheduler: MarketingScheduler,
     private readonly render: MarketingRenderService,
     @InjectPinoLogger(MarketingPhotoshootService.name) private readonly logger: PinoLogger,
@@ -180,12 +186,16 @@ export class MarketingPhotoshootService {
 
   async list(userId: string): Promise<PhotoshootView[]> {
     const list = await this.shoots.listForUser(userId, LIST_LIMIT);
-    const shots = await this.shots.listFor(list.map((s) => s.id));
+    const [shots, jobs] = await Promise.all([
+      this.shots.listFor(list.map((s) => s.id)),
+      this.jobs.latestForPhotoshoots(list.map((s) => s.id)),
+    ]);
     return Promise.all(
       list.map((s) =>
         this.view(
           s,
           shots.filter((x) => x.photoshootId === s.id),
+          jobs.find((j) => j.payload.imageGeneration?.photoshootId === s.id),
         ),
       ),
     );
@@ -193,7 +203,11 @@ export class MarketingPhotoshootService {
 
   async get(userId: string, id: string): Promise<PhotoshootView> {
     const shoot = await this.owned(userId, id);
-    return this.view(shoot, await this.shots.listFor([shoot.id]));
+    const [shots, jobs] = await Promise.all([
+      this.shots.listFor([shoot.id]),
+      this.jobs.latestForPhotoshoots([shoot.id]),
+    ]);
+    return this.view(shoot, shots, jobs[0]);
   }
 
   async remove(userId: string, id: string): Promise<void> {
@@ -273,10 +287,11 @@ export class MarketingPhotoshootService {
       : Promise.resolve(undefined);
   }
 
-  private async view(shoot: Photoshoot, shots: PhotoshootShot[]): Promise<PhotoshootView> {
+  private async view(shoot: Photoshoot, shots: PhotoshootShot[], job?: RenderJob): Promise<PhotoshootView> {
     const { sourceImageKey, ...rest } = shoot;
     return {
       ...rest,
+      imageJob: job ? kaggleJobStatus(job) : undefined,
       sourceImageUrl: await this.url(sourceImageKey),
       shots: await Promise.all(
         shots

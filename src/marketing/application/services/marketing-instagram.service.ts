@@ -58,9 +58,6 @@ export class MarketingInstagramService {
       state,
       enable_fb_login: 'true',
     });
-    if (this.config.instagram.configId) {
-      params.set('config_id', this.config.instagram.configId);
-    }
     return { authorizationUrl: `${INSTAGRAM_AUTHORIZE_URL}?${params.toString()}` };
   }
 
@@ -180,6 +177,18 @@ export class MarketingInstagramService {
     }
     if (!this.config.credentialsSecret) {
       throw new ServiceUnavailableException('Set MARKETING_CREDENTIALS_SECRET to encrypt Instagram access tokens.');
+    }
+    const callbackPath = '/api/v1/public/marketing/instagram/callback';
+    let redirectPath: string;
+    try {
+      redirectPath = new URL(redirectUri).pathname.replace(/\/+$/, '');
+    } catch {
+      throw new ServiceUnavailableException('MARKETING_INSTAGRAM_REDIRECT_URI must be a valid absolute URL.');
+    }
+    if (redirectPath !== callbackPath) {
+      throw new ServiceUnavailableException(
+        `MARKETING_INSTAGRAM_REDIRECT_URI must point to the backend OAuth callback: ${callbackPath}.`,
+      );
     }
   }
 

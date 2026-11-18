@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 
-import { MarketingImageInputModel } from './marketing.models';
+import { KaggleJobStatusResponseModel, MarketingImageInputModel } from './marketing.models';
 import {
   PHOTOSHOOT_ASPECTS,
   PHOTOSHOOT_METALS,
@@ -95,4 +95,8 @@ export class PhotoshootResponseModel {
   @Type(() => PhotoshootShotResponseModel)
   @ApiProperty({ type: [PhotoshootShotResponseModel] })
   shots: PhotoshootShotResponseModel[];
+  @Expose()
+  @Type(() => KaggleJobStatusResponseModel)
+  @ApiPropertyOptional({ type: KaggleJobStatusResponseModel, description: 'Latest Kaggle image-notebook run' })
+  imageJob?: KaggleJobStatusResponseModel;
 }

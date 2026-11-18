@@ -509,6 +509,51 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     if (filter.kind) where.kind = filter.kind;
     return (await (await this.repo()).findOne({ where, order: { createdAt: 'DESC' } })) as unknown as RenderJob | null;
   }
+
+  async latestForCampaigns(campaignIds: string[]): Promise<RenderJob[]> {
+    if (!campaignIds.length) return [];
+    const repo = await this.repo();
+    const rows = returnedRows(
+      await repo.query(
+        `SELECT DISTINCT ON ("campaign_id", "kind") "id"
+           FROM "marketing_render_jobs"
+          WHERE "campaign_id" = ANY($1::uuid[]) AND "kind" = ANY($2::varchar[])
+          ORDER BY "campaign_id", "kind", "created_at" DESC`,
+        [campaignIds, [ERenderJobKind.Images, ERenderJobKind.Campaign]],
+      ),
+    );
+    return this.byIds(rows.map((r) => r.id as string));
+  }
+
+  async latestForPhotoshoots(photoshootIds: string[]): Promise<RenderJob[]> {
+    if (!photoshootIds.length) return [];
+    const repo = await this.repo();
+    const rows = returnedRows(
+      await repo.query(
+        `SELECT DISTINCT ON ("payload"->'imageGeneration'->>'photoshootId') "id"
+           FROM "marketing_render_jobs"
+          WHERE "kind" = $2 AND "payload"->'imageGeneration'->>'photoshootId' = ANY($1::text[])
+          ORDER BY "payload"->'imageGeneration'->>'photoshootId', "created_at" DESC`,
+        [photoshootIds, ERenderJobKind.Images],
+      ),
+    );
+    return this.byIds(rows.map((r) => r.id as string));
+  }
+
+  async listRecentFinished(limit: number): Promise<RenderJob[]> {
+    return (await (
+      await this.repo()
+    ).find({
+      where: { status: In([ERenderJobStatus.Done, ERenderJobStatus.Failed]), kind: Not(ERenderJobKind.Setup) },
+      order: { finishedAt: { direction: 'DESC', nulls: 'LAST' }, updatedAt: 'DESC' },
+      take: limit,
+    })) as unknown as RenderJob[];
+  }
+
+  private async byIds(ids: string[]): Promise<RenderJob[]> {
+    if (!ids.length) return [];
+    return (await (await this.repo()).find({ where: { id: In(ids) } })) as unknown as RenderJob[];
+  }
 }
 
 /** marketing_settings. Read on use (a few ms) so a change made by an admin applies on every server at once. */

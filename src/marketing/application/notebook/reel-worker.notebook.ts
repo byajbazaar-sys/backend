@@ -9,6 +9,8 @@
  * Kinds: "setup" (one-time check of a new account) and "render".
  */
 
+import { IMAGE_MODELS } from './image-worker.notebook';
+
 export interface NotebookClip {
     key: string;
     imageUrl: string;
@@ -125,8 +127,7 @@ try:
         raise RuntimeError("No GPU in this session. Kaggle needs a verified phone number for GPU access.")
     model_checks = [
         "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors",
-        "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct/resolve/main/config.json",
-        "https://huggingface.co/segmind/SSD-1B/resolve/main/model_index.json",
+        __IMAGE_MODEL_CHECKS__
     ]
     for model_url in model_checks:
         r = requests.head(model_url, allow_redirects=True, timeout=30)
@@ -331,10 +332,15 @@ def validate_render(path, width=OUT_W, height=OUT_H, fps=OUT_FPS, min_duration=4
         raise RuntimeError(f"Rendered output missing: {path}")
     info = subprocess.run([FFMPEG, "-hide_banner", "-i", path], capture_output=True, text=True, check=False)
     out = (info.stderr or info.stdout or "")
-    m = re.search(r"Stream.*Video:.*?(\d+)x(\d+).*?(\d+(?:\.\d+)?)\s+fps", out, re.S | re.I)
+    # ffmpeg prints e.g. "Video: h264 (High) (avc1 / 0x31637661), yuv420p(...), 1080x1920 [SAR 1:1], 30 fps":
+    # the size needs 2+ digits on both sides so the codec tag (0x3163…) is not read as a resolution.
+    line = next((l for l in out.splitlines() if "Video:" in l), "")
+    size_m = re.search(r"\\b(\\d{2,5})x(\\d{2,5})\\b", line)
+    fps_m = re.search(r"(\\d+(?:\\.\\d+)?)\\s*(?:fps|tbr)", line)
+    m = (size_m.group(1), size_m.group(2), fps_m.group(1)) if size_m and fps_m else None
     if not m:
         raise RuntimeError(f"Could not inspect render metadata for {path}")
-    video_w, video_h, video_fps = map(float, m.groups())
+    video_w, video_h, video_fps = map(float, m)
     duration = video_duration(path)
     size = os.path.getsize(path)
     if duration < min_duration:
@@ -428,7 +434,18 @@ def render_clip(clip, p, idx, count, base=32, span=56):
     while True:  # ComfyUI WebSocket events instead of polling /history
         if time.time() - t0 > 3 * 3600:
             raise TimeoutError("Rendering took longer than 3 hours")
-        msg = cws.recv()
+        try:
+            msg = cws.recv()
+        except websocket.WebSocketTimeoutException:
+            # Long silent steps (model load, VAE decode): ask ComfyUI directly instead of failing the clip.
+            hist = requests.get(f"{COMFY}/history/{pid}", timeout=60).json().get(pid, {})
+            if hist.get("status", {}).get("completed") or hist.get("outputs"):
+                break
+            if hist.get("status", {}).get("status_str") == "error":
+                raise RuntimeError("ComfyUI reported an error: " + json.dumps(hist.get("status"))[:800])
+            report.send("rendering", lo, f"Rendering {label} ({idx + 1}/{count}) · still working", force=True,
+                        clipKey=clip["key"])
+            continue
         if not isinstance(msg, str):
             continue
         evt = json.loads(msg)
@@ -545,17 +562,29 @@ except Exception as e:
     raise
 `;
 
+/** Image-notebook models the setup check makes sure the account can download. */
+const IMAGE_MODEL_CHECKS = [
+    `https://huggingface.co/${IMAGE_MODELS.generator}/resolve/main/model_index.json`,
+    `https://huggingface.co/${IMAGE_MODELS.vae}/resolve/main/config.json`,
+    `https://huggingface.co/${IMAGE_MODELS.segmenter}/resolve/main/config.json`,
+    `https://huggingface.co/${IMAGE_MODELS.analystLarge}/resolve/main/config.json`,
+]
+    .map((url) => JSON.stringify(url) + ',')
+    .join('\n        ');
+
 /** Python string literal holding the job JSON (JSON escapes are valid Python string escapes). */
 function jobLiteral(job: WorkerNotebookJob): string {
     return JSON.stringify(JSON.stringify(job));
 }
 
 export function buildWorkerNotebook(job: WorkerNotebookJob): Record<string, unknown> {
+    // Function replacement: a `$` in the job (titles, presigned URLs) must not be read as a replacement pattern.
+    const reporter = CELL_REPORTER.replace('__JOB_JSON__', () => jobLiteral(job));
     const cells =
         job.kind === 'setup'
-            ? [code(CELL_REPORTER.replace('__JOB_JSON__', jobLiteral(job))), code(CELL_SETUP_CHECK)]
+            ? [code(reporter), code(CELL_SETUP_CHECK.replace('__IMAGE_MODEL_CHECKS__', () => IMAGE_MODEL_CHECKS))]
             : [
-                code(CELL_REPORTER.replace('__JOB_JSON__', jobLiteral(job))),
+                code(reporter),
                 code(CELL_INSTALL),
                 code(CELL_MODELS),
                 code(CELL_COMFY),

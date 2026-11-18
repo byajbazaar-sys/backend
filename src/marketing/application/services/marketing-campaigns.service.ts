@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { MarketingBrand, MarketingCampaign, MarketingScene } from '../domain';
+import { MarketingBrand, MarketingCampaign, MarketingScene, RenderJob } from '../domain';
 import {
   BUSY_RENDER_STATUSES,
   CAMPAIGN_SCENES,
@@ -29,6 +29,7 @@ import {
   MARKETING_SCHEDULED_POSTS_REPOSITORY,
   RENDER_JOBS_REPOSITORY,
 } from '../ports';
+import { KaggleJobStatusView, kaggleJobStatus } from './kaggle-job-status';
 import { MarketingEvents } from './marketing-events';
 import { MarketingKeys } from './marketing-keys';
 import { MarketingRenderService } from './marketing-render.service';
@@ -58,6 +59,10 @@ export interface CampaignView extends MarketingCampaign {
   coverImageUrl?: string;
   coverSceneIndex?: number;
   scenes?: SceneView[];
+  /** Latest run of the Kaggle image notebook (scene images). */
+  imageJob?: KaggleJobStatusView;
+  /** Latest run of the Kaggle video notebook (scene clips + merge). */
+  videoJob?: KaggleJobStatusView;
 }
 
 export interface BrandView extends MarketingBrand {
@@ -157,11 +162,21 @@ export class MarketingCampaignsService {
 
   async list(userId: string): Promise<CampaignView[]> {
     const campaigns = await this.campaigns.listForUser(userId, 30);
-    return Promise.all(campaigns.map((c) => this.view(c, false)));
+    const jobs = await this.jobs.latestForCampaigns(campaigns.map((c) => c.id));
+    return Promise.all(
+      campaigns.map((c) =>
+        this.view(
+          c,
+          false,
+          jobs.filter((j) => j.campaignId === c.id),
+        ),
+      ),
+    );
   }
 
   async get(userId: string, id: string): Promise<CampaignView> {
-    return this.view(await this.owned(userId, id), true);
+    const campaign = await this.owned(userId, id);
+    return this.view(campaign, true, await this.jobs.latestForCampaigns([campaign.id]));
   }
 
   async remove(userId: string, id: string): Promise<void> {
@@ -217,7 +232,7 @@ export class MarketingCampaignsService {
     }
     const updated = await this.campaigns.update(id, { status: ECampaignStatus.WaitingGpu, completedAt: null });
     await this.events.campaign(updated, true);
-    return this.view(updated, true);
+    return this.view(updated, true, await this.jobs.latestForCampaigns([updated.id]));
   }
 
   // ---------------------------------------------------------------- brand kit
@@ -265,7 +280,7 @@ export class MarketingCampaignsService {
       : Promise.resolve(undefined);
   }
 
-  private async view(campaign: MarketingCampaign, withScenes: boolean): Promise<CampaignView> {
+  private async view(campaign: MarketingCampaign, withScenes: boolean, jobs?: RenderJob[]): Promise<CampaignView> {
     const scenes = await this.scenes.listForCampaign(campaign.id);
     const cover = scenes.find((s) => s.imageStatus === EAssetStatus.Ready && s.imageKey);
     const [sourceImageUrl, mergedVideoUrl, coverImageUrl] = await Promise.all([
@@ -280,6 +295,10 @@ export class MarketingCampaignsService {
       coverImageUrl,
       coverSceneIndex: cover?.index,
     };
+    const imageJob = jobs?.find((j) => j.kind === ERenderJobKind.Images);
+    const videoJob = jobs?.find((j) => j.kind === ERenderJobKind.Campaign);
+    if (imageJob) view.imageJob = kaggleJobStatus(imageJob);
+    if (videoJob) view.videoJob = kaggleJobStatus(videoJob);
     if (withScenes) {
       view.scenes = await Promise.all(
         scenes.map(async (s) => ({

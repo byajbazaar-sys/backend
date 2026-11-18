@@ -16,6 +16,7 @@ import {
   PHOTOSHOOT_ASPECTS,
   PhotoshootAspect,
 } from '../enums';
+import { jobTarget, kaggleJobStatus, notebookOf } from './kaggle-job-status';
 import { MarketingEvents } from './marketing-events';
 import { LOGO_CLIP_KEY, MarketingKeys, sceneClipKey, sceneIndexFromClipKey } from './marketing-keys';
 import { buildWorkerNotebook, NotebookClip, WorkerNotebookJob } from '../notebook/reel-worker.notebook';
@@ -124,6 +125,37 @@ export interface KaggleNotebookHealth {
   progress: number | null;
   stageMessage: string | null;
   failureMessage: string | null;
+  target: string | null;
+  attempts: number | null;
+  startedAt: Date | null;
+  updatedAt: Date | null;
+}
+
+/** One notebook pipeline (image or video) across every account. */
+export interface KagglePipelineHealth {
+  notebook: 'image' | 'video';
+  state: 'running' | 'starting' | 'waiting' | 'idle' | 'failing';
+  running: number;
+  starting: number;
+  waiting: number;
+  lastSuccessAt: Date | null;
+  lastFailureAt: Date | null;
+  lastFailure: string | null;
+  recentDone: number;
+  recentFailed: number;
+}
+
+export interface KaggleRecentJob {
+  id: string;
+  kind: string;
+  notebook: 'image' | 'video';
+  target: string;
+  status: string;
+  account: string | null;
+  attempts: number;
+  durationMinutes: number | null;
+  error: string | null;
+  finishedAt: Date | null;
 }
 
 export interface KaggleAccountNotebookHealth {
@@ -143,9 +175,13 @@ export interface KaggleHealth {
   oldestWaitingMinutes: number | null;
   notebooks: KaggleAccountNotebookHealth[];
   issues: KaggleHealthIssue[];
+  pipelines: KagglePipelineHealth[];
+  recentJobs: KaggleRecentJob[];
   waitingJobs: {
     id: string;
     kind: string;
+    notebook: string;
+    target: string;
     campaignId: string | null;
     attempts: number;
     waitingMinutes: number;
@@ -233,12 +269,20 @@ export class MarketingRenderService {
     const campaign = await this.campaigns.findById(campaignId);
     if (!campaign) return null;
     const scenes = await this.scenes.listForCampaign(campaignId);
-    const targets = scenes.filter((s) => sceneIndexes?.includes(s.index) ?? s.imageStatus !== EAssetStatus.Ready);
+    let targets = scenes.filter((s) => sceneIndexes?.includes(s.index) ?? s.imageStatus !== EAssetStatus.Ready);
     if (!targets.length) return null;
 
     const open = await this.jobs.findOpenFor({ campaignId, kind: ERenderJobKind.Images });
     if (open?.status !== ERenderJobStatus.Waiting) {
-      if (open) return null;
+      if (open) {
+        // A notebook is already generating this campaign: queue only the scenes it is not working on, as a
+        // follow-up job, instead of dropping the request.
+        const generation = open.payload.imageGeneration;
+        const done = new Set(generation?.doneImages ?? []);
+        const inFlight = new Set((generation?.targets ?? []).filter((t) => !done.has(t.index)).map((t) => t.index));
+        targets = targets.filter((s) => !inFlight.has(s.index));
+        if (!targets.length) return null;
+      }
       const job = await this.jobs.create({
         kind: ERenderJobKind.Images,
         userId: campaign.userId,
@@ -687,13 +731,15 @@ export class MarketingRenderService {
 
   /** What is wrong (if anything) with rendering right now, for the admin screen and the no-capacity alert. */
   async health(): Promise<KaggleHealth> {
-    const [workers, accounts, busyJobs, waitingJobs, waiting, settings] = await Promise.all([
+    const [workers, accounts, busyJobs, waitingJobs, waiting, settings, finished, allWaiting] = await Promise.all([
       this.pool.workers(),
       this.accounts.list(),
       this.jobs.listBusy(),
       this.jobs.listWaiting(20),
       this.jobs.countWaiting(),
       this.settings.kaggle(),
+      this.jobs.listRecentFinished(40),
+      this.jobs.listWaiting(500),
     ]);
     const now = Date.now();
     const minutes = (d?: Date | null): number => (d ? Math.round((now - new Date(d).getTime()) / 60_000) : 0);
@@ -721,6 +767,10 @@ export class MarketingRenderService {
               progress: null,
               stageMessage: null,
               failureMessage: account?.lastError ?? null,
+              target: null,
+              attempts: null,
+              startedAt: null,
+              updatedAt: null,
             };
           }
           const kernelName = job.kernelRef?.split('/')[1];
@@ -741,6 +791,10 @@ export class MarketingRenderService {
             progress: job.progress,
             stageMessage: job.stageMessage ?? null,
             failureMessage: session.failureMessage ?? null,
+            target: jobTarget(job),
+            attempts: job.attempts,
+            startedAt: job.startedAt ?? null,
+            updatedAt: job.updatedAt ?? null,
           };
         };
         const [video, image] = await Promise.all([
@@ -854,9 +908,61 @@ export class MarketingRenderService {
       oldestWaitingMinutes,
       notebooks,
       issues,
+      pipelines: (['image', 'video'] as const).map((notebook) => {
+        const mine = (j: RenderJob) => notebookOf(j.kind) === notebook;
+        const busy = busyJobs.filter(mine);
+        const runningCount = busy.filter((j) => j.status === ERenderJobStatus.Running).length;
+        const startingCount = busy.length - runningCount;
+        const waitingCount = allWaiting.filter(mine).length;
+        const done = finished.filter(mine);
+        const lastSuccess = done.find((j) => j.status === ERenderJobStatus.Done);
+        const lastFailure = done.find((j) => j.status === ERenderJobStatus.Failed);
+        const failing =
+          !!lastFailure &&
+          (!lastSuccess ||
+            new Date(lastFailure.finishedAt ?? lastFailure.updatedAt ?? 0).getTime() >
+              new Date(lastSuccess.finishedAt ?? lastSuccess.updatedAt ?? 0).getTime());
+        return {
+          notebook,
+          state: runningCount
+            ? ('running' as const)
+            : startingCount
+              ? ('starting' as const)
+              : waitingCount
+                ? ('waiting' as const)
+                : failing
+                  ? ('failing' as const)
+                  : ('idle' as const),
+          running: runningCount,
+          starting: startingCount,
+          waiting: waitingCount,
+          lastSuccessAt: lastSuccess?.finishedAt ?? null,
+          lastFailureAt: lastFailure?.finishedAt ?? null,
+          lastFailure: lastFailure?.error?.slice(0, 500) ?? null,
+          recentDone: done.filter((j) => j.status === ERenderJobStatus.Done).length,
+          recentFailed: done.filter((j) => j.status === ERenderJobStatus.Failed).length,
+        };
+      }),
+      recentJobs: finished.slice(0, 20).map((j) => ({
+        id: j.id,
+        kind: j.kind,
+        notebook: notebookOf(j.kind) === 'image' ? ('image' as const) : ('video' as const),
+        target: jobTarget(j),
+        status: j.status,
+        account: j.workerId ?? null,
+        attempts: j.attempts,
+        durationMinutes:
+          j.startedAt && j.finishedAt
+            ? Math.max(0, Math.round((new Date(j.finishedAt).getTime() - new Date(j.startedAt).getTime()) / 60_000))
+            : null,
+        error: j.error?.slice(0, 500) ?? null,
+        finishedAt: j.finishedAt ?? null,
+      })),
       waitingJobs: waitingJobs.map((j) => ({
         id: j.id,
         kind: j.kind,
+        notebook: notebookOf(j.kind),
+        target: jobTarget(j),
         campaignId: j.campaignId ?? null,
         attempts: j.attempts,
         waitingMinutes: minutes(j.createdAt),
@@ -1017,6 +1123,7 @@ export class MarketingRenderService {
       progress,
       booting,
       job.kind === ERenderJobKind.Images ? ECampaignStatus.Planning : ECampaignStatus.Rendering,
+      ERenderJobStatus.Starting,
     );
     await this.scheduleWatch(job.id);
     return true;
@@ -1044,7 +1151,13 @@ export class MarketingRenderService {
       attempts: job.attempts + 1,
       stageMessage: message,
     });
-    await this.campaignProgress(job, job.progress, message, ECampaignStatus.WaitingGpu);
+    await this.campaignProgress(
+      { ...job, attempts: job.attempts + 1 },
+      job.progress,
+      message,
+      ECampaignStatus.WaitingGpu,
+      ERenderJobStatus.Waiting,
+    );
   }
 
   private async notebookJob(job: RenderJob): Promise<WorkerNotebookJob> {
@@ -1626,7 +1739,13 @@ export class MarketingRenderService {
       progress: job.progress,
       stageMessage: message,
     });
-    await this.campaignProgress(job, job.progress, message, ECampaignStatus.WaitingGpu);
+    await this.campaignProgress(
+      { ...job, attempts: job.attempts + 1 },
+      job.progress,
+      message,
+      ECampaignStatus.WaitingGpu,
+      ERenderJobStatus.Waiting,
+    );
     await this.scheduler.schedule({ step: 'dispatch' });
   }
 
@@ -1678,12 +1797,26 @@ export class MarketingRenderService {
     });
   }
 
+  /**
+   * Progress of a job, pushed to its owner with the notebook's own status (image or video): onto the campaign, or
+   * onto the photoshoot for photoshoot image jobs.
+   */
   private async campaignProgress(
     job: RenderJob,
     progress: number,
     message: string | undefined,
     status: ECampaignStatus,
+    jobStatus: ERenderJobStatus = ERenderJobStatus.Running,
   ): Promise<void> {
+    const snapshot = kaggleJobStatus({
+      ...job,
+      status: jobStatus,
+      progress,
+      stageMessage: (message || job.stageMessage || '').slice(0, 250) || null,
+      updatedAt: new Date(),
+    });
+    const photoshootId = job.payload.imageGeneration?.photoshootId;
+    if (photoshootId && job.userId) await this.events.photoshootJob(job.userId, photoshootId, snapshot);
     if (!job.campaignId) return;
     const campaign = await this.campaigns.findById(job.campaignId);
     if (!campaign) return;
@@ -1692,7 +1825,7 @@ export class MarketingRenderService {
       progress,
       stageMessage: (message || campaign.stageMessage || '').slice(0, 250),
     });
-    if (updated) await this.events.campaign(updated, false);
+    if (updated) await this.events.campaign(updated, false, snapshot);
   }
 
   private async setCampaign(campaign: MarketingCampaign, patch: Partial<MarketingCampaign>): Promise<void> {

@@ -146,7 +146,12 @@ export class BulkCreateKaggleCredentialResultModel {
 
 export class KaggleRunningJobModel {
   @ApiProperty() @Expose() id: string;
-  @ApiProperty({ enum: ['CAMPAIGN', 'LOGO', 'SETUP'] }) @Expose() kind: string;
+  @ApiProperty({ enum: ['CAMPAIGN', 'IMAGES', 'LOGO', 'SETUP'] }) @Expose() kind: string;
+  @ApiProperty({ enum: ['image', 'video', 'setup'], description: 'Kaggle notebook running the job' })
+  @Expose()
+  notebook: string;
+  @ApiProperty({ description: 'What the job works on' }) @Expose() target: string;
+  @ApiPropertyOptional({ description: 'owner/kernel-slug on Kaggle' }) @Expose() kernelRef: string | null;
   @ApiProperty() @Expose() status: string;
   @ApiPropertyOptional() @Expose() account: string | null;
   @ApiPropertyOptional() @Expose() slot: number | null;
@@ -154,6 +159,7 @@ export class KaggleRunningJobModel {
   @ApiPropertyOptional() @Expose() stageMessage: string | null;
   @ApiProperty() @Expose() attempts: number;
   @ApiPropertyOptional() @Expose() startedAt: Date | null;
+  @ApiPropertyOptional({ description: 'Last progress report' }) @Expose() updatedAt: Date | null;
 }
 
 /** Queue + capacity at a glance for the admin screen. */
@@ -188,6 +194,8 @@ export class KaggleHealthIssueModel {
 export class KaggleWaitingJobModel {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() kind: string;
+  @ApiProperty({ enum: ['image', 'video'] }) @Expose() notebook: string;
+  @ApiProperty() @Expose() target: string;
   @ApiPropertyOptional() @Expose() campaignId: string | null;
   @ApiProperty() @Expose() attempts: number;
   @ApiProperty() @Expose() waitingMinutes: number;
@@ -203,6 +211,38 @@ export class KaggleNotebookHealthModel {
   @ApiPropertyOptional() @Expose() progress: number | null;
   @ApiPropertyOptional() @Expose() stageMessage: string | null;
   @ApiPropertyOptional() @Expose() failureMessage: string | null;
+  @ApiPropertyOptional() @Expose() target: string | null;
+  @ApiPropertyOptional() @Expose() attempts: number | null;
+  @ApiPropertyOptional() @Expose() startedAt: Date | null;
+  @ApiPropertyOptional({ description: 'Last progress report' }) @Expose() updatedAt: Date | null;
+}
+
+/** One notebook pipeline (image or video) across every account. */
+export class KagglePipelineModel {
+  @ApiProperty({ enum: ['image', 'video'] }) @Expose() notebook: string;
+  @ApiProperty({ enum: ['running', 'starting', 'waiting', 'idle', 'failing'] }) @Expose() state: string;
+  @ApiProperty() @Expose() running: number;
+  @ApiProperty() @Expose() starting: number;
+  @ApiProperty() @Expose() waiting: number;
+  @ApiPropertyOptional() @Expose() lastSuccessAt: Date | null;
+  @ApiPropertyOptional() @Expose() lastFailureAt: Date | null;
+  @ApiPropertyOptional() @Expose() lastFailure: string | null;
+  @ApiProperty({ description: 'Finished runs in the recent window' }) @Expose() recentDone: number;
+  @ApiProperty() @Expose() recentFailed: number;
+}
+
+/** A finished notebook run. */
+export class KaggleRecentJobModel {
+  @ApiProperty() @Expose() id: string;
+  @ApiProperty() @Expose() kind: string;
+  @ApiProperty({ enum: ['image', 'video'] }) @Expose() notebook: string;
+  @ApiProperty() @Expose() target: string;
+  @ApiProperty({ enum: ['DONE', 'FAILED'] }) @Expose() status: string;
+  @ApiPropertyOptional() @Expose() account: string | null;
+  @ApiProperty() @Expose() attempts: number;
+  @ApiPropertyOptional() @Expose() durationMinutes: number | null;
+  @ApiPropertyOptional() @Expose() error: string | null;
+  @ApiPropertyOptional() @Expose() finishedAt: Date | null;
 }
 
 export class KaggleAccountNotebookHealthModel {
@@ -238,6 +278,14 @@ export class KaggleHealthResponseModel {
   @Expose()
   @Type(() => KaggleWaitingJobModel)
   waitingJobs: KaggleWaitingJobModel[];
+  @ApiProperty({ type: [KagglePipelineModel], description: 'Image notebook and video notebook status' })
+  @Expose()
+  @Type(() => KagglePipelineModel)
+  pipelines: KagglePipelineModel[];
+  @ApiProperty({ type: [KaggleRecentJobModel] })
+  @Expose()
+  @Type(() => KaggleRecentJobModel)
+  recentJobs: KaggleRecentJobModel[];
 }
 
 export class KaggleRecoveryJobModel {
