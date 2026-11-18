@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 
 import { UserEntity } from './user.entity';
-import { EMetalType } from '../../../application/features/inventory/enums';
+import { EMetalType } from '../../../application';
 
 @Entity('metal_rates')
 export class MetalRateEntity {

@@ -1,5 +1,4 @@
-import { FaceLibraryStatusModel, FaceLibrarySyncResponseModel, FaceSearchResponseModel } from '../models/face-search.models';
-
+import { FaceLibraryStatusModel, FaceLibrarySyncResponseModel, FaceSearchResponseModel } from '../models';
 export const FACE_SEARCH_SERVICE = 'IFaceSearchService';
 
 export interface IFaceSearchService {

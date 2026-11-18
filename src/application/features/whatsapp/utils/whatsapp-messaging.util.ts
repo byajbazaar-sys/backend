@@ -1,4 +1,4 @@
-import { WHATSAPP_CUSTOMER_SERVICE_WINDOW_MS } from '../constants/whatsapp-messaging.constants';
+import { WHATSAPP_CUSTOMER_SERVICE_WINDOW_MS } from './whatsapp-messaging.constants';
 
 export function normalizeWhatsAppRecipient(phone: string | null | undefined): string {
   if (!phone?.trim()) {

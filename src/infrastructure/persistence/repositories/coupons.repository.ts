@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { Coupon, ICouponsRepository } from '../../../application';
-import { CouponEntity } from '../entities/coupon.entity';
+import { CouponEntity } from '../entities';
 
 @Injectable()
 export class CouponsRepository implements ICouponsRepository {

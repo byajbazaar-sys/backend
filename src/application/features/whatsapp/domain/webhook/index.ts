@@ -11,3 +11,4 @@ export * from './whatsapp-webhook-conversation';
 export * from './whatsapp-webhook-conversation-origin';
 export * from './whatsapp-webhook-pricing';
 export * from './parse-whatsapp-webhook-payload';
+export * from './whatsapp-webhook-message-status-error';

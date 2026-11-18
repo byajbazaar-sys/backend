@@ -1,13 +1,5 @@
-export interface WhatsAppMessagingReadinessInput {
-  metaPhoneStatus?: string;
-  displayNameStatus?: string;
-  displayPhoneNumber?: string;
-}
-
-export interface WhatsAppMessagingReadiness {
-  canSendMessages: boolean;
-  messagingBlockReason?: string;
-}
+import { WhatsAppMessagingReadiness } from './whatsapp-messaging-readiness';
+import { WhatsAppMessagingReadinessInput } from './whatsapp-messaging-readiness-input';
 
 /** Meta-provided +1 555 test numbers from Embedded Signup. */
 export function isMetaProvided555Number(displayPhoneNumber?: string): boolean {
@@ -19,9 +11,7 @@ export function isMetaProvided555Number(displayPhoneNumber?: string): boolean {
   return digits.startsWith('1555');
 }
 
-export function evaluateWhatsAppMessagingReadiness(
-  input: WhatsAppMessagingReadinessInput,
-): WhatsAppMessagingReadiness {
+export function evaluateWhatsAppMessagingReadiness(input: WhatsAppMessagingReadinessInput): WhatsAppMessagingReadiness {
   const metaPhoneStatus = input.metaPhoneStatus?.toUpperCase();
   const displayNameStatus = input.displayNameStatus?.toUpperCase();
 
@@ -64,8 +54,7 @@ export function evaluateWhatsAppMessagingReadiness(
 
     return {
       canSendMessages: false,
-      messagingBlockReason:
-        'Meta test numbers (+1 555) need an approved display name before messages can be sent.',
+      messagingBlockReason: 'Meta test numbers (+1 555) need an approved display name before messages can be sent.',
     };
   }
 

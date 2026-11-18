@@ -13,9 +13,9 @@ import {
   InventoryItemsFilterOptions,
   InventoryItemUpdatePatch,
   InventoryCategoryBreakdown,
+  InventoryItemEntityUpdateInput,
 } from '../../../application';
-import { InventoryItemEntityUpdateInput } from '../../../application/features/inventory/models/inventory-item-entity-update-input.model';
-import { InventoryItemEntity } from '../entities/inventory-item.entity';
+import { InventoryItemEntity } from '../entities';
 
 @Injectable()
 export class InventoryItemsRepository implements IInventoryItemsRepository {

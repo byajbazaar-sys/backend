@@ -9,28 +9,30 @@ import {
 } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { OTP_TTL_SECONDS, OtpChallengeService, OtpChannel, OtpPurpose } from './otp-challenge.service';
-import { EMAIL_SERVICE, IEmailService } from '../../../shared/services/i-email.service';
-import { IRedisService, REDIS_SERVICE } from '../../../shared/services/i-redis.service';
-import { ISmsOtpSender, SMS_OTP_SENDER } from '../../../shared/services/i-sms-otp.sender';
+import { OTP_TTL_SECONDS, OtpChallengeService } from './otp-challenge.service';
+import { OtpChannel } from './otp-channel';
+import { OtpPurpose } from './otp-purpose';
+import {
+  EMAIL_SERVICE,
+  IEmailService,
+  IRedisService,
+  REDIS_SERVICE,
+  ISmsOtpSender,
+  SMS_OTP_SENDER,
+  maskEmail,
+  maskPhone,
+  normalizeIndianMobile,
+  toIndianE164,
+} from '../../../shared';
 import { EMAIL_TEMPLATE_SERVICE, IEmailTemplateService } from '../../notifications';
 import { IUsersRepository, User, USERS_REPOSITORY } from '../../users';
-import { SendOtpResponseModel, VerificationStatusResponseModel } from '../models/otp.models';
-import { maskEmail, maskPhone, normalizeIndianMobile, toIndianE164 } from '../utils/phone.util';
+import { SendOtpResponseModel, VerificationStatusResponseModel } from '../models';
+import { SignupCodes } from './signup-codes';
 
 const RESEND_COOLDOWN_SECONDS = 30;
 const MAX_SENDS_PER_WINDOW = 5;
 const SEND_WINDOW_SECONDS = 30 * 60;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-export interface SignupCodes {
-  email: string;
-  emailChallenge: string;
-  emailCode: string;
-  phoneNumber: string;
-  phoneChallenge: string;
-  phoneCode: string;
-}
 
 /**
  * Sends and checks the one-time codes for email and mobile verification. Email codes go out

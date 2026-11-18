@@ -1,6 +1,4 @@
-import { Item } from '../../features';
-import { UpdateItemRequestModel } from '../../features/items/models';
-
+import { Item, UpdateItemRequestModel } from '../../features';
 export const ITEMS_REPOSITORY = 'ITEMS_REPOSITORY';
 
 export interface IItemsRepository {

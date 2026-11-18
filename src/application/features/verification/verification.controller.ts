@@ -9,8 +9,8 @@ import {
   SendOtpResponseModel,
   VerificationStatusResponseModel,
   VerifyAccountOtpRequestModel,
-} from './models/otp.models';
-import { VerificationService } from './service/verification.service';
+} from './models';
+import { VerificationService } from './service';
 
 /** Account → verify email / mobile for signed-in users (existing accounts, Google sign-ups). */
 @ApiTags('verification')

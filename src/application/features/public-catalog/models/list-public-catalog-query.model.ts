@@ -2,8 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
-export const PUBLIC_CATALOG_SORTS = ['newest', 'price_asc', 'price_desc', 'weight_asc', 'weight_desc', 'name'] as const;
-export type PublicCatalogSort = (typeof PUBLIC_CATALOG_SORTS)[number];
+import { PUBLIC_CATALOG_SORTS, PublicCatalogSort } from './public-catalog-sort';
 
 export class ListPublicCatalogQueryModel {
   @ApiPropertyOptional()

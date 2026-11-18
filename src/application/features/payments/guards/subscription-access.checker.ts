@@ -3,12 +3,15 @@ import { EUserType, IIdentity, ISubscriptionAccessChecker, TRIAL_DAYS } from '@s
 import { Request } from 'express';
 
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
-import { isPaywallExemptPath, SUBSCRIPTION_REQUIRED_CODE } from '../constants';
 import { ESubscriptionStatus } from '../domain';
-import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from '../service/i-subscriptions.repository';
-import { subscriptionGrantsAccess } from '../utils/subscription-access.util';
-import { isTrialActive, resolveTrialEndsAt } from '../utils/trial.util';
-
+import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from '../service';
+import {
+  isPaywallExemptPath,
+  SUBSCRIPTION_REQUIRED_CODE,
+  subscriptionGrantsAccess,
+  isTrialActive,
+  resolveTrialEndsAt,
+} from '../utils';
 /** Positive answers are cached briefly so every API call doesn't hit the database twice. */
 const ACCESS_CACHE_MS = 5 * 60 * 1000;
 

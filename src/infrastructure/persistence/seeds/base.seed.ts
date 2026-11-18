@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ESeedType } from '@shared-libs';
 import { Repository } from 'typeorm';
 
-import { SeedEntity } from '../entities/seed.entity';
+import { SeedEntity } from '../entities';
 
 @Injectable()
 export abstract class BaseSeed {

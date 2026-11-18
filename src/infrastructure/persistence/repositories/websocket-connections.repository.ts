@@ -3,9 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { IsNull, Repository } from 'typeorm';
 
-import { IWebSocketConnectionsRepository, WebSocketConnection } from '../../../application';
-import { EDeviceType } from '../../../application';
-import { WebSocketConnectionEntity } from '../entities/websocket-connection.entity';
+import { IWebSocketConnectionsRepository, WebSocketConnection, EDeviceType } from '../../../application';
+import { WebSocketConnectionEntity } from '../entities';
 
 @Injectable()
 export class WebSocketConnectionsRepository implements IWebSocketConnectionsRepository {
@@ -31,9 +30,7 @@ export class WebSocketConnectionsRepository implements IWebSocketConnectionsRepo
       where: { userId, disconnectedAt: IsNull() },
       order: { connectedAt: 'DESC' },
     });
-    return rows.map((entity) =>
-      plainToInstance(WebSocketConnection, entity, { excludeExtraneousValues: true }),
-    );
+    return rows.map((entity) => plainToInstance(WebSocketConnection, entity, { excludeExtraneousValues: true }));
   }
 
   async findActiveBySessionAndDevice(sessionId: string, deviceType: EDeviceType): Promise<WebSocketConnection> {

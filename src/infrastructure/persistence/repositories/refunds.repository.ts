@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { IRefundsRepository, Refund, UpsertRefundEntityInput } from '../../../application';
-import { RefundEntity } from '../entities/refund.entity';
+import { RefundEntity } from '../entities';
 
 @Injectable()
 export class RefundsRepository implements IRefundsRepository {

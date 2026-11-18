@@ -5,7 +5,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { BillLog, BillLogsQuery, IBillLogsRepository } from '../../../application';
-import { BillLogEntity } from '../entities/bill-log.entity';
+import { BillLogEntity } from '../entities';
 import { TransactionalContext } from '../transactional-context';
 
 @Injectable()

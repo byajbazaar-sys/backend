@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
 import { Plan } from '../domain';
-import { IPlansRepository } from '../service/i-plans.repository';
+import { IPlansRepository } from '../service';
 
 function assertValidCheckoutPlan(plan: Plan | null, planId?: string): Plan {
   if (!plan) {

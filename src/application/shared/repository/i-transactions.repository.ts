@@ -8,9 +8,8 @@ import {
   LoanEffect,
   Transaction,
   TransactionReplayPatch,
+  CreateTransactionInput,
 } from '../../features';
-import { CreateTransactionInput } from '../../features/transactions/models';
-
 export const TRANSACTIONS_REPOSITORY = 'ITransactionsRepository';
 
 export interface ITransactionsRepository {

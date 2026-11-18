@@ -1,8 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 
-import { ECouponType, ESubscriptionStatus } from '../domain';
-import { Coupon, CouponRedemption, Subscription } from '../domain';
+import { ECouponType, ESubscriptionStatus, Coupon, CouponRedemption, Subscription } from '../domain';
 import { ApplyCouponResponseModel } from '../models';
 import { CouponPreview } from './coupon-preview';
 import { COUPON_REDEMPTIONS_REPOSITORY, ICouponRedemptionsRepository } from './i-coupon-redemptions.repository';
@@ -11,7 +10,7 @@ import { COUPONS_REPOSITORY, ICouponsRepository } from './i-coupons.repository';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { RazorpayOptions } from '../../../shared';
-import { resolveCheckoutPlan } from '../utils/checkout-plan.util';
+import { resolveCheckoutPlan } from '../utils';
 
 @Injectable()
 export class CouponService implements ICouponService {

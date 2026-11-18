@@ -9,11 +9,11 @@ import {
   JewelleryEvent,
   JewelleryEventDuplicateQuery,
   JewelleryEventRelatedQuery,
-} from '../../../application/features/events/domain';
-import { JewelleryEventUpdatePatch } from '../../../application/features/events/models';
-import { IJewelleryEventsRepository } from '../../../application/features/events/service/i-jewellery-events.repository';
-import { JewelleryEventsFilter } from '../../../application/features/events/service/jewellery-events-filter';
-import { JewelleryEventEntity } from '../entities/jewellery-event.entity';
+  JewelleryEventUpdatePatch,
+  IJewelleryEventsRepository,
+  JewelleryEventsFilter,
+} from '../../../application';
+import { JewelleryEventEntity } from '../entities';
 
 @Injectable()
 export class JewelleryEventsRepository implements IJewelleryEventsRepository {

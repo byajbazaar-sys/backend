@@ -1,95 +1,23 @@
-import { JwtService } from '@nestjs/jwt';
-
-import { SettingsApiController } from './api-access';
-import { AuthController } from './auth';
-import { CustomersController } from './customers';
-import { DepositsController } from './deposits';
-import { OrdersController } from './orders';
-import { EventsController, AdminEventsController } from './events';
-import {
-  InventoryCategoriesController,
-  InventoryItemsController,
-  InventoryReportsController,
-  InventoryCatalogController,
-  BarcodeController,
-} from './inventory';
-import { ItemsController } from './items';
-import { LabelDesignerSettingsController, LabelDesignerSettingsService } from './label-designer';
-import { LoansController } from './loans';
-import { MetalRatesController } from './metal-rates';
-import { NotificationsController } from './notifications';
-import { PaymentsController, AdminPaymentsController, CouponAdminService } from './payments';
-import { PosSessionsController, PosSessionPublicController, PosSessionLeaveController } from './pos';
-import { PublicCatalogController } from './public-catalog';
-import { SalesBillsController } from './sales-bills';
-import { SupportController } from './support';
-import { TransactionsController } from './transactions';
-import { TryOnController } from './try-on';
-import { UsersController } from './users';
-import { OtpChallengeService, VerificationController, VerificationService } from './verification';
-import { WhatsAppController, WhatsAppWebhookController } from './whatsapp';
-
-export * from './users';
+export * from './api-access';
 export * from './auth';
 export * from './customers';
-export * from './loans';
-export * from './transactions';
-export * from './items';
-export * from './label-designer';
-export * from './notifications';
-export * from './support';
-export * from './inventory';
-export * from './pos';
-export * from './sales-bills';
-export * from './metal-rates';
-export * from './api-access';
-export * from './payments';
-export * from './events';
-export * from './try-on';
 export * from './deposits';
 export * from './orders';
+export * from './events';
+export * from './inventory';
+export * from './items';
+export * from './label-designer';
+export * from './loans';
+export * from './metal-rates';
+export * from './notifications';
+export * from './payments';
+export * from './pos';
 export * from './public-catalog';
-export * from './whatsapp';
+export * from './sales-bills';
+export * from './support';
+export * from './transactions';
+export * from './try-on';
+export * from './users';
 export * from './verification';
-
-export const Controllers = [
-  UsersController,
-  AuthController,
-  CustomersController,
-  LoansController,
-  TransactionsController,
-  ItemsController,
-  LabelDesignerSettingsController,
-  NotificationsController,
-  SupportController,
-  InventoryCategoriesController,
-  InventoryItemsController,
-  InventoryReportsController,
-  InventoryCatalogController,
-  BarcodeController,
-  PosSessionPublicController,
-  PosSessionLeaveController,
-  PosSessionsController,
-  SalesBillsController,
-  MetalRatesController,
-  SettingsApiController,
-  PaymentsController,
-  AdminPaymentsController,
-  AdminEventsController,
-  EventsController,
-  TryOnController,
-  DepositsController,
-  OrdersController,
-  PublicCatalogController,
-  WhatsAppController,
-  WhatsAppWebhookController,
-  VerificationController,
-];
-
-export const Services = [
-  JwtService,
-  LabelDesignerSettingsService,
-  OtpChallengeService,
-  VerificationService,
-  CouponAdminService,
-];
+export * from './whatsapp';
+export * from './features.registry';

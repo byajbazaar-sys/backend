@@ -6,7 +6,7 @@ import { LogOutboxRelay } from './log-outbox-relay';
 import { LOG_STREAMS } from './log-tables';
 import { LogsDatabase } from './logs-database';
 import { LogsModeService } from './logs-mode.service';
-import { ILogsHost, LOGS_HOST } from '../../application/ports/logs-host.ports';
+import { ILogsHost, LOGS_HOST } from '../host';
 
 export interface LogsMaintenanceReport {
   skipped?: string;

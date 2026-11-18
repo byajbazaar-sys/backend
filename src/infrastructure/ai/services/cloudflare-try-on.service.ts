@@ -13,12 +13,14 @@ import {
   resolveCloudflareTryOnModelId,
 } from '../ai.constants';
 import { CloudflareTryOnOptions, type CloudflareCredential } from '../cloudflare-try-on.options';
-import type { AiImageInput, JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
-import { buildProductBackgroundRemovalPrompt } from '../prompts/product-image.prompts';
-import { buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts/try-on.prompts';
-import { detectDisplayBackdrop, displayBackdropCutout } from '../utils/display-backdrop.util';
-import { stripDataUrl, toGeneratedImage, withTimeout } from '../utils/image.util';
+import type { AiImageInput, AiJewelleryTryOnRequest, AiOutfitRecolorRequest } from '../interfaces';
+import { buildProductBackgroundRemovalPrompt, buildFullTryOnPrompt, buildOutfitRecolorPrompt } from '../prompts';
 import {
+  detectDisplayBackdrop,
+  displayBackdropCutout,
+  stripDataUrl,
+  toGeneratedImage,
+  withTimeout,
   type ProductCutout,
   type RefineOptions,
   compressPngForApiPreview,
@@ -31,9 +33,8 @@ import {
   refineProductCutout,
   removeWhiteBackground,
   whiteBackdropCutout,
-} from '../utils/product-image.util';
-import { buildTryOnImageSequence } from '../utils/try-on-images.util';
-
+  buildTryOnImageSequence,
+} from '../utils';
 type ProductCutoutPurpose = 'white preview' | 'transparent storage';
 
 /** Keyed foreground above this share means a prop (bust, stand, packaging) is still in the picture. */
@@ -59,15 +60,18 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     @InjectPinoLogger(CloudflareTryOnService.name) private readonly logger: PinoLogger,
   ) {}
 
-  async generateJewelleryTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
+  async generateJewelleryTryOn(request: AiJewelleryTryOnRequest): Promise<GeneratedAiImage> {
     return (await this.generateTryOnImages(request, 'jewellery'))[0];
   }
 
-  async generateOutfitTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
+  async generateOutfitTryOn(request: AiJewelleryTryOnRequest): Promise<GeneratedAiImage> {
     return (await this.generateTryOnImages(request, 'outfit'))[0];
   }
 
-  async generateTryOnImages(request: JewelleryTryOnRequest, mode: 'jewellery' | 'outfit'): Promise<GeneratedAiImage[]> {
+  async generateTryOnImages(
+    request: AiJewelleryTryOnRequest,
+    mode: 'jewellery' | 'outfit',
+  ): Promise<GeneratedAiImage[]> {
     this.assertConfigured();
     const count = Math.min(2, Math.max(1, request.variations ?? 2));
     const modelId = this.resolveModelId(request);
@@ -93,7 +97,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     return images;
   }
 
-  async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {
+  async recolorOutfit(request: AiOutfitRecolorRequest): Promise<GeneratedAiImage> {
     this.assertConfigured();
     const prompt = buildOutfitRecolorPrompt(request.color);
     const inputImage = await this.resizeForCloudflare(request.image);
@@ -602,11 +606,11 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     return new BadRequestException(msg || 'Cloudflare try-on request failed');
   }
 
-  private buildPrompt(request: JewelleryTryOnRequest, mode: 'jewellery' | 'outfit'): string {
+  private buildPrompt(request: AiJewelleryTryOnRequest, mode: 'jewellery' | 'outfit'): string {
     return buildFullTryOnPrompt(mode, request);
   }
 
-  private async buildInputImages(request: JewelleryTryOnRequest): Promise<Buffer[]> {
+  private async buildInputImages(request: AiJewelleryTryOnRequest): Promise<Buffer[]> {
     if (!request.personImage?.base64) {
       throw new BadRequestException('personImage is required');
     }
@@ -635,7 +639,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       .toBuffer();
   }
 
-  private resolveModelId(request: JewelleryTryOnRequest): string {
+  private resolveModelId(request: AiJewelleryTryOnRequest): string {
     return resolveCloudflareTryOnModelId(request.cloudflareModel, this.options.modelId);
   }
 
@@ -648,7 +652,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
   }
 
   private async runOnce(
-    request: JewelleryTryOnRequest,
+    request: AiJewelleryTryOnRequest,
     mode: 'jewellery' | 'outfit',
     seed?: number,
     variationIndex = 1,

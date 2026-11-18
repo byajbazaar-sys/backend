@@ -1,8 +1,5 @@
 import { insertLogRows, LEGACY_TABLES, LOG_TABLES, LogRowByStream, LogStream, SqlExecutor } from './log-tables';
-import {
-  EWhatsAppMessageDeliveryStatus,
-  shouldAdvanceWhatsAppMessageStatus,
-} from '../../../application/features/whatsapp/enums/e-whatsapp-message-delivery-status.enum';
+import { EWhatsAppMessageDeliveryStatus, shouldAdvanceWhatsAppMessageStatus } from '../../../application';
 
 const MIN_UUID = '00000000-0000-0000-0000-000000000000';
 /**

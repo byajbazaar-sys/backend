@@ -8,9 +8,9 @@ import { ITryOnAiService, GeneratedAiImage } from '../../../application';
 import { AIVOT_TRYON_GENERATE_PATH, AIVOT_TRYON_MIME } from '../ai.constants';
 import { AivotTryOnOptions } from '../aivot-try-on.options';
 import { CloudflareTryOnService } from './cloudflare-try-on.service';
-import { isTransientTryOnStatus, mapAivotHttpError } from '../exceptions/aivot-try-on.errors';
-import type { JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces/ai-media.types';
-import { stripDataUrl } from '../utils/image.util';
+import { isTransientTryOnStatus, mapAivotHttpError } from '../exceptions';
+import type { AiJewelleryTryOnRequest, AiOutfitRecolorRequest } from '../interfaces';
+import { stripDataUrl } from '../utils';
 
 interface AivotGenerateResponse {
   statusCode?: number;
@@ -40,16 +40,16 @@ export class AivotService implements ITryOnAiService {
     });
   }
 
-  async generateJewelleryTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
+  async generateJewelleryTryOn(request: AiJewelleryTryOnRequest): Promise<GeneratedAiImage> {
     return (await this.generateTryOnImages(request, 'jewellery'))[0];
   }
 
-  async generateOutfitTryOn(request: JewelleryTryOnRequest): Promise<GeneratedAiImage> {
+  async generateOutfitTryOn(request: AiJewelleryTryOnRequest): Promise<GeneratedAiImage> {
     return (await this.generateTryOnImages(request, 'outfit'))[0];
   }
 
   async generateTryOnImages(
-    request: JewelleryTryOnRequest,
+    request: AiJewelleryTryOnRequest,
     _mode: 'jewellery' | 'outfit',
   ): Promise<GeneratedAiImage[]> {
     this.assertConfigured();
@@ -70,7 +70,7 @@ export class AivotService implements ITryOnAiService {
     return images;
   }
 
-  async recolorOutfit(request: OutfitRecolorRequest): Promise<GeneratedAiImage> {
+  async recolorOutfit(request: AiOutfitRecolorRequest): Promise<GeneratedAiImage> {
     return this.cloudflare.recolorOutfit(request);
   }
 
@@ -85,7 +85,7 @@ export class AivotService implements ITryOnAiService {
     }
   }
 
-  private buildFormData(request: JewelleryTryOnRequest): FormData {
+  private buildFormData(request: AiJewelleryTryOnRequest): FormData {
     if (!request.personImage?.base64) {
       throw new BadRequestException('personImage is required');
     }
@@ -156,7 +156,7 @@ export class AivotService implements ITryOnAiService {
   }
 
   private async callGenerateStyledImage(
-    request: JewelleryTryOnRequest,
+    request: AiJewelleryTryOnRequest,
     signal?: AbortSignal,
   ): Promise<GeneratedAiImage[]> {
     const endpoint = AIVOT_TRYON_GENERATE_PATH;

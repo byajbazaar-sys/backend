@@ -1,70 +1,69 @@
 import { Module } from '@nestjs/common';
 
-import { MarketingAdminController } from './application/controllers/marketing-admin.controller';
-import {
-  MarketingInstagramCallbackController,
-  MarketingInstagramController,
-  MarketingInstagramWebhookController,
-} from './application/controllers/marketing-instagram.controller';
-import { MarketingPhotoshootController } from './application/controllers/marketing-photoshoot.controller';
 import {
   MarketingController,
   MarketingQueueController,
   MarketingWorkerEventsController,
-} from './application/controllers/marketing.controller';
-import {
+  MarketingCampaignsService,
+  MarketingPlannerService,
+  MarketingInstagramCallbackController,
+  MarketingInstagramController,
+  MarketingInstagramWebhookController,
+  MarketingInstagramService,
+  MarketingPublishingService,
+  MarketingAdminController,
+  KaggleCredentialsAdminService,
+  KaggleHealthService,
+  MarketingRenderService,
+  MarketingPhotoshootController,
+  MarketingPhotoshootService,
+  MarketingQueueConsumer,
   IKaggleCredentialsRepository,
-  IMarketingActivityLog,
-  IMarketingCampaignsRepository,
-  IMarketingPhotoshootsRepository,
-  IRenderJobsRepository,
-  KAGGLE_ACCOUNTS_REPOSITORY,
   KAGGLE_CREDENTIALS_REPOSITORY,
-  KAGGLE_WORKER_POOL,
+  IMarketingActivityLog,
   MARKETING_ACTIVITY_LOG,
-  MARKETING_BRANDS_REPOSITORY,
+  IMarketingCampaignsRepository,
   MARKETING_CAMPAIGNS_REPOSITORY,
+  IMarketingPhotoshootsRepository,
+  MARKETING_PHOTOSHOOTS_REPOSITORY,
+  IRenderJobsRepository,
+  RENDER_JOBS_REPOSITORY,
+  KAGGLE_ACCOUNTS_REPOSITORY,
+  KAGGLE_WORKER_POOL,
+  MARKETING_BRANDS_REPOSITORY,
   MARKETING_CATALOG,
   MARKETING_FILE_STORAGE,
   MARKETING_INSTAGRAM_REPOSITORY,
   MARKETING_NOTIFIER,
   MARKETING_QUEUE,
+  MARKETING_WORKER_INVOKER,
+  MARKETING_SECRET_CIPHER,
+  INSTAGRAM_GRAPH_CLIENT,
   MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY,
-  MARKETING_PHOTOSHOOTS_REPOSITORY,
   MARKETING_SCENES_REPOSITORY,
   MARKETING_SCHEDULED_POSTS_REPOSITORY,
   MARKETING_SETTINGS_REPOSITORY,
-  RENDER_JOBS_REPOSITORY,
-} from './application/ports';
-import { KaggleCredentialsAdminService } from './application/services/kaggle-credentials-admin.service';
-import { MarketingCampaignsService } from './application/services/marketing-campaigns.service';
-import { MarketingEvents } from './application/services/marketing-events';
-import { MarketingInstagramService } from './application/services/marketing-instagram.service';
-import { MarketingPhotoshootService } from './application/services/marketing-photoshoot.service';
-import { MarketingPlannerService } from './application/services/marketing-planner.service';
-import { MarketingPublishingService } from './application/services/marketing-publishing.service';
-import { MarketingQueueConsumer } from './application/services/marketing-queue.consumer';
-import { MarketingRenderService } from './application/services/marketing-render.service';
-import { MARKETING_STEP_RUNNER, MarketingScheduler } from './application/services/marketing-scheduler';
-import { ByajBazaarActivityLogAdapter } from './infrastructure/adapters/byajbazaar-activity-log.adapter';
-import { ByajBazaarCatalogAdapter } from './infrastructure/adapters/byajbazaar-catalog.adapter';
-import { ByajBazaarNotifierAdapter } from './infrastructure/adapters/byajbazaar-notifier.adapter';
-import { loadMarketingSettings } from './infrastructure/config/marketing-settings.loader';
-import { MarketingSecretCipher } from './infrastructure/crypto/marketing-secret.cipher';
-import { KaggleWorkerPool } from './infrastructure/kaggle/kaggle-worker-pool';
+  MarketingEvents,
+  MARKETING_STEP_RUNNER,
+  MarketingScheduler,
+} from './application';
 import {
+  ByajBazaarActivityLogAdapter,
+  ByajBazaarCatalogAdapter,
+  ByajBazaarNotifierAdapter,
+  LambdaMarketingWorkerInvoker,
+  loadMarketingSettings,
+  MarketingSecretCipher,
+  InstagramGraphClient,
+  KaggleWorkerPool,
   campaignsWithActivityLog,
   kaggleCredentialsWithActivityLog,
   photoshootsWithActivityLog,
   renderJobsWithActivityLog,
-} from './infrastructure/persistence/activity-logged.repositories';
-import { MarketingDatabase } from './infrastructure/persistence/marketing-database';
-import { MarketingInstagramRepository } from './infrastructure/persistence/marketing-instagram.repository';
-import {
+  MarketingDatabase,
+  MarketingInstagramRepository,
   MarketingPhotoshootShotsRepository,
   MarketingPhotoshootsRepository,
-} from './infrastructure/persistence/marketing-photoshoot.repositories';
-import {
   KaggleAccountsRepository,
   KaggleCredentialsRepository,
   MarketingBrandsRepository,
@@ -73,15 +72,15 @@ import {
   MarketingScheduledPostsRepository,
   MarketingSettingsRepository,
   RenderJobsRepository,
-} from './infrastructure/persistence/marketing.repositories';
-import { QStashMarketingQueue } from './infrastructure/queue/qstash-marketing.queue';
-import { MarketingFileStorage } from './infrastructure/storage/marketing-file.storage';
+  QStashMarketingQueue,
+  MarketingFileStorage,
+} from './infrastructure';
 import { MarketingConfig } from './marketing.config';
 
 /**
  * Marketing (experimental) — a self-contained bounded context:
  *  - own database (MARKETING_DB_*, own migrations table), own S3 bucket (MARKETING_S3_*), own queue (QStash);
- *  - depends on ByajBazaar only through the ports in application/ports, implemented by infrastructure/adapters
+ *  - depends on ByajBazaar only through the ports in application/shared/ports, implemented by infrastructure/adapters
  *    (inventory + business name, WebSocket push) — the only files that import ByajBazaar code.
  *
  * Flow: input image → [queue: plan] 5 prompts (cheap text model) + 5 scene images (image-to-image) + brand logo
@@ -134,6 +133,8 @@ import { MarketingConfig } from './marketing.config';
     { provide: KAGGLE_ACCOUNTS_REPOSITORY, useClass: KaggleAccountsRepository },
     { provide: MARKETING_SETTINGS_REPOSITORY, useClass: MarketingSettingsRepository },
     MarketingSecretCipher,
+    { provide: MARKETING_SECRET_CIPHER, useExisting: MarketingSecretCipher },
+    { provide: INSTAGRAM_GRAPH_CLIENT, useClass: InstagramGraphClient },
     {
       provide: KAGGLE_CREDENTIALS_REPOSITORY,
       inject: [KaggleCredentialsRepository, MARKETING_ACTIVITY_LOG],
@@ -147,11 +148,13 @@ import { MarketingConfig } from './marketing.config';
     },
     { provide: MARKETING_FILE_STORAGE, useClass: MarketingFileStorage },
     { provide: MARKETING_QUEUE, useClass: QStashMarketingQueue },
+    { provide: MARKETING_WORKER_INVOKER, useClass: LambdaMarketingWorkerInvoker },
     { provide: KAGGLE_WORKER_POOL, useClass: KaggleWorkerPool },
     { provide: MARKETING_CATALOG, useClass: ByajBazaarCatalogAdapter },
     { provide: MARKETING_NOTIFIER, useClass: ByajBazaarNotifierAdapter },
     MarketingEvents,
     MarketingScheduler,
+    KaggleHealthService,
     MarketingRenderService,
     MarketingPlannerService,
     MarketingPhotoshootService,

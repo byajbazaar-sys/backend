@@ -1,14 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { IWhatsAppDueReminderService, WhatsAppDueReminderRunResult } from './i-whatsapp-due-reminder.service';
+import { IWhatsAppDueReminderService } from './i-whatsapp-due-reminder.service';
 import { IWhatsAppService, WHATSAPP_SERVICE } from './i-whatsapp.service';
-import { DUES_REPOSITORY, IDuesRepository } from '../../../shared/repository/i-due.repository';
-import { ACTIVITY_LOGGER, EActivityLogCategory, IActivityLogger } from '../../../shared/services/i-activity-logger';
-import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
+import { WhatsAppDueReminderRunResult } from './whatsapp-due-reminder-run-result';
+import {
+  DUES_REPOSITORY,
+  IDuesRepository,
+  ACTIVITY_LOGGER,
+  EActivityLogCategory,
+  IActivityLogger,
+} from '../../../shared';
 import { EWhatsAppMessageContextType } from '../enums';
-import { normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
-
+import { WHATSAPP_DEFAULT_TEMPLATES, normalizeWhatsAppRecipient } from '../utils';
 const DUE_REMINDER_TEMPLATE =
   WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_due_reminder') ??
   WHATSAPP_DEFAULT_TEMPLATES[1];

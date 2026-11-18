@@ -3,11 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AES_ENCRYPT_SERVICE, IDbOptions } from '@shared-libs';
 
-import { AIOptions, AivotTryOnOptions, CloudflareTryOnOptions } from './ai';
+import {
+  AIOptions,
+  AivotTryOnOptions,
+  CloudflareTryOnOptions,
+  AivotService,
+  CloudflareTryOnService,
+  TryOnOrchestratorService,
+} from './ai';
 import { ResendOptions, ResendService } from './resend';
 import { StartMessagingOptions, StartMessagingService } from './startmessaging';
-import { WEBSOCKET_MESSAGE_SERVICE } from '../application';
 import {
+  WEBSOCKET_MESSAGE_SERVICE,
   CUSTOMERS_REPOSITORY,
   DUES_REPOSITORY,
   EMAIL_SERVICE,
@@ -28,6 +35,7 @@ import {
   POS_SESSIONS_REPOSITORY,
   WEBSOCKET_CONNECTIONS_REPOSITORY,
   SALES_BILLS_REPOSITORY,
+  INVENTORY_ITEM_SALES_REPOSITORY,
   METAL_RATES_REPOSITORY,
   API_CONFIGURATION_REPOSITORY,
   API_ACCESS_TOKEN_REPOSITORY,
@@ -57,17 +65,19 @@ import {
   UNIT_OF_WORK,
   APP_INTEGRITY_SERVICE,
   AppIntegrityOptions,
+  WebAppOptions,
+  FaceCompareOptions,
+  FACE_EMBEDDING_SERVICE,
+  FACE_VECTOR_INDEX,
+  ASYNC_FUNCTION_INVOKER,
 } from '../application';
-import { WebAppOptions } from '../application';
-import { AivotService } from './ai/services/aivot.service';
-import { CloudflareTryOnService } from './ai/services/cloudflare-try-on.service';
-import { TryOnOrchestratorService } from './ai/services/try-on-orchestrator.service';
 import { AppIntegrityService } from './app-integrity';
-import CronServices from './cron';
+import { LambdaFunctionInvoker } from './aws-lambda';
+import { CRON_SERVICES } from './cron';
 import { AESEncrypt, AESEncryptOptions } from './crypto';
+import { InsightFaceClient, QdrantClient } from './face-compare';
 import { GoogleOAuthService } from './google-oauth';
 import { MetaGraphClient } from './meta';
-import { FaceCompareOptions, InsightFaceClient, QdrantClient } from './face-compare';
 import {
   UnitOfWork,
   CustomersRepository,
@@ -105,13 +115,13 @@ import {
   WhatsAppBusinessConnectionsRepository,
   WhatsAppConversationWindowsRepository,
   WhatsAppMessagesRepository,
+  generateDataSourceOptions,
+  ENTITIES,
+  SEEDS,
 } from './persistence';
-import Entities from './persistence/entities';
-import Seeds from './persistence/seeds';
-import { generateDataSourceOptions } from './persistence/type-orm.config';
 import { RedisOptions, RedisService, RedisCacheService } from './redis';
 import { FileStorageMock, UsersFileStorage } from './s3';
-import { WebSocketMessageService } from './websocket/websocket-message.service';
+import { WebSocketMessageService } from './websocket';
 
 @Global()
 @Module({
@@ -128,11 +138,11 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
         return generateDataSourceOptions(dbConfig);
       },
     }),
-    TypeOrmModule.forFeature([...Entities]),
+    TypeOrmModule.forFeature([...ENTITIES]),
   ],
   providers: [
-    ...Seeds,
-    ...CronServices,
+    ...SEEDS,
+    ...CRON_SERVICES,
     {
       provide: UNIT_OF_WORK,
       useClass: UnitOfWork,
@@ -196,6 +206,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       provide: SALES_BILLS_REPOSITORY,
       useClass: SalesBillsRepository,
     },
+    { provide: INVENTORY_ITEM_SALES_REPOSITORY, useExisting: SALES_BILLS_REPOSITORY },
     BillLogsRepository,
     {
       provide: METAL_RATES_REPOSITORY,
@@ -275,6 +286,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
       provide: WEBSOCKET_MESSAGE_SERVICE,
       useClass: WebSocketMessageService,
     },
+    { provide: ASYNC_FUNCTION_INVOKER, useClass: LambdaFunctionInvoker },
     {
       provide: AES_ENCRYPT_SERVICE,
       useClass: AESEncrypt,
@@ -320,6 +332,8 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     },
     InsightFaceClient,
     QdrantClient,
+    { provide: FACE_EMBEDDING_SERVICE, useExisting: InsightFaceClient },
+    { provide: FACE_VECTOR_INDEX, useExisting: QdrantClient },
     {
       provide: GoogleOAuthOptions,
       inject: [ConfigService],
@@ -445,6 +459,7 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     POS_SESSIONS_REPOSITORY,
     WEBSOCKET_CONNECTIONS_REPOSITORY,
     SALES_BILLS_REPOSITORY,
+    INVENTORY_ITEM_SALES_REPOSITORY,
     BillLogsRepository,
     METAL_RATES_REPOSITORY,
     API_CONFIGURATION_REPOSITORY,
@@ -484,8 +499,11 @@ import { WebSocketMessageService } from './websocket/websocket-message.service';
     FaceCompareOptions,
     InsightFaceClient,
     QdrantClient,
-    ...Seeds,
-    ...CronServices,
+    FACE_EMBEDDING_SERVICE,
+    FACE_VECTOR_INDEX,
+    ASYNC_FUNCTION_INVOKER,
+    ...SEEDS,
+    ...CRON_SERVICES,
   ],
 })
 export class InfrastructureModule {}

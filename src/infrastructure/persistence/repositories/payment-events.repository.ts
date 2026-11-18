@@ -10,7 +10,7 @@ import {
   PaymentEventLinksData,
   UpdatePaymentEventLinksEntityInput,
 } from '../../../application';
-import { PaymentEventEntity } from '../entities/payment-event.entity';
+import { PaymentEventEntity } from '../entities';
 
 @Injectable()
 export class PaymentEventsRepository implements IPaymentEventsRepository {

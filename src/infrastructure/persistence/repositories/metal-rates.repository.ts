@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { IMetalRatesRepository, MetalRate } from '../../../application';
-import { MetalRateEntity } from '../entities/metal-rate.entity';
+import { MetalRateEntity } from '../entities';
 
 @Injectable()
 export class MetalRatesRepository implements IMetalRatesRepository {

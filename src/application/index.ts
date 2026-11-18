@@ -1,3 +1,3 @@
 export * from './features';
-export * from './application.module';
 export * from './shared';
+export * from './application.module';

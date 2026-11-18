@@ -13,17 +13,7 @@ import { plainToInstance } from 'class-transformer';
 import { randomBytes } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { IRedisService, REDIS_SERVICE } from '../../../shared/services/i-redis.service';
-
-import {
-  WHATSAPP_BILL_PDF_TEMPLATE,
-  WHATSAPP_DEFAULT_TEMPLATES,
-  WHATSAPP_DEPOSIT_RECEIPT_PDF_TEMPLATE,
-  WHATSAPP_PAYMENT_RECEIPT_PDF_TEMPLATE,
-  WHATSAPP_PAYMENT_RECEIVED_TEMPLATE,
-  WHATSAPP_DEPOSIT_RECEIVED_TEMPLATE,
-} from '../constants/whatsapp-default-template.constants';
-import { resolveUploadedPdfMimeType } from '../utils/is-uploaded-pdf.util';
+import { IRedisService, REDIS_SERVICE } from '../../../shared';
 import {
   ConnectWhatsAppBusinessData,
   SaveWhatsAppBusinessConnectionData,
@@ -45,13 +35,7 @@ import {
   EWhatsAppMessageDeliveryStatus,
   EWhatsAppMessageType,
 } from '../enums';
-import { WhatsAppMessagesFilterOptions } from '../options/whatsapp-messages-filter.options';
-import {
-  IMetaGraphClient,
-  META_GRAPH_CLIENT,
-  MetaGraphCredentials,
-  MetaTemplateSummary,
-} from './i-meta-graph.client';
+import { IMetaGraphClient, META_GRAPH_CLIENT } from './i-meta-graph.client';
 import {
   IWhatsAppBusinessConnectionsRepository,
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
@@ -63,11 +47,21 @@ import {
 import { IWhatsAppMessagesRepository, WHATSAPP_MESSAGES_REPOSITORY } from './i-whatsapp-messages.repository';
 import { IWhatsAppRealtimeService, WHATSAPP_REALTIME_SERVICE } from './i-whatsapp-realtime.service';
 import { IWhatsAppService } from './i-whatsapp.service';
-import { isWithinCustomerServiceWindow, normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
+import { MetaGraphCredentials } from './meta-graph-credentials';
+import { MetaTemplateSummary } from './meta-template-summary';
+import { WhatsAppMessagesFilterOptions } from '../options';
 import {
+  resolveUploadedPdfMimeType,
+  WHATSAPP_BILL_PDF_TEMPLATE,
+  WHATSAPP_DEFAULT_TEMPLATES,
+  WHATSAPP_DEPOSIT_RECEIPT_PDF_TEMPLATE,
+  WHATSAPP_PAYMENT_RECEIPT_PDF_TEMPLATE,
+  WHATSAPP_PAYMENT_RECEIVED_TEMPLATE,
+  WHATSAPP_DEPOSIT_RECEIVED_TEMPLATE,
   evaluateWhatsAppMessagingReadiness,
-} from '../utils/whatsapp-display-name.util';
-
+  isWithinCustomerServiceWindow,
+  normalizeWhatsAppRecipient,
+} from '../utils';
 const WHATSAPP_MOBILE_RETURN_SESSION_PREFIX = 'whatsapp:mobile-return:';
 const WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS = 600;
 const WHATSAPP_ONBOARDING_SESSION_PREFIX = 'whatsapp:onboarding:';
@@ -93,10 +87,7 @@ interface StoredWhatsAppOnboardingSession {
 export class WhatsAppService implements IWhatsAppService {
   private readonly fallbackMobileReturnSessions = new Map<string, StoredWhatsAppMobileReturnSession>();
   private readonly fallbackOnboardingSessions = new Map<string, StoredWhatsAppOnboardingSession>();
-  private readonly messageTemplatesCache = new Map<
-    string,
-    { expiresAt: number; templates: MetaTemplateSummary[] }
-  >();
+  private readonly messageTemplatesCache = new Map<string, { expiresAt: number; templates: MetaTemplateSummary[] }>();
 
   constructor(
     @Inject(META_GRAPH_CLIENT) private readonly metaGraphClient: IMetaGraphClient,
@@ -455,9 +446,7 @@ export class WhatsAppService implements IWhatsAppService {
     await this.assertMessagingAllowed(userId, credentials);
 
     const amountLabel = this.formatTransactionAmountLabel(details.amount);
-    const balanceLabel = details.balanceAfter
-      ? this.formatTransactionAmountLabel(details.balanceAfter)
-      : '—';
+    const balanceLabel = details.balanceAfter ? this.formatTransactionAmountLabel(details.balanceAfter) : '—';
     const shop = shopName.trim() || 'Your shop';
     const depositLabel = details.depositNumber?.trim() || '—';
     const typeLabel = details.transactionType?.trim() || 'Deposit';
@@ -825,8 +814,7 @@ export class WhatsAppService implements IWhatsAppService {
       }
 
       const phone =
-        (requestedPhoneNumberId && phoneNumbers.find((item) => item.id === requestedPhoneNumberId)) ||
-        phoneNumbers[0];
+        (requestedPhoneNumberId && phoneNumbers.find((item) => item.id === requestedPhoneNumberId)) || phoneNumbers[0];
 
       if (!phone) {
         continue;
@@ -930,11 +918,7 @@ export class WhatsAppService implements IWhatsAppService {
     return message;
   }
 
-  async listMessageHistory(
-    userId: string,
-    businessId: string,
-    options: Omit<WhatsAppMessagesFilterOptions, 'userId'>,
-  ) {
+  async listMessageHistory(userId: string, businessId: string, options: Omit<WhatsAppMessagesFilterOptions, 'userId'>) {
     this.assertBusinessAccess(userId, businessId);
     return this.messagesRepo.listByUserId({
       userId,
@@ -998,7 +982,7 @@ export class WhatsAppService implements IWhatsAppService {
     sessionId: string,
   ): Promise<{ exists: boolean; fromMobileApp: boolean }> {
     const stored = await this.readOnboardingSession(sessionId.trim());
-    if (!stored || stored.userId !== userId) {
+    if (stored?.userId !== userId) {
       return { exists: false, fromMobileApp: false };
     }
     return { exists: true, fromMobileApp: stored.fromMobileApp };
@@ -1260,9 +1244,7 @@ export class WhatsAppService implements IWhatsAppService {
           canSendMessages,
           messagingBlockReason:
             readiness.messagingBlockReason ??
-            (!hasPaymentMethod
-              ? 'Add a payment method in Meta WhatsApp Manager before sending messages.'
-              : undefined),
+            (!hasPaymentMethod ? 'Add a payment method in Meta WhatsApp Manager before sending messages.' : undefined),
           hasPaymentMethod,
         },
         { excludeExtraneousValues: true },
@@ -1471,7 +1453,9 @@ export class WhatsAppService implements IWhatsAppService {
   private async resolveCredentials(userId: string): Promise<MetaGraphCredentials> {
     const connection = await this.connectionsRepo.findByUserId(userId);
     if (connection?.connectionStatus !== EWhatsAppConnectionStatus.Connected) {
-      throw new BadRequestException('WhatsApp is not connected for this business. Connect your WhatsApp account first.');
+      throw new BadRequestException(
+        'WhatsApp is not connected for this business. Connect your WhatsApp account first.',
+      );
     }
 
     const encryptedToken = await this.connectionsRepo.findEncryptedTokenByUserId(userId);
@@ -1491,29 +1475,17 @@ export class WhatsAppService implements IWhatsAppService {
     return `${WHATSAPP_ONBOARDING_SESSION_PREFIX}${sessionId}`;
   }
 
-  private async storeOnboardingSession(
-    sessionId: string,
-    payload: StoredWhatsAppOnboardingSession,
-  ): Promise<void> {
+  private async storeOnboardingSession(sessionId: string, payload: StoredWhatsAppOnboardingSession): Promise<void> {
     if (this.redis.isEnabled()) {
-      await this.redis.setAsync(
-        this.onboardingSessionKey(sessionId),
-        payload,
-        WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS,
-      );
+      await this.redis.setAsync(this.onboardingSessionKey(sessionId), payload, WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS);
       return;
     }
 
     this.fallbackOnboardingSessions.set(sessionId, payload);
-    setTimeout(
-      () => this.fallbackOnboardingSessions.delete(sessionId),
-      WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS * 1000,
-    );
+    setTimeout(() => this.fallbackOnboardingSessions.delete(sessionId), WHATSAPP_ONBOARDING_SESSION_TTL_SECONDS * 1000);
   }
 
-  private async readOnboardingSession(
-    sessionId: string,
-  ): Promise<StoredWhatsAppOnboardingSession | null> {
+  private async readOnboardingSession(sessionId: string): Promise<StoredWhatsAppOnboardingSession | null> {
     if (!sessionId) return null;
 
     const stored = this.redis.isEnabled()
@@ -1540,10 +1512,7 @@ export class WhatsAppService implements IWhatsAppService {
     return `${WHATSAPP_MOBILE_RETURN_SESSION_PREFIX}${sessionId}`;
   }
 
-  private async storeMobileReturnSession(
-    sessionId: string,
-    payload: StoredWhatsAppMobileReturnSession,
-  ): Promise<void> {
+  private async storeMobileReturnSession(sessionId: string, payload: StoredWhatsAppMobileReturnSession): Promise<void> {
     const key = this.mobileReturnSessionKey(sessionId);
     if (this.redis.isEnabled()) {
       await this.redis.setAsync(key, payload, WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS);
@@ -1551,12 +1520,13 @@ export class WhatsAppService implements IWhatsAppService {
     }
 
     this.fallbackMobileReturnSessions.set(sessionId, payload);
-    setTimeout(() => this.fallbackMobileReturnSessions.delete(sessionId), WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS * 1000);
+    setTimeout(
+      () => this.fallbackMobileReturnSessions.delete(sessionId),
+      WHATSAPP_MOBILE_RETURN_SESSION_TTL_SECONDS * 1000,
+    );
   }
 
-  private async readMobileReturnSession(
-    sessionId: string,
-  ): Promise<StoredWhatsAppMobileReturnSession | null> {
+  private async readMobileReturnSession(sessionId: string): Promise<StoredWhatsAppMobileReturnSession | null> {
     const key = this.mobileReturnSessionKey(sessionId);
     if (this.redis.isEnabled()) {
       return (await this.redis.getAsync<StoredWhatsAppMobileReturnSession>(key)) ?? null;

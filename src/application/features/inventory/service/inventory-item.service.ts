@@ -10,6 +10,8 @@ import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { IInventoryCategoriesRepository, INVENTORY_CATEGORIES_REPOSITORY } from './i-inventory-categories.repository';
+import { IInventoryItemSalesRepository, INVENTORY_ITEM_SALES_REPOSITORY } from './i-inventory-item-sales.repository';
+import { IInventoryItemService } from './i-inventory-item.service';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import {
   IUsersFileStorage,
@@ -21,9 +23,9 @@ import {
   CACHE_SERVICE,
   ICacheService,
 } from '../../../shared';
-import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from '../../sales-bills/service/i-sales-bills.repository';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { InventoryItem, InventoryItemSale } from '../domain';
+import { EInventoryItemStatus } from '../enums';
 import {
   CreateInventoryItemRequestModel,
   InventoryImageAiPreviewResponseModel,
@@ -33,9 +35,7 @@ import {
 } from '../models';
 import { InventoryItemsFilterOptions } from '../options';
 import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
-import { IInventoryItemService } from './i-inventory-item.service';
-import { EInventoryItemStatus } from '../enums';
-import { deriveBusinessSkuPrefix } from '../utils/business-sku-prefix';
+import { deriveBusinessSkuPrefix } from '../utils';
 
 @Injectable()
 export class InventoryItemService implements IInventoryItemService {
@@ -45,7 +45,7 @@ export class InventoryItemService implements IInventoryItemService {
     @Inject(BARCODE_SERVICE) private readonly barcodeService: IBarcodeService,
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
-    @Inject(SALES_BILLS_REPOSITORY) private readonly salesBillsRepo: ISalesBillsRepository,
+    @Inject(INVENTORY_ITEM_SALES_REPOSITORY) private readonly salesBillsRepo: IInventoryItemSalesRepository,
     @Inject(PRODUCT_IMAGE_AI_SERVICE) private readonly productImageAi: IProductImageAiService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(InventoryItemService.name) private readonly logger: PinoLogger,

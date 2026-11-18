@@ -4,17 +4,24 @@ import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { Customer } from '../domain';
+import { CUSTOMERS_REPOSITORY, ICustomersRepository } from './i-customers.repository';
+import { IFaceSearchService } from './i-face-search.service';
+import {
+  FACE_EMBEDDING_SERVICE,
+  FACE_VECTOR_INDEX,
+  FaceCompareOptions,
+  IFaceEmbeddingService,
+  IFaceVectorIndex,
+  IUsersFileStorage,
+  USERS_FILE_STORAGE,
+} from '../../../shared';
 import {
   FaceLibraryStatusModel,
   FaceLibrarySyncResponseModel,
   FaceMatchResultModel,
   FaceSearchResponseModel,
-} from '../models/face-search.models';
-import { CUSTOMERS_REPOSITORY, ICustomersRepository } from './i-customers.repository';
-import { IFaceSearchService } from './i-face-search.service';
+} from '../models';
 import { CustomersDownloadFilterOptions } from '../options';
-import { FaceCompareOptions, InsightFaceClient, QdrantClient } from '../../../../infrastructure/face-compare';
-import { USERS_FILE_STORAGE, IUsersFileStorage } from '../../../shared';
 
 function customerDisplayName(customer: Customer): string {
   return [customer.firstName, customer.middleName, customer.lastName].filter(Boolean).join(' ').trim() || 'Unknown';
@@ -33,8 +40,8 @@ function listFilter(userId: string): CustomersDownloadFilterOptions {
 export class FaceSearchService implements IFaceSearchService {
   constructor(
     private readonly options: FaceCompareOptions,
-    private readonly insightFace: InsightFaceClient,
-    private readonly qdrant: QdrantClient,
+    @Inject(FACE_EMBEDDING_SERVICE) private readonly insightFace: IFaceEmbeddingService,
+    @Inject(FACE_VECTOR_INDEX) private readonly qdrant: IFaceVectorIndex,
     @Inject(CUSTOMERS_REPOSITORY) private readonly customersRepo: ICustomersRepository,
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @InjectPinoLogger(FaceSearchService.name) private readonly logger: PinoLogger,

@@ -1,6 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { EUserType } from '@shared-libs';
-import { Paged, toPaged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import { EUserType, Paged, toPaged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
@@ -15,9 +14,9 @@ import {
   IUsersFileStorage,
   USERS_FILE_STORAGE,
   USER_DETAILS_CACHE_TTL_SECONDS,
+  normalizeIndianMobile,
 } from '../../../shared';
-import { normalizeIndianMobile } from '../../verification/utils/phone.util';
-import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../utils/catalog-slug.helper';
+import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../utils';
 
 type CachedUser = User & { profilePhotoUrl?: string; shopLogoUrl?: string };
 

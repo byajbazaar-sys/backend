@@ -1,6 +1,6 @@
 import { Expose, Type } from 'class-transformer';
 
-import { ESubscriptionStatus } from './enums';
+import { ESubscriptionStatus } from './e-subscription-status.enum';
 
 export class Subscription {
   @Expose()

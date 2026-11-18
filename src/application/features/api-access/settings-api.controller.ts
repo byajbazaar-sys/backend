@@ -11,7 +11,7 @@ import {
   GenerateApiCredentialsResponseModel,
   UpdateApiStatusRequestModel,
 } from './models';
-import { API_AUTH_SERVICE, IApiAuthService } from './service/i-api-auth.service';
+import { API_AUTH_SERVICE, IApiAuthService } from './service';
 
 @ApiTags('settings')
 @ApiBearerAuth('user')

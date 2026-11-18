@@ -26,8 +26,7 @@ import {
   ICacheService,
   queryCacheParts,
 } from '../../../shared';
-import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY } from '../../loans/service/i-loan-items.repository';
-import { ILoansRepository, LOANS_REPOSITORY } from '../../loans/service/i-loans.repository';
+import { ILoanItemsRepository, LOAN_ITEMS_REPOSITORY, ILoansRepository, LOANS_REPOSITORY } from '../../loans';
 import { CustomersFilterOptions, CustomersDownloadFilterOptions } from '../options';
 
 @Injectable()

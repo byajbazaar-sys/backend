@@ -9,19 +9,17 @@ import {
   DepositTransaction,
   CreateDepositReceiptData,
   DepositReceiptResult,
-} from '../../../application/features/deposits/domain';
-import { EDepositStatus, EDepositTransactionType } from '../../../application/features/deposits/enums';
-import {
+  EDepositStatus,
+  EDepositTransactionType,
   CreateDepositAccountInput,
   CreateDepositTransactionInput,
   UpdateDepositAccountPatch,
-} from '../../../application/features/deposits/models';
-import { DepositsFilterOptions, DepositsDownloadFilterOptions } from '../../../application/features/deposits/options';
-import { DepositStats } from '../../../application/features/deposits/service/deposit-stats';
-import { IDepositsRepository } from '../../../application/features/deposits/service/i-deposits.repository';
-import { DepositAccountEntity } from '../entities/deposit-account.entity';
-import { DepositReceiptEntity } from '../entities/deposit-receipt.entity';
-import { DepositTransactionEntity } from '../entities/deposit-transaction.entity';
+  DepositsFilterOptions,
+  DepositsDownloadFilterOptions,
+  DepositStats,
+  IDepositsRepository,
+} from '../../../application';
+import { DepositAccountEntity, DepositReceiptEntity, DepositTransactionEntity } from '../entities';
 
 @Injectable()
 export class DepositsRepository implements IDepositsRepository {

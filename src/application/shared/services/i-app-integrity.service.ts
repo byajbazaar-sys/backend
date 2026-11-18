@@ -1,11 +1,7 @@
-import { GoogleSsoRequestModel } from '../../features/auth/models';
+import { AppIntegrityChallengeResult } from './app-integrity-challenge-result';
+import { GoogleSsoRequestModel } from '../../features';
 
 export const APP_INTEGRITY_SERVICE = 'IAppIntegrityService';
-
-export interface AppIntegrityChallengeResult {
-  challenge: string;
-  expiresInSeconds: number;
-}
 
 export interface IAppIntegrityService {
   createChallenge(): Promise<AppIntegrityChallengeResult>;

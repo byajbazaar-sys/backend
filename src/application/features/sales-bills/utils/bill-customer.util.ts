@@ -1,4 +1,4 @@
-import { Customer } from '../../customers/domain';
+import { Customer } from '../../customers';
 
 /** Bill fields that describe the buyer. */
 export interface BillCustomerDetails {

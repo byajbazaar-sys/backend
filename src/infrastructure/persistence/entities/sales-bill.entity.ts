@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, Index } from 'typeorm';
 
 import { SalesBillItemEntity } from './sales-bill-item.entity';
-import { EPaymentMode, EBillStatus, EDocumentType } from '../../../application/features/sales-bills/enums';
+import { EPaymentMode, EBillStatus, EDocumentType } from '../../../application';
 
 @Entity('sales_bills')
 @Index('IDX_sales_bills_bill_number', ['billNumber'])

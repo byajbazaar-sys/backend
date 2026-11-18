@@ -1,8 +1,7 @@
 import { Paged } from '@shared-libs';
 
 import { CreateOrderData, Order, OrderActivity, UpdateOrderData } from '../domain';
-import { AddOrderAdvanceData } from '../models/add-order-advance-data.model';
-import { NotifyOrderResponseModel } from '../models/notify-order-response.model';
+import { NotifyOrderResponseModel, AddOrderAdvanceData } from '../models';
 import { OrdersFilterOptions } from '../options';
 import { OrderStats } from './order-stats';
 import { EOrderStatus } from '../enums';

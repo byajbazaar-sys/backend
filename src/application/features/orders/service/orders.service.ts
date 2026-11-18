@@ -3,23 +3,6 @@ import { normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
 
-import { CUSTOMERS_REPOSITORY, ICustomersRepository } from '../../customers/service';
-import { Customer } from '../../customers/domain';
-import { DEPOSIT_SERVICE, IDepositService } from '../../deposits/service';
-import { ETransactionPaidIn } from '../../transactions/enums/e-transaction-paid-in';
-import {
-  WHATSAPP_ORDER_NOTIFICATION_SERVICE,
-  WhatsAppOrderNotificationService,
-} from '../../whatsapp/service/whatsapp-order-notification.service';
-import { CreateOrderData, Order, OrderActivity, OrderAttachment, UpdateOrderData } from '../domain';
-import { EOrderActivityType, EOrderPriority, EOrderStatus } from '../enums';
-import { AddOrderAdvanceData, NotifyOrderResponseModel, UpdateOrderPatch } from '../models';
-import { OrdersFilterOptions } from '../options';
-import { IOrdersService } from './i-orders.service';
-import { getEffectiveOrderAmount, syncLegacyTotalAmount } from './order-amount.util';
-import { ORDERS_REPOSITORY, IOrdersRepository } from './i-orders.repository';
-import { OrderStats } from './order-stats';
-import { isTerminalOrderStatus, isValidStatusTransition } from './order-status-transitions';
 import {
   CACHE_NAMESPACE,
   CACHE_SERVICE,
@@ -29,6 +12,19 @@ import {
   queryCacheParts,
   USERS_FILE_STORAGE,
 } from '../../../shared';
+import { Customer, CUSTOMERS_REPOSITORY, ICustomersRepository } from '../../customers';
+import { DEPOSIT_SERVICE, IDepositService } from '../../deposits';
+import { ETransactionPaidIn } from '../../transactions';
+import { IWhatsAppOrderNotificationService, WHATSAPP_ORDER_NOTIFICATION_SERVICE } from '../../whatsapp';
+import { CreateOrderData, Order, OrderActivity, OrderAttachment, UpdateOrderData } from '../domain';
+import { EOrderActivityType, EOrderPriority, EOrderStatus } from '../enums';
+import { AddOrderAdvanceData, NotifyOrderResponseModel, UpdateOrderPatch } from '../models';
+import { OrdersFilterOptions } from '../options';
+import { ORDERS_REPOSITORY, IOrdersRepository } from './i-orders.repository';
+import { IOrdersService } from './i-orders.service';
+import { getEffectiveOrderAmount, syncLegacyTotalAmount } from './order-amount.util';
+import { OrderStats } from './order-stats';
+import { isTerminalOrderStatus, isValidStatusTransition } from './order-status-transitions';
 
 @Injectable()
 export class OrdersService implements IOrdersService {
@@ -37,7 +33,7 @@ export class OrdersService implements IOrdersService {
     @Inject(CUSTOMERS_REPOSITORY) private readonly customersRepo: ICustomersRepository,
     @Inject(DEPOSIT_SERVICE) private readonly depositService: IDepositService,
     @Inject(WHATSAPP_ORDER_NOTIFICATION_SERVICE)
-    private readonly orderNotificationService: WhatsAppOrderNotificationService,
+    private readonly orderNotificationService: IWhatsAppOrderNotificationService,
     @Inject(USERS_FILE_STORAGE) private readonly fileStorage: IUsersFileStorage,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @InjectPinoLogger(OrdersService.name) private readonly logger: PinoLogger,
@@ -50,13 +46,9 @@ export class OrdersService implements IOrdersService {
     ]);
     if (!customer) throw new NotFoundException('Customer not found');
 
-    const estimatedAmount = this.normalizeAmount(
-      data.estimatedAmount ?? data.totalAmount ?? 0,
-      true,
-    );
-    const finalAmount =
-      data.finalAmount != null ? this.normalizeAmount(data.finalAmount, true) : undefined;
-    let order = this.withCustomerSnapshot(
+    const estimatedAmount = this.normalizeAmount(data.estimatedAmount ?? data.totalAmount ?? 0, true);
+    const finalAmount = data.finalAmount != null ? this.normalizeAmount(data.finalAmount, true) : undefined;
+    const order = this.withCustomerSnapshot(
       await this.ordersRepo.create({
         orderNumber,
         customerId: data.customerId,
@@ -100,7 +92,10 @@ export class OrdersService implements IOrdersService {
           metadata: { attachmentId: attachment.id, filename: image.originalname },
         })
         .catch((err) => {
-          this.logger.warn({ err, orderId: order.id, attachmentId: attachment.id }, 'Failed to log attachment activity');
+          this.logger.warn(
+            { err, orderId: order.id, attachmentId: attachment.id },
+            'Failed to log attachment activity',
+          );
         });
     }
 
@@ -200,10 +195,7 @@ export class OrdersService implements IOrdersService {
       const existingFinal = existing.finalAmount != null ? Number(existing.finalAmount) : null;
       if (finalAmount !== existingFinal) {
         patch.finalAmount = finalAmount;
-        patch.totalAmount = syncLegacyTotalAmount(
-          existing.estimatedAmount ?? 0,
-          finalAmount,
-        );
+        patch.totalAmount = syncLegacyTotalAmount(existing.estimatedAmount ?? 0, finalAmount);
         metadata.finalAmount = { from: existingFinal, to: finalAmount };
       }
     }
@@ -316,15 +308,10 @@ export class OrdersService implements IOrdersService {
       throw new BadRequestException('Advance amount exceeds order total');
     }
 
-    const depositAccount = await this.depositService.findOrCreateActiveAccount(
-      existing.customerId,
-      createdBy,
-    );
+    const depositAccount = await this.depositService.findOrCreateActiveAccount(existing.customerId, createdBy);
 
     const paymentMode = data.paymentMode ?? ETransactionPaidIn.CASH;
-    const depositRemarks =
-      data.note?.trim() ||
-      `Order ${existing.orderNumber} advance`;
+    const depositRemarks = data.note?.trim() || `Order ${existing.orderNumber} advance`;
 
     const updated = await this.ordersRepo.update(id, createdBy, { paidAmount: nextPaidAmount });
     if (!updated) throw new NotFoundException('Order not found');
@@ -601,11 +588,7 @@ export class OrdersService implements IOrdersService {
     if (file.mimetype === 'application/pdf') {
       return { buffer: file.buffer, mimetype: file.mimetype, fileExtension: 'pdf' };
     }
-    const normalized = await normalizeImageBufferForStorageOrThrow(
-      file.buffer,
-      file.mimetype,
-      file.originalname,
-    );
+    const normalized = await normalizeImageBufferForStorageOrThrow(file.buffer, file.mimetype, file.originalname);
     return {
       buffer: normalized.buffer,
       mimetype: normalized.mimetype,
@@ -627,11 +610,7 @@ export class OrdersService implements IOrdersService {
     return order;
   }
 
-  private assertPaidAmountWithinTotal(
-    paidAmount: number,
-    estimatedAmount: number,
-    finalAmount?: number | null,
-  ): void {
+  private assertPaidAmountWithinTotal(paidAmount: number, estimatedAmount: number, finalAmount?: number | null): void {
     const effectiveAmount = getEffectiveOrderAmount({ estimatedAmount, finalAmount });
     if (effectiveAmount > 0 && paidAmount > effectiveAmount) {
       throw new BadRequestException('Order amount cannot be less than amount already paid');

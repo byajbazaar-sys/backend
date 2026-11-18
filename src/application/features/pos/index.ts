@@ -1,5 +1,5 @@
-export * from './domain';
 export * from './enums';
+export * from './domain';
 export * from './models';
 export * from './service';
 export * from './pos-sessions.controller';

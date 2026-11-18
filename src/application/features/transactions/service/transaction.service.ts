@@ -316,8 +316,7 @@ export class TransactionService implements ITransactionService {
       const resolved = this.resolveOptionalPaidAt(updates.paidAt, loan);
       const newPaidAt: Date | null = resolved ?? null;
       const previousPaidAt = current.paidAt ?? null;
-      const paidAtChanged =
-        (previousPaidAt?.getTime() ?? null) !== (newPaidAt?.getTime() ?? null);
+      const paidAtChanged = (previousPaidAt?.getTime() ?? null) !== (newPaidAt?.getTime() ?? null);
       if (paidAtChanged) {
         const updated = await this.transactionsRepo.updatePaidAt(id, createdBy, newPaidAt);
         if (!updated) {

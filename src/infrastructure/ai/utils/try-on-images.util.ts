@@ -1,5 +1,5 @@
-import type { TryOnJewelleryType } from '../../../application/features/try-on/jewellery-types';
-import type { AiImageInput } from '../interfaces/ai-media.types';
+import type { TryOnJewelleryType } from '../../../application';
+import type { AiImageInput } from '../interfaces';
 
 const JEWELLERY_ORDER: TryOnJewelleryType[] = [
   'necklace',

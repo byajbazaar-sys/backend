@@ -1,9 +1,9 @@
 import { SqlExecutor } from './log-tables';
-import type { UpdateWhatsAppMessageStatusData } from '../../../application/features/whatsapp/domain';
 import {
   EWhatsAppMessageDeliveryStatus,
   shouldAdvanceWhatsAppMessageStatus,
-} from '../../../application/features/whatsapp/enums/e-whatsapp-message-delivery-status.enum';
+  type UpdateWhatsAppMessageStatusData,
+} from '../../../application';
 
 /** Outbox entry (stream whatsapp_status): a status webhook to apply once the logs database is reachable again. */
 export interface WhatsAppStatusOp {

@@ -85,15 +85,15 @@ import {
   WhatsAppDueReminderService,
   WHATSAPP_REALTIME_SERVICE,
   WhatsAppRealtimeService,
-} from './features';
-import { WhatsAppOrderNotificationService, WHATSAPP_ORDER_NOTIFICATION_SERVICE } from './features/whatsapp/service/whatsapp-order-notification.service';
-import { EMAIL_TEMPLATE_SERVICE, EmailTemplateService } from './features/notifications';
-import {
+  EMAIL_TEMPLATE_SERVICE,
+  EmailTemplateService,
   POS_SESSION_SERVICE,
   PosSessionService,
   WEBSOCKET_HANDLER_SERVICE,
   WebSocketHandlerService,
-} from './features/pos';
+  WhatsAppOrderNotificationService,
+  WHATSAPP_ORDER_NOTIFICATION_SERVICE,
+} from './features';
 
 @Global()
 @Module({

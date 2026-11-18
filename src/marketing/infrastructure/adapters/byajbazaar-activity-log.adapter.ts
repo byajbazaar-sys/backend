@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { ACTIVITY_LOGGER, EActivityLogCategory, IActivityLogger } from '../../../application/shared';
-import { IMarketingActivityLog, MarketingActivity } from '../../application/ports';
+import { ACTIVITY_LOGGER, EActivityLogCategory, IActivityLogger } from '../../../application';
+import { MarketingActivity, IMarketingActivityLog } from '../../application';
 
 /** Marketing activity → the ByajBazaar logs service (activity_logs, category MARKETING). */
 @Injectable()

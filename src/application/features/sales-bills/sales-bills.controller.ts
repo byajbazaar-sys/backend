@@ -36,8 +36,7 @@ import {
   ListBillLogsQueryModel,
   RecordBillLogRequestModel,
 } from './models';
-import { SALES_BILL_SERVICE, ISalesBillService } from './service';
-import type { BillActionContext } from './service/sales-bill.service';
+import { SALES_BILL_SERVICE, ISalesBillService, type BillActionContext } from './service';
 
 /** Which app did the operation, from the user agent (no extra header needed from the clients). */
 function billActionContext(req: Request, identity: IIdentity): BillActionContext {

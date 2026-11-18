@@ -4,7 +4,7 @@ import {
   EWhatsAppMessageContextType,
   EWhatsAppMessageDeliveryStatus,
   EWhatsAppMessageType,
-} from '../../../application/features/whatsapp/enums';
+} from '../../../application';
 
 @Entity('whatsapp_messages')
 @Index('UQ_whatsapp_messages_meta_message_id', ['metaMessageId'], { unique: true })

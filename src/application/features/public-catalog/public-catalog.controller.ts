@@ -4,7 +4,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { plainToInstance } from 'class-transformer';
 
 import { ListPublicCatalogQueryModel, PublicCatalogResponseModel } from './models';
-import { IPublicCatalogService, PUBLIC_CATALOG_SERVICE } from './service/i-public-catalog.service';
+import { IPublicCatalogService, PUBLIC_CATALOG_SERVICE } from './service';
 
 @ApiTags('public-catalog')
 @UseGuards(ThrottlerGuard)

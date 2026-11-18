@@ -1,3 +1,5 @@
+export * from './create-sales-bill-entity-input.model';
+export * from './create-sales-bill-line-entity-input.model';
 export * from './create-sales-bill-line-item.model';
 export * from './create-sales-bill.model';
 export * from './update-sales-bill-line-item.model';
@@ -9,5 +11,8 @@ export * from './sales-bill-line-item-response.model';
 export * from './sales-bills-paged-response.model';
 export * from './bulk-delete-sales-bills-request.model';
 export * from './bulk-delete-sales-bills-response.model';
-export * from './create-sales-bill-entity-input.model';
-export * from './bill-log.models';
+export * from './bill-log-change-response.model';
+export * from './bill-log-response.model';
+export * from './bill-logs-paged-response.model';
+export * from './list-bill-logs-query.model';
+export * from './record-bill-log-request.model';

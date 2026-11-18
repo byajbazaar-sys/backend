@@ -1,11 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { SYSTEM_USER_ID } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
-import { SYSTEM_USER_ID } from 'libs/constants/constants';
 import { In, Repository } from 'typeorm';
 
 import { IItemsRepository, Item, UpdateItemRequestModel } from '../../../application';
-import { ItemEntity } from '../entities/item.entity';
+import { ItemEntity } from '../entities';
 
 @Injectable()
 export class ItemsRepository implements IItemsRepository {

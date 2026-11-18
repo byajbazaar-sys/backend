@@ -1,4 +1,4 @@
-import { EDueType } from '../../../shared/enums';
+import { EDueType } from '../../../shared';
 
 export interface UpdateDueEntityInput {
   type?: EDueType;

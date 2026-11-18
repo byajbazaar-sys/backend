@@ -12,12 +12,13 @@ import {
 } from './i-websocket-connections.repository';
 import { IWebSocketHandlerService } from './i-websocket-handler.service';
 import { IWebSocketMessageService, WEBSOCKET_MESSAGE_SERVICE } from '../../../shared';
-import { InventoryItem } from '../../inventory/domain';
-import { BARCODE_SERVICE, IBarcodeService } from '../../inventory/service/i-barcode.service';
 import {
+  BARCODE_SERVICE,
+  IBarcodeService,
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
-} from '../../inventory/service/i-inventory-items.repository';
+  InventoryItem,
+} from '../../inventory';
 import { WebSocketConnectResult } from '../domain';
 import { EDeviceType } from '../enums';
 

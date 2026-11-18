@@ -8,8 +8,8 @@ import { parse } from 'qs';
 
 import { AppModule } from './app.module';
 import { IApiOptions, IMsConfig } from './configurations';
-import { CronService } from './infrastructure/cron';
-import { SeedingService } from './infrastructure/persistence/seeds/seeding.service';
+import { CronService, SeedingService } from './infrastructure';
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,

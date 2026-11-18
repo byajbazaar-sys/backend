@@ -1,5 +1,5 @@
 import type { TryOnProviderRoute } from '../../../shared';
-import type { JewelleryTryOnRequest, OutfitRecolorRequest } from '../interfaces';
+import type { JewelleryTryOnRequest, OutfitRecolorRequest } from '../domain';
 
 export interface TryOnLambdaPayload {
   jobId: string;

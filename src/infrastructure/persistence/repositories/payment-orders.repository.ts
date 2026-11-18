@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { IPaymentOrdersRepository, PaymentOrder } from '../../../application';
-import { PaymentOrderEntity } from '../entities/payment-order.entity';
+import { PaymentOrderEntity } from '../entities';
 
 @Injectable()
 export class PaymentOrdersRepository implements IPaymentOrdersRepository {

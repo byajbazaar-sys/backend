@@ -1,54 +1,12 @@
-export interface MetaSendMessageResult {
-  messageId: string;
-}
-
-export interface MetaCreateTemplateResult {
-  templateId: string;
-  status: string;
-}
-
-export interface MetaTemplateSummary {
-  id: string;
-  name: string;
-  language: string;
-  status: string;
-  category?: string;
-}
-
-export interface MetaGraphCredentials {
-  accessToken: string;
-  phoneNumberId: string;
-  wabaId: string;
-}
-
-export interface MetaPhoneNumberStatus {
-  status: string;
-  codeVerificationStatus?: string;
-  displayPhoneNumber?: string;
-  verifiedName?: string;
-  nameStatus?: string;
-}
-
-export interface MetaWhatsAppBusinessAccountInfo {
-  primaryFundingId?: string;
-  currency?: string;
-}
-
-export interface MetaRegisterPhoneResult {
-  success: boolean;
-  status: string;
-}
-
-export interface MetaWabaPhoneNumber {
-  id: string;
-  displayPhoneNumber?: string;
-  verifiedName?: string;
-  status?: string;
-}
-
-export interface MetaSubscribeAppResult {
-  success: boolean;
-}
+import { MetaCreateTemplateResult } from './meta-create-template-result';
+import { MetaGraphCredentials } from './meta-graph-credentials';
+import { MetaPhoneNumberStatus } from './meta-phone-number-status';
+import { MetaRegisterPhoneResult } from './meta-register-phone-result';
+import { MetaSendMessageResult } from './meta-send-message-result';
+import { MetaSubscribeAppResult } from './meta-subscribe-app-result';
+import { MetaTemplateSummary } from './meta-template-summary';
+import { MetaWabaPhoneNumber } from './meta-waba-phone-number';
+import { MetaWhatsAppBusinessAccountInfo } from './meta-whatsapp-business-account-info';
 
 export const META_GRAPH_CLIENT = 'IMetaGraphClient';
 

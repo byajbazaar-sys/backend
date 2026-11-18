@@ -2,9 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { IWhatsAppConversationWindowsRepository } from '../../../application/features/whatsapp/service/i-whatsapp-conversation-windows.repository';
-import { normalizeWhatsAppRecipient } from '../../../application/features/whatsapp/utils/whatsapp-messaging.util';
-import { WhatsAppConversationWindowEntity } from '../entities/whatsapp-conversation-window.entity';
+import { IWhatsAppConversationWindowsRepository, normalizeWhatsAppRecipient } from '../../../application';
+import { WhatsAppConversationWindowEntity } from '../entities';
 
 @Injectable()
 export class WhatsAppConversationWindowsRepository implements IWhatsAppConversationWindowsRepository {

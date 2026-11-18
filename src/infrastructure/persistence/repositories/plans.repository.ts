@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { IPlansRepository, Plan, UpdatePlanEntityInput, UpdatePlanPatch } from '../../../application';
-import { PlanEntity } from '../entities/plan.entity';
+import { PlanEntity } from '../entities';
 
 @Injectable()
 export class PlansRepository implements IPlansRepository {
@@ -67,9 +67,7 @@ export class PlansRepository implements IPlansRepository {
       .filter((entity) => {
         const interval = entity.interval?.trim().toLowerCase();
         const intervalCount = entity.intervalCount ?? 1;
-        return (
-          (interval === 'monthly' && intervalCount === 1) || (interval === 'yearly' && intervalCount === 1)
-        );
+        return (interval === 'monthly' && intervalCount === 1) || (interval === 'yearly' && intervalCount === 1);
       })
       .map((entity) => this.mapEntity(entity));
   }

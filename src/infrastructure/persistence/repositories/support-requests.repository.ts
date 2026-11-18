@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
-import { ISupportRequestsRepository, SupportRequest } from '../../../application/features/support';
-import { SupportRequestEntity } from '../entities/support-request.entity';
+import { ISupportRequestsRepository, SupportRequest } from '../../../application';
+import { SupportRequestEntity } from '../entities';
 
 @Injectable()
 export class SupportRequestsRepository implements ISupportRequestsRepository {

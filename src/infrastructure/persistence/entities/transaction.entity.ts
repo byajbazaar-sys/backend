@@ -12,7 +12,7 @@ import { CustomerEntity } from './customer.entity';
 import { DueEntity } from './due.entity';
 import { LoanEntity } from './loan.entity';
 import { UserEntity } from './user.entity';
-import { ETransactionType, ETransactionPaidIn } from '../../../application/features/transactions/enums';
+import { ETransactionType, ETransactionPaidIn } from '../../../application';
 
 @Entity('transactions')
 export class TransactionEntity {

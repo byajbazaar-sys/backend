@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { CreateTransactionLogInput, ITransactionLogsRepository, TransactionLog } from '../../../application';
-import { TransactionLogEntity } from '../entities/transaction-log.entity';
+import { TransactionLogEntity } from '../entities';
 import { TransactionalContext } from '../transactional-context';
 
 @Injectable()

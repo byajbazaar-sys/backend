@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
-import { EJewelleryEventStatus } from '../../../application/features/events/domain/enums';
+import { EJewelleryEventStatus } from '../../../application';
 
 @Entity('jewellery_events')
 export class JewelleryEventEntity {

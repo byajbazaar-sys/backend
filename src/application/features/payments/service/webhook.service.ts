@@ -18,8 +18,8 @@ import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { SubscriptionPatch } from '../models';
 import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
+import { IRefundService, REFUND_SERVICE } from './i-refund.service';
 import { IWebhookService } from './i-webhook.service';
-import { REFUND_SERVICE, RefundService } from './refund.service';
 import { ACTIVITY_LOGGER, EActivityLogCategory, IActivityLogger } from '../../../shared';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 
@@ -31,7 +31,7 @@ export class WebhookService implements IWebhookService {
     @Inject(SUBSCRIPTIONS_REPOSITORY) private readonly subscriptionsRepo: ISubscriptionsRepository,
     @Inject(PAYMENTS_REPOSITORY) private readonly paymentsRepo: IPaymentsRepository,
     @Inject(PAYMENT_ORDERS_REPOSITORY) private readonly ordersRepo: IPaymentOrdersRepository,
-    @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
+    @Inject(REFUND_SERVICE) private readonly refundService: IRefundService,
     @Inject(COUPON_SERVICE) private readonly couponService: ICouponService,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(ACTIVITY_LOGGER) private readonly activityLogger: IActivityLogger,

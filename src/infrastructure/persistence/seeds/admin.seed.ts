@@ -1,13 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ESeedType, EUserType } from '@shared-libs';
-import { BCRYPT_SALT_ROUNDS } from '@shared-libs';
+import { ESeedType, EUserType, BCRYPT_SALT_ROUNDS } from '@shared-libs';
 import { hashSync } from 'bcrypt';
 import { Repository } from 'typeorm';
 
 import { BaseSeed } from './base.seed';
-import { SeedEntity } from '../entities/seed.entity';
-import { UserEntity } from '../entities/user.entity';
+import { SeedEntity, UserEntity } from '../entities';
 
 @Injectable()
 export class AdminSeed extends BaseSeed {

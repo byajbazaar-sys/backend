@@ -10,7 +10,7 @@ import {
   MarketingSettingEntity,
   MarketingScheduledPostEntity,
   RenderJobEntity,
-} from './entities/marketing.entities';
+} from './entities';
 import { MarketingDatabase } from './marketing-database';
 import {
   KaggleAccount,
@@ -20,16 +20,13 @@ import {
   MarketingScene,
   MarketingScheduledPost,
   RenderJob,
-} from '../../application/domain';
-import {
+  DEFAULT_KAGGLE_SETTINGS,
+  KaggleSettings,
   BUSY_RENDER_STATUSES,
   ECampaignStatus,
   EKaggleAccountStatus,
   ERenderJobKind,
   ERenderJobStatus,
-} from '../../application/enums';
-import {
-  DEFAULT_KAGGLE_SETTINGS,
   IKaggleAccountsRepository,
   IKaggleCredentialsRepository,
   IMarketingBrandsRepository,
@@ -38,9 +35,8 @@ import {
   IMarketingSettingsRepository,
   IMarketingScheduledPostsRepository,
   IRenderJobsRepository,
-  KaggleSettings,
-} from '../../application/ports';
-import { MarketingSecretCipher } from '../crypto/marketing-secret.cipher';
+} from '../../application';
+import { MarketingSecretCipher } from '../crypto';
 
 /** UPDATE … RETURNING through TypeORM on Postgres returns [rows, affectedCount]. */
 function returnedRows(result: unknown): Record<string, unknown>[] {
@@ -456,6 +452,18 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     return (await this.repo()).count({
       where: { status: ERenderJobStatus.Waiting, kind: Not(ERenderJobKind.Setup) },
     });
+  }
+
+  async countWaitingByKind(): Promise<Partial<Record<ERenderJobKind, number>>> {
+    const rows = await (await this.repo())
+      .createQueryBuilder('j')
+      .select('j.kind', 'kind')
+      .addSelect('COUNT(*)', 'count')
+      .where('j.status = :status', { status: ERenderJobStatus.Waiting })
+      .andWhere('j.kind <> :setup', { setup: ERenderJobKind.Setup })
+      .groupBy('j.kind')
+      .getRawMany<{ kind: ERenderJobKind; count: string }>();
+    return Object.fromEntries(rows.map((r) => [r.kind, Number(r.count)]));
   }
 
   async busySlots(workerId: string): Promise<number[]> {

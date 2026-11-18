@@ -3,9 +3,8 @@ import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swa
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 
-import { LabelDesignerSettingsService } from './label-designer-settings.service';
-import type { LabelDesignerSettingsResponse } from './service';
-import { SaveLabelDesignerSettingsModel } from './models/save-label-designer-settings.model';
+import { SaveLabelDesignerSettingsModel } from './models';
+import { LabelDesignerSettingsService, type LabelDesignerSettingsResponse } from './service';
 
 const MAX_SETTINGS_BYTES = 4 * 1024 * 1024;
 
@@ -36,4 +35,3 @@ export class LabelDesignerSettingsController {
     return this.settingsService.save(identity.userId, settings);
   }
 }
-

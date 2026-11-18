@@ -4,9 +4,7 @@ import { ESeedType, SYSTEM_USER_ID } from '@shared-libs';
 import { Repository } from 'typeorm';
 
 import { BaseSeed } from './base.seed';
-import { InventoryCategoryEntity } from '../entities/inventory-category.entity';
-import { SeedEntity } from '../entities/seed.entity';
-
+import { InventoryCategoryEntity, SeedEntity } from '../entities';
 const DEFAULT_CATEGORIES = [
   { name: 'Ring', description: 'Gold and diamond rings' },
   { name: 'Chain', description: 'Gold and silver chains' },

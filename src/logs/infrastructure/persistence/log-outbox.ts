@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { LogStream, SqlExecutor } from './log-tables';
-import { ILogsHost, LOGS_HOST } from '../../application/ports/logs-host.ports';
+import { ILogsHost, LOGS_HOST } from '../host';
 
 /** What the outbox holds: log rows of a stream, or WhatsApp delivery-status updates waiting to be applied. */
 export type OutboxStream = LogStream | 'whatsapp_status';

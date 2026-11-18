@@ -13,3 +13,5 @@ export * from './dues-response.model';
 export * from './dues-paged-response.model';
 export * from './list-dues-query.model';
 export * from './get-due-params.model';
+export * from './create-transaction-entity-input.model';
+export * from './update-due-entity-input.model';

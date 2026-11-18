@@ -7,4 +7,5 @@ export * from './sales-metal-breakdown';
 export * from './sales-payment-breakdown';
 export * from './sales-document-type-breakdown';
 export * from './gst-csv-export-result';
+export * from './bill-log-change';
 export * from './bill-log';

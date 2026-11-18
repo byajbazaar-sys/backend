@@ -10,6 +10,13 @@ import { Paged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
+import { BillActionContext } from './bill-action-context';
+import { BillLineUpdate } from './bill-line-update';
+import { BillLogsQuery } from './bill-logs-query';
+import { BILL_LOGS_REPOSITORY, IBillLogsRepository } from './i-bill-logs.repository';
+import { ISalesBillService } from './i-sales-bill.service';
+import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
+import { InventoryStockDeduction } from './inventory-stock-deduction';
 import {
   BulkDeleteResult,
   CACHE_NAMESPACE,
@@ -19,22 +26,20 @@ import {
   queryCacheParts,
   salesAnalyticsCacheParts,
 } from '../../../shared';
-import { Customer } from '../../customers/domain';
 import {
+  Customer,
   CUSTOMER_SERVICE,
   CUSTOMERS_REPOSITORY,
   ICustomerService,
   ICustomersRepository,
-} from '../../customers/service';
-import { EInventoryItemStatus } from '../../inventory/enums';
+} from '../../customers';
 import {
+  EInventoryItemStatus,
   IInventoryCategoriesRepository,
   INVENTORY_CATEGORIES_REPOSITORY,
-} from '../../inventory/service/i-inventory-categories.repository';
-import {
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
-} from '../../inventory/service/i-inventory-items.repository';
+} from '../../inventory';
 import { BillLog, SalesBill, SalesBillLineItem, SalesAnalytics, GstCsvExportResult } from '../domain';
 import {
   EBillStatus,
@@ -52,33 +57,20 @@ import {
   UpdateSalesBillPatch,
 } from '../models';
 import { SalesAnalyticsFilterOptions, SalesBillsExportFilterOptions, SalesBillsFilterOptions } from '../options';
-import { BillLineUpdate } from './bill-line-update';
-import { BILL_LOGS_REPOSITORY, BillLogsQuery, IBillLogsRepository } from './i-bill-logs.repository';
-import { ISalesBillService } from './i-sales-bill.service';
-import { ISalesBillsRepository, SALES_BILLS_REPOSITORY } from './i-sales-bills.repository';
-import { InventoryStockDeduction } from './inventory-stock-deduction';
-import { computeBillLineTotal } from '../utils/bill-line-total.util';
 import {
+  computeBillLineTotal,
   BillCustomerDetails,
   billMobileDigits,
   isRealCustomerName,
   missingCustomerDetails,
   newCustomerFromBill,
-} from '../utils/bill-customer.util';
-import { billSnapshot, diffBills } from '../utils/bill-log-diff.util';
-import { toGstExportCsv } from '../utils/gst-export.util';
-import {
+  billSnapshot,
+  diffBills,
+  toGstExportCsv,
   computeUnitPurchaseCost,
   computeLineProfit,
   recalcLineProfitFromExisting,
-} from '../utils/purchase-profit.util';
-
-/** Who did an operation and from where, for the bill history. */
-export interface BillActionContext {
-  performedBy?: string;
-  /** web | mobile | api */
-  channel?: string;
-}
+} from '../utils';
 
 const DEFAULT_CGST_RATE = 1.5;
 const DEFAULT_SGST_RATE = 1.5;

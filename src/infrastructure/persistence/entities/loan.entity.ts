@@ -14,12 +14,7 @@ import { DueEntity } from './due.entity';
 import { LoanItemEntity } from './loan-item.entity';
 import { TransactionEntity } from './transaction.entity';
 import { UserEntity } from './user.entity';
-import {
-  ELoanTenureType,
-  EInterestCalculationMethod,
-  EInterestType,
-  ELoanStatus,
-} from '../../../application/features/loans/enums';
+import { ELoanTenureType, EInterestCalculationMethod, EInterestType, ELoanStatus } from '../../../application';
 
 @Entity('loans')
 export class LoanEntity {

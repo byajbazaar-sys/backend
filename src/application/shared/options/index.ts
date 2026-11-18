@@ -4,3 +4,4 @@ export * from './app-integrity.options';
 export * from './web-app.options';
 export * from './razorpay.options';
 export * from './meta-whatsapp.options';
+export * from './face-compare.options';

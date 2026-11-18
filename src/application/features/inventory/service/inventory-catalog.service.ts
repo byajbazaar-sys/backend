@@ -11,8 +11,7 @@ import {
 import { IInventoryCatalogService } from './i-inventory-catalog.service';
 import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY } from './i-inventory-items.repository';
 import { CACHE_NAMESPACE, CACHE_SERVICE, ICacheService } from '../../../shared';
-import { UserUpdatePatch } from '../../users/models/user-update-patch.model';
-import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
+import { UserUpdatePatch, IUsersRepository, USERS_REPOSITORY } from '../../users';
 
 @Injectable()
 export class InventoryCatalogService implements IInventoryCatalogService {

@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { Context, Handler } from 'aws-lambda';
 
 import { AppModule } from '../app.module';
-import { ITryOnService, TRY_ON_SERVICE, TryOnLambdaPayload } from '../application/features/try-on/try-on.service';
+import { ITryOnService, TRY_ON_SERVICE, TryOnLambdaPayload } from '../application';
 
 let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 

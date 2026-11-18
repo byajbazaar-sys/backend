@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
-import { EWhatsAppConnectionStatus } from '../../../application/features/whatsapp/enums';
+import { EWhatsAppConnectionStatus } from '../../../application';
 
 @Entity('whatsapp_business_connections')
 @Index('UQ_whatsapp_business_connections_user_id', ['userId'], { unique: true })

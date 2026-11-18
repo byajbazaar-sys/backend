@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv';
-import { Environment } from 'libs/types';
+import { Environment } from '../types';
 dotenv.config();
 export const dotEnvName = (): string =>
   '.env' +

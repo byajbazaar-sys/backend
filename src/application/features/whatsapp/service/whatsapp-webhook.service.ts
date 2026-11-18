@@ -8,8 +8,7 @@ import {
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
 } from './i-whatsapp-business-connections.repository';
 import { IWhatsAppMessagesRepository, WHATSAPP_MESSAGES_REPOSITORY } from './i-whatsapp-messages.repository';
-import { MetaWhatsAppOptions } from '../../../shared/options/meta-whatsapp.options';
-import { META_WHATSAPP_REENGAGEMENT_ERROR_CODE } from '../constants/whatsapp-messaging.constants';
+import { MetaWhatsAppOptions } from '../../../shared';
 import {
   parseWhatsAppWebhookPayload,
   SaveWhatsAppOutboundMessageData,
@@ -17,8 +16,8 @@ import {
   WhatsAppWebhookAckResult,
   WhatsAppWebhookMessageStatus,
   WhatsAppWebhookPayload,
+  WhatsAppBusinessConnection,
 } from '../domain';
-import { WhatsAppBusinessConnection } from '../domain/whatsapp-business-connection';
 import { parseWhatsAppMessageDeliveryStatus } from '../enums';
 import {
   IWhatsAppConversationWindowsRepository,
@@ -26,7 +25,7 @@ import {
 } from './i-whatsapp-conversation-windows.repository';
 import { IWhatsAppRealtimeService, WHATSAPP_REALTIME_SERVICE } from './i-whatsapp-realtime.service';
 import { IWhatsAppWebhookService } from './i-whatsapp-webhook.service';
-import { parseWhatsAppWebhookUnixTimestamp } from '../utils/whatsapp-messaging.util';
+import { META_WHATSAPP_REENGAGEMENT_ERROR_CODE, parseWhatsAppWebhookUnixTimestamp } from '../utils';
 
 @Injectable()
 export class WhatsAppWebhookService implements IWhatsAppWebhookService {

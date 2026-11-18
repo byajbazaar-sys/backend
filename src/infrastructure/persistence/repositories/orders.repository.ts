@@ -4,16 +4,20 @@ import { ESortOrder, getPaginationValues, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
-import { Order, OrderActivity, OrderAttachment } from '../../../application/features/orders/domain';
-import { EOrderStatus } from '../../../application/features/orders/enums';
-import { CreateOrderActivityInput, CreateOrderInput, UpdateOrderPatch } from '../../../application/features/orders/models';
-import { OrdersFilterOptions } from '../../../application/features/orders/options';
-import { IOrdersRepository } from '../../../application/features/orders/service/i-orders.repository';
-import { OrderStats } from '../../../application/features/orders/service/order-stats';
-import { isOrderOverdue } from '../../../application/features/orders/service/order-status-transitions';
-import { OrderActivityEntity } from '../entities/order-activity.entity';
-import { OrderAttachmentEntity } from '../entities/order-attachment.entity';
-import { OrderEntity } from '../entities/order.entity';
+import {
+  Order,
+  OrderActivity,
+  OrderAttachment,
+  EOrderStatus,
+  CreateOrderActivityInput,
+  CreateOrderInput,
+  UpdateOrderPatch,
+  OrdersFilterOptions,
+  IOrdersRepository,
+  OrderStats,
+  isOrderOverdue,
+} from '../../../application';
+import { OrderActivityEntity, OrderAttachmentEntity, OrderEntity } from '../entities';
 
 @Injectable()
 export class OrdersRepository implements IOrdersRepository {
@@ -236,9 +240,8 @@ export class OrdersRepository implements IOrdersRepository {
   }
 
   private mapOrder(entity: OrderEntity, attachments?: OrderAttachment[]): Order {
-    const customer = (
-      entity as OrderEntity & { customer?: { firstName?: string; lastName?: string; phone?: string } }
-    ).customer;
+    const customer = (entity as OrderEntity & { customer?: { firstName?: string; lastName?: string; phone?: string } })
+      .customer;
     const assignee = (entity as OrderEntity & { assignee?: { firstName?: string; lastName?: string } }).assignee;
     const estimatedAmount = Number(entity.estimatedAmount ?? entity.totalAmount ?? 0);
     const finalAmount = entity.finalAmount != null ? Number(entity.finalAmount) : undefined;

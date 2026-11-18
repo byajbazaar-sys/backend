@@ -7,10 +7,10 @@ import {
   SaveWhatsAppBusinessConnectionData,
   UpdateWhatsAppSettingsData,
   WhatsAppBusinessConnection,
-} from '../../../application/features/whatsapp/domain';
-import { EWhatsAppConnectionStatus } from '../../../application/features/whatsapp/enums';
-import { IWhatsAppBusinessConnectionsRepository } from '../../../application/features/whatsapp/service/i-whatsapp-business-connections.repository';
-import { WhatsAppBusinessConnectionEntity } from '../entities/whatsapp-business-connection.entity';
+  EWhatsAppConnectionStatus,
+  IWhatsAppBusinessConnectionsRepository,
+} from '../../../application';
+import { WhatsAppBusinessConnectionEntity } from '../entities';
 
 @Injectable()
 export class WhatsAppBusinessConnectionsRepository implements IWhatsAppBusinessConnectionsRepository {

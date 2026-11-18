@@ -16,9 +16,9 @@ import {
   Notification,
   NotificationsFilterOptions,
   NotificationDeliveryPatch,
-} from '../../../application/features/notifications';
-import { NotificationEntityUpdateInput } from '../../../application/features/notifications/models/notification-entity-update-input.model';
-import { NotificationEntity } from '../entities/notification.entity';
+  NotificationEntityUpdateInput,
+} from '../../../application';
+import { NotificationEntity } from '../entities';
 
 @Injectable()
 export class NotificationsRepository implements INotificationsRepository {

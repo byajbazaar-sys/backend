@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
-import Entities from './entities';
+import { ENTITIES } from './entities';
 import { IDbOptions } from './options';
 
 const DB_PORT = 5432;
@@ -23,7 +23,7 @@ export const generateDataSourceOptions = (options?: IDbOptions): DataSourceOptio
     synchronize: false,
     namingStrategy: new SnakeNamingStrategy(),
     logging: true,
-    entities: [...Entities],
+    entities: [...ENTITIES],
     migrations: [__dirname + '/migrations/*{.ts,.js}'],
     // Remote Postgres (e.g. Neon) requires SSL; local dev typically does not
     ssl: isLocalDb ? false : { rejectUnauthorized: false },

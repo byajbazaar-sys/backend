@@ -1,15 +1,11 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { EUserType, getPaginationValues, Roles, RolesGuard, toPaged, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 
-import { ActivityLogsStore } from '../../infrastructure/persistence/stores/activity-logs.store';
-import {
-  ActivityLogResponseModel,
-  ActivityLogsPagedResponseModel,
-  ListActivityLogsQueryModel,
-} from '../models/activity-log.models';
+import { ActivityLogResponseModel, ActivityLogsPagedResponseModel, ListActivityLogsQueryModel } from '../models';
+import { ACTIVITY_LOGS_REPOSITORY, IActivityLogsRepository } from '../ports';
 
 /** Admin view of the activity log (dues, payments, marketing), newest first. */
 @ApiTags('logs-admin')
@@ -18,7 +14,7 @@ import {
 @Roles(EUserType.Admin)
 @Controller('logs/admin/activity')
 export class ActivityLogsAdminController {
-  constructor(private readonly store: ActivityLogsStore) {}
+  constructor(@Inject(ACTIVITY_LOGS_REPOSITORY) private readonly store: IActivityLogsRepository) {}
 
   @Get()
   @ApiOperation({ summary: 'Search the activity log (admin)' })

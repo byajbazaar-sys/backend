@@ -1,7 +1,7 @@
 import { Paged } from '@shared-libs';
 
 import { SaveWhatsAppOutboundMessageData, UpdateWhatsAppMessageStatusData, WhatsAppMessage } from '../domain';
-import { WhatsAppMessagesFilterOptions } from '../options/whatsapp-messages-filter.options';
+import { WhatsAppMessagesFilterOptions } from '../options';
 
 export const WHATSAPP_MESSAGES_REPOSITORY = 'WHATSAPP_MESSAGES_REPOSITORY';
 

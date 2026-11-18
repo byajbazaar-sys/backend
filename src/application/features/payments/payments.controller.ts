@@ -31,8 +31,7 @@ import {
   WebhookAckResponseModel,
 } from './models';
 import { USERS_REPOSITORY, IUsersRepository } from '../users';
-import { IPaymentsService, PAYMENTS_SERVICE } from './service/i-payments.service';
-import { IWebhookService, WEBHOOK_SERVICE } from './service/i-webhook.service';
+import { IPaymentsService, PAYMENTS_SERVICE, IWebhookService, WEBHOOK_SERVICE } from './service';
 
 @ApiTags('payments')
 @Controller('payments')

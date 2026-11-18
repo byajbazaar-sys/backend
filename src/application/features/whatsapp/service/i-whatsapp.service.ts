@@ -13,9 +13,8 @@ import {
   WhatsAppRegisterPhoneResult,
   WhatsAppTemplateCreateResult,
 } from '../domain';
-import { WhatsAppMessagesFilterOptions } from '../options/whatsapp-messages-filter.options';
-import { MetaTemplateSummary } from './i-meta-graph.client';
-
+import { WhatsAppMessagesFilterOptions } from '../options';
+import { MetaTemplateSummary } from './meta-template-summary';
 export const WHATSAPP_SERVICE = 'WHATSAPP_SERVICE';
 
 export interface IWhatsAppService {
@@ -137,10 +136,7 @@ export interface IWhatsAppService {
     fromMobileApp: boolean,
     redirectUri?: string,
   ): Promise<{ sessionId: string; expiresInSeconds: number }>;
-  getWhatsAppOnboardingSession(
-    userId: string,
-    sessionId: string,
-  ): Promise<{ exists: boolean; fromMobileApp: boolean }>;
+  getWhatsAppOnboardingSession(userId: string, sessionId: string): Promise<{ exists: boolean; fromMobileApp: boolean }>;
   createWhatsAppMobileReturnSession(
     userId: string,
     businessId: string,

@@ -1,6 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Paged } from '@shared-libs';
-import { ENotificationChannel, ENotificationStatus } from '@shared-libs';
+import { Paged, ENotificationChannel, ENotificationStatus } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
@@ -9,7 +8,7 @@ import { INotificationService } from './i-notification.service';
 import { IEmailService, EMAIL_SERVICE, SendEmail } from '../../../shared';
 import { SendEmailRequestModel } from '../models';
 import { NotificationsFilterOptions } from '../options';
-import { INotificationsRepository, NOTIFICATIONS_REPOSITORY } from '../repository';
+import { INotificationsRepository, NOTIFICATIONS_REPOSITORY } from './i-notifications.repository';
 
 @Injectable()
 export class NotificationService implements INotificationService {

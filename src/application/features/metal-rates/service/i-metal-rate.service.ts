@@ -1,8 +1,11 @@
 import { BulkDeleteResult } from '../../../shared';
 import { MetalRate } from '../domain';
-import { CreateMetalRateRequestModel, ListMetalRatesQueryModel } from '../models';
-import { CurrentMetalRatesResponseModel, MetalRateChartPointModel } from '../models';
-
+import {
+  CreateMetalRateRequestModel,
+  ListMetalRatesQueryModel,
+  CurrentMetalRatesResponseModel,
+  MetalRateChartPointModel,
+} from '../models';
 export const METAL_RATE_SERVICE = 'METAL_RATE_SERVICE';
 
 export interface IMetalRateService {

@@ -1,11 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { In, Repository } from 'typeorm';
 
-import { MarketingPhotoshootEntity, MarketingPhotoshootShotEntity } from './entities/marketing.entities';
+import { MarketingPhotoshootEntity, MarketingPhotoshootShotEntity } from './entities';
 import { MarketingDatabase } from './marketing-database';
-import { Photoshoot, PhotoshootShot } from '../../application/domain';
-import { EPhotoshootStatus } from '../../application/enums';
-import { IMarketingPhotoshootShotsRepository, IMarketingPhotoshootsRepository } from '../../application/ports';
+import {
+  Photoshoot,
+  PhotoshootShot,
+  EPhotoshootStatus,
+  IMarketingPhotoshootShotsRepository,
+  IMarketingPhotoshootsRepository,
+} from '../../application';
 
 @Injectable()
 export class MarketingPhotoshootsRepository implements IMarketingPhotoshootsRepository {

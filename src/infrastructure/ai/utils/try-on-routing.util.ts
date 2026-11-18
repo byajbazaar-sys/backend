@@ -1,5 +1,4 @@
-import { requiresCloudflareOnly } from '../../../application/features/try-on/jewellery-types';
-import type { TryOnProviderRoute } from '../../../application/shared/services/try-on-provider-route';
+import { requiresCloudflareOnly, type TryOnProviderRoute } from '../../../application';
 
 /** Per-user try-on attempt → provider/model (1-based). */
 export function resolveTryOnProviderRoute(attemptNumber: number, jewelleryTypes?: string[]): TryOnProviderRoute {

@@ -1,5 +1,5 @@
 import { GeneratedAiImage } from '../../../application';
-import { AiImageInput } from '../interfaces/ai-media.types';
+import { AiImageInput } from '../interfaces';
 
 export function stripDataUrl(base64: string): string {
   const idx = base64.indexOf('base64,');

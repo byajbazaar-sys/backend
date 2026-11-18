@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
+import { IMarketingSecretCipher } from '../../application';
 import { MarketingConfig } from '../../marketing.config';
 
 const VERSION = 'v1';
@@ -11,7 +12,7 @@ const VERSION = 'v1';
  * MARKETING_CREDENTIALS_SECRET (falls back to TOKEN_SECRET) — changing it makes stored keys unreadable.
  */
 @Injectable()
-export class MarketingSecretCipher {
+export class MarketingSecretCipher implements IMarketingSecretCipher {
   constructor(private readonly config: MarketingConfig) {}
 
   private key(): Buffer {

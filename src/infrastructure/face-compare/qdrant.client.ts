@@ -1,23 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 
-import { FaceCompareOptions } from './face-compare.options';
-
-export interface QdrantFacePayload {
-  userId: string;
-  customerId: string;
-  customerName: string;
-  profilePhotoRef?: string;
-}
-
-export interface QdrantSearchHit {
-  id: string;
-  score: number;
-  payload: QdrantFacePayload;
-}
+import { FaceCompareOptions, FaceVectorPayload, FaceVectorSearchHit, IFaceVectorIndex } from '../../application';
 
 @Injectable()
-export class QdrantClient {
+export class QdrantClient implements IFaceVectorIndex {
   private readonly http: AxiosInstance;
 
   constructor(private readonly options: FaceCompareOptions) {
@@ -55,7 +42,7 @@ export class QdrantClient {
     });
   }
 
-  async upsertFace(pointId: string, vector: number[], payload: QdrantFacePayload): Promise<void> {
+  async upsertFace(pointId: string, vector: number[], payload: FaceVectorPayload): Promise<void> {
     await this.ensureCollection();
     const response = await this.http.put(`/collections/${this.options.collectionName}/points`, {
       wait: true,
@@ -77,9 +64,9 @@ export class QdrantClient {
     }
   }
 
-  async search(userId: string, vector: number[], limit = 5): Promise<QdrantSearchHit[]> {
+  async search(userId: string, vector: number[], limit = 5): Promise<FaceVectorSearchHit[]> {
     await this.ensureCollection();
-    const response = await this.http.post<{ result?: Array<{ id: string; score: number; payload?: QdrantFacePayload }> }>(
+    const response = await this.http.post<{ result?: { id: string; score: number; payload?: FaceVectorPayload }[] }>(
       `/collections/${this.options.collectionName}/points/search`,
       {
         vector,
@@ -101,7 +88,7 @@ export class QdrantClient {
       .map((hit) => ({
         id: String(hit.id),
         score: hit.score,
-        payload: hit.payload as QdrantFacePayload,
+        payload: hit.payload,
       }));
   }
 

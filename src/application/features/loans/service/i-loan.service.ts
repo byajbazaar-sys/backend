@@ -1,5 +1,4 @@
-import { Loan, LoanExtended, LoanItem } from '../domain';
-import { LoanStats } from '../domain';
+import { Loan, LoanExtended, LoanItem, LoanStats } from '../domain';
 import { ELoanStatus } from '../enums';
 import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from '../options';
 

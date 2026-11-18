@@ -1,4 +1,4 @@
-import { EQuantityPricingMode } from '../enums/e-quantity-pricing-mode.enum';
+import { EQuantityPricingMode } from '../enums';
 
 export function normalizeQuantityPricingMode(mode?: string | null): EQuantityPricingMode {
   return mode === EQuantityPricingMode.Fixed ? EQuantityPricingMode.Fixed : EQuantityPricingMode.Multiply;

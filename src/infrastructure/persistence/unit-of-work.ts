@@ -4,7 +4,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
 
 import { TransactionalContext } from './transactional-context';
-import { IUnitOfWork } from '../../application/shared';
+import { IUnitOfWork } from '../../application';
 
 @Injectable()
 export class UnitOfWork implements IUnitOfWork {

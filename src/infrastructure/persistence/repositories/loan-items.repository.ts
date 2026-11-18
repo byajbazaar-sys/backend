@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { In, Repository } from 'typeorm';
 
 import { ILoanItemsRepository, LoanItem, UpdateLoanItemPatch } from '../../../application';
-import { LoanItemEntity } from '../entities/loan-item.entity';
+import { LoanItemEntity } from '../entities';
 
 @Injectable()
 export class LoanItemsRepository implements ILoanItemsRepository {

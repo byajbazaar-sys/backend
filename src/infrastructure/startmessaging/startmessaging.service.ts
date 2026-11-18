@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, ServiceUnavailableException } from '@n
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { StartMessagingOptions } from './options';
-import { ISmsOtpSender } from '../../application/shared/services/i-sms-otp.sender';
+import { ISmsOtpSender } from '../../application';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 

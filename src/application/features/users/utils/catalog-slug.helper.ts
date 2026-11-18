@@ -1,7 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { buildCatalogSlug, CATALOG_SLUG_TAKEN_MESSAGE, isValidCatalogSlug } from '@shared-libs';
 
-import { IUsersRepository } from '../service/i-users.repository';
+import { IUsersRepository } from '../service';
 
 /** Resolve catalog slug from business name; rejects duplicates without auto-suffixing. */
 export async function resolveCatalogSlugForBusinessName(

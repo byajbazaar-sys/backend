@@ -3,7 +3,7 @@ import { Context, Handler } from 'aws-lambda';
 import { DataSource } from 'typeorm';
 
 import { AppModule } from '../app.module';
-import { SeedingService } from '../infrastructure/persistence/seeds/seeding.service';
+import { SeedingService } from '../infrastructure';
 import { LogsDatabase, LogsMaintenanceService } from '../logs';
 import { MarketingDatabase } from '../marketing';
 

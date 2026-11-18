@@ -5,7 +5,7 @@ import { LogOutbox, OutboxEntry, OutboxStream } from './log-outbox';
 import { insertLogRows, LogRowByStream, LogStream } from './log-tables';
 import { LogsDatabase } from './logs-database';
 import { applyWhatsAppStatus, WhatsAppStatusOp } from './whatsapp-messages.sql';
-import { ILogsHost, LOGS_HOST } from '../../application/ports/logs-host.ports';
+import { ILogsHost, LOGS_HOST } from '../host';
 
 const BATCH_SIZE = 200;
 

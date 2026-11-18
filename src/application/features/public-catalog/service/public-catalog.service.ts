@@ -4,14 +4,10 @@ import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { USERS_FILE_STORAGE, IUsersFileStorage } from '../../../shared';
-import {
-  IInventoryItemsRepository,
-  INVENTORY_ITEMS_REPOSITORY,
-} from '../../inventory/service/i-inventory-items.repository';
-import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
+import { IInventoryItemsRepository, INVENTORY_ITEMS_REPOSITORY, InventoryItem } from '../../inventory';
+import { IUsersRepository, USERS_REPOSITORY } from '../../users';
 import { ListPublicCatalogQueryModel, PublicCatalogItemModel, PublicCatalogResponseModel } from '../models';
 import { IPublicCatalogService } from './i-public-catalog.service';
-import { InventoryItem } from '../../inventory/domain';
 
 @Injectable()
 export class PublicCatalogService implements IPublicCatalogService {

@@ -1,4 +1,4 @@
-import { CreateTransactionLogInput, TransactionLog } from '../../features/transactions/domain';
+import { CreateTransactionLogInput, TransactionLog } from '../../features';
 
 export const TRANSACTION_LOGS_REPOSITORY = 'ITransactionLogsRepository';
 

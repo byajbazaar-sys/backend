@@ -16,11 +16,10 @@ import {
   LoanStats,
   LoanStatsFilterOptions,
   OpenLoanMaturityRef,
+  Due,
+  EDueType,
 } from '../../../application';
-import { Due, EDueType } from '../../../application/shared';
-import { CustomerEntity } from '../entities/customer.entity';
-import { DueEntity } from '../entities/due.entity';
-import { LoanEntity } from '../entities/loan.entity';
+import { CustomerEntity, DueEntity, LoanEntity } from '../entities';
 import { TransactionalContext } from '../transactional-context';
 
 function formatLoanCustomerName(

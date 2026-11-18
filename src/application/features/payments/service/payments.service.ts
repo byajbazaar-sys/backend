@@ -41,9 +41,14 @@ import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
 import { RazorpaySubscriptionResult } from './razorpay-subscription-result';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
-import { resolveCheckoutPlan, subscriptionTotalCount } from '../utils/checkout-plan.util';
-import { subscriptionGrantsAccess } from '../utils/subscription-access.util';
-import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
+import {
+  resolveCheckoutPlan,
+  subscriptionTotalCount,
+  subscriptionGrantsAccess,
+  isTrialActive,
+  resolveTrialEndsAt,
+  trialDaysRemaining,
+} from '../utils';
 
 /** Same day next month / next year — when recurring billing starts after a paid first period. */
 export function addBillingPeriod(from: Date, period: 'monthly' | 'yearly'): Date {
@@ -62,7 +67,11 @@ export function addBillingPeriod(from: Date, period: 'monthly' | 'yearly'): Date
  * Billing dates from a Razorpay subscription. Before recurring billing starts (first period paid
  * upfront with a coupon) Razorpay has no current_end yet, so the paid period ends at start_at.
  */
-export function rzpPeriod(rzp: RazorpaySubscriptionResult): { currentStart: Date; currentEnd: Date; nextBillingAt: Date } {
+export function rzpPeriod(rzp: RazorpaySubscriptionResult): {
+  currentStart: Date;
+  currentEnd: Date;
+  nextBillingAt: Date;
+} {
   const toDate = (sec?: number) => (sec ? new Date(sec * 1000) : null);
   const notStarted = !rzp.current_end && !!rzp.start_at;
   return {

@@ -13,10 +13,10 @@ import {
   TransactionReplayPatch,
   TransactionsFilterOptions,
   TransactionsDownloadFilterOptions,
+  CreateTransactionInput,
+  CreateTransactionEntityInput,
 } from '../../../application';
-import { CreateTransactionInput } from '../../../application/features/transactions/models';
-import { CreateTransactionEntityInput } from '../../../application/features/transactions/models/create-transaction-entity-input.model';
-import { TransactionEntity } from '../entities/transaction.entity';
+import { TransactionEntity } from '../entities';
 import { TransactionalContext } from '../transactional-context';
 
 @Injectable()
@@ -44,8 +44,7 @@ export class TransactionsRepository implements ITransactionsRepository {
     sortField: string | undefined,
     sortOrder: 'ASC' | 'DESC',
   ): void {
-    const field =
-      sortField && TransactionsRepository.LIST_SORT_FIELDS.has(sortField) ? sortField : 'createdAt';
+    const field = sortField && TransactionsRepository.LIST_SORT_FIELDS.has(sortField) ? sortField : 'createdAt';
     if (field === 'paidAt') {
       qb.orderBy('COALESCE(t.paid_at, t.created_at)', sortOrder);
       return;
@@ -126,10 +125,7 @@ export class TransactionsRepository implements ITransactionsRepository {
 
     this.applyTransactionListOrdering(qb, params.sortField, sortOrder);
 
-    const [items, totalCount] = await qb
-      .skip(skip)
-      .take(pageSize)
-      .getManyAndCount();
+    const [items, totalCount] = await qb.skip(skip).take(pageSize).getManyAndCount();
 
     return toPaged(Transaction, {
       items,

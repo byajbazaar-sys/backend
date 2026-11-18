@@ -1,6 +1,6 @@
 import { Paged } from '@shared-libs';
 
-import { InventoryItemSale } from '../../inventory/domain';
+import { InventoryItemSale } from '../../inventory';
 import { SalesBill, SalesAnalytics } from '../domain';
 import { UpdateSalesBillPatch } from '../models';
 import { SalesAnalyticsFilterOptions, SalesBillsExportFilterOptions, SalesBillsFilterOptions } from '../options';

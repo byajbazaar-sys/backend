@@ -3,21 +3,14 @@ import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { BulkDeleteResult, CACHE_NAMESPACE, CACHE_SERVICE, ICacheService, queryCacheParts } from '../../../shared';
-import { EMetalType } from '../../inventory/enums';
-import {
-  isAllowedRatePurity,
-  CurrentRateKey,
-  METAL_RATE_CURRENT_CACHE_TTL_SECONDS,
-  metalRateCurrentCacheKey,
-  purityToCurrentKey,
-} from '../constants';
+import { EMetalType } from '../../inventory';
 import {
   createEmptyCurrentMetalRatesData,
   createEmptyCurrentRateSnapshot,
   CurrentMetalRatesData,
   CurrentRateSnapshot,
+  MetalRate,
 } from '../domain';
-import { MetalRate } from '../domain';
 import {
   CreateMetalRateRequestModel,
   CurrentMetalRatesResponseModel,
@@ -26,6 +19,13 @@ import {
 } from '../models';
 import { IMetalRateService } from './i-metal-rate.service';
 import { IMetalRatesRepository, METAL_RATES_REPOSITORY } from './i-metal-rates.repository';
+import {
+  isAllowedRatePurity,
+  CurrentRateKey,
+  METAL_RATE_CURRENT_CACHE_TTL_SECONDS,
+  metalRateCurrentCacheKey,
+  purityToCurrentKey,
+} from '../utils';
 
 @Injectable()
 export class MetalRateService implements IMetalRateService {

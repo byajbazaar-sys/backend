@@ -2,12 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import { instanceToPlain } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { WhatsAppMessage } from '../domain';
-import {
-  IWebSocketConnectionsRepository,
-  WEBSOCKET_CONNECTIONS_REPOSITORY,
-} from '../../pos/service/i-websocket-connections.repository';
 import { IWebSocketMessageService, WEBSOCKET_MESSAGE_SERVICE } from '../../../shared';
+import { IWebSocketConnectionsRepository, WEBSOCKET_CONNECTIONS_REPOSITORY } from '../../pos';
+import { WhatsAppMessage } from '../domain';
 import { IWhatsAppRealtimeService } from './i-whatsapp-realtime.service';
 
 @Injectable()

@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { v4 as uuid } from 'uuid';
 
 import { BillLog, BillLogsQuery, IBillLogsRepository } from '../../../../application';
-import { ILogsHost, LOGS_HOST } from '../../../application/ports/logs-host.ports';
+import { ILogsHost, LOGS_HOST } from '../../host';
 import { BillLogRow, nextLogTimestamp } from '../log-tables';
 import { LogWriter } from '../log-writer';
 import { LogsDatabase } from '../logs-database';

@@ -11,11 +11,10 @@ import {
   EDueType,
   PastDueMarked,
   WhatsAppDueReminderCandidate,
+  UpdateDueEntityInput,
+  EWhatsAppConnectionStatus,
 } from '../../../application';
-import { UpdateDueEntityInput } from '../../../application/features/transactions/models/update-due-entity-input.model';
-import { EWhatsAppConnectionStatus } from '../../../application/features/whatsapp/enums';
-import { DueEntity } from '../entities/due.entity';
-import { TransactionEntity } from '../entities/transaction.entity';
+import { DueEntity, TransactionEntity } from '../entities';
 import { TransactionalContext } from '../transactional-context';
 
 @Injectable()

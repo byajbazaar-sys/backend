@@ -5,7 +5,7 @@ import { Request } from 'express';
 import { IIdentity } from '../interfaces';
 import { UsersAuthOptions } from '../options';
 import { IAuthenticationProvider } from './i-authentication-provider';
-import { extractRequestToken } from '../utils/extract-request-token.util';
+import { extractRequestToken } from '../utils';
 
 @Injectable()
 export class JwtAuthenticationProvider implements IAuthenticationProvider {

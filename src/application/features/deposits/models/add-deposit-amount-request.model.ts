@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
-import { ETransactionPaidIn } from '../../transactions/enums/e-transaction-paid-in';
+import { ETransactionPaidIn } from '../../transactions';
 
 export class AddDepositAmountRequestModel {
   @ApiProperty({ example: 5000 })

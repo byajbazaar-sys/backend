@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
 import { ITryOnAssetsRepository, TryOnAsset, CreateTryOnAssetData, TryOnAssetType } from '../../../application';
-import { TryOnAssetEntity } from '../entities/try-on-asset.entity';
+import { TryOnAssetEntity } from '../entities';
 
 @Injectable()
 export class TryOnAssetsRepository implements ITryOnAssetsRepository {

@@ -22,12 +22,7 @@ import {
 } from '../../loans';
 import { emptyLoanEffect, LoanEffect, Transaction } from '../domain';
 import { ETransactionType } from '../enums';
-
-/** How a replay should differ from the history currently on record. */
-export type ReplayMutation =
-  | { kind: 'none' }
-  | { kind: 'delete'; transactionId: string }
-  | { kind: 'editAmount'; transactionId: string; newAmount: number };
+import { ReplayMutation } from './replay-mutation';
 
 /**
  * Loan state reduced to the parts a replay is responsible for reproducing.

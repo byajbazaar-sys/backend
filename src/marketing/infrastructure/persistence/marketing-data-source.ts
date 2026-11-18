@@ -2,8 +2,8 @@ import 'dotenv/config';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
+import { MARKETING_ENTITY_CLASSES } from './entities';
 import { MarketingConfig } from '../../marketing.config';
-import { MARKETING_ENTITY_CLASSES } from './entities/marketing.entities';
 
 export const MARKETING_ENTITIES = MARKETING_ENTITY_CLASSES;
 

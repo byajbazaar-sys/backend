@@ -8,8 +8,10 @@
 export const LOG_STREAMS = ['bill', 'transaction', 'activity', 'whatsapp'] as const;
 export type LogStream = (typeof LOG_STREAMS)[number];
 
-/** Timestamps travel as ISO-8601 UTC text with microseconds, so nothing shifts or rounds between databases. */
-type IsoTimestamp = string;
+import type { ActivityLogRow, IsoTimestamp } from '../../application';
+
+export type { ActivityLogRow, IsoTimestamp } from '../../application';
+export { nextLogTimestamp } from '../../application';
 
 export interface BillLogRow {
   id: string;
@@ -38,19 +40,6 @@ export interface TransactionLogRow {
   newPaidIn: string | null;
   loanVersion: number | null;
   performedBy: string;
-  createdAt: IsoTimestamp;
-}
-
-export interface ActivityLogRow {
-  id: string;
-  category: string;
-  action: string;
-  entityType: string;
-  entityId: string | null;
-  userId: string | null;
-  performedBy: string | null;
-  channel: string | null;
-  data: Record<string, unknown>;
   createdAt: IsoTimestamp;
 }
 
@@ -327,11 +316,3 @@ export const LEGACY_TABLES: Record<
       FROM whatsapp_messages w`,
   },
 };
-
-/** Monotonic per process, so logs written in the same millisecond keep their order. */
-let lastTimestampMs = 0;
-export function nextLogTimestamp(): IsoTimestamp {
-  const now = Date.now();
-  lastTimestampMs = now > lastTimestampMs ? now : lastTimestampMs + 1;
-  return new Date(lastTimestampMs).toISOString();
-}

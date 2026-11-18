@@ -1,4 +1,4 @@
-import type { TryOnJewelleryType } from '../../../application/features/try-on/jewellery-types';
+import type { TryOnJewelleryType } from '../../../application';
 
 export type { TryOnJewelleryType };
 
@@ -9,7 +9,7 @@ export interface AiImageInput {
   heightInInches?: number;
 }
 
-export interface JewelleryTryOnRequest {
+export interface AiJewelleryTryOnRequest {
   personImage: AiImageInput;
   jewelleryItems: AiImageInput[];
   /** Required by Aivot — non-empty string (e.g. Saree) */
@@ -21,7 +21,7 @@ export interface JewelleryTryOnRequest {
   cloudflareModel?: string;
 }
 
-export interface OutfitRecolorRequest {
+export interface AiOutfitRecolorRequest {
   image: AiImageInput;
   color: string;
 }

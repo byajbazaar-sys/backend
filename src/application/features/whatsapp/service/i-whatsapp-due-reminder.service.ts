@@ -1,10 +1,6 @@
-export const WHATSAPP_DUE_REMINDER_SERVICE = 'WHATSAPP_DUE_REMINDER_SERVICE';
+import { WhatsAppDueReminderRunResult } from './whatsapp-due-reminder-run-result';
 
-export interface WhatsAppDueReminderRunResult {
-  sent: number;
-  skipped: number;
-  failed: number;
-}
+export const WHATSAPP_DUE_REMINDER_SERVICE = 'WHATSAPP_DUE_REMINDER_SERVICE';
 
 export interface IWhatsAppDueReminderService {
   sendPendingDueReminders(): Promise<WhatsAppDueReminderRunResult>;

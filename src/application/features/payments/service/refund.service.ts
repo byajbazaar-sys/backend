@@ -2,14 +2,13 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { ESubscriptionStatus, Payment, Refund } from '../domain';
 import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
+import { IRefundService } from './i-refund.service';
 import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
-import { isFullyRefunded, parseRefundReason, resolvePaymentStatusAfterRefund } from '../utils/refund.util';
-
-export const REFUND_SERVICE = 'REFUND_SERVICE';
+import { isFullyRefunded, parseRefundReason, resolvePaymentStatusAfterRefund } from '../utils';
 
 @Injectable()
-export class RefundService {
+export class RefundService implements IRefundService {
   constructor(
     @Inject(REFUNDS_REPOSITORY) private readonly refundsRepo: IRefundsRepository,
     @Inject(PAYMENTS_REPOSITORY) private readonly paymentsRepo: IPaymentsRepository,

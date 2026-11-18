@@ -1,21 +1,7 @@
 import { Expose, Type } from 'class-transformer';
 
-import { EBillLogAction } from '../enums/e-bill-log-action.enum';
-
-/** One changed value in an edit: a bill field, or an item line (`items[<line>].<field>`). */
-export class BillLogChange {
-  @Expose()
-  field: string;
-
-  @Expose()
-  label: string;
-
-  @Expose()
-  from: string | number | null;
-
-  @Expose()
-  to: string | number | null;
-}
+import { EBillLogAction } from '../enums';
+import { BillLogChange } from './bill-log-change';
 
 export class BillLog {
   @Expose()

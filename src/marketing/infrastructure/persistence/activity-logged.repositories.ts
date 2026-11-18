@@ -1,14 +1,18 @@
-import { KaggleCredential, MarketingCampaign, Photoshoot, RenderJob } from '../../application/domain';
-import { ECampaignStatus, EPhotoshootStatus, ERenderJobStatus } from '../../application/enums';
 import {
+  KaggleCredential,
+  MarketingCampaign,
+  Photoshoot,
+  RenderJob,
+  MarketingActivity,
+  ECampaignStatus,
+  EPhotoshootStatus,
+  ERenderJobStatus,
   IKaggleCredentialsRepository,
   IMarketingActivityLog,
   IMarketingCampaignsRepository,
   IMarketingPhotoshootsRepository,
   IRenderJobsRepository,
-  MarketingActivity,
-} from '../../application/ports';
-
+} from '../../application';
 /**
  * Marketing activity log, recorded at the repository boundary so it covers every code path that changes a campaign,
  * photoshoot, render job or Kaggle account — without touching the services. Each wrapper calls the real repository

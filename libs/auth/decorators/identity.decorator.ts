@@ -1,6 +1,4 @@
-import { ExecutionContext } from '@nestjs/common';
-import { createParamDecorator } from '@nestjs/common';
-
+import { ExecutionContext, createParamDecorator } from '@nestjs/common';
 import { IIdentity } from '../interfaces';
 
 export const Identity = createParamDecorator((data: unknown, ctx: ExecutionContext): IIdentity => {

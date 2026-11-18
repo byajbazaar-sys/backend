@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 
 import { UserEntity } from './user.entity';
-import { EPosSessionStatus } from '../../../application/features/pos/enums/e-pos-session-status.enum';
+import { EPosSessionStatus } from '../../../application';
 
 @Entity('pos_sessions')
 @Index('IDX_pos_sessions_session_code', ['sessionCode'], { unique: true })

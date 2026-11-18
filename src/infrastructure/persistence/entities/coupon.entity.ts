@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
-import { ECouponType } from '../../../application/features/payments/domain/enums';
+import { ECouponType } from '../../../application';
 
 @Entity('coupons')
 @Index('UQ_coupons_code', ['code'], { unique: true })

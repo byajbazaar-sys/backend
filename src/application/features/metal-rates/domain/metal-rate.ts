@@ -1,6 +1,6 @@
 import { Expose } from 'class-transformer';
 
-import { EMetalType } from '../../inventory/enums';
+import { EMetalType } from '../../inventory';
 
 export class MetalRate {
   @Expose()

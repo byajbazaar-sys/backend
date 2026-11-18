@@ -21,7 +21,6 @@ import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 
 import { ConnectWhatsAppBusinessData, UpdateWhatsAppSettingsData } from './domain';
-import { isUploadedPdfFile } from './utils/is-uploaded-pdf.util';
 import {
   ConnectWhatsAppBusinessRequestModel,
   CreateWhatsAppTemplateRequestModel,
@@ -59,6 +58,7 @@ import {
   WhatsAppMobileReturnSessionParamModel,
 } from './models';
 import { IWhatsAppService, WHATSAPP_SERVICE } from './service';
+import { isUploadedPdfFile } from './utils';
 
 @ApiTags('whatsapp')
 @ApiBearerAuth('user')
@@ -125,11 +125,7 @@ export class WhatsAppController {
       },
       { excludeExtraneousValues: true },
     );
-    const connection = await this.whatsappService.updateWhatsAppSettings(
-      identity.userId,
-      body.businessId,
-      settings,
-    );
+    const connection = await this.whatsappService.updateWhatsAppSettings(identity.userId, body.businessId, settings);
     return plainToInstance(WhatsAppConnectionResponseModel, connection, { excludeExtraneousValues: true });
   }
 
@@ -161,10 +157,7 @@ export class WhatsAppController {
     @Param() params: WhatsAppOnboardingSessionParamModel,
     @Identity() identity: IIdentity,
   ): Promise<GetWhatsAppOnboardingSessionResponseModel> {
-    const result = await this.whatsappService.getWhatsAppOnboardingSession(
-      identity.userId,
-      params.sessionId,
-    );
+    const result = await this.whatsappService.getWhatsAppOnboardingSession(identity.userId, params.sessionId);
     return plainToInstance(GetWhatsAppOnboardingSessionResponseModel, result, {
       excludeExtraneousValues: true,
     });
@@ -178,10 +171,7 @@ export class WhatsAppController {
     @Body() body: CreateWhatsAppMobileReturnSessionRequestModel,
     @Identity() identity: IIdentity,
   ): Promise<CreateWhatsAppMobileReturnSessionResponseModel> {
-    const result = await this.whatsappService.createWhatsAppMobileReturnSession(
-      identity.userId,
-      body.businessId,
-    );
+    const result = await this.whatsappService.createWhatsAppMobileReturnSession(identity.userId, body.businessId);
     return plainToInstance(CreateWhatsAppMobileReturnSessionResponseModel, result, {
       excludeExtraneousValues: true,
     });
@@ -356,11 +346,7 @@ export class WhatsAppController {
     const billLabelParts: string[] = [];
     if (body.billNumber?.trim()) billLabelParts.push(body.billNumber.trim());
     if (body.customerName?.trim()) {
-      billLabelParts.push(
-        billLabelParts.length > 0
-          ? `→ ${body.customerName.trim()}`
-          : body.customerName.trim(),
-      );
+      billLabelParts.push(billLabelParts.length > 0 ? `→ ${body.customerName.trim()}` : body.customerName.trim());
     }
 
     const result = await this.whatsappService.sendBillPdfDocument(
@@ -443,17 +429,11 @@ export class WhatsAppController {
     if (body.receiptNumber?.trim()) depositLabelParts.push(body.receiptNumber.trim());
     if (body.depositNumber?.trim()) {
       depositLabelParts.push(
-        depositLabelParts.length > 0
-          ? `· ${body.depositNumber.trim()}`
-          : body.depositNumber.trim(),
+        depositLabelParts.length > 0 ? `· ${body.depositNumber.trim()}` : body.depositNumber.trim(),
       );
     }
     if (body.customerName?.trim()) {
-      depositLabelParts.push(
-        depositLabelParts.length > 0
-          ? `→ ${body.customerName.trim()}`
-          : body.customerName.trim(),
-      );
+      depositLabelParts.push(depositLabelParts.length > 0 ? `→ ${body.customerName.trim()}` : body.customerName.trim());
     }
 
     const result = await this.whatsappService.sendDepositPdfDocument(
@@ -536,16 +516,12 @@ export class WhatsAppController {
     if (body.receiptNumber?.trim()) transactionLabelParts.push(body.receiptNumber.trim());
     if (body.loanNumber?.trim()) {
       transactionLabelParts.push(
-        transactionLabelParts.length > 0
-          ? `· ${body.loanNumber.trim()}`
-          : body.loanNumber.trim(),
+        transactionLabelParts.length > 0 ? `· ${body.loanNumber.trim()}` : body.loanNumber.trim(),
       );
     }
     if (body.customerName?.trim()) {
       transactionLabelParts.push(
-        transactionLabelParts.length > 0
-          ? `→ ${body.customerName.trim()}`
-          : body.customerName.trim(),
+        transactionLabelParts.length > 0 ? `→ ${body.customerName.trim()}` : body.customerName.trim(),
       );
     }
 

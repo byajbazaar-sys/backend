@@ -11,7 +11,7 @@ import {
   CustomersDownloadFilterOptions,
   UpdateCustomerEntityInput,
 } from '../../../application';
-import { CustomerEntity } from '../entities/customer.entity';
+import { CustomerEntity } from '../entities';
 
 @Injectable()
 export class CustomersRepository implements ICustomersRepository {

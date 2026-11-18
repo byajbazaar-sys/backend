@@ -14,7 +14,7 @@ import { CustomerEntity } from './customer.entity';
 import { OrderActivityEntity } from './order-activity.entity';
 import { OrderAttachmentEntity } from './order-attachment.entity';
 import { UserEntity } from './user.entity';
-import { EOrderPriority, EOrderStatus, EOrderType } from '../../../application/features/orders/enums';
+import { EOrderPriority, EOrderStatus, EOrderType } from '../../../application';
 
 @Entity('orders')
 @Index(['createdBy', 'orderNumber'], { unique: true })

@@ -12,8 +12,12 @@ import {
   InventoryItemsPagedResponseModel,
   UpdateCatalogSettingsRequestModel,
 } from './models';
-import { INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
-import { INVENTORY_CATALOG_SERVICE, IInventoryCatalogService } from './service/i-inventory-catalog.service';
+import {
+  INVENTORY_ITEM_SERVICE,
+  IInventoryItemService,
+  INVENTORY_CATALOG_SERVICE,
+  IInventoryCatalogService,
+} from './service';
 
 @ApiTags('inventory-catalog')
 @ApiBearerAuth('user')

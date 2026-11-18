@@ -31,9 +31,13 @@ import {
   RefundResponseModel,
   UpdatePlanRequestModel,
 } from './models';
-import { CouponAdminService } from './service/coupon-admin.service';
-import { IPlanService, PLAN_SERVICE } from './service/i-plan.service';
-import { ISubscriptionAdminService, SUBSCRIPTION_ADMIN_SERVICE } from './service/i-subscription-admin.service';
+import {
+  CouponAdminService,
+  IPlanService,
+  PLAN_SERVICE,
+  ISubscriptionAdminService,
+  SUBSCRIPTION_ADMIN_SERVICE,
+} from './service';
 
 @ApiTags('payments')
 @ApiBearerAuth('user')

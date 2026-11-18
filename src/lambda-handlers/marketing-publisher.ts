@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { Context, Handler } from 'aws-lambda';
 
 import { AppModule } from '../app.module';
-import { MarketingPublishingService } from '../marketing/application/services/marketing-publishing.service';
+import { MarketingPublishingService } from '../marketing';
 
 let cachedApp: INestApplicationContext;
 

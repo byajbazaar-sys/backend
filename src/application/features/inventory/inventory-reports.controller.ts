@@ -17,7 +17,7 @@ import { plainToInstance } from 'class-transformer';
 import { InventoryAnalytics } from './domain';
 import { InventoryItemResponseModel } from './models';
 import { INVENTORY_REPORT_SERVICE, IInventoryReportService } from './service';
-import { ExportFormat } from '../../shared/enums/e-export-format.enum';
+import { ExportFormat } from '../../shared';
 
 @ApiTags('inventory-reports')
 @ApiBearerAuth('user')

@@ -1,5 +1,3 @@
-export * from './models/otp.models';
-export * from './service/otp-challenge.service';
-export * from './service/verification.service';
-export * from './utils/phone.util';
+export * from './models';
+export * from './service';
 export * from './verification.controller';

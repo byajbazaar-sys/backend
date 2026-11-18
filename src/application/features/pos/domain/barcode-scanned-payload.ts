@@ -1,4 +1,4 @@
-import { InventoryItem } from '../../inventory/domain';
+import { InventoryItem } from '../../inventory';
 
 export interface BarcodeScannedPayload {
   type: 'barcodeScanned';

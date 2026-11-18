@@ -1,127 +1,42 @@
-import { ApiAccessTokenEntity } from './api-access-token.entity';
-import { ApiConfigurationEntity } from './api-configuration.entity';
-import { CouponRedemptionEntity } from './coupon-redemption.entity';
-import { CouponEntity } from './coupon.entity';
-import { CustomerEntity } from './customer.entity';
-import { DepositAccountEntity } from './deposit-account.entity';
-import { DepositReceiptEntity } from './deposit-receipt.entity';
-import { DepositTransactionEntity } from './deposit-transaction.entity';
-import { DueEntity } from './due.entity';
-import { InventoryCategoryEntity } from './inventory-category.entity';
-import { InventoryItemEntity } from './inventory-item.entity';
-import { ItemEntity } from './item.entity';
-import { JewelleryEventEntity } from './jewellery-event.entity';
-import { LabelDesignerSettingsEntity } from './label-designer-settings.entity';
-import { LoanItemEntity } from './loan-item.entity';
-import { LoanEntity } from './loan.entity';
-import { MetalRateEntity } from './metal-rate.entity';
-import { NotificationEntity } from './notification.entity';
-import { OrderActivityEntity } from './order-activity.entity';
-import { OrderAttachmentEntity } from './order-attachment.entity';
-import { OrderEntity } from './order.entity';
-import { PaymentEventEntity } from './payment-event.entity';
-import { PaymentOrderEntity } from './payment-order.entity';
-import { PaymentEntity } from './payment.entity';
-import { PlanEntity } from './plan.entity';
-import { PosSessionEntity } from './pos-session.entity';
-import { RefundEntity } from './refund.entity';
-import { SalesBillItemEntity } from './sales-bill-item.entity';
-import { SalesBillEntity } from './sales-bill.entity';
-import { BillLogEntity } from './bill-log.entity';
-import { SeedEntity } from './seed.entity';
-import { SubscriptionEntity } from './subscription.entity';
-import { SupportRequestEntity } from './support-request.entity';
-import { TransactionLogEntity } from './transaction-log.entity';
-import { TransactionEntity } from './transaction.entity';
-import { TryOnAssetEntity } from './try-on-asset.entity';
-import { UserEntity } from './user.entity';
-import { WebSocketConnectionEntity } from './websocket-connection.entity';
-import { WhatsAppBusinessConnectionEntity } from './whatsapp-business-connection.entity';
-import { WhatsAppConversationWindowEntity } from './whatsapp-conversation-window.entity';
-import { WhatsAppMessageEntity } from './whatsapp-message.entity';
-
-export { UserEntity } from './user.entity';
-export { CustomerEntity } from './customer.entity';
-export { LoanEntity } from './loan.entity';
-export { LoanItemEntity } from './loan-item.entity';
-export { ItemEntity } from './item.entity';
-export { TransactionEntity } from './transaction.entity';
-export { DueEntity } from './due.entity';
-export { NotificationEntity } from './notification.entity';
-export { SeedEntity } from './seed.entity';
-export { SupportRequestEntity } from './support-request.entity';
-export { InventoryCategoryEntity } from './inventory-category.entity';
-export { InventoryItemEntity } from './inventory-item.entity';
-export { PosSessionEntity } from './pos-session.entity';
-export { WebSocketConnectionEntity } from './websocket-connection.entity';
-export { SalesBillEntity } from './sales-bill.entity';
-export { BillLogEntity } from './bill-log.entity';
-export { SalesBillItemEntity } from './sales-bill-item.entity';
-export { MetalRateEntity } from './metal-rate.entity';
-export { ApiConfigurationEntity } from './api-configuration.entity';
-export { ApiAccessTokenEntity } from './api-access-token.entity';
-export { CouponEntity } from './coupon.entity';
-export { SubscriptionEntity } from './subscription.entity';
-export { PaymentOrderEntity } from './payment-order.entity';
-export { PaymentEntity } from './payment.entity';
-export { PaymentEventEntity } from './payment-event.entity';
-export { CouponRedemptionEntity } from './coupon-redemption.entity';
-export { RefundEntity } from './refund.entity';
-export { PlanEntity } from './plan.entity';
-export { JewelleryEventEntity } from './jewellery-event.entity';
-export { LabelDesignerSettingsEntity } from './label-designer-settings.entity';
-export { TryOnAssetEntity } from './try-on-asset.entity';
-export { DepositAccountEntity } from './deposit-account.entity';
-export { DepositTransactionEntity } from './deposit-transaction.entity';
-export { DepositReceiptEntity } from './deposit-receipt.entity';
-export { OrderEntity } from './order.entity';
-export { OrderActivityEntity } from './order-activity.entity';
-export { OrderAttachmentEntity } from './order-attachment.entity';
-export { TransactionLogEntity } from './transaction-log.entity';
-export { WhatsAppBusinessConnectionEntity } from './whatsapp-business-connection.entity';
-export { WhatsAppConversationWindowEntity } from './whatsapp-conversation-window.entity';
-export { WhatsAppMessageEntity } from './whatsapp-message.entity';
-
-export default [
-  UserEntity,
-  CustomerEntity,
-  LoanEntity,
-  LoanItemEntity,
-  ItemEntity,
-  TransactionEntity,
-  DueEntity,
-  NotificationEntity,
-  SeedEntity,
-  SupportRequestEntity,
-  InventoryCategoryEntity,
-  InventoryItemEntity,
-  PosSessionEntity,
-  WebSocketConnectionEntity,
-  SalesBillEntity,
-  BillLogEntity,
-  SalesBillItemEntity,
-  MetalRateEntity,
-  ApiConfigurationEntity,
-  ApiAccessTokenEntity,
-  CouponEntity,
-  SubscriptionEntity,
-  PaymentOrderEntity,
-  PaymentEntity,
-  PaymentEventEntity,
-  CouponRedemptionEntity,
-  RefundEntity,
-  PlanEntity,
-  JewelleryEventEntity,
-  LabelDesignerSettingsEntity,
-  TryOnAssetEntity,
-  DepositAccountEntity,
-  DepositTransactionEntity,
-  DepositReceiptEntity,
-  OrderEntity,
-  OrderActivityEntity,
-  OrderAttachmentEntity,
-  TransactionLogEntity,
-  WhatsAppBusinessConnectionEntity,
-  WhatsAppConversationWindowEntity,
-  WhatsAppMessageEntity,
-];
+export * from './api-access-token.entity';
+export * from './api-configuration.entity';
+export * from './coupon-redemption.entity';
+export * from './coupon.entity';
+export * from './customer.entity';
+export * from './deposit-account.entity';
+export * from './deposit-receipt.entity';
+export * from './deposit-transaction.entity';
+export * from './due.entity';
+export * from './inventory-category.entity';
+export * from './inventory-item.entity';
+export * from './item.entity';
+export * from './jewellery-event.entity';
+export * from './label-designer-settings.entity';
+export * from './loan-item.entity';
+export * from './loan.entity';
+export * from './metal-rate.entity';
+export * from './notification.entity';
+export * from './order-activity.entity';
+export * from './order-attachment.entity';
+export * from './order.entity';
+export * from './payment-event.entity';
+export * from './payment-order.entity';
+export * from './payment.entity';
+export * from './plan.entity';
+export * from './pos-session.entity';
+export * from './refund.entity';
+export * from './sales-bill-item.entity';
+export * from './sales-bill.entity';
+export * from './bill-log.entity';
+export * from './seed.entity';
+export * from './subscription.entity';
+export * from './support-request.entity';
+export * from './transaction-log.entity';
+export * from './transaction.entity';
+export * from './try-on-asset.entity';
+export * from './user.entity';
+export * from './websocket-connection.entity';
+export * from './whatsapp-business-connection.entity';
+export * from './whatsapp-conversation-window.entity';
+export * from './whatsapp-message.entity';
+export * from './entities.registry';

@@ -3,11 +3,9 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { AivotService } from './aivot.service';
 import { CloudflareTryOnService } from './cloudflare-try-on.service';
-import { GeneratedAiImage } from '../../../application';
-import { ITryOnOrchestrator } from '../../../application/shared/services/i-try-on-orchestrator.service';
-import { TryOnProviderRoute } from '../../../application/shared/services/try-on-provider-route';
-import type { JewelleryTryOnRequest } from '../interfaces/ai-media.types';
-import { resolveTryOnProviderRoute } from '../utils/try-on-routing.util';
+import { GeneratedAiImage, ITryOnOrchestrator, TryOnProviderRoute } from '../../../application';
+import type { AiJewelleryTryOnRequest } from '../interfaces';
+import { resolveTryOnProviderRoute } from '../utils';
 
 @Injectable()
 export class TryOnOrchestratorService implements ITryOnOrchestrator {
@@ -25,10 +23,10 @@ export class TryOnOrchestratorService implements ITryOnOrchestrator {
 
   async generateTryOnImages(
     route: TryOnProviderRoute,
-    request: JewelleryTryOnRequest,
+    request: AiJewelleryTryOnRequest,
     mode: 'jewellery' | 'outfit',
   ): Promise<GeneratedAiImage[]> {
-    const routedRequest: JewelleryTryOnRequest = {
+    const routedRequest: AiJewelleryTryOnRequest = {
       ...request,
       cloudflareModel: route.cloudflareModel ?? request.cloudflareModel,
     };

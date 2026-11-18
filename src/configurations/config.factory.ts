@@ -9,6 +9,7 @@ import {
   RazorpayOptions,
   AppIntegrityOptions,
   MetaWhatsAppOptions,
+  FaceCompareOptions,
 } from '../application';
 import {
   AESEncryptOptions,
@@ -19,7 +20,6 @@ import {
   ResendOptions,
   StartMessagingOptions,
   RedisOptions,
-  FaceCompareOptions,
   type TryOnAiProvider,
   AIVOT_TRYON_TIMEOUT_MS,
   AIVOT_TRYON_MAX_RETRIES,
@@ -149,9 +149,7 @@ export const configFactory = (): IMsConfig => ({
     process.env.META_WEBHOOK_VERIFY_TOKEN ?? '',
   ),
   faceCompare: new FaceCompareOptions(
-    process.env.FACE_COMPARE_API_URL?.trim() ||
-      process.env.INSIGHTFACE_API_URL?.trim() ||
-      'http://140.245.93.109:8000',
+    process.env.FACE_COMPARE_API_URL?.trim() || process.env.INSIGHTFACE_API_URL?.trim() || 'http://140.245.93.109:8000',
     process.env.QDRANT_URL?.trim() || '',
     process.env.QDRANT_API_KEY?.trim() || '',
     process.env.QDRANT_COLLECTION?.trim() || 'customer_faces',

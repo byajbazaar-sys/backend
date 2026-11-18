@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { Context, Handler } from 'aws-lambda';
 
 import { AppModule } from '../app.module';
-import { CronService } from '../infrastructure/cron';
+import { CronService } from '../infrastructure';
 
 let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 

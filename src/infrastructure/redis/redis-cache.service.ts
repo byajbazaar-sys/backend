@@ -1,10 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { cacheDataKey, cacheVersionKey } from '../../application/shared/cache/cache.constants';
-import { ICacheService } from '../../application/shared/services/i-cache.service';
-import { IRedisService, REDIS_SERVICE } from '../../application/shared/services/i-redis.service';
-
+import { cacheDataKey, cacheVersionKey, ICacheService, IRedisService, REDIS_SERVICE } from '../../application';
 const CACHE_VERSION_TTL_SECONDS = 86_400;
 
 @Injectable()

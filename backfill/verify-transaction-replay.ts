@@ -9,12 +9,10 @@ import { NestFactory } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { TRANSACTION_SERVICE, ITransactionService } from '../src/application/features/transactions/service';
-import { LoanReplayService } from '../src/application/features/transactions/service/loan-replay.service';
-import { LOAN_SERVICE, ILoanService } from '../src/application/features/loans';
-import { DUES_REPOSITORY, IDuesRepository, TRANSACTIONS_REPOSITORY, ITransactionsRepository } from '../src/application/shared';
-import { LOANS_REPOSITORY, ILoansRepository } from '../src/application/features/loans';
+import { LoanReplayService } from "../src/application/features/transactions/service/loan-replay.service";
+import { LOAN_SERVICE, ILoanService, LOANS_REPOSITORY, ILoansRepository } from '../src/application/features/loans';
+import { DUES_REPOSITORY, IDuesRepository, TRANSACTIONS_REPOSITORY, ITransactionsRepository, EDueType } from '../src/application/shared';
 import { ETransactionType, ETransactionPaidIn } from '../src/application/features/transactions/enums';
-import { EDueType } from '../src/application/shared';
 import { Transaction } from '../src/application/features/transactions/domain';
 import { Loan } from '../src/application/features/loans/domain';
 

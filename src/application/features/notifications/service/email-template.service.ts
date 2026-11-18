@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import mjml2html from 'mjml';
 
 import { EmailVerificationTemplateData, ForgotPasswordTemplateData } from '../domain';
-import { IEmailTemplateService } from '../interfaces';
-import { EMAIL_VERIFICATION_TEMPLATE, FORGOT_PASSWORD_TEMPLATE } from '../templates';
+import { IEmailTemplateService } from './i-email-template.service';
+import { EMAIL_VERIFICATION_TEMPLATE, FORGOT_PASSWORD_TEMPLATE } from '../utils';
 
 function escapeHtml(value: string): string {
   return String(value ?? '')

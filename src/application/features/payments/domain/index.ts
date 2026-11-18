@@ -1,4 +1,3 @@
-export * from './enums';
 export * from './subscription';
 export * from './coupon';
 export * from './payment-order';
@@ -16,3 +15,5 @@ export * from './razorpay-create-refund-data';
 export * from './subscription-user-profile-data';
 export * from './webhook-ack-result';
 export * from './payment-event-insert-result';
+export * from './e-coupon-type.enum';
+export * from './e-subscription-status.enum';

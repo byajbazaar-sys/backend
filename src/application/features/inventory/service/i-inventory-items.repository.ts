@@ -3,30 +3,10 @@ import { Paged } from '@shared-libs';
 import { InventoryItem, InventoryCategoryBreakdown } from '../domain';
 import { InventoryItemUpdatePatch } from '../models';
 import { InventoryItemsFilterOptions } from '../options';
+import { PublicCatalogFacets } from './public-catalog-facets';
+import { PublicCatalogQuery } from './public-catalog-query';
 
 export const INVENTORY_ITEMS_REPOSITORY = 'INVENTORY_ITEMS_REPOSITORY';
-
-/** Public catalog list query (filters the shop hides are dropped before this point). */
-export interface PublicCatalogQuery
-  extends Pick<InventoryItemsFilterOptions, 'search' | 'categoryId' | 'metalType' | 'pageNumber' | 'pageSize'> {
-  purity?: string;
-  minWeight?: number;
-  maxWeight?: number;
-  minPrice?: number;
-  maxPrice?: number;
-  hallmarked?: boolean;
-  sort?: 'newest' | 'price_asc' | 'price_desc' | 'weight_asc' | 'weight_desc' | 'name';
-}
-
-export interface PublicCatalogFacets {
-  categories: { id: string; name: string; count: number }[];
-  metals: string[];
-  purities: string[];
-  minWeight?: number;
-  maxWeight?: number;
-  minPrice?: number;
-  maxPrice?: number;
-}
 
 export interface IInventoryItemsRepository {
   create(data: InventoryItem): Promise<InventoryItem>;

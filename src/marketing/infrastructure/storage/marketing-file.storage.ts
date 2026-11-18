@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { S3FileStorage } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { IMarketingFileStorage } from '../../application/ports';
+import { IMarketingFileStorage } from '../../application';
 import { MarketingConfig } from '../../marketing.config';
 
 /** Marketing's own bucket (MARKETING_S3_*): opening stills and finished Reels. Private; signed URLs only. */

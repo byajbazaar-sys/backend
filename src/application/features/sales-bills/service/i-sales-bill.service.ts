@@ -3,8 +3,8 @@ import { Paged } from '@shared-libs';
 import { BulkDeleteResult } from '../../../shared';
 import { BillLog, SalesBill, SalesAnalytics, GstCsvExportResult } from '../domain';
 import { EBillLogAction } from '../enums';
-import { BillLogsQuery } from './i-bill-logs.repository';
-import type { BillActionContext } from './sales-bill.service';
+import type { BillActionContext } from './bill-action-context';
+import { BillLogsQuery } from './bill-logs-query';
 import { CreateSalesBillRequestModel, ListSalesBillsQueryModel, UpdateSalesBillRequestModel } from '../models';
 
 export const SALES_BILL_SERVICE = 'SALES_BILL_SERVICE';

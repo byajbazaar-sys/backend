@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { IsNull, MoreThan, Repository } from 'typeorm';
 
 import { ApiAccessToken, IApiAccessTokenRepository } from '../../../application';
-import { ApiAccessTokenEntity } from '../entities/api-access-token.entity';
+import { ApiAccessTokenEntity } from '../entities';
 
 @Injectable()
 export class ApiAccessTokenRepository implements IApiAccessTokenRepository {

@@ -4,11 +4,13 @@ import { Paged } from '@shared-libs';
 import { DataSource, EntityManager } from 'typeorm';
 
 import type { BillLog, BillLogsQuery, CreateTransactionLogInput, TransactionLog } from '../../../application';
-import { BillLogsRepository } from '../../../infrastructure/persistence/repositories/bill-logs.repository';
-import { TransactionLogsRepository } from '../../../infrastructure/persistence/repositories/transaction-logs.repository';
-import { WhatsAppMessagesRepository } from '../../../infrastructure/persistence/repositories/whatsapp-messages.repository';
-import { TransactionalContext } from '../../../infrastructure/persistence/transactional-context';
-import { ILogsHost } from '../../application/ports/logs-host.ports';
+import {
+  TransactionalContext,
+  BillLogsRepository,
+  TransactionLogsRepository,
+  WhatsAppMessagesRepository,
+} from '../../../infrastructure';
+import { ILogsHost } from '../host';
 
 /** Plugs the main database, its transactions and the pre-logs-service log tables into the logs service. */
 @Injectable()

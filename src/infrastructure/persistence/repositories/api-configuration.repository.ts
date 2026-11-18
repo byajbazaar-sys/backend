@@ -3,9 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
-import { ApiConfiguration, IApiConfigurationRepository } from '../../../application';
-import { SaveApiConfigurationEntityInput } from '../../../application/features/api-access/models/save-api-configuration-entity-input.model';
-import { ApiConfigurationEntity } from '../entities/api-configuration.entity';
+import { ApiConfiguration, IApiConfigurationRepository, SaveApiConfigurationEntityInput } from '../../../application';
+import { ApiConfigurationEntity } from '../entities';
 
 @Injectable()
 export class ApiConfigurationRepository implements IApiConfigurationRepository {

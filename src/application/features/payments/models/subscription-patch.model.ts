@@ -1,4 +1,4 @@
-import { ESubscriptionStatus } from '../domain/enums';
+import { ESubscriptionStatus } from '../domain';
 
 export interface SubscriptionPatch {
   planId?: string;

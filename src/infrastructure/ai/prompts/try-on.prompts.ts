@@ -1,5 +1,5 @@
-import type { AiImageInput } from '../interfaces/ai-media.types';
-import { orderJewelleryItems } from '../utils/try-on-images.util';
+import type { AiImageInput } from '../interfaces';
+import { orderJewelleryItems } from '../utils';
 
 const FACE_HEIGHT_INCHES = 8.5;
 const TORSO_HEIGHT_INCHES = 18;

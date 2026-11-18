@@ -1,6 +1,4 @@
-import { InventoryAnalytics, InventoryDashboardStats, InventoryCategoryBreakdown } from '../domain';
-import { InventoryItem } from '../domain';
-
+import { InventoryAnalytics, InventoryDashboardStats, InventoryCategoryBreakdown, InventoryItem } from '../domain';
 export const INVENTORY_REPORT_SERVICE = 'INVENTORY_REPORT_SERVICE';
 
 export interface IInventoryReportService {

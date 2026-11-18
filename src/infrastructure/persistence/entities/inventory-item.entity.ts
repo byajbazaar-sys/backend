@@ -11,7 +11,7 @@ import {
 
 import { InventoryCategoryEntity } from './inventory-category.entity';
 import { UserEntity } from './user.entity';
-import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../../../application/features/inventory/enums';
+import { EInventoryItemStatus, EMakingChargeMode, EMetalType } from '../../../application';
 
 @Entity('inventory_items')
 @Index('UQ_inventory_items_created_by_sku', ['createdBy', 'sku'], { unique: true })

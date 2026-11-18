@@ -2,7 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, Jo
 
 import { OrderEntity } from './order.entity';
 import { UserEntity } from './user.entity';
-import { EOrderActivityType, EOrderStatus } from '../../../application/features/orders/enums';
+import { EOrderActivityType, EOrderStatus } from '../../../application';
 
 @Entity('order_activities')
 @Index(['orderId', 'createdAt'])

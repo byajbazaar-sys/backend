@@ -1,27 +1,35 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
-import { ActivityLogsAdminController } from './application/controllers/activity-logs-admin.controller';
-import { LogsRequestContextInterceptor } from './application/logs-request-context';
-import { LOGS_HOST } from './application/ports/logs-host.ports';
-import { ActivityLogger } from './application/services/activity-logger.service';
-import { ByajBazaarLogsHostAdapter } from './infrastructure/adapters/byajbazaar-host.adapter';
-import { loadLogsSettings } from './infrastructure/config/logs-settings.loader';
-import { LogOutbox } from './infrastructure/persistence/log-outbox';
-import { LogOutboxRelay } from './infrastructure/persistence/log-outbox-relay';
-import { LogWriter } from './infrastructure/persistence/log-writer';
-import { LogsDatabase } from './infrastructure/persistence/logs-database';
-import { LogsMaintenanceService } from './infrastructure/persistence/logs-maintenance.service';
-import { LogsModeService } from './infrastructure/persistence/logs-mode.service';
-import { ActivityLogsStore } from './infrastructure/persistence/stores/activity-logs.store';
-import { BillLogsStore } from './infrastructure/persistence/stores/bill-logs.store';
-import { TransactionLogsStore } from './infrastructure/persistence/stores/transaction-logs.store';
-import { WhatsAppMessagesStore } from './infrastructure/persistence/stores/whatsapp-messages.store';
+import {
+  LogsRequestContextInterceptor,
+  ActivityLogsAdminController,
+  ACTIVITY_LOGS_REPOSITORY,
+  LOGS_TRANSACTION,
+  ActivityLogger,
+} from './application';
+import {
+  ByajBazaarLogsHostAdapter,
+  loadLogsSettings,
+  LOGS_HOST,
+  LogOutbox,
+  LogOutboxRelay,
+  LogWriter,
+  LogsDatabase,
+  LogsMaintenanceService,
+  LogsModeService,
+  ActivityLogsStore,
+  BillLogsStore,
+  TransactionLogsStore,
+  WhatsAppMessagesStore,
+} from './infrastructure';
 import { LogsConfig } from './logs.config';
-import { BILL_LOGS_REPOSITORY } from '../application/features/sales-bills/service/i-bill-logs.repository';
-import { WHATSAPP_MESSAGES_REPOSITORY } from '../application/features/whatsapp/service/i-whatsapp-messages.repository';
-import { TRANSACTION_LOGS_REPOSITORY } from '../application/shared/repository/i-transaction-logs.repository';
-import { ACTIVITY_LOGGER } from '../application/shared/services/i-activity-logger';
+import {
+  BILL_LOGS_REPOSITORY,
+  WHATSAPP_MESSAGES_REPOSITORY,
+  TRANSACTION_LOGS_REPOSITORY,
+  ACTIVITY_LOGGER,
+} from '../application';
 
 /**
  * Logs service — a self-contained bounded context, like marketing:
@@ -58,6 +66,8 @@ import { ACTIVITY_LOGGER } from '../application/shared/services/i-activity-logge
     TransactionLogsStore,
     WhatsAppMessagesStore,
     ActivityLogsStore,
+    { provide: ACTIVITY_LOGS_REPOSITORY, useExisting: ActivityLogsStore },
+    { provide: LOGS_TRANSACTION, useExisting: LOGS_HOST },
     ActivityLogger,
     { provide: BILL_LOGS_REPOSITORY, useExisting: BillLogsStore },
     { provide: TRANSACTION_LOGS_REPOSITORY, useExisting: TransactionLogsStore },

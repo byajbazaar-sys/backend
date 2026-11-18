@@ -3,10 +3,11 @@ import { UsersAuthOptions } from '@shared-libs';
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { IRedisService, REDIS_SERVICE } from '../../../shared/services/i-redis.service';
-
-export type OtpChannel = 'email' | 'phone';
-export type OtpPurpose = 'signup' | 'account';
+import { ChallengeExpectation } from './challenge-expectation';
+import { IssuedChallenge } from './issued-challenge';
+import { OtpChannel } from './otp-channel';
+import { OtpPurpose } from './otp-purpose';
+import { IRedisService, REDIS_SERVICE } from '../../../shared';
 
 export const OTP_TTL_SECONDS = 10 * 60;
 export const OTP_MAX_ATTEMPTS = 5;
@@ -23,19 +24,6 @@ interface ChallengeClaims {
   /** Bound user for account verification. */
   u?: string;
   exp: number;
-}
-
-export interface IssuedChallenge {
-  code: string;
-  challengeToken: string;
-  expiresAt: Date;
-}
-
-export interface ChallengeExpectation {
-  channel: OtpChannel;
-  target: string;
-  purpose: OtpPurpose;
-  userId?: string;
 }
 
 /**

@@ -1,4 +1,3 @@
 export * from './models';
-export * from './auth.service';
+export * from './service';
 export * from './auth.controller';
-export * from './interfaces';

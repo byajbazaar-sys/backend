@@ -9,6 +9,7 @@ import {
   RazorpayOptions,
   AppIntegrityOptions,
   MetaWhatsAppOptions,
+  FaceCompareOptions,
 } from '../application';
 import {
   AESEncryptOptions,
@@ -18,7 +19,6 @@ import {
   ResendOptions,
   RedisOptions,
   StartMessagingOptions,
-  FaceCompareOptions,
 } from '../infrastructure';
 
 export interface IMsConfig {

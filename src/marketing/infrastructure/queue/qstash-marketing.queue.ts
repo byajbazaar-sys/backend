@@ -3,7 +3,7 @@ import axios from 'axios';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { IMarketingQueue, MarketingQueueMessage } from '../../application/ports';
+import { MarketingQueueMessage, IMarketingQueue } from '../../application';
 import { MarketingConfig } from '../../marketing.config';
 
 /**

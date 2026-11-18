@@ -25,7 +25,7 @@ import {
   ListJewelleryEventsQueryModel,
   UpdateJewelleryEventRequestModel,
 } from './models';
-import { IJewelleryEventService, JEWELLERY_EVENT_SERVICE } from './service/i-jewellery-event.service';
+import { IJewelleryEventService, JEWELLERY_EVENT_SERVICE } from './service';
 
 @ApiTags('events')
 @Controller('events')

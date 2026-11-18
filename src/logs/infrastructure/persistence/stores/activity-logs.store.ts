@@ -1,30 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { ILogsHost, LOGS_HOST } from '../../../application/ports/logs-host.ports';
+import { ActivityLogsQuery, ActivityLogView, IActivityLogsRepository } from '../../../application';
+import { ILogsHost, LOGS_HOST } from '../../host';
 import { ActivityLogRow, insertLogRows, SqlExecutor } from '../log-tables';
 import { LogWriter } from '../log-writer';
 import { LogsDatabase } from '../logs-database';
 import { LogsModeService } from '../logs-mode.service';
 
-export interface ActivityLogsQuery {
-  category?: string;
-  action?: string;
-  entityType?: string;
-  entityId?: string;
-  userId?: string;
-  performedBy?: string;
-  from?: Date;
-  to?: Date;
-  /** Already validated by the caller. */
-  limit: number;
-  offset: number;
-}
-
-export type ActivityLogView = Omit<ActivityLogRow, 'createdAt'> & { createdAt: Date; performedByName: string | null };
-
 /** activity_logs: dues / payments / marketing activity. Same table shape in the logs and the main database. */
 @Injectable()
-export class ActivityLogsStore {
+export class ActivityLogsStore implements IActivityLogsRepository {
   constructor(
     @Inject(LOGS_HOST) private readonly host: ILogsHost,
     private readonly db: LogsDatabase,

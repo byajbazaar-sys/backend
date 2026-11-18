@@ -3,9 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { Repository } from 'typeorm';
 
-import { IPosSessionsRepository, PosSession, PosSessionPatch } from '../../../application';
-import { EPosSessionStatus } from '../../../application/features/pos/enums/e-pos-session-status.enum';
-import { PosSessionEntity } from '../entities/pos-session.entity';
+import { IPosSessionsRepository, PosSession, PosSessionPatch, EPosSessionStatus } from '../../../application';
+import { PosSessionEntity } from '../entities';
 
 @Injectable()
 export class PosSessionsRepository implements IPosSessionsRepository {

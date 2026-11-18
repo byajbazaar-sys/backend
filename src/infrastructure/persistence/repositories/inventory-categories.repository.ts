@@ -9,7 +9,7 @@ import {
   InventoryCategory,
   UpdateInventoryCategoryRequestModel,
 } from '../../../application';
-import { InventoryCategoryEntity } from '../entities/inventory-category.entity';
+import { InventoryCategoryEntity } from '../entities';
 
 @Injectable()
 export class InventoryCategoriesRepository implements IInventoryCategoriesRepository {

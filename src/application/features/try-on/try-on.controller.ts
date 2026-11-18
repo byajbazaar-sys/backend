@@ -27,7 +27,7 @@ import {
   TryOnAssetsListResponseModel,
   TryOnJobResponseModel,
 } from './models';
-import { ITryOnService, TRY_ON_SERVICE } from './try-on.service';
+import { ITryOnService, TRY_ON_SERVICE } from './service';
 
 @ApiTags('try-on')
 @ApiBearerAuth('user')

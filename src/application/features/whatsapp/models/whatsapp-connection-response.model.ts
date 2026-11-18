@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 
 import { EWhatsAppConnectionStatus } from '../enums';
-
 export class WhatsAppConnectionResponseModel {
   @ApiProperty()
   @Expose()
@@ -86,10 +85,4 @@ export class WhatsAppConnectionResponseModel {
   @ApiProperty()
   @Expose()
   updatedAt: Date;
-}
-
-export class WhatsAppDisconnectResponseModel {
-  @ApiProperty({ example: true })
-  @Expose()
-  success: boolean;
 }

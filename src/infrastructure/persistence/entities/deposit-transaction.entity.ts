@@ -15,7 +15,7 @@ import { DepositReceiptEntity } from './deposit-receipt.entity';
 import { OrderEntity } from './order.entity';
 import { SalesBillEntity } from './sales-bill.entity';
 import { UserEntity } from './user.entity';
-import { EDepositTransactionType } from '../../../application/features/deposits/enums';
+import { EDepositTransactionType } from '../../../application';
 
 @Entity('deposit_transactions')
 @Index(['depositAccountId'])

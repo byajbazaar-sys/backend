@@ -3,11 +3,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, Jo
 import { LoanEntity } from './loan.entity';
 import { TransactionEntity } from './transaction.entity';
 import { UserEntity } from './user.entity';
-import {
-  ETransactionLogAction,
-  ETransactionPaidIn,
-  ETransactionType,
-} from '../../../application/features/transactions/enums';
+import { ETransactionLogAction, ETransactionPaidIn, ETransactionType } from '../../../application';
 
 @Entity('transaction_logs')
 export class TransactionLogEntity {

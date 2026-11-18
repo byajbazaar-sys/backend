@@ -1,7 +1,9 @@
-import type { TryOnJobRecord } from '../interfaces';
+import type { TryOnJobRecord } from '../domain';
 import type { CreateTryOnJobRequestModel, RecolorTryOnRequestModel, TryOnAssetResponseModel } from '../models';
 import type { TryOnLambdaPayload } from './try-on-lambda-payload';
 import type { UploadTryOnAssetInput } from './upload-try-on-asset-input';
+
+export const TRY_ON_SERVICE = 'TRY_ON_SERVICE';
 
 export interface ITryOnService {
   startTryOnJob(userId: string, body: CreateTryOnJobRequestModel): Promise<TryOnJobRecord>;

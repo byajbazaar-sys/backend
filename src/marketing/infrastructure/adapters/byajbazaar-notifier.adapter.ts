@@ -4,9 +4,10 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   IWebSocketConnectionsRepository,
   WEBSOCKET_CONNECTIONS_REPOSITORY,
-} from '../../../application/features/pos/service/i-websocket-connections.repository';
-import { IWebSocketMessageService, WEBSOCKET_MESSAGE_SERVICE } from '../../../application/shared';
-import { IMarketingNotifier } from '../../application/ports';
+  IWebSocketMessageService,
+  WEBSOCKET_MESSAGE_SERVICE,
+} from '../../../application';
+import { IMarketingNotifier } from '../../application';
 
 /** Pushes to the user's open ByajBazaar sessions over the existing AWS API Gateway WebSocket. */
 @Injectable()

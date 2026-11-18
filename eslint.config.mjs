@@ -123,7 +123,7 @@ export default [
 
   // Application layer must depend on interfaces only — never import infrastructure.
   {
-    files: ['src/application/**/*.ts'],
+    files: ['src/application/**/*.ts', 'src/marketing/application/**/*.ts', 'src/logs/application/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

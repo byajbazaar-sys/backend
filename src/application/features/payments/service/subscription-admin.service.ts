@@ -19,10 +19,10 @@ import { IPaymentEventsRepository, PAYMENT_EVENTS_REPOSITORY } from './i-payment
 import { IPaymentsRepository, PAYMENTS_REPOSITORY } from './i-payments.repository';
 import { IPlansRepository, PLANS_REPOSITORY } from './i-plans.repository';
 import { IRazorpayService, RAZORPAY_SERVICE } from './i-razorpay.service';
+import { IRefundService, REFUND_SERVICE } from './i-refund.service';
 import { IRefundsRepository, REFUNDS_REPOSITORY } from './i-refunds.repository';
 import { ISubscriptionAdminService } from './i-subscription-admin.service';
 import { ISubscriptionsRepository, SUBSCRIPTIONS_REPOSITORY } from './i-subscriptions.repository';
-import { REFUND_SERVICE, RefundService } from './refund.service';
 import {
   ACTIVITY_LOGGER,
   EActivityLogCategory,
@@ -33,8 +33,13 @@ import {
   ICacheService,
 } from '../../../shared';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
-import { isPaymentRefundable, remainingRefundableAmount } from '../utils/refund.util';
-import { isTrialActive, resolveTrialEndsAt, trialDaysRemaining } from '../utils/trial.util';
+import {
+  isPaymentRefundable,
+  remainingRefundableAmount,
+  isTrialActive,
+  resolveTrialEndsAt,
+  trialDaysRemaining,
+} from '../utils';
 
 @Injectable()
 export class SubscriptionAdminService implements ISubscriptionAdminService {
@@ -47,7 +52,7 @@ export class SubscriptionAdminService implements ISubscriptionAdminService {
     @Inject(RAZORPAY_SERVICE) private readonly razorpay: IRazorpayService,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(REFUNDS_REPOSITORY) private readonly refundsRepo: IRefundsRepository,
-    @Inject(REFUND_SERVICE) private readonly refundService: RefundService,
+    @Inject(REFUND_SERVICE) private readonly refundService: IRefundService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     private readonly razorpayOptions: RazorpayOptions,
     @Inject(ACTIVITY_LOGGER) private readonly activityLogger: IActivityLogger,

@@ -1,7 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 import { hashSync } from 'bcrypt';
-import { BCRYPT_SALT_ROUNDS } from '@shared-libs';
-import { SYSTEM_USER_ID } from '@shared-libs';
+import { BCRYPT_SALT_ROUNDS, SYSTEM_USER_ID } from '@shared-libs';
 
 export class InsertSystemUser1730880000010 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {

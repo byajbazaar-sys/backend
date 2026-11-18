@@ -9,10 +9,10 @@ import {
   SaveWhatsAppOutboundMessageData,
   UpdateWhatsAppMessageStatusData,
   WhatsAppMessage,
-} from '../../../../application/features/whatsapp/domain';
-import { WhatsAppMessagesFilterOptions } from '../../../../application/features/whatsapp/options/whatsapp-messages-filter.options';
-import { IWhatsAppMessagesRepository } from '../../../../application/features/whatsapp/service/i-whatsapp-messages.repository';
-import { ILogsHost, LOGS_HOST } from '../../../application/ports/logs-host.ports';
+  WhatsAppMessagesFilterOptions,
+  IWhatsAppMessagesRepository,
+} from '../../../../application';
+import { ILogsHost, LOGS_HOST } from '../../host';
 import { LogOutbox } from '../log-outbox';
 import { nextLogTimestamp, WhatsAppMessageRow } from '../log-tables';
 import { LogWriter } from '../log-writer';

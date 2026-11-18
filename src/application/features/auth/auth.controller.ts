@@ -21,8 +21,6 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { User } from '../users';
 import { SendOtpResponseModel, SendSignupOtpRequestModel, VerificationService } from '../verification';
-import { IAuthService } from './interfaces';
-import { AUTH_SERVICE } from './interfaces';
 import {
   LoginRequestModel,
   LoginResponseModel,
@@ -33,9 +31,9 @@ import {
   GoogleSsoResponseModel,
   AppIntegrityChallengeResponseModel,
 } from './models';
+import { IAuthService, AUTH_SERVICE } from './service';
 import { APP_INTEGRITY_SERVICE, IAppIntegrityService } from '../../shared';
-import { API_AUTH_SERVICE, IApiAuthService } from '../api-access';
-import { ApiTokenResponseModel } from '../api-access/models';
+import { API_AUTH_SERVICE, IApiAuthService, ApiTokenResponseModel } from '../api-access';
 
 @ApiTags('auth')
 @Controller('auth')

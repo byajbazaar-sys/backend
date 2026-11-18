@@ -12,7 +12,7 @@ import {
 import { CustomerEntity } from './customer.entity';
 import { LoanEntity } from './loan.entity';
 import { UserEntity } from './user.entity';
-import { EDueType } from '../../../application/shared/enums';
+import { EDueType } from '../../../application';
 
 @Entity('dues')
 @Index(['loanId', 'dueDate'])

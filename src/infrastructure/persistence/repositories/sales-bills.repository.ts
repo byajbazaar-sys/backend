@@ -19,15 +19,14 @@ import {
   UpdateSalesBillPatch,
   CreateSalesBillEntityInput,
   CreateSalesBillLineEntityInput,
+  SalesBillsExportFilterOptions,
+  computeBillLineTotal,
+  IInventoryItemSalesRepository,
 } from '../../../application';
-import { SalesBillsExportFilterOptions } from '../../../application/features/sales-bills/options/sales-bills-export-filter.options';
-import { computeBillLineTotal } from '../../../application/features/sales-bills/utils/bill-line-total.util';
-import { InventoryItemEntity } from '../entities/inventory-item.entity';
-import { SalesBillItemEntity } from '../entities/sales-bill-item.entity';
-import { SalesBillEntity } from '../entities/sales-bill.entity';
+import { InventoryItemEntity, SalesBillItemEntity, SalesBillEntity } from '../entities';
 
 @Injectable()
-export class SalesBillsRepository implements ISalesBillsRepository {
+export class SalesBillsRepository implements ISalesBillsRepository, IInventoryItemSalesRepository {
   constructor(
     @InjectRepository(SalesBillEntity)
     private readonly billsRepo: Repository<SalesBillEntity>,
@@ -250,8 +249,7 @@ export class SalesBillsRepository implements ISalesBillsRepository {
 
           const qty = Number(line.quantity) || 1;
           const price = Number(line.sellingPrice) || 0;
-          line.lineTotal =
-            update.lineTotal ?? computeBillLineTotal(price, qty, line.quantityPricingMode);
+          line.lineTotal = update.lineTotal ?? computeBillLineTotal(price, qty, line.quantityPricingMode);
           if (update.purchaseCost != null) line.purchaseCost = update.purchaseCost;
           if (update.profitAmount != null) line.profitAmount = update.profitAmount;
           await itemsRepo.save(line);

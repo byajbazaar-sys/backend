@@ -1,6 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ESortOrder } from '@shared-libs';
-import { ENotificationChannel, ENotificationStatus } from '@shared-libs';
+import { ESortOrder, ENotificationChannel, ENotificationStatus } from '@shared-libs';
 import { Type } from 'class-transformer';
 import { IsOptional, IsString, IsEnum, IsInt, Min, Max } from 'class-validator';
 

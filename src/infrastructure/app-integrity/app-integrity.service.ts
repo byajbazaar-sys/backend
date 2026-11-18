@@ -2,14 +2,14 @@ import { BadRequestException, ForbiddenException, Inject, Injectable } from '@ne
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { GoogleSsoRequestModel } from '../../application/features/auth/models';
-import { AppIntegrityOptions } from '../../application/shared/options/app-integrity.options';
 import {
+  GoogleSsoRequestModel,
+  AppIntegrityOptions,
   AppIntegrityChallengeResult,
   IAppIntegrityService,
-} from '../../application/shared/services/i-app-integrity.service';
-import { IRedisService, REDIS_SERVICE } from '../../application/shared/services/i-redis.service';
-
+  IRedisService,
+  REDIS_SERVICE,
+} from '../../application';
 const CHALLENGE_TTL_SECONDS = 300;
 const CHALLENGE_PREFIX = 'app-integrity:challenge:';
 const ATTEST_PREFIX = 'app-integrity:attest:';

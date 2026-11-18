@@ -1,16 +1,9 @@
 import { Paged } from '@shared-libs';
 
-import { BillLog } from '../domain/bill-log';
+import { BillLog } from '../domain';
+import { BillLogsQuery } from './bill-logs-query';
 
 export const BILL_LOGS_REPOSITORY = 'IBillLogsRepository';
-
-export interface BillLogsQuery {
-  userId: string;
-  billId?: string;
-  action?: string;
-  pageNumber?: number;
-  pageSize?: number;
-}
 
 export interface IBillLogsRepository {
   create(log: BillLog): Promise<BillLog>;

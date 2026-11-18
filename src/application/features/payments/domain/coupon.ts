@@ -1,6 +1,6 @@
 import { Expose, Type } from 'class-transformer';
 
-import { ECouponType } from './enums';
+import { ECouponType } from './e-coupon-type.enum';
 
 export class Coupon {
   @Expose()

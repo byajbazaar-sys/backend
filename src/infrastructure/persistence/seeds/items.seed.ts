@@ -4,8 +4,7 @@ import { ESeedType, SYSTEM_USER_ID } from '@shared-libs';
 import { Repository } from 'typeorm';
 
 import { BaseSeed } from './base.seed';
-import { ItemEntity } from '../entities/item.entity';
-import { SeedEntity } from '../entities/seed.entity';
+import { ItemEntity, SeedEntity } from '../entities';
 
 @Injectable()
 export class ItemsSeed extends BaseSeed {

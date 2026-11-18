@@ -12,9 +12,9 @@ import {
   Subscription,
   SubscriptionPatch,
   UpdateSubscriptionEntityInput,
+  ESubscriptionStatus,
 } from '../../../application';
-import { ESubscriptionStatus } from '../../../application/features/payments/domain/enums';
-import { SubscriptionEntity } from '../entities/subscription.entity';
+import { SubscriptionEntity } from '../entities';
 
 @Injectable()
 export class SubscriptionsRepository implements ISubscriptionsRepository {

@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from '../app.module';
-import { WEBSOCKET_HANDLER_SERVICE, IWebSocketHandlerService } from '../application/features/pos/service';
+import { WEBSOCKET_HANDLER_SERVICE, IWebSocketHandlerService } from '../application';
 
 let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 

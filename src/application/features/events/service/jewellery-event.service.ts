@@ -18,7 +18,7 @@ import {
 } from '../models';
 import { IJewelleryEventService } from './i-jewellery-event.service';
 import { IJewelleryEventsRepository, JEWELLERY_EVENTS_REPOSITORY } from './i-jewellery-events.repository';
-import { buildEventSlug } from '../utils/slug.util';
+import { buildEventSlug } from '../utils';
 
 @Injectable()
 export class JewelleryEventService implements IJewelleryEventService {

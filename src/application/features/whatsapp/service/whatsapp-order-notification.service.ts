@@ -1,24 +1,21 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { Order } from '../../orders/domain';
-import { EOrderStatus } from '../../orders/enums';
-import { Customer } from '../../customers/domain';
+import { Customer } from '../../customers';
+import { Order, EOrderStatus } from '../../orders';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users';
-import { WHATSAPP_DEFAULT_TEMPLATES } from '../constants/whatsapp-default-template.constants';
+import { OrderNotificationResult } from '../domain';
 import { EWhatsAppConnectionStatus, EWhatsAppMessageContextType } from '../enums';
-import { normalizeWhatsAppRecipient } from '../utils/whatsapp-messaging.util';
+import { normalizeWhatsAppRecipient, WHATSAPP_DEFAULT_TEMPLATES } from '../utils';
+import { IWhatsAppOrderNotificationService } from './i-whatsapp-order-notification.service';
 import { IWhatsAppService, WHATSAPP_SERVICE } from './i-whatsapp.service';
-
-export const WHATSAPP_ORDER_NOTIFICATION_SERVICE = 'WHATSAPP_ORDER_NOTIFICATION_SERVICE';
 
 const ORDER_CREATED_TEMPLATE =
   WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_order_created') ??
   WHATSAPP_DEFAULT_TEMPLATES[1];
 
 const ORDER_UPDATE_TEMPLATE =
-  WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_order_update') ??
-  ORDER_CREATED_TEMPLATE;
+  WHATSAPP_DEFAULT_TEMPLATES.find((template) => template.name === 'byajbazaar_order_update') ?? ORDER_CREATED_TEMPLATE;
 
 const STATUS_LABELS: Record<EOrderStatus, string> = {
   [EOrderStatus.NEW]: 'New',
@@ -31,15 +28,8 @@ const STATUS_LABELS: Record<EOrderStatus, string> = {
   [EOrderStatus.CANCELLED]: 'Cancelled',
 };
 
-export interface OrderNotificationResult {
-  sent: boolean;
-  channel: 'whatsapp';
-  recipient?: string;
-  reason?: string;
-}
-
 @Injectable()
-export class WhatsAppOrderNotificationService {
+export class WhatsAppOrderNotificationService implements IWhatsAppOrderNotificationService {
   constructor(
     @Inject(WHATSAPP_SERVICE) private readonly whatsappService: IWhatsAppService,
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
@@ -52,11 +42,7 @@ export class WhatsAppOrderNotificationService {
     customer: Customer,
     note?: string,
   ): Promise<OrderNotificationResult> {
-    const rawPhone =
-      customer.phone?.trim() ||
-      customer.alternativePhone?.trim() ||
-      order.customerPhone?.trim() ||
-      '';
+    const rawPhone = customer.phone?.trim() || customer.alternativePhone?.trim() || order.customerPhone?.trim() || '';
     const recipient = normalizeWhatsAppRecipient(rawPhone);
     if (!recipient || recipient.length < 11) {
       return { sent: false, channel: 'whatsapp', reason: 'Customer phone is missing or invalid' };

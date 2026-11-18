@@ -2,11 +2,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { v4 as uuid } from 'uuid';
 
-import { ActivityLogEntry, IActivityLogger } from '../../../application/shared/services/i-activity-logger';
-import { ActivityLogRow, nextLogTimestamp } from '../../infrastructure/persistence/log-tables';
-import { ActivityLogsStore } from '../../infrastructure/persistence/stores/activity-logs.store';
+import { ActivityLogEntry, IActivityLogger } from '../../../application';
+import { ActivityLogRow } from '../domain';
 import { currentLogsRequestContext } from '../logs-request-context';
-import { ILogsHost, LOGS_HOST } from '../ports/logs-host.ports';
+import { ACTIVITY_LOGS_REPOSITORY, IActivityLogsRepository, ILogsTransaction, LOGS_TRANSACTION } from '../ports';
+import { nextLogTimestamp } from '../utils';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -14,8 +14,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 @Injectable()
 export class ActivityLogger implements IActivityLogger {
   constructor(
-    @Inject(LOGS_HOST) private readonly host: ILogsHost,
-    private readonly store: ActivityLogsStore,
+    @Inject(LOGS_TRANSACTION) private readonly host: ILogsTransaction,
+    @Inject(ACTIVITY_LOGS_REPOSITORY) private readonly store: IActivityLogsRepository,
     @InjectPinoLogger(ActivityLogger.name) private readonly logger: PinoLogger,
   ) {}
 

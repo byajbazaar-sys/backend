@@ -1,4 +1,3 @@
-export * from './infrastructure.module';
 export * from './persistence';
 export * from './crypto';
 export * from './s3';
@@ -10,3 +9,7 @@ export * from './redis';
 export * from './meta';
 export * from './face-compare';
 export * from './startmessaging';
+export * from './aws-lambda';
+export * from './app-integrity';
+export * from './websocket';
+export * from './infrastructure.module';

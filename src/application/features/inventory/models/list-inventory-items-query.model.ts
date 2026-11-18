@@ -1,11 +1,21 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 import { EInventoryItemStatus, EInventoryItemSortOrder } from '../enums';
-
-export const INVENTORY_SORT_FIELDS = ['createdAt', 'netWeight', 'sellingPrice', 'itemName'] as const;
-export type InventorySortField = (typeof INVENTORY_SORT_FIELDS)[number];
+import { INVENTORY_SORT_FIELDS, InventorySortField } from './inventory-sort-field';
 
 export class ListInventoryItemsQueryModel {
   @Expose()

@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 
-import { EMetalType } from '../../inventory/enums';
+import { EMetalType } from '../../inventory';
 
 export class PublicCatalogItemModel {
   @Expose()

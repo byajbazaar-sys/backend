@@ -1,8 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Paged, toCSV, toPDF, IPdfColumnConfig } from '@shared-libs';
+import { Paged, toCSV, toPDF, IPdfColumnConfig, ESortOrder } from '@shared-libs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
-import { CUSTOMERS_REPOSITORY, ICustomersRepository } from '../../customers/service';
+import { CUSTOMERS_REPOSITORY, ICustomersRepository } from '../../customers';
 import {
   CreateDepositAccountData,
   AddDepositData,
@@ -13,8 +13,6 @@ import {
   DepositTransaction,
 } from '../domain';
 import { EDepositStatus, EDepositTransactionType } from '../enums';
-import { ESortOrder } from '@shared-libs';
-
 import { DepositsDownloadFilterOptions, DepositsFilterOptions } from '../options';
 import { DepositStats } from './deposit-stats';
 import { IDepositService } from './i-deposit.service';

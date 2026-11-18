@@ -8,14 +8,12 @@ import {
   SaveWhatsAppOutboundMessageData,
   UpdateWhatsAppMessageStatusData,
   WhatsAppMessage,
-} from '../../../application/features/whatsapp/domain';
-import {
   EWhatsAppMessageDeliveryStatus,
   shouldAdvanceWhatsAppMessageStatus,
-} from '../../../application/features/whatsapp/enums';
-import { IWhatsAppMessagesRepository } from '../../../application/features/whatsapp/service/i-whatsapp-messages.repository';
-import { WhatsAppMessagesFilterOptions } from '../../../application/features/whatsapp/options/whatsapp-messages-filter.options';
-import { WhatsAppMessageEntity } from '../entities/whatsapp-message.entity';
+  WhatsAppMessagesFilterOptions,
+  IWhatsAppMessagesRepository,
+} from '../../../application';
+import { WhatsAppMessageEntity } from '../entities';
 
 @Injectable()
 export class WhatsAppMessagesRepository implements IWhatsAppMessagesRepository {
@@ -63,11 +61,7 @@ export class WhatsAppMessagesRepository implements IWhatsAppMessagesRepository {
       qb.andWhere('m.context_type = :contextType', { contextType: options.contextType });
     }
 
-    const [rows, totalCount] = await qb
-      .orderBy('m.created_at', 'DESC')
-      .skip(skip)
-      .take(pageSize)
-      .getManyAndCount();
+    const [rows, totalCount] = await qb.orderBy('m.created_at', 'DESC').skip(skip).take(pageSize).getManyAndCount();
 
     return toPaged(WhatsAppMessage, {
       items: rows.map((row) => this.map(row)),

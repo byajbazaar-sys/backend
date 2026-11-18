@@ -1,8 +1,8 @@
 import { APIGatewayProxyWebsocketEventV2, APIGatewayProxyWebsocketHandlerV2 } from 'aws-lambda';
 
 import { getTokenFromEvent, getWebSocketApp, getWebSocketHandler, wsResponse } from './websocket-bootstrap';
+import { EDeviceType } from '../application';
 import { MarketingRenderService } from '../marketing';
-import { EDeviceType } from '../application/features/pos/enums';
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;

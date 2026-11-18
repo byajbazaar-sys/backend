@@ -4,10 +4,12 @@ import axios from 'axios';
 import {
   IInventoryItemsRepository,
   INVENTORY_ITEMS_REPOSITORY,
-} from '../../../application/features/inventory/service/i-inventory-items.repository';
-import { IUsersRepository, USERS_REPOSITORY } from '../../../application/features/users/service/i-users.repository';
-import { IUsersFileStorage, USERS_FILE_STORAGE } from '../../../application/shared';
-import { IMarketingCatalog, MarketingCatalogItem } from '../../application/ports';
+  IUsersRepository,
+  USERS_REPOSITORY,
+  IUsersFileStorage,
+  USERS_FILE_STORAGE,
+} from '../../../application';
+import { MarketingCatalogItem, IMarketingCatalog } from '../../application';
 
 /** Reads inventory items and their photos from ByajBazaar (main database + bucket). */
 @Injectable()

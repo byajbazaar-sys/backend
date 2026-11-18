@@ -1,4 +1,4 @@
-import type { JewelleryTryOnRequest } from '../../features/try-on/interfaces';
+import type { JewelleryTryOnRequest } from '../../features';
 import type { GeneratedAiImage } from '../interfaces';
 import { TryOnProviderRoute } from './try-on-provider-route';
 
