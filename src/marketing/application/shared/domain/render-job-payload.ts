@@ -1,4 +1,5 @@
 import { RenderClipSpec } from './render-clip-spec';
+import { WorkerSessionPayload } from './worker-session-payload';
 
 export interface RenderJobPayload {
   clips: RenderClipSpec[];
@@ -28,4 +29,10 @@ export interface RenderJobPayload {
   done?: string[];
   /** The merged film was uploaded (no merge needed on continuation). */
   mergeDone?: boolean;
+  /** Work job running inside a warm WORKER session: that session's job id. */
+  sessionJobId?: string | null;
+  /** WORKER jobs: what the warm session is doing. */
+  session?: WorkerSessionPayload;
+  /** SETUP jobs for a ready account that only (re)build its model cache dataset. */
+  cacheOnly?: boolean;
 }

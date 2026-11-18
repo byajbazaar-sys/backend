@@ -6,7 +6,7 @@ export interface IRenderJobsRepository {
   create(job: Omit<RenderJob, 'id'>): Promise<RenderJob>;
   findById(id: string): Promise<RenderJob | null>;
   update(id: string, patch: Partial<RenderJob>): Promise<RenderJob | null>;
-  /** Busy slots per account (STARTING / RUNNING). */
+  /** Busy slots per account (STARTING / RUNNING); jobs running inside a warm WORKER session count as its slot. */
   countBusyByWorker(): Promise<Record<string, number>>;
   /** Jobs currently on Kaggle (STARTING / RUNNING), oldest first. */
   listBusy(): Promise<RenderJob[]>;
@@ -22,9 +22,21 @@ export interface IRenderJobsRepository {
    * account, other jobs for any ready account.
    */
   claimNext(workerId: string, includeWork: boolean): Promise<RenderJob | null>;
+  /**
+   * Atomically claims the oldest WAITING work job (IMAGES / CAMPAIGN / LOGO) for a warm session of `workerId`:
+   * it becomes STARTING on that account, in the session's slot and kernel, with payload.sessionJobId set.
+   */
+  claimNextForSession(session: RenderJob): Promise<RenderJob | null>;
+  /** Live warm WORKER sessions (STARTING / RUNNING), oldest first. */
+  listSessions(): Promise<RenderJob[]>;
   findStale(statuses: ERenderJobStatus[], olderThan: Date): Promise<RenderJob[]>;
   /** Waiting / busy job for a campaign or brand logo, to avoid queuing duplicates. */
-  findOpenFor(filter: { campaignId?: string; userId?: string; kind?: string }): Promise<RenderJob | null>;
+  findOpenFor(filter: {
+    campaignId?: string;
+    userId?: string;
+    kind?: string;
+    workerId?: string;
+  }): Promise<RenderJob | null>;
   /** Newest IMAGES and CAMPAIGN (video) job of each campaign, for the image / video notebook status. */
   latestForCampaigns(campaignIds: string[]): Promise<RenderJob[]>;
   /** Most recently finished (DONE / FAILED) non-setup jobs, newest first. */

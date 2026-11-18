@@ -25,6 +25,28 @@ export function kindsOf(notebook: KaggleWorkNotebook): ERenderJobKind[] {
   return notebook === 'image' ? [ERenderJobKind.Images] : [ERenderJobKind.Campaign, ERenderJobKind.Logo];
 }
 
+/**
+ * Kernel slug ("byajbazaar-image-ab12cd34") from a stored kernel ref. Kaggle has returned refs as "user/slug",
+ * "/user/slug" and "/code/user/slug" — taking the second path segment sent the user name (or "code") as the slug,
+ * so every session-status check failed with HTTP 403.
+ */
+export function kernelSlugOf(ref?: string | null): string | null {
+  const parts = String(ref ?? '')
+    .replace(/^https?:\/\/[^/]+/, '')
+    .split('/')
+    .filter(Boolean);
+  return parts.length >= 2 ? parts[parts.length - 1] : null;
+}
+
+/** "user/slug" form of a kernel ref, for storage and links. */
+export function normalizeKernelRef(ref?: string | null): string | null {
+  const parts = String(ref ?? '')
+    .replace(/^https?:\/\/[^/]+/, '')
+    .split('/')
+    .filter(Boolean);
+  return parts.length >= 2 ? parts.slice(-2).join('/') : null;
+}
+
 export function isAccountCoolingDown(account: Pick<KaggleAccount, 'cooldownUntil'>): boolean {
   return !!account.cooldownUntil && new Date(account.cooldownUntil).getTime() > Date.now();
 }

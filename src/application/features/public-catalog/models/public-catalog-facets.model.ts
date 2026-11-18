@@ -19,6 +19,14 @@ export class PublicCatalogFacetsModel {
   purities?: string[];
 
   @Expose()
+  @ApiPropertyOptional({ type: [String] })
+  sizes?: string[];
+
+  @Expose()
+  @ApiPropertyOptional()
+  hallmarkedCount?: number;
+
+  @Expose()
   @ApiPropertyOptional()
   minWeight?: number;
 

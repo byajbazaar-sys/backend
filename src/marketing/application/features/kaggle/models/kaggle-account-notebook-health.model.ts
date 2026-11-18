@@ -1,7 +1,8 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
 import { KaggleNotebookHealthModel } from './kaggle-notebook-health.model';
+import { KaggleWarmWorkerHealthModel } from './kaggle-warm-worker-health.model';
 
 export class KaggleAccountNotebookHealthModel {
   @ApiProperty() @Expose() account: string;
@@ -14,4 +15,8 @@ export class KaggleAccountNotebookHealthModel {
   @Expose()
   @Type(() => KaggleNotebookHealthModel)
   image: KaggleNotebookHealthModel;
+  @ApiPropertyOptional({ type: KaggleWarmWorkerHealthModel, nullable: true })
+  @Expose()
+  @Type(() => KaggleWarmWorkerHealthModel)
+  worker: KaggleWarmWorkerHealthModel | null;
 }

@@ -11,6 +11,7 @@ import {
   MarketingScene,
   RenderClipSpec,
   RenderJob,
+  WorkerSessionPayload,
   BUSY_RENDER_STATUSES,
   CAMPAIGN_SCENES,
   EAssetStatus,
@@ -56,17 +57,25 @@ import { buildLogoImagePrompt, buildSceneVideoPrompt, LOGO_VIDEO_PROMPT, VIDEO_N
 import {
   isAccountCoolingDown,
   kaggleJobStatus,
+  jobTarget,
+  kernelSlugOf,
   MIN_GPU_HOURS,
   STARTING_MAX_MS,
   buildImageWorkerNotebook,
   ImageNotebookJob,
   buildWorkerNotebook,
+  buildWorkerSessionNotebook,
+  modelCacheContents,
+  modelsDatasetSlug,
   NotebookClip,
+  NotebookModelCache,
   WorkerNotebookJob,
   signMarketingWorkerToken,
   verifyMarketingWorkerToken,
 } from '../utils';
 import { MarketingWorkerEvent } from './marketing-worker-event';
+import { WorkerSessionAnswer } from './worker-session-answer';
+import { WorkerSessionPoll } from './worker-session-poll';
 
 /** No progress for this long while on a worker → the Kaggle session died. */
 const STALE_JOB_MS = 45 * 60 * 1000;
@@ -94,6 +103,18 @@ const AUTO_SETUP_RETRY_MS = 30 * 60 * 1000;
 const KAGGLE_QUEUED_MAX_MS = 30 * 60 * 1000;
 /** "Renders waiting but no account can take them" is logged/alerted at most this often (per server). */
 const NO_CAPACITY_ALERT_MS = 30 * 60 * 1000;
+/** A warm session is given a job only with at least this much Kaggle session time left (else it stops). */
+const SESSION_MIN_LEFT_SECONDS = 45 * 60;
+/** Extra idle warm sessions (another one is already warm) stop after this long. */
+const EXTRA_IDLE_MS = 5 * 60 * 1000;
+/** Idle warm sessions poll this often. */
+const SESSION_POLL_SECONDS = 10;
+/** An idle warm session that stopped polling this long ago is gone. */
+const SESSION_LOST_MS = 5 * 60 * 1000;
+/** A job a session finished is checked for its final event after this long. */
+const SETTLE_GRACE_MS = 2 * 60 * 1000;
+/** Model cache builds are retried at most this often per account. */
+const MODEL_CACHE_RETRY_MS = 6 * 60 * 60 * 1000;
 
 /** A ready account that can take render jobs in this dispatch round. */
 interface DispatchCandidate {
@@ -476,9 +497,9 @@ export class MarketingRenderService {
     const busy = await this.jobs.countBusyByWorker();
     const accounts = (await this.accounts.list()).filter((a) => workers.has(a.username));
 
-    // New accounts run their one-time setup notebook.
+    // New accounts run their one-time setup notebook; ready ones may (re)build their model cache with it.
     for (const account of accounts) {
-      if (account.status !== EKaggleAccountStatus.SettingUp) continue;
+      if (account.status !== EKaggleAccountStatus.SettingUp && account.status !== EKaggleAccountStatus.Ready) continue;
       if ((busy[account.username] ?? 0) >= workers.get(account.username).concurrency) continue;
       const job = await this.jobs.claimNext(account.username, false);
       if (!job) continue;
@@ -505,6 +526,12 @@ export class MarketingRenderService {
 
     if (candidates.length === 0) await this.reportNoCapacity();
 
+    if (this.config.publicApiBaseUrl) {
+      await this.dispatchSessions(candidates);
+      return;
+    }
+
+    // Without a public API URL notebooks cannot pull work: one notebook push per job.
     let workLeft = true;
     for (;;) {
       const candidate = pickDispatchCandidate(candidates);
@@ -527,6 +554,245 @@ export class MarketingRenderService {
         { delaySeconds: RECHECK_DELAY_SECONDS, deduplicationId: `marketing-dispatch-${window}` },
       );
     }
+  }
+
+  /**
+   * Warm sessions pull waiting jobs themselves (`nextForSession`). Here: retire dead sessions, then start one new
+   * session per waiting job that no idle or booting session will pick up — so a busy worker never delays the next
+   * job, and nothing new starts while a warm one is free.
+   */
+  private async dispatchSessions(candidates: DispatchCandidate[]): Promise<void> {
+    await this.reapSessions();
+    const waiting = await this.jobs.countWaiting();
+    const free = (await this.jobs.listSessions()).filter(
+      (s) => s.status === ERenderJobStatus.Starting || s.payload.session?.state !== 'busy',
+    ).length;
+    let need = waiting - free;
+    while (need > 0) {
+      const candidate = pickDispatchCandidate(candidates);
+      if (!candidate) break;
+      candidate.used += 1;
+      candidate.lastAssignedAt = Date.now();
+      const slot = await this.freeSlot(candidate.username, candidate.concurrency);
+      if (await this.startSession(candidate.username, slot)) need -= 1;
+      else candidate.used = candidate.concurrency;
+    }
+    if (need > 0 || waiting > free) {
+      const window = Math.floor(Date.now() / (RECHECK_DELAY_SECONDS * 1000));
+      await this.scheduler.schedule(
+        { step: 'dispatch' },
+        { delaySeconds: RECHECK_DELAY_SECONDS, deduplicationId: `marketing-dispatch-${window}` },
+      );
+    }
+  }
+
+  /** Pushes a warm worker session notebook (with the account's model dataset mounted when it has one). */
+  private async startSession(workerId: string, slot: number): Promise<boolean> {
+    const session = await this.jobs.create({
+      kind: ERenderJobKind.Worker,
+      workerId,
+      slot,
+      status: ERenderJobStatus.Starting,
+      payload: { clips: [], merge: null, session: { state: 'starting', jobsRun: 0 } },
+      progress: 0,
+      stageMessage: 'Warm GPU worker booting',
+      attempts: 0,
+      startedAt: new Date(),
+    });
+    const account = await this.accounts.find(workerId);
+    try {
+      const notebook = buildWorkerSessionNotebook({
+        jobId: session.id,
+        token: signMarketingWorkerToken(session.id),
+        apiBaseUrl: this.config.publicApiBaseUrl,
+        sessionSeconds: Math.max(3600, this.config.kaggleSessionHours * 3600 - SESSION_MARGIN_SECONDS),
+      });
+      const pushed = await this.pool.pushNotebook(
+        workerId,
+        { name: `byajbazaar-worker-${slot}`, title: `ByajBazaar Worker ${slot}` },
+        notebook,
+        { datasets: account?.modelsDataset ? [account.modelsDataset] : [] },
+      );
+      await this.jobs.update(session.id, { kernelRef: pushed.ref });
+      await this.accounts.update(workerId, { lastAssignedAt: new Date(), lastError: null });
+      this.logger.info({ account: workerId, slot, session: session.id }, 'Warm GPU worker started');
+      return true;
+    } catch (err) {
+      const reason = (err as Error).message;
+      await this.endSession(session, `Could not start: ${reason}`, true);
+      await this.accounts.update(workerId, {
+        cooldownUntil: new Date(Date.now() + START_FAILURE_COOLDOWN_MS),
+        lastError: `Could not start a notebook: ${reason}`.slice(0, 2000),
+      });
+      await this.healthEvent('KAGGLE_ACCOUNT_COOLDOWN', workerId, {
+        reason,
+        minutes: START_FAILURE_COOLDOWN_MS / 60_000,
+        sessionId: session.id,
+      });
+      return false;
+    }
+  }
+
+  /** Sessions that never booted, or stopped polling while idle, are closed (their slot frees up). */
+  private async reapSessions(): Promise<void> {
+    for (const session of await this.jobs.listSessions()) {
+      const silentMs = Date.now() - new Date(session.updatedAt ?? session.startedAt ?? Date.now()).getTime();
+      if (session.status === ERenderJobStatus.Starting && silentMs > STARTING_MAX_MS) {
+        const kernelName = kernelSlugOf(session.kernelRef);
+        const state =
+          session.workerId && kernelName ? (await this.pool.sessionStatus(session.workerId, kernelName)).state : null;
+        if (state === 'queued' && session.workerId) {
+          await this.accounts.update(session.workerId, {
+            cooldownUntil: new Date(Date.now() + START_FAILURE_COOLDOWN_MS),
+            lastError: 'Kaggle kept the session queued (no GPU free on the account)',
+          });
+        }
+        await this.endSession(session, 'The warm GPU worker never reported in', true);
+        continue;
+      }
+      if (session.status !== ERenderJobStatus.Running || silentMs <= SESSION_LOST_MS) continue;
+      const current = session.payload.session?.currentJobId
+        ? await this.jobs.findById(session.payload.session.currentJobId)
+        : null;
+      // A busy session is silent while its job runs: the job's own watchdog covers it.
+      if (current && BUSY_RENDER_STATUSES.includes(current.status)) continue;
+      await this.endSession(session, 'The warm GPU worker stopped responding', true);
+    }
+  }
+
+  private async endSession(session: RenderJob, reason: string, failed = false): Promise<void> {
+    await this.jobs.update(session.id, {
+      status: failed ? ERenderJobStatus.Failed : ERenderJobStatus.Done,
+      stageMessage: reason.slice(0, 250),
+      error: failed ? reason.slice(0, 2000) : null,
+      finishedAt: new Date(),
+      payload: { ...session.payload, session: { ...(session.payload.session ?? { state: 'idle' }), state: 'idle' } },
+    });
+    this.logger.info({ session: session.id, account: session.workerId, reason }, 'Warm GPU worker closed');
+  }
+
+  /**
+   * A warm session asks for work (also its heartbeat). Settles the job it just ran, then hands it the oldest waiting
+   * job (its notebook cells), or tells it to keep polling, or to stop: idle too long (only the last idle session
+   * stays warm for warmIdleMinutes; extra ones stop after EXTRA_IDLE_MS), too little session time left, or the
+   * account can no longer render. Null when the token is not valid.
+   */
+  async nextForSession(request: WorkerSessionPoll): Promise<WorkerSessionAnswer | null> {
+    if (!request.sessionId || !verifyMarketingWorkerToken(request.sessionId, request.token)) return null;
+    const session = await this.jobs.findById(request.sessionId);
+    if (!session || session.kind !== ERenderJobKind.Worker) return null;
+    if (!BUSY_RENDER_STATUSES.includes(session.status)) return { stop: true, reason: 'the session was closed' };
+
+    const state = session.payload.session ?? { state: 'starting' as const };
+    let settle = state.settle ?? null;
+    if (state.currentJobId) {
+      if (request.jobError) await this.settleSessionJob(session, state.currentJobId, request.jobError);
+      else settle = { jobId: state.currentJobId, at: new Date().toISOString() };
+    }
+    if (settle && Date.now() - Date.parse(settle.at) > SETTLE_GRACE_MS) {
+      await this.settleSessionJob(session, settle.jobId, null);
+      settle = null;
+    }
+
+    const remaining = Math.max(0, Number(request.remainingSeconds) || 0);
+    const base: WorkerSessionPayload = {
+      ...state,
+      currentJobId: null,
+      settle,
+      remainingSeconds: remaining,
+      pipeline: request.pipeline ?? state.pipeline ?? null,
+    };
+    const stop = async (reason: string): Promise<WorkerSessionAnswer> => {
+      await this.endSession({ ...session, payload: { ...session.payload, session: base } }, `Stopped: ${reason}`);
+      await this.scheduler.schedule({ step: 'dispatch' }); // a fresh session takes over if work is waiting
+      return { stop: true, reason };
+    };
+
+    if (remaining < SESSION_MIN_LEFT_SECONDS) return stop('the Kaggle session time is nearly used up');
+    const account = session.workerId ? await this.accounts.find(session.workerId) : null;
+    const enabled = (await this.pool.workers()).some((w) => w.id === session.workerId);
+    if (!account || !enabled || account.status !== EKaggleAccountStatus.Ready || isAccountCoolingDown(account)) {
+      return stop('the account is not available for renders');
+    }
+    if (!(await this.gpuQuota(account)).usable) return stop('the account is out of GPU hours');
+
+    const job = await this.jobs.claimNextForSession(session);
+    if (job) return this.handToSession(session, base, job, remaining);
+
+    const now = Date.now();
+    const idleSince = state.state === 'idle' && state.idleSince ? state.idleSince : new Date(now).toISOString();
+    const idleMs = now - Date.parse(idleSince);
+    const idleOthers = (await this.jobs.listSessions()).filter(
+      (s) => s.id !== session.id && s.status === ERenderJobStatus.Running && s.payload.session?.state === 'idle',
+    );
+    // The session with the most time left (ties: lowest id) stays warm; the others go home early.
+    const keeper = idleOthers.every((s) => {
+      const left = s.payload.session?.remainingSeconds ?? 0;
+      return left < remaining || (left === remaining && s.id > session.id);
+    });
+    const limitMs = (await this.settings.kaggle()).warmIdleMinutes * 60_000;
+    if (idleMs >= (keeper ? limitMs : Math.min(limitMs, EXTRA_IDLE_MS))) {
+      return stop(`idle for ${Math.round(idleMs / 60_000)} min`);
+    }
+    await this.jobs.update(session.id, {
+      status: ERenderJobStatus.Running,
+      stageMessage: `Warm · idle ${Math.floor(idleMs / 60_000)} min`,
+      payload: { ...session.payload, session: { ...base, state: 'idle', idleSince } },
+    });
+    return { pollSeconds: SESSION_POLL_SECONDS };
+  }
+
+  /** The job a session ran is still marked busy although the session moved on: it crashed (or never reported). */
+  private async settleSessionJob(session: RenderJob, jobId: string, jobError?: string | null): Promise<void> {
+    const job = await this.jobs.findById(jobId);
+    if (!job || !BUSY_RENDER_STATUSES.includes(job.status) || job.payload.sessionJobId !== session.id) return;
+    if (jobError) await this.failJob(job, `The GPU worker crashed: ${jobError}`);
+    else await this.restartJob(job, 'The job ended without reporting a result', false, false, true);
+  }
+
+  private async handToSession(
+    session: RenderJob,
+    base: WorkerSessionPayload,
+    job: RenderJob,
+    remaining: number,
+  ): Promise<WorkerSessionAnswer> {
+    let notebook: Record<string, unknown>;
+    try {
+      if (!this.config.websocketUrl) throw new Error('WEBSOCKET_API_URL is not configured');
+      notebook =
+        job.kind === ERenderJobKind.Images
+          ? buildImageWorkerNotebook(await this.imageNotebookJob(job))
+          : buildWorkerNotebook(await this.notebookJob(job, Math.max(1800, remaining - SESSION_MARGIN_SECONDS)));
+    } catch (err) {
+      await this.failJob(job, `Could not start the GPU worker: ${(err as Error).message}`);
+      return { pollSeconds: 1 };
+    }
+    await this.jobs.update(session.id, {
+      status: ERenderJobStatus.Running,
+      stageMessage: `Running: ${jobTarget(job)}`.slice(0, 250),
+      payload: {
+        ...session.payload,
+        session: { ...base, state: 'busy', currentJobId: job.id, idleSince: null, jobsRun: (base.jobsRun ?? 0) + 1 },
+      },
+    });
+    if (job.workerId) await this.accounts.update(job.workerId, { lastAssignedAt: new Date(), lastError: null });
+    const message = job.attempts > 0 ? 'Continuing on a warm GPU worker' : 'Starting on a warm GPU worker';
+    const progress = Math.max(1, job.progress);
+    await this.jobs.update(job.id, { stageMessage: message, progress });
+    await this.reportJobProgress(
+      job,
+      progress,
+      message,
+      job.kind === ERenderJobKind.Images ? ECampaignStatus.Planning : ECampaignStatus.Rendering,
+      ERenderJobStatus.Starting,
+    );
+    await this.scheduleWatch(job.id);
+    const cells = ((notebook.cells as { cell_type: string; source: string }[]) ?? [])
+      .filter((cell) => cell.cell_type === 'code')
+      .map((cell) => cell.source);
+    return {
+      job: { id: job.id, kind: job.kind, pipeline: job.kind === ERenderJobKind.Images ? 'image' : 'video', cells },
+    };
   }
 
   /**
@@ -596,11 +862,39 @@ export class MarketingRenderService {
       }
     }
 
+    if (this.config.publicApiBaseUrl) await this.queueModelCaches(configured.map((w) => w.id));
+
     const listed = new Set(configured.map((w) => w.id));
     for (const account of known.values()) {
       if (!listed.has(account.username) && account.status !== EKaggleAccountStatus.Disabled) {
         await this.accounts.upsert({ username: account.username, status: EKaggleAccountStatus.Disabled });
       }
+    }
+  }
+
+  /**
+   * Ready accounts without the current model dataset get a cache-only SETUP job (at most every
+   * MODEL_CACHE_RETRY_MS); they keep rendering meanwhile, downloading the models in each session.
+   */
+  private async queueModelCaches(usernames: string[]): Promise<void> {
+    const dataset = modelsDatasetSlug(!!this.config.huggingFaceToken);
+    for (const account of await this.accounts.list()) {
+      if (!usernames.includes(account.username) || account.status !== EKaggleAccountStatus.Ready) continue;
+      if (account.modelsDataset === `${account.username}/${dataset}`) continue;
+      if (account.modelsAttemptAt && Date.now() - new Date(account.modelsAttemptAt).getTime() < MODEL_CACHE_RETRY_MS) {
+        continue;
+      }
+      if (await this.jobs.findOpenFor({ kind: ERenderJobKind.Setup, workerId: account.username })) continue;
+      await this.accounts.update(account.username, { modelsAttemptAt: new Date() });
+      await this.jobs.create({
+        kind: ERenderJobKind.Setup,
+        workerId: account.username,
+        status: ERenderJobStatus.Waiting,
+        payload: { clips: [], merge: null, cacheOnly: true },
+        progress: 0,
+        attempts: 0,
+      });
+      this.logger.info({ account: account.username, dataset }, 'Queued the Kaggle model cache build');
     }
   }
 
@@ -646,7 +940,7 @@ export class MarketingRenderService {
         result.cooldownsCleared.push(account.username);
       }
     }
-    for (const job of await this.jobs.listBusy()) {
+    for (const job of (await this.jobs.listBusy()).filter((j) => j.kind !== ERenderJobKind.Worker)) {
       const reason = await this.stuckReason(job, 10 * 60 * 1000);
       if (!reason) continue;
       await this.restartJob(job, `${reason} (restarted by an admin)`, false, true);
@@ -675,7 +969,7 @@ export class MarketingRenderService {
   private async stuckReason(job: RenderJob, minSilentMs: number): Promise<string | null> {
     const silentMs = Date.now() - new Date(job.updatedAt ?? job.startedAt ?? Date.now()).getTime();
     if (silentMs < minSilentMs) return null;
-    const kernelName = job.kernelRef?.split('/')[1];
+    const kernelName = kernelSlugOf(job.kernelRef);
     if (!job.workerId || !kernelName) return 'The GPU worker never started';
     const { state } = await this.pool.sessionStatus(job.workerId, kernelName);
     if (state === 'complete' || state === 'error' || state === 'cancelled') return `The Kaggle session ${state}`;
@@ -810,14 +1104,22 @@ export class MarketingRenderService {
     );
   }
 
-  private async notebookJob(job: RenderJob): Promise<WorkerNotebookJob> {
+  /** `budgetSeconds`: session time the job may use (a warm session passes what it has left). */
+  private async notebookJob(job: RenderJob, budgetSeconds?: number): Promise<WorkerNotebookJob> {
     const base = {
       jobId: job.id,
       token: signMarketingWorkerToken(job.id),
       wsUrl: this.config.websocketUrl,
       apiBaseUrl: this.config.publicApiBaseUrl,
     };
-    if (job.kind === ERenderJobKind.Setup) return { ...base, kind: 'setup' };
+    if (job.kind === ERenderJobKind.Setup) {
+      return {
+        ...base,
+        kind: 'setup',
+        modelCache: await this.modelCacheFor(job),
+        hfToken: this.config.huggingFaceToken,
+      };
+    }
     if (job.kind === ERenderJobKind.Images) throw new Error('Image jobs require the image notebook');
 
     const campaign = job.campaignId ? await this.campaigns.findById(job.campaignId) : null;
@@ -865,8 +1167,24 @@ export class MarketingRenderService {
       preset: campaign?.quality === 'hd' ? 'reel_hq' : 'reel_fast',
       clips,
       merge,
-      sessionBudgetSeconds: Math.max(3600, this.config.kaggleSessionHours * 3600 - SESSION_MARGIN_SECONDS),
+      sessionBudgetSeconds:
+        budgetSeconds ?? Math.max(3600, this.config.kaggleSessionHours * 3600 - SESSION_MARGIN_SECONDS),
     };
+  }
+
+  /**
+   * What the setup notebook publishes as the account's private model dataset (with the account's own credentials),
+   * or undefined when it already has the current one. Only with warm sessions — per-job notebooks don't mount it.
+   */
+  private async modelCacheFor(job: RenderJob): Promise<NotebookModelCache | undefined> {
+    if (!job.workerId || !this.config.publicApiBaseUrl) return undefined;
+    const account = await this.accounts.find(job.workerId);
+    const klein9b = !!this.config.huggingFaceToken;
+    const dataset = `${job.workerId}/${modelsDatasetSlug(klein9b)}`;
+    if (account?.modelsDataset === dataset) return undefined;
+    const { username, key } = await this.pool.accountCredentials(job.workerId);
+    await this.accounts.update(job.workerId, { modelsAttemptAt: new Date() });
+    return { dataset, username, key, ...modelCacheContents(klein9b) };
   }
 
   private async imageNotebookJob(job: RenderJob): Promise<ImageNotebookJob> {
@@ -901,6 +1219,7 @@ export class MarketingRenderService {
       title: generation.title,
       style: generation.style,
       targets,
+      hfToken: this.config.huggingFaceToken,
     };
   }
 
@@ -917,10 +1236,12 @@ export class MarketingRenderService {
     if (!job || !BUSY_RENDER_STATUSES.includes(job.status)) return true; // late or duplicate
 
     if (job.kind === ERenderJobKind.Setup) return this.handleSetupEvent(job, event);
+    if (job.kind === ERenderJobKind.Worker) return this.handleSessionEvent(job, event);
 
     if (event.stage === 'sessionExpiring') {
       const progress = Math.max(job.progress ?? 0, Math.min(99, Math.round(Number(event.progress) || 0)));
-      await this.restartJob({ ...job, progress }, 'The Kaggle session reached its time limit', true);
+      // In a warm session the session itself stops at its next poll (too little time left).
+      await this.restartJob({ ...job, progress }, 'The Kaggle session reached its time limit', true, false, true);
       return true;
     }
 
@@ -1197,22 +1518,76 @@ export class MarketingRenderService {
     });
   }
 
+  private async handleSessionEvent(session: RenderJob, event: MarketingWorkerEvent): Promise<boolean> {
+    if (event.status === 'completed' || event.status === 'failed') {
+      await this.endSession(session, event.message || 'Stopped', event.status === 'failed');
+      await this.scheduler.schedule({ step: 'dispatch' });
+      return true;
+    }
+    const ready = event.stage === 'sessionReady';
+    await this.jobs.update(session.id, {
+      status: ready ? ERenderJobStatus.Running : session.status,
+      stageMessage: (event.message || session.stageMessage || '').slice(0, 250),
+      payload: {
+        ...session.payload,
+        session: {
+          ...(session.payload.session ?? { state: 'starting' }),
+          ...(typeof event.modelsCached === 'boolean' ? { modelsCached: event.modelsCached } : {}),
+        },
+      },
+    });
+    return true;
+  }
+
   private async handleSetupEvent(job: RenderJob, event: MarketingWorkerEvent): Promise<boolean> {
-    if (event.status === 'completed') {
-      await this.jobs.update(job.id, { status: ERenderJobStatus.Done, progress: 100, finishedAt: new Date() });
+    const markReady = async (): Promise<void> => {
+      const account = job.workerId ? await this.accounts.find(job.workerId) : null;
+      if (account?.status === EKaggleAccountStatus.Ready && !event.gpuInfo) return;
       await this.accounts.upsert({
         username: job.workerId,
         status: EKaggleAccountStatus.Ready,
-        readyAt: new Date(),
-        gpuInfo: event.gpuInfo?.slice(0, 250) ?? null,
+        readyAt: account?.readyAt ?? new Date(),
+        gpuInfo: event.gpuInfo?.slice(0, 250) ?? account?.gpuInfo ?? null,
         lastError: null,
       });
-      this.logger.info({ account: job.workerId, gpu: event.gpuInfo }, 'Kaggle account ready');
-      await this.scheduler.schedule({ step: 'dispatch' }); // start using it
+      if (account?.status !== EKaggleAccountStatus.Ready) {
+        this.logger.info({ account: job.workerId, gpu: event.gpuInfo }, 'Kaggle account ready');
+        await this.scheduler.schedule({ step: 'dispatch' }); // start using it
+      }
+    };
+    if (event.stage === 'accountReady') {
+      // Checks passed; the same session goes on building the model cache — renders may start meanwhile.
+      await markReady();
+      await this.jobs.update(job.id, {
+        status: ERenderJobStatus.Running,
+        progress: Number(event.progress) || 10,
+        stageMessage: (event.message || 'Building the model cache').slice(0, 250),
+      });
+      return true;
+    }
+    if (event.status === 'completed') {
+      await this.jobs.update(job.id, {
+        status: ERenderJobStatus.Done,
+        progress: 100,
+        stageMessage: (event.message || 'Done').slice(0, 250),
+        finishedAt: new Date(),
+      });
+      await markReady();
+      if (event.modelsDataset && job.workerId) {
+        await this.accounts.update(job.workerId, { modelsDataset: event.modelsDataset.slice(0, 200) });
+        this.logger.info({ account: job.workerId, dataset: event.modelsDataset }, 'Kaggle model cache ready');
+      } else if (event.modelsCacheError) {
+        this.logger.warn({ account: job.workerId, err: event.modelsCacheError }, 'Kaggle model cache not built');
+        await this.healthEvent('KAGGLE_MODEL_CACHE_FAILED', job.workerId ?? null, { error: event.modelsCacheError });
+      }
     } else if (event.status === 'failed') {
       await this.failJob(job, event.message || 'Account setup failed');
     } else {
-      await this.jobs.update(job.id, { status: ERenderJobStatus.Running, progress: Number(event.progress) || 0 });
+      await this.jobs.update(job.id, {
+        status: ERenderJobStatus.Running,
+        progress: Number(event.progress) || 0,
+        stageMessage: (event.message || job.stageMessage || '').slice(0, 250),
+      });
     }
     return true;
   }
@@ -1291,7 +1666,10 @@ export class MarketingRenderService {
   /** Busy jobs with no progress for a while: continue them in a new session (or fail once out of restarts). */
   private async failStaleJobs(): Promise<void> {
     const stale = await this.jobs.findStale(BUSY_RENDER_STATUSES, new Date(Date.now() - STALE_JOB_MS));
-    for (const job of stale) await this.restartJob(job, 'The GPU worker stopped responding');
+    // Warm sessions are quiet while their job runs; reapSessions() handles them.
+    for (const job of stale.filter((j) => j.kind !== ERenderJobKind.Worker)) {
+      await this.restartJob(job, 'The GPU worker stopped responding');
+    }
   }
 
   // ---------------------------------------------------------------- session restarts
@@ -1312,7 +1690,7 @@ export class MarketingRenderService {
     const job = await this.jobs.findById(jobId);
     if (!job || !BUSY_RENDER_STATUSES.includes(job.status)) return;
     const silentMs = Date.now() - new Date(job.updatedAt ?? job.startedAt ?? Date.now()).getTime();
-    const kernelName = job.kernelRef?.split('/')[1];
+    const kernelName = kernelSlugOf(job.kernelRef);
     const { state, failureMessage } =
       job.workerId && kernelName
         ? await this.pool.sessionStatus(job.workerId, kernelName)
@@ -1357,7 +1735,23 @@ export class MarketingRenderService {
    * Continues a job in a fresh Kaggle session (any free account): finished clips are kept and skipped. Gives up after
    * MAX_RESTARTS. Account setup jobs are not continued — they fail and are retried by the account sync.
    */
-  private async restartJob(job: RenderJob, reason: string, planned = false, force = false): Promise<void> {
+  /** `keepSession`: the warm session the job ran in is still alive (it asked for more work / will stop itself). */
+  private async restartJob(
+    job: RenderJob,
+    reason: string,
+    planned = false,
+    force = false,
+    keepSession = false,
+  ): Promise<void> {
+    if (job.kind === ERenderJobKind.Worker) {
+      await this.endSession(job, reason, true);
+      return;
+    }
+    if (job.payload.sessionJobId && !keepSession) {
+      // The session died with the job: close it so its slot frees up.
+      const session = await this.jobs.findById(job.payload.sessionJobId);
+      if (session && BUSY_RENDER_STATUSES.includes(session.status)) await this.endSession(session, reason, true);
+    }
     if (!planned) {
       await this.healthEvent('KAGGLE_JOB_RESTARTED', job.workerId ?? null, {
         jobId: job.id,
@@ -1389,6 +1783,7 @@ export class MarketingRenderService {
       attempts: job.attempts + 1,
       progress: job.progress,
       stageMessage: message,
+      payload: { ...job.payload, sessionJobId: null },
     });
     await this.reportJobProgress(
       { ...job, attempts: job.attempts + 1 },
@@ -1408,6 +1803,11 @@ export class MarketingRenderService {
       finishedAt: new Date(),
     });
     if (job.kind === ERenderJobKind.Setup && job.workerId) {
+      const account = await this.accounts.find(job.workerId);
+      if (job.payload.cacheOnly || account?.status === EKaggleAccountStatus.Ready) {
+        this.logger.warn({ account: job.workerId, message }, 'Kaggle model cache build failed — account stays ready');
+        return;
+      }
       await this.accounts.upsert({
         username: job.workerId,
         status: EKaggleAccountStatus.Failed,
@@ -1415,6 +1815,7 @@ export class MarketingRenderService {
       });
       return;
     }
+    if (job.kind === ERenderJobKind.Worker) return;
     if (job.workerId) await this.accounts.recordOutcome(job.workerId, 'failed');
     if (job.kind === ERenderJobKind.Images) {
       await this.failImageTargets(job, message);

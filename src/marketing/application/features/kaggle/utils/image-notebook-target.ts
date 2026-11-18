@@ -1,6 +1,7 @@
 /**
  * Kaggle image notebook, built per job. Quality and product accuracy come first; T4 × 2 is split by role:
- * GPU 0 paints with FLUX.2 [klein] 4B (ComfyUI), GPU 1 keeps Qwen3-VL to plan the shots and judge every take.
+ * GPU 0 paints with FLUX.2 [klein] 9B (ComfyUI; the open 4B without MARKETING_HF_TOKEN), GPU 1 keeps Qwen3-VL to plan
+ * the shots and judge every take.
  *  1. Qwen3-VL (8B on T4 × 2, 4B on one GPU) reads the photo, boxes the jewellery and writes per shot a scene prompt,
  *     a full-photo prompt for AI mode, where the product sits and a camera-motion prompt.
  *  2. exact mode: BiRefNet cuts the jewellery out inside that box; klein paints only around the pinned cut-out and

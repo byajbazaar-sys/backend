@@ -1,6 +1,12 @@
 import { IS3StorageOptions } from '@shared-libs';
 
 /**
+ * Marketing bucket prefixes served by the media CDN Worker (cloudflare/image-worker/wrangler.media.toml,
+ * ALLOWED_PREFIXES): campaign / photoshoot images, scene clips and Reels, brand logos, Instagram post images.
+ */
+export const MARKETING_MEDIA_CDN_PREFIXES = ['campaigns/', 'brands/', 'photoshoots/', 'instagram/'] as const;
+
+/**
  * Marketing runs on its own resources (database, S3 bucket, QStash queue), configured with MARKETING_* env vars.
  * Every value is optional: without them the module falls back to the main database / bucket and runs jobs
  * without the queue, so ByajBazaar keeps booting even when marketing is not set up.
@@ -22,6 +28,10 @@ export class MarketingConfig {
     bucket: env('MARKETING_S3_BUCKET_NAME') ?? env('S3_BUCKET_NAME') ?? '',
     region: env('MARKETING_S3_BUCKET_REGION') ?? env('S3_BUCKET_REGION') ?? 'ap-south-1',
     endpoint: env('MARKETING_S3_ENDPOINT') ?? (env('MARKETING_S3_BUCKET_NAME') ? undefined : env('S3_ENDPOINT')),
+    // Media CDN (Cloudflare Worker in front of the private marketing bucket), e.g. https://media.byajbazaar.com.
+    // Set: stable cached URLs for images and videos. Unset: signed B2 URLs, as before.
+    imageCdnUrl: env('MARKETING_MEDIA_CDN_URL')?.replace(/\/+$/, ''),
+    cdnPrefixes: MARKETING_MEDIA_CDN_PREFIXES,
   };
 
   readonly queue = {
@@ -64,6 +74,11 @@ export class MarketingConfig {
     graphApiVersion: env('MARKETING_INSTAGRAM_GRAPH_API_VERSION') ?? 'v27.0',
   };
   readonly kaggleMachineShape = env('KAGGLE_MACHINE_SHAPE') ?? 'NvidiaTeslaT4';
+  /**
+   * Hugging Face token (read access) of an account that accepted the FLUX.2 [klein] 9B licence: the image notebooks
+   * then paint with 9B. Without it they use the open 4B model. Passed into the private Kaggle notebooks.
+   */
+  readonly huggingFaceToken = env('MARKETING_HF_TOKEN');
   /** Kaggle's GPU session limit; the notebook hands over to a new session before reaching it. */
   readonly kaggleSessionHours = Number(env('KAGGLE_SESSION_HOURS') ?? 12) || 12;
 

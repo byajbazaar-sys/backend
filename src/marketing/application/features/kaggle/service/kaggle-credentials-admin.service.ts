@@ -6,6 +6,7 @@ import {
   KaggleAccount,
   KaggleCredential,
   EKaggleAccountStatus,
+  ERenderJobKind,
   IKaggleAccountsRepository,
   KAGGLE_ACCOUNTS_REPOSITORY,
   IKaggleCredentialsRepository,
@@ -141,7 +142,10 @@ export class KaggleCredentialsAdminService {
   }
 
   async updateSettings(patch: KaggleSettingsModel): Promise<KaggleSettingsModel> {
-    const saved = await this.settings.saveKaggle({ autoRecover: patch.autoRecover });
+    const saved = await this.settings.saveKaggle({
+      autoRecover: patch.autoRecover,
+      ...(patch.warmIdleMinutes !== undefined ? { warmIdleMinutes: patch.warmIdleMinutes } : {}),
+    });
     this.logger.info(saved, 'Kaggle settings updated');
     return saved;
   }
@@ -151,21 +155,23 @@ export class KaggleCredentialsAdminService {
     const [capacity, running] = await Promise.all([this.render.capacity(), this.jobs.listBusy()]);
     return {
       ...capacity,
-      running: running.map((job) => ({
-        id: job.id,
-        kind: job.kind,
-        notebook: notebookOf(job.kind),
-        target: jobTarget(job),
-        kernelRef: job.kernelRef ?? null,
-        status: job.status,
-        account: job.workerId ?? null,
-        slot: job.slot ?? null,
-        progress: job.progress,
-        stageMessage: job.stageMessage ?? null,
-        attempts: job.attempts,
-        startedAt: job.startedAt ?? null,
-        updatedAt: job.updatedAt ?? null,
-      })),
+      running: running
+        .filter((job) => job.kind !== ERenderJobKind.Worker)
+        .map((job) => ({
+          id: job.id,
+          kind: job.kind,
+          notebook: notebookOf(job.kind),
+          target: jobTarget(job),
+          kernelRef: job.kernelRef ?? null,
+          status: job.status,
+          account: job.workerId ?? null,
+          slot: job.slot ?? null,
+          progress: job.progress,
+          stageMessage: job.stageMessage ?? null,
+          attempts: job.attempts,
+          startedAt: job.startedAt ?? null,
+          updatedAt: job.updatedAt ?? null,
+        })),
     };
   }
 
@@ -283,6 +289,7 @@ export class KaggleCredentialsAdminService {
       status: account?.status ?? null,
       lastError: account?.lastError ?? null,
       gpuInfo: account?.gpuInfo ?? null,
+      modelsDataset: account?.modelsDataset ?? null,
       readyAt: account?.readyAt ?? null,
       gpuHoursLeft: account?.gpuHoursLeft ?? null,
       quotaCheckedAt: account?.quotaCheckedAt ?? null,

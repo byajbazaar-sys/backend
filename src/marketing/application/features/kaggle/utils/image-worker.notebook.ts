@@ -7,11 +7,20 @@ export const IMAGE_MODELS = {
   segmenter: 'ZhengPeng7/BiRefNet',
   analystLarge: 'Qwen/Qwen3-VL-8B-Instruct',
   analystSmall: 'Qwen/Qwen3-VL-4B-Instruct',
-  /** FLUX.2 [klein] 4B (Apache-2.0, full-precision weights) for ComfyUI — paints every shot in both modes. */
-  kleinDiffusion: 'https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/resolve/main/flux-2-klein-4b.safetensors',
+  /**
+   * FLUX.2 [klein] 9B distilled (fp8 weights, fp16 compute on T4) for ComfyUI — paints every shot in both modes.
+   * Gated on Hugging Face and under the FLUX Non-Commercial License: needs MARKETING_HF_TOKEN from an account that
+   * accepted it (and a BFL commercial licence for business use).
+   */
+  kleinDiffusion:
+    'https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors',
   kleinTextEncoder:
-    'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors',
+    'https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors',
   kleinVae: 'https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors',
+  /** FLUX.2 [klein] 4B (Apache-2.0, open) — used when no Hugging Face token is configured. */
+  klein4bDiffusion: 'https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/resolve/main/flux-2-klein-4b.safetensors',
+  klein4bTextEncoder:
+    'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors',
 } as const;
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
@@ -27,6 +36,11 @@ import requests, websocket
 
 JOB = json.loads(__JOB_JSON__)
 MODELS = json.loads(__MODELS_JSON__)
+# Inside a warm worker session WORKER survives between jobs: loaded analyst, running ComfyUI, installed packages,
+# and LOCAL_MODELS (Hugging Face repos symlinked from the private model dataset). Standalone runs start empty.
+WORKER = globals().setdefault("WORKER", {})
+MODELS.update({key: WORKER["local_models"][repo] for key, repo in MODELS.items()
+               if repo in WORKER.get("local_models", {})})
 # exact = cut out the real product, paint only the scene around it; ai = FLUX.2 [klein] redraws the whole shot
 MODE = "ai" if JOB.get("mode") == "ai" and JOB["type"] != "logo" else "exact"
 
@@ -76,9 +90,11 @@ report = Reporter()
 report.send("imageSetup", 1, "Image worker started", force=True)
 
 try:
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q",
-                    "transformers>=4.57,<5", "diffusers>=0.34", "accelerate>=1.2", "bitsandbytes>=0.45",
-                    "safetensors", "pillow", "timm", "kornia", "einops"], check=True)
+    if not WORKER.get("image_packages"):
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q",
+                        "transformers>=4.57,<5", "diffusers>=0.34", "accelerate>=1.2", "bitsandbytes>=0.45",
+                        "safetensors", "pillow", "timm", "kornia", "einops"], check=True)
+        WORKER["image_packages"] = True
     import numpy as np
     import torch
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -134,6 +150,10 @@ def free_gpu():
 
 def load_vlm():
     global VLM, VLM_PROCESSOR
+    cached = WORKER.get("vlm")
+    if cached and cached[0] == VLM_ID:  # warm session: already on its GPU
+        _, VLM, VLM_PROCESSOR = cached
+        return
     from transformers import AutoProcessor, BitsAndBytesConfig, Qwen3VLForConditionalGeneration
     quantization = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
                                       bnb_4bit_compute_dtype=torch.float16)
@@ -142,11 +162,13 @@ def load_vlm():
         device_map={"": VLM_DEVICE}, low_cpu_mem_usage=True)
     VLM.eval()
     VLM_PROCESSOR = AutoProcessor.from_pretrained(VLM_ID)
+    WORKER["vlm"] = (VLM_ID, VLM, VLM_PROCESSOR)
 
 
 def unload_vlm():
     global VLM, VLM_PROCESSOR
     VLM, VLM_PROCESSOR = None, None
+    WORKER.pop("vlm", None)
     free_gpu()
 
 
@@ -394,19 +416,30 @@ except Exception as exc:
 `;
 
 const CELL_ENGINE = `
-# FLUX.2 [klein] 4B in ComfyUI on GPU 0 paints every shot (fp16 on T4; Qwen-Image only runs in bf16/fp32 there).
+# FLUX.2 [klein] 9B (fp8 weights, fp16 compute; 4B without a Hugging Face token) in ComfyUI on GPU 0 paints every
+# shot (Qwen-Image only runs in bf16/fp32 there).
 # exact mode: it paints only around the pinned product (latent noise mask), then the real pixels go back on top.
 # ai mode: it redraws the whole photo from the product reference. GPU 1 keeps Qwen3-VL to judge every take.
-# The ~16 GB of weights download in the background while the analyst plans the shots.
+# The ~18 GB of weights download in the background while the analyst plans the shots.
 COMFY_DIR = "/tmp/ComfyUI"
 COMFY = "http://127.0.0.1:8188"
 KLEIN_STEPS = 4  # the distilled klein model is trained for 4 steps
-COMFY_STATE = {"proc": None, "info": None, "fp32_text": False, "error": None}
+COMFY_STATE = WORKER.setdefault("comfy_image", {"proc": None, "info": None, "fp32_text": False, "error": None})
+COMFY_STATE["error"] = None
+if COMFY_STATE["proc"] is not None and COMFY_STATE["proc"].poll() is not None:
+    COMFY_STATE.update(proc=None, info=None)  # it died since the last job: start a fresh one
+HF_TOKEN = JOB.get("hfToken") or ""
+KLEIN_9B = bool(HF_TOKEN)  # 9B is gated: without a token the open 4B model paints instead
+KLEIN_NAME = "FLUX.2 [klein] 9B" if KLEIN_9B else "FLUX.2 [klein] 4B"
 KLEIN = {
-    "unet": ("models/diffusion_models", MODELS["kleinDiffusion"]),
-    "clip": ("models/text_encoders", MODELS["kleinTextEncoder"]),
+    "unet": ("models/diffusion_models", MODELS["kleinDiffusion" if KLEIN_9B else "klein4bDiffusion"]),
+    "clip": ("models/text_encoders", MODELS["kleinTextEncoder" if KLEIN_9B else "klein4bTextEncoder"]),
     "vae": ("models/vae", MODELS["kleinVae"]),
 }
+
+
+def hf_headers(url):
+    return {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN and "huggingface.co" in url else {}
 
 
 def fetch(url, dst, label):
@@ -417,8 +450,11 @@ def fetch(url, dst, label):
     for attempt in range(1, 6):
         done = os.path.getsize(part) if os.path.exists(part) else 0
         try:
-            with requests.get(url, stream=True, headers={"Range": f"bytes={done}-"} if done else {},
-                              timeout=(30, 300)) as r:
+            headers = {**hf_headers(url), **({"Range": f"bytes={done}-"} if done else {})}
+            with requests.get(url, stream=True, headers=headers, timeout=(30, 300)) as r:
+                if r.status_code in (401, 403):
+                    raise RuntimeError(f"Hugging Face refused {label} (HTTP {r.status_code}): the token's account must "
+                                       "accept the FLUX.2 [klein] licence on huggingface.co")
                 if done and r.status_code != 206:
                     done = 0
                 r.raise_for_status()
@@ -440,7 +476,7 @@ def prefetch_engine():
         if not os.path.isdir(COMFY_DIR):
             subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git",
                             COMFY_DIR], check=True, capture_output=True)
-        for (folder, url), label in zip(KLEIN.values(), ["FLUX.2 [klein]", "its text encoder", "its VAE"]):
+        for (folder, url), label in zip(KLEIN.values(), [KLEIN_NAME, "its text encoder", "its VAE"]):
             fetch(url, os.path.join(COMFY_DIR, folder, url.split("/")[-1]), label)
     except Exception as exc:
         traceback.print_exc()
@@ -448,7 +484,9 @@ def prefetch_engine():
 
 
 PREFETCH = threading.Thread(target=prefetch_engine, daemon=True)
-PREFETCH.start()
+if COMFY_STATE["info"] is None:  # a warm session already has klein running
+    PREFETCH.start()
+
 
 
 def start_comfy():
@@ -480,11 +518,11 @@ def ensure_comfy():
     if COMFY_STATE["info"] is not None:
         return
     if PREFETCH.is_alive():
-        report.send("imageSetup", 20, "Finishing the FLUX.2 [klein] download", force=True)
+        report.send("imageSetup", 20, f"Finishing the {KLEIN_NAME} download", force=True)
         PREFETCH.join()
     if COMFY_STATE["error"]:
         raise RuntimeError(COMFY_STATE["error"])
-    report.send("imageSetup", 21, "Installing the FLUX.2 [klein] image engine", force=True)
+    report.send("imageSetup", 21, f"Installing the {KLEIN_NAME} image engine", force=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", f"{COMFY_DIR}/requirements.txt"], check=True)
     start_comfy()
 
@@ -515,7 +553,7 @@ def node(cls, **inputs):
 
 
 def klein_workflow(prompt, seed, width, height, reference=None, canvas=None, mask=None):
-    """The official ComfyUI "Flux.2 [Klein] 4B Distilled" graph in API format.
+    """The official ComfyUI "Flux.2 [Klein] Distilled" graph (4B and 9B share it) in API format.
     reference: uploaded image the model edits from (ReferenceLatent on both conditionings).
     canvas + mask: keep the canvas where the mask is black and paint only where it is white (SetLatentNoiseMask)."""
     name = lambda key: KLEIN[key][1].split("/")[-1]

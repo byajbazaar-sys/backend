@@ -13,10 +13,16 @@ export interface IKaggleWorkerPool {
    * Throws with the reason when the credentials don't work.
    */
   gpuQuota(workerId: string): Promise<{ hoursLeft: number | null }>;
-  /** Pushes (and runs) a notebook on the worker account, as a private GPU T4 × 2 kernel named `kernel.name`. */
+  /**
+   * Pushes (and runs) a notebook on the worker account, as a private GPU T4 × 2 kernel named `kernel.name`.
+   * `datasets` ("user/slug") are mounted under /kaggle/input; a push Kaggle refuses because of them is retried without.
+   */
   pushNotebook(
     workerId: string,
     kernel: { name: string; title: string },
     notebook: Record<string, unknown>,
+    options?: { datasets?: string[] },
   ): Promise<KagglePushResult>;
+  /** The account's own Kaggle credentials, for the setup notebook that publishes its private model dataset. */
+  accountCredentials(workerId: string): Promise<{ username: string; key: string }>;
 }

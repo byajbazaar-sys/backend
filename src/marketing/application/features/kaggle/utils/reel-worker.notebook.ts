@@ -1,4 +1,5 @@
 import { IMAGE_MODELS } from './image-worker.notebook';
+import { VIDEO_MODEL_FILES } from './model-cache';
 import { WorkerNotebookJob } from './worker-notebook-job';
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
@@ -11,6 +12,8 @@ import requests, websocket
 
 JOB = json.loads(__JOB_JSON__)
 SESSION_START = time.time()
+# Inside a warm worker session WORKER survives between jobs (installed engine, running ComfyUI); standalone: empty.
+WORKER = globals().setdefault("WORKER", {})
 
 
 class Reporter:
@@ -87,20 +90,145 @@ try:
         "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors",
         __IMAGE_MODEL_CHECKS__
     ]
+    HF_TOKEN = JOB.get("hfToken") or ""
+    if HF_TOKEN:  # gated FLUX.2 [klein] 9B: the token's account must have accepted its licence
+        model_checks += [__GATED_MODEL_CHECKS__]
     for model_url in model_checks:
-        r = requests.head(model_url, allow_redirects=True, timeout=30)
+        auth = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN and "huggingface.co" in model_url else {}
+        r = requests.head(model_url, allow_redirects=True, timeout=30, headers=auth)
+        if r.status_code in (401, 403) and auth:
+            raise RuntimeError(f"Hugging Face refused {model_url.split('/')[-1]} (HTTP {r.status_code}): accept the "
+                               "FLUX.2 [klein] 9B licence on huggingface.co with the account of MARKETING_HF_TOKEN.")
         if r.status_code >= 400:
             raise RuntimeError(f"Model host not reachable: {model_url} (HTTP {r.status_code}). Check Kaggle Internet access.")
     ffmpeg = find_ffmpeg()
     disk = shutil.disk_usage("/tmp").free / 1e9
-    if disk < 25:
-        raise RuntimeError(f"Only {disk:.0f} GB free in /tmp; the models need ~25 GB.")
+    need = 120 if JOB.get("modelCache") else 25  # the cache build stages ~52 GB of models
+    if disk < need:
+        raise RuntimeError(f"Only {disk:.0f} GB free in /tmp; the models need ~{need} GB.")
     info = f"{len(gpus)} GPU: " + "; ".join(g.split(" (UUID")[0] for g in gpus) + f" | /tmp {disk:.0f} GB free"
-    report.send("completed", 100, "Account ready", status="completed", force=True, gpuInfo=info, gpuCount=len(gpus))
+    if JOB.get("modelCache"):
+        # Renders may start on this account now; the model cache keeps building in this session.
+        report.send("accountReady", 10, "Account ready — building the model cache", force=True, gpuInfo=info,
+                    gpuCount=len(gpus))
+    else:
+        report.send("completed", 100, "Account ready", status="completed", force=True, gpuInfo=info,
+                    gpuCount=len(gpus))
 except Exception as e:
     traceback.print_exc()
     report.send("failed", 0, f"Setup check failed: {e}", status="failed", force=True)
     raise
+`;
+
+/**
+ * Setup, second part: downloads every model once and publishes them as a private dataset on this account, so warm
+ * worker sessions mount them under /kaggle/input instead of downloading ~52 GB. Never fails the account: on any
+ * problem it reports the error and workers keep downloading.
+ */
+const CELL_MODEL_CACHE = `
+def cache_download(url, dst):
+    if os.path.exists(dst) and os.path.getsize(dst) > 1_000_000:
+        return
+    part = dst + ".part"
+    token = JOB.get("hfToken") or ""
+    for attempt in range(1, 6):
+        done = os.path.getsize(part) if os.path.exists(part) else 0
+        headers = {"Authorization": f"Bearer {token}"} if token and "huggingface.co" in url else {}
+        if done:
+            headers["Range"] = f"bytes={done}-"
+        try:
+            with requests.get(url, stream=True, headers=headers, timeout=(30, 300)) as r:
+                if done and r.status_code != 206:
+                    done = 0
+                r.raise_for_status()
+                with open(part, "ab" if done else "wb") as f:
+                    for chunk in r.iter_content(16 * 1024 * 1024):
+                        f.write(chunk)
+            os.replace(part, dst)
+            return
+        except requests.RequestException as e:
+            print(f"download attempt {attempt} failed: {e}", flush=True)
+            time.sleep(5 * attempt)
+    raise RuntimeError(f"Could not download {url}")
+
+
+def kaggle_cli(*args, check=True):
+    r = subprocess.run(["kaggle", *args], capture_output=True, text=True)
+    print("kaggle", " ".join(args[:2]), "->", (r.stdout + r.stderr).strip()[-600:], flush=True)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"kaggle {' '.join(args[:2])} failed: {(r.stderr or r.stdout).strip()[-300:]}")
+    return r
+
+
+def dataset_state(ref):
+    r = kaggle_cli("datasets", "status", ref, check=False)
+    text = (r.stdout + r.stderr).lower()
+    return "missing" if r.returncode != 0 else "ready" if "ready" in text else "error" if "error" in text else "pending"
+
+
+CACHE = JOB.get("modelCache")
+if CACHE:
+    try:
+        ref = CACHE["dataset"]
+        key = CACHE["key"]
+        os.environ["KAGGLE_USERNAME"] = CACHE["username"]
+        os.makedirs(os.path.expanduser("~/.kaggle"), exist_ok=True)
+        if key.startswith("KGAT_"):  # new-style API token
+            os.environ["KAGGLE_API_TOKEN"] = key
+            open(os.path.expanduser("~/.kaggle/access_token"), "w").write(key)
+        else:
+            os.environ["KAGGLE_KEY"] = key
+            json.dump({"username": CACHE["username"], "key": key}, open(os.path.expanduser("~/.kaggle/kaggle.json"), "w"))
+        os.chmod(os.path.expanduser("~/.kaggle"), 0o700)
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "kaggle", "huggingface_hub"], check=True)
+
+        state = dataset_state(ref)
+        if state != "ready":
+            DIR = "/tmp/bb-model-cache"
+            os.makedirs(DIR, exist_ok=True)
+            manifest = {"dataset": ref, "files": []}
+            items = len(CACHE["comfy"]) + len(CACHE["hf"])
+            for i, f in enumerate(CACHE["comfy"]):
+                report.send("modelCache", 12 + 40 * i / items, f"Downloading models for the cache ({i + 1}/{items})")
+                name = "comfy--" + f["path"].replace("/", "--")
+                cache_download(f["url"], os.path.join(DIR, name))
+                manifest["files"].append({"name": name, "kind": "comfy", "path": f["path"]})
+            from huggingface_hub import snapshot_download
+            for j, repo in enumerate(CACHE["hf"]):
+                n = len(CACHE["comfy"]) + j
+                report.send("modelCache", 12 + 40 * n / items, f"Downloading models for the cache ({n + 1}/{items})")
+                local = snapshot_download(repo, local_dir=f"/tmp/bb-hf-stage/{repo.replace('/', '--')}")
+                for root, dirs, files in os.walk(local):
+                    dirs[:] = [d for d in dirs if not d.startswith(".")]
+                    for fn in files:
+                        rel = os.path.relpath(os.path.join(root, fn), local)
+                        name = "hf--" + repo.replace("/", "--") + "--" + rel.replace("/", "--")
+                        os.replace(os.path.join(root, fn), os.path.join(DIR, name))
+                        manifest["files"].append({"name": name, "kind": "hf", "repo": repo, "path": rel})
+            json.dump(manifest, open(os.path.join(DIR, "byajbazaar-models.json"), "w"))
+            json.dump({"title": "ByajBazaar models " + ref.split("-")[-1], "id": ref,
+                       "licenses": [{"name": "other"}]}, open(os.path.join(DIR, "dataset-metadata.json"), "w"))
+            size = sum(os.path.getsize(os.path.join(DIR, n)) for n in os.listdir(DIR)) / 1e9
+            report.send("modelCache", 55, f"Uploading the private model cache ({size:.0f} GB)", force=True)
+            if state == "missing":
+                kaggle_cli("datasets", "create", "-p", DIR, "-q")  # private unless --public
+            else:
+                kaggle_cli("datasets", "version", "-p", DIR, "-m", "ByajBazaar models", "-q")
+            started = time.time()
+            while time.time() - started < 90 * 60:
+                state = dataset_state(ref)
+                if state in ("ready", "error"):
+                    break
+                report.send("modelCache", 90, "Kaggle is processing the model cache")
+                time.sleep(60)
+            if state != "ready":
+                raise RuntimeError(f"the dataset is {state} after upload")
+        report.send("completed", 100, "Account ready · model cache built", status="completed", force=True,
+                    modelsDataset=ref)
+    except Exception as e:
+        traceback.print_exc()
+        report.send("completed", 100, f"Account ready (model cache not built: {e})"[:240], status="completed",
+                    force=True, modelsCacheError=str(e)[:400])
 `;
 
 const CELL_INSTALL = `
@@ -118,12 +246,14 @@ try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", *args], check=True)
 
     report.send("setup", 3, f"Installing video engine ({GPU_COUNT} GPU)", force=True)
-    if not os.path.isdir(COMFY_DIR):
-        subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git", COMFY_DIR], check=True)
-    C2C_DIR = f"{COMFY_DIR}/custom_nodes/ComfyUI-CustomNodePacks"
-    if not os.path.isdir(C2C_DIR):
-        subprocess.run(["git", "clone", "--depth", "1", "https://github.com/Code2Collapse/ComfyUI-CustomNodePacks.git", C2C_DIR], check=True)
-    pip("-r", f"{COMFY_DIR}/requirements.txt")
+    if not WORKER.get("video_installed"):
+        if not os.path.isdir(COMFY_DIR):
+            subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git", COMFY_DIR], check=True)
+        C2C_DIR = f"{COMFY_DIR}/custom_nodes/ComfyUI-CustomNodePacks"
+        if not os.path.isdir(C2C_DIR):
+            subprocess.run(["git", "clone", "--depth", "1", "https://github.com/Code2Collapse/ComfyUI-CustomNodePacks.git", C2C_DIR], check=True)
+        pip("-r", f"{COMFY_DIR}/requirements.txt")
+        WORKER["video_installed"] = True
     FFMPEG = find_ffmpeg()
     report.send("setup", 6, "Video engine installed", force=True)
 except Exception as e:
@@ -132,14 +262,7 @@ except Exception as e:
 `;
 
 const CELL_MODELS = `
-MODEL_FILES = [
-    ("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors",
-     "models/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors"),
-    ("https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-     "models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"),
-    ("https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors",
-     "models/vae/wan2.2_vae.safetensors"),
-]
+MODEL_FILES = __VIDEO_MODEL_FILES__
 
 
 def download(url, rel, base_pct, span_pct, retries=4):
@@ -183,29 +306,34 @@ except Exception as e:
 
 const CELL_COMFY = `
 try:
-    subprocess.run(["pkill", "-f", f"{COMFY_DIR}/main.py"], check=False)
-    time.sleep(3)
-    env = dict(os.environ)
-    env.pop("CUDA_VISIBLE_DEVICES", None)
-    env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-    COMFY_LOG = f"{BIG_DIR}/comfyui.log"
-    comfy_proc = subprocess.Popen(
-        [sys.executable, f"{COMFY_DIR}/main.py", "--listen", "127.0.0.1", "--port", "8188",
-         "--disable-pinned-memory", "--reserve-vram", "1.0", "--preview-method", "none"],
-        cwd=COMFY_DIR, env=env, stdout=open(COMFY_LOG, "w"), stderr=subprocess.STDOUT)
     COMFY = "http://127.0.0.1:8188"
-    for _ in range(180):
-        if comfy_proc.poll() is not None:
-            break
-        try:
-            if requests.get(f"{COMFY}/system_stats", timeout=3).ok:
+    cached = WORKER.get("comfy_video")
+    if cached and cached["proc"].poll() is None:  # warm session: Wan is already loaded
+        comfy_proc, OBJECT_INFO = cached["proc"], cached["info"]
+    else:
+        subprocess.run(["pkill", "-f", f"{COMFY_DIR}/main.py"], check=False)
+        time.sleep(3)
+        env = dict(os.environ)
+        env.pop("CUDA_VISIBLE_DEVICES", None)
+        env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+        COMFY_LOG = f"{BIG_DIR}/comfyui.log"
+        comfy_proc = subprocess.Popen(
+            [sys.executable, f"{COMFY_DIR}/main.py", "--listen", "127.0.0.1", "--port", "8188",
+             "--disable-pinned-memory", "--reserve-vram", "1.0", "--preview-method", "none"],
+            cwd=COMFY_DIR, env=env, stdout=open(COMFY_LOG, "w"), stderr=subprocess.STDOUT)
+        for _ in range(180):
+            if comfy_proc.poll() is not None:
                 break
-        except requests.RequestException:
-            pass
-        time.sleep(2)
-    if comfy_proc.poll() is not None:
-        raise RuntimeError("ComfyUI exited: " + open(COMFY_LOG).read()[-1500:])
-    OBJECT_INFO = requests.get(f"{COMFY}/object_info", timeout=60).json()
+            try:
+                if requests.get(f"{COMFY}/system_stats", timeout=3).ok:
+                    break
+            except requests.RequestException:
+                pass
+            time.sleep(2)
+        if comfy_proc.poll() is not None:
+            raise RuntimeError("ComfyUI exited: " + open(COMFY_LOG).read()[-1500:])
+        OBJECT_INFO = requests.get(f"{COMFY}/object_info", timeout=60).json()
+        WORKER["comfy_video"] = {"proc": comfy_proc, "info": OBJECT_INFO}  # the warm session stops it when switching
     NODES = set(OBJECT_INFO.keys())
     report.send("rendering", 32, "Video engine ready", force=True)
 except Exception as e:
@@ -574,28 +702,46 @@ const IMAGE_MODEL_CHECKS = [
   `https://huggingface.co/${IMAGE_MODELS.vae}/resolve/main/config.json`,
   `https://huggingface.co/${IMAGE_MODELS.segmenter}/resolve/main/config.json`,
   `https://huggingface.co/${IMAGE_MODELS.analystLarge}/resolve/main/config.json`,
-  IMAGE_MODELS.kleinDiffusion,
   IMAGE_MODELS.kleinTextEncoder,
   IMAGE_MODELS.kleinVae,
+  IMAGE_MODELS.klein4bDiffusion,
+  IMAGE_MODELS.klein4bTextEncoder,
 ]
   .map((url) => JSON.stringify(url) + ',')
   .join('\n        ');
+/** Gated downloads, checked only when a Hugging Face token is configured. */
+const GATED_MODEL_CHECKS = JSON.stringify(IMAGE_MODELS.kleinDiffusion);
 
 /** Python string literal holding the job JSON (JSON escapes are valid Python string escapes). */
 function jobLiteral(job: WorkerNotebookJob): string {
   return JSON.stringify(JSON.stringify(job));
 }
 
+/** VIDEO_MODEL_FILES as a Python list of (url, path) tuples (JSON strings are valid Python strings). */
+const VIDEO_MODEL_FILES_PY =
+  '[\n' +
+  VIDEO_MODEL_FILES.map((f) => `    (${JSON.stringify(f.url)},\n     ${JSON.stringify(f.path)}),`).join('\n') +
+  '\n]';
+
 export function buildWorkerNotebook(job: WorkerNotebookJob): Record<string, unknown> {
   // Function replacement: a `$` in the job (titles, presigned URLs) must not be read as a replacement pattern.
   const reporter = CELL_REPORTER.replace('__JOB_JSON__', () => jobLiteral(job));
   const cells =
     job.kind === 'setup'
-      ? [code(reporter), code(CELL_SETUP_CHECK.replace('__IMAGE_MODEL_CHECKS__', () => IMAGE_MODEL_CHECKS))]
+      ? [
+          code(reporter),
+          code(
+            CELL_SETUP_CHECK.replace('__IMAGE_MODEL_CHECKS__', () => IMAGE_MODEL_CHECKS).replace(
+              '__GATED_MODEL_CHECKS__',
+              () => GATED_MODEL_CHECKS,
+            ),
+          ),
+          code(CELL_MODEL_CACHE),
+        ]
       : [
           code(reporter),
           code(CELL_INSTALL),
-          code(CELL_MODELS),
+          code(CELL_MODELS.replace('__VIDEO_MODEL_FILES__', () => VIDEO_MODEL_FILES_PY)),
           code(CELL_COMFY),
           code(CELL_RENDER_AND_MERGE),
           code(CELL_RUN),

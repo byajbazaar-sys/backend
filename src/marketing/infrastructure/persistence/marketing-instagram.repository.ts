@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { MarketingInstagramConnectionEntity } from './entities';
 import { MarketingDatabase } from './marketing-database';
+import { returnedRows } from './returned-rows';
 import { MarketingInstagramConnection, IMarketingInstagramRepository } from '../../application';
 
 @Injectable()
@@ -14,7 +15,7 @@ export class MarketingInstagramRepository implements IMarketingInstagramReposito
   }
 
   async consumeOAuthState(stateHash: string, now: Date): Promise<string | null> {
-    const rows = await (
+    const result: unknown = await (
       await this.db.connection()
     ).query(
       `UPDATE "marketing_instagram_connections"
@@ -23,7 +24,8 @@ export class MarketingInstagramRepository implements IMarketingInstagramReposito
        RETURNING "user_id"`,
       [stateHash, now],
     );
-    return rows[0]?.user_id ?? null;
+    const userId = returnedRows(result)[0]?.user_id;
+    return typeof userId === 'string' ? userId : null;
   }
 
   async saveConnection(connection: MarketingInstagramConnection): Promise<void> {

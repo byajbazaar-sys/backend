@@ -12,6 +12,7 @@ import {
   RenderJobEntity,
 } from './entities';
 import { MarketingDatabase } from './marketing-database';
+import { returnedRows } from './returned-rows';
 import {
   KaggleAccount,
   KaggleCredential,
@@ -39,11 +40,6 @@ import {
 import { MarketingSecretCipher } from '../crypto';
 
 /** UPDATE … RETURNING through TypeORM on Postgres returns [rows, affectedCount]. */
-function returnedRows(result: unknown): Record<string, unknown>[] {
-  if (Array.isArray(result) && Array.isArray(result[0])) return result[0] as Record<string, unknown>[];
-  return (Array.isArray(result) ? result : []) as Record<string, unknown>[];
-}
-
 function recordOf(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Unexpected scheduled-post database row');
@@ -235,7 +231,7 @@ export class MarketingScheduledPostsRepository implements IMarketingScheduledPos
       [now, limit],
     );
     if (!Array.isArray(result)) throw new Error('Unexpected scheduled-post query result');
-    return result.map((raw) => {
+    return returnedRows(result).map((raw) => {
       const row = recordOf(raw);
       return {
         id: requiredString(row, 'id'),
@@ -418,12 +414,15 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
   }
 
   async countBusyByWorker(): Promise<Record<string, number>> {
-    const rows = await (await this.repo())
+    const rows = await (
+      await this.repo()
+    )
       .createQueryBuilder('j')
       .select('j.worker_id', 'workerId')
       .addSelect('COUNT(*)', 'count')
       .where('j.status IN (:...statuses)', { statuses: BUSY_RENDER_STATUSES })
       .andWhere('j.worker_id IS NOT NULL')
+      .andWhere(`j.payload->>'sessionJobId' IS NULL`) // runs inside a session: the session holds the slot
       .groupBy('j.worker_id')
       .getRawMany<{ workerId: string; count: string }>();
     return Object.fromEntries(rows.map((r) => [r.workerId, Number(r.count)]));
@@ -467,13 +466,56 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
   }
 
   async busySlots(workerId: string): Promise<number[]> {
-    const rows = await (
+    const rows = await (await this.repo())
+      .createQueryBuilder('j')
+      .select('j.slot', 'slot')
+      .where('j.worker_id = :workerId', { workerId })
+      .andWhere('j.status IN (:...statuses)', { statuses: BUSY_RENDER_STATUSES })
+      .andWhere('j.kind <> :setup', { setup: ERenderJobKind.Setup })
+      .andWhere(`j.payload->>'sessionJobId' IS NULL`)
+      .getRawMany<{ slot: number | null }>();
+    return rows.map((r) => r.slot).filter((s): s is number => s !== null && s !== undefined);
+  }
+
+  async claimNextForSession(session: RenderJob): Promise<RenderJob | null> {
+    const rows = returnedRows(
+      await (
+        await this.repo()
+      ).query(
+        `UPDATE "marketing_render_jobs"
+            SET "status" = $1, "worker_id" = $2, "slot" = $3, "kernel_ref" = $4,
+                "payload" = jsonb_set("payload", '{sessionJobId}', to_jsonb($5::text)),
+                "started_at" = now(), "updated_at" = now(), "stage_message" = 'Starting on a warm GPU worker'
+          WHERE "id" = (
+            SELECT "id" FROM "marketing_render_jobs"
+             WHERE "status" = $6 AND "kind" = ANY($7::varchar[])
+             ORDER BY "created_at" ASC
+             LIMIT 1
+             FOR UPDATE SKIP LOCKED
+          )
+          RETURNING "id"`,
+        [
+          ERenderJobStatus.Starting,
+          session.workerId,
+          session.slot ?? null,
+          session.kernelRef ?? null,
+          session.id,
+          ERenderJobStatus.Waiting,
+          [ERenderJobKind.Images, ERenderJobKind.Campaign, ERenderJobKind.Logo],
+        ],
+      ),
+    );
+    const id = rows[0]?.id as string | undefined;
+    return id ? this.findById(id) : null;
+  }
+
+  async listSessions(): Promise<RenderJob[]> {
+    return (await (
       await this.repo()
     ).find({
-      select: { slot: true },
-      where: { workerId, status: In(BUSY_RENDER_STATUSES), kind: Not(ERenderJobKind.Setup) },
-    });
-    return rows.map((r) => r.slot).filter((s): s is number => s !== null && s !== undefined);
+      where: { kind: ERenderJobKind.Worker, status: In(BUSY_RENDER_STATUSES) },
+      order: { createdAt: 'ASC' },
+    })) as unknown as RenderJob[];
   }
 
   async claimNext(workerId: string, includeWork: boolean): Promise<RenderJob | null> {
@@ -508,13 +550,19 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     })) as unknown as RenderJob[];
   }
 
-  async findOpenFor(filter: { campaignId?: string; userId?: string; kind?: string }): Promise<RenderJob | null> {
+  async findOpenFor(filter: {
+    campaignId?: string;
+    userId?: string;
+    kind?: string;
+    workerId?: string;
+  }): Promise<RenderJob | null> {
     const where: FindOptionsWhere<RenderJobEntity> = {
       status: In([ERenderJobStatus.Waiting, ...BUSY_RENDER_STATUSES]),
     };
     if (filter.campaignId) where.campaignId = filter.campaignId;
     if (filter.userId) where.userId = filter.userId;
     if (filter.kind) where.kind = filter.kind;
+    if (filter.workerId) where.workerId = filter.workerId;
     return (await (await this.repo()).findOne({ where, order: { createdAt: 'DESC' } })) as unknown as RenderJob | null;
   }
 
@@ -552,7 +600,10 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     return (await (
       await this.repo()
     ).find({
-      where: { status: In([ERenderJobStatus.Done, ERenderJobStatus.Failed]), kind: Not(ERenderJobKind.Setup) },
+      where: {
+        status: In([ERenderJobStatus.Done, ERenderJobStatus.Failed]),
+        kind: Not(In([ERenderJobKind.Setup, ERenderJobKind.Worker])),
+      },
       order: { finishedAt: { direction: 'DESC', nulls: 'LAST' }, updatedAt: 'DESC' },
       take: limit,
     })) as unknown as RenderJob[];

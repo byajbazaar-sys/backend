@@ -15,6 +15,10 @@ export interface KaggleAccount {
   cooldownUntil?: Date | null;
   /** When it was last given a job (equally free accounts take turns). */
   lastAssignedAt?: Date | null;
+  /** "user/slug" of the private Kaggle dataset holding every model, once the setup notebook built it. */
+  modelsDataset?: string | null;
+  /** Last time a model cache build was started for this account. */
+  modelsAttemptAt?: Date | null;
   jobsCompleted?: number;
   jobsFailed?: number;
   updatedAt?: Date;

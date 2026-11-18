@@ -9,6 +9,7 @@ import {
   IKaggleCredentialsRepository,
   KAGGLE_CREDENTIALS_REPOSITORY,
   IKaggleWorkerPool,
+  normalizeKernelRef,
 } from '../../application';
 import { MarketingConfig } from '../../marketing.config';
 
@@ -96,7 +97,11 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
         { userName: account.id, kernelSlug: kernelName },
         this.request(account),
       );
-      if (res.status >= 300) return { state: 'unknown', failureMessage: `HTTP ${res.status}` };
+      if (res.status >= 300) {
+        const detail = JSON.stringify(res.data ?? '').slice(0, 300);
+        this.logger.warn({ workerId, kernelName, status: res.status, detail }, 'Kaggle session status rejected');
+        return { state: 'unknown', failureMessage: `Kaggle status check failed (HTTP ${res.status})` };
+      }
       const data = (res.data ?? {}) as { status?: string; failureMessage?: string };
       // Enum names may come bare ("RUNNING") or prefixed ("KERNEL_WORKER_STATUS_RUNNING").
       const raw = String(data.status ?? 'QUEUED').toUpperCase();
@@ -118,33 +123,28 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
     }
   }
 
+  async accountCredentials(workerId: string): Promise<{ username: string; key: string }> {
+    const account = await this.account(workerId);
+    return { username: account.id, key: account.key };
+  }
+
   async pushNotebook(
     workerId: string,
     kernel: { name: string; title: string },
     notebook: Record<string, unknown>,
+    options: { datasets?: string[] } = {},
   ): Promise<KagglePushResult> {
     const account = await this.account(workerId);
-    const res = await axios.post(
-      KAGGLE_KERNEL_PUSH_API,
-      {
-        slug: `${account.id}/${kernel.name}`,
-        newTitle: kernel.title,
-        text: JSON.stringify(notebook),
-        language: 'python',
-        kernelType: 'notebook',
-        isPrivate: true,
-        enableGpu: true,
-        enableTpu: false,
-        enableInternet: true,
-        machineShape: this.config.kaggleMachineShape, // GPU T4 × 2
-        datasetDataSources: [],
-        kernelDataSources: [],
-        competitionDataSources: [],
-        modelDataSources: [],
-        categoryIds: [],
-      },
-      this.request(account),
-    );
+    const datasets = options.datasets ?? [];
+    let res = await this.push(account, kernel, notebook, datasets);
+    if (datasets.length && (res.status >= 300 || (res.data as { error?: string })?.error)) {
+      // The model dataset may still be processing (or was deleted): the notebook downloads the models instead.
+      this.logger.warn(
+        { workerId, kernel: kernel.name, datasets, status: res.status },
+        'Kaggle push with the model dataset failed — retrying without it',
+      );
+      res = await this.push(account, kernel, notebook, []);
+    }
     const data = (res.data ?? {}) as {
       ref?: string;
       url?: string;
@@ -158,9 +158,42 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
       throw new ServiceUnavailableException(`Kaggle push failed on ${workerId}: ${reason}`);
     }
     this.logger.info(
-      { workerId, kernel: kernel.name, ref: data.ref, version: data.versionNumber },
+      { workerId, kernel: kernel.name, ref: data.ref, version: data.versionNumber, datasets },
       'Kaggle notebook pushed',
     );
-    return { ref: data.ref ?? `${account.id}/${kernel.name}`, url: data.url ?? '', versionNumber: data.versionNumber };
+    return {
+      ref: normalizeKernelRef(data.ref) ?? `${account.id}/${kernel.name}`,
+      url: data.url ?? '',
+      versionNumber: data.versionNumber,
+    };
+  }
+
+  private push(
+    account: KaggleAccountCredentials,
+    kernel: { name: string; title: string },
+    notebook: Record<string, unknown>,
+    datasets: string[],
+  ) {
+    return axios.post(
+      KAGGLE_KERNEL_PUSH_API,
+      {
+        slug: `${account.id}/${kernel.name}`,
+        newTitle: kernel.title,
+        text: JSON.stringify(notebook),
+        language: 'python',
+        kernelType: 'notebook',
+        isPrivate: true,
+        enableGpu: true,
+        enableTpu: false,
+        enableInternet: true,
+        machineShape: this.config.kaggleMachineShape, // GPU T4 × 2
+        datasetDataSources: datasets,
+        kernelDataSources: [],
+        competitionDataSources: [],
+        modelDataSources: [],
+        categoryIds: [],
+      },
+      this.request(account),
+    );
   }
 }

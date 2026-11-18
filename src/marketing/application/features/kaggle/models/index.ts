@@ -18,3 +18,4 @@ export * from './kaggle-settings.model';
 export * from './kaggle-waiting-job.model';
 export * from './restart-render-job-response.model';
 export * from './update-kaggle-credential-request.model';
+export * from './kaggle-warm-worker-health.model';

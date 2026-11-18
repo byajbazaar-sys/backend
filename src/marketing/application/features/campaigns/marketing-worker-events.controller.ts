@@ -1,8 +1,8 @@
 import { Body, Controller, ForbiddenException, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 
-import { MarketingWorkerEventModel } from './models';
+import { MarketingWorkerEventModel, WorkerSessionPollRequestModel, WorkerSessionPollResponseModel } from './models';
 import { MarketingRenderService } from '../kaggle';
 
 /** HTTPS fallback for worker notebooks when the WebSocket is unavailable. Authorised by the per-job token. */
@@ -16,5 +16,16 @@ export class MarketingWorkerEventsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async workerEvent(@Body() body: MarketingWorkerEventModel): Promise<void> {
     if (!(await this.render.handleWorkerEvent(body))) throw new ForbiddenException('Invalid worker token');
+  }
+
+  /** Warm Kaggle worker sessions pull their next job here (every ~10 s while idle). */
+  @Post('worker/next')
+  @HttpCode(HttpStatus.OK)
+  @SkipThrottle()
+  @ApiOkResponse({ type: WorkerSessionPollResponseModel })
+  async nextJob(@Body() body: WorkerSessionPollRequestModel): Promise<WorkerSessionPollResponseModel> {
+    const answer = await this.render.nextForSession(body);
+    if (!answer) throw new ForbiddenException('Invalid worker session');
+    return answer;
   }
 }

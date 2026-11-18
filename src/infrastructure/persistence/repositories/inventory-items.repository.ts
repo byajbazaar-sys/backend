@@ -322,6 +322,11 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
     if (params.maxPrice != null) qb.andWhere('item.selling_price <= :maxPrice', { maxPrice: params.maxPrice });
     if (params.hallmarked !== undefined)
       qb.andWhere('item.hallmarked = :hallmarked', { hallmarked: params.hallmarked });
+    if (params.size?.trim()) {
+      qb.andWhere('UPPER(TRIM(item.size)) = UPPER(:size)', { size: params.size.trim() });
+    }
+    if (params.withImages) qb.andWhere("jsonb_array_length(COALESCE(item.image_urls, '[]'::jsonb)) > 0");
+    if (params.pricedOnly) qb.andWhere('item.selling_price > 0');
 
     const sorts: Record<string, [string, 'ASC' | 'DESC']> = {
       newest: ['item.created_at', 'DESC'],
@@ -355,7 +360,7 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
         .andWhere('item.is_catalog_visible = true')
         .andWhere('item.status = :status', { status: 'AVAILABLE' });
 
-    const [categories, metals, purities, ranges] = await Promise.all([
+    const [categories, metals, purities, ranges, sizes, hallmarked] = await Promise.all([
       base()
         .innerJoin('item.category', 'category')
         .select('category.id', 'id')
@@ -381,6 +386,12 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
           minPrice: string | null;
           maxPrice: string | null;
         }>(),
+      base()
+        .select('DISTINCT UPPER(TRIM(item.size))', 'size')
+        .andWhere("COALESCE(TRIM(item.size), '') <> ''")
+        .limit(60)
+        .getRawMany<{ size: string }>(),
+      base().andWhere('item.hallmarked = true').getCount(),
     ]);
     const num = (v?: string | null) => (v == null ? undefined : Number(v));
     return {
@@ -390,6 +401,19 @@ export class InventoryItemsRepository implements IInventoryItemsRepository {
         .map((p) => p.purity)
         .filter(Boolean)
         .sort(),
+      // Numeric sizes (ring 12, 14…) in number order, then the rest alphabetically.
+      sizes: sizes
+        .map((s) => s.size)
+        .filter(Boolean)
+        .sort((a, b) => {
+          const na = Number(a);
+          const nb = Number(b);
+          if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+          if (Number.isFinite(na)) return -1;
+          if (Number.isFinite(nb)) return 1;
+          return a.localeCompare(b);
+        }),
+      hallmarkedCount: hallmarked,
       minWeight: num(ranges?.minWeight),
       maxWeight: num(ranges?.maxWeight),
       minPrice: num(ranges?.minPrice),

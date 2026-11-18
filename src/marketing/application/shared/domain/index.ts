@@ -21,3 +21,4 @@ export * from './photoshoot';
 export * from './render-clip-spec';
 export * from './render-job-payload';
 export * from './render-job';
+export * from './worker-session-payload';

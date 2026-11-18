@@ -3,10 +3,10 @@ export const IMAGE_CDN_ALLOWED_PREFIXES = ['inventory/', 'users/shop-logos/', 'o
 
 const LEGACY_B2_HOST_SUFFIXES = ['backblazeb2.com', 'amazonaws.com'];
 
-export function isCdnEligibleKey(key: string): boolean {
+export function isCdnEligibleKey(key: string, prefixes: readonly string[] = IMAGE_CDN_ALLOWED_PREFIXES): boolean {
   const normalized = normalizeObjectKey(key);
   if (!normalized) return false;
-  return IMAGE_CDN_ALLOWED_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  return prefixes.some((prefix) => normalized.startsWith(prefix));
 }
 
 export function normalizeObjectKey(key: string): string {

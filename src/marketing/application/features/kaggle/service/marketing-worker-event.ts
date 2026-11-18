@@ -9,6 +9,11 @@ export interface MarketingWorkerEvent {
   clipKey?: string;
   failedClips?: string[];
   gpuInfo?: string;
+  gpuCount?: number;
+  qualityScore?: number;
+  modelsDataset?: string;
+  modelsCacheError?: string;
+  modelsCached?: boolean;
   imageIndex?: number;
   imagePrompt?: string;
   motionPrompt?: string;

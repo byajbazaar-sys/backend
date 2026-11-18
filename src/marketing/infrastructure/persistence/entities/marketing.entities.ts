@@ -73,6 +73,8 @@ export class KaggleAccountEntity {
   @Column({ type: 'timestamptz', nullable: true }) quotaCheckedAt: Date | null;
   @Column({ type: 'timestamptz', nullable: true }) cooldownUntil: Date | null;
   @Column({ type: 'timestamptz', nullable: true }) lastAssignedAt: Date | null;
+  @Column({ type: 'varchar', length: 200, nullable: true }) modelsDataset: string | null;
+  @Column({ type: 'timestamptz', nullable: true }) modelsAttemptAt: Date | null;
   @Column({ type: 'integer', default: 0 }) jobsCompleted: number;
   @Column({ type: 'integer', default: 0 }) jobsFailed: number;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;

@@ -18,6 +18,7 @@ import {
 import {
   isAccountCoolingDown,
   jobTarget,
+  kernelSlugOf,
   KAGGLE_WORK_NOTEBOOKS,
   KaggleWorkNotebook,
   kindsOf,
@@ -33,6 +34,7 @@ import { KaggleHealthStatus } from './kaggle-health-status';
 import { KaggleNotebookHealth } from './kaggle-notebook-health';
 import { KagglePipelineHealth } from './kaggle-pipeline-health';
 import { KaggleRecentJob } from './kaggle-recent-job';
+import { KaggleWarmWorkerHealth } from './kaggle-warm-worker-health';
 
 /** A setup notebook taking longer than this is reported as slow. */
 const SETUP_SLOW_MS = 45 * 60 * 1000;
@@ -130,14 +132,43 @@ export class KaggleHealthService {
     return Promise.all(
       [...names].map(async (username) => {
         const account = snapshot.accounts.get(username);
-        const jobs = snapshot.busy.filter((job) => job.workerId === username);
+        const jobs = snapshot.busy.filter((job) => job.workerId === username && job.kind !== ERenderJobKind.Worker);
+        const sessions = snapshot.busy.filter((job) => job.workerId === username && job.kind === ERenderJobKind.Worker);
         const [video, image] = await Promise.all([
           this.notebookHealth(account, jobs, 'video'),
           this.notebookHealth(account, jobs, 'image'),
         ]);
-        return { account: username, accountStatus: account?.status ?? 'UNCONFIGURED', video, image };
+        return {
+          account: username,
+          accountStatus: account?.status ?? 'UNCONFIGURED',
+          video,
+          image,
+          worker: this.warmWorker(sessions),
+        };
       }),
     );
+  }
+
+  /** The newest live warm session of an account (busy ones first), or null. */
+  private warmWorker(sessions: RenderJob[]): KaggleWarmWorkerHealth | null {
+    if (!sessions.length) return null;
+    const rank = (s: RenderJob) =>
+      s.payload.session?.state === 'busy' ? 0 : s.status === ERenderJobStatus.Running ? 1 : 2;
+    const session = [...sessions].sort((a, b) => rank(a) - rank(b))[0];
+    const info = session.payload.session;
+    const state = session.status === ERenderJobStatus.Starting ? 'starting' : info?.state === 'busy' ? 'busy' : 'idle';
+    return {
+      sessions: sessions.length,
+      state,
+      idleMinutes: state === 'idle' && info?.idleSince ? minutesSince(new Date(info.idleSince)) : null,
+      jobsRun: info?.jobsRun ?? 0,
+      modelsCached: info?.modelsCached ?? null,
+      hoursLeft:
+        typeof info?.remainingSeconds === 'number' ? Math.round((info.remainingSeconds / 3600) * 10) / 10 : null,
+      pipeline: info?.pipeline ?? null,
+      kernelRef: session.kernelRef ?? null,
+      startedAt: session.startedAt ?? null,
+    };
   }
 
   private async notebookHealth(
@@ -162,19 +193,27 @@ export class KaggleHealthService {
         updatedAt: null,
       };
     }
-    const kernelName = job.kernelRef?.split('/')[1];
+    const kernelName = kernelSlugOf(job.kernelRef);
     const session =
       kernelName && job.workerId
         ? await this.pool.sessionStatus(job.workerId, kernelName)
         : { state: 'unknown' as const, failureMessage: undefined };
-    const starting = job.status === ERenderJobStatus.Starting;
+    // Kaggle's status API can be unavailable for a session that is clearly alive (it keeps sending progress):
+    // fall back to what the job itself reports instead of showing "unknown".
+    const fallback =
+      job.status === ERenderJobStatus.Starting
+        ? 'STARTING'
+        : job.status === ERenderJobStatus.Running
+          ? 'RUNNING'
+          : null;
+    const unknown = session.state === 'unknown';
     return {
       jobId: job.id,
-      status: session.state === 'unknown' && starting ? 'STARTING' : session.state.toUpperCase(),
+      status: unknown && fallback ? fallback : session.state.toUpperCase(),
       kernelRef: job.kernelRef ?? null,
       progress: job.progress,
       stageMessage: job.stageMessage ?? null,
-      failureMessage: session.failureMessage ?? null,
+      failureMessage: unknown && fallback ? null : (session.failureMessage ?? null),
       target: jobTarget(job),
       attempts: job.attempts,
       startedAt: job.startedAt ?? null,
@@ -271,7 +310,7 @@ export class KaggleHealthService {
         message: `${snapshot.waiting} render(s) waiting; the oldest for ${minutesSince(oldest)} min`,
       });
     }
-    for (const job of snapshot.busy) {
+    for (const job of snapshot.busy.filter((j) => j.kind !== ERenderJobKind.Worker)) {
       const silent = minutesSince(job.updatedAt ?? job.startedAt);
       if (silent * 60_000 <= STARTING_MAX_MS) continue;
       const neverStarted = job.status === ERenderJobStatus.Starting;

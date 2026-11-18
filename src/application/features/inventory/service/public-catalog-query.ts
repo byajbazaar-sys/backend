@@ -9,5 +9,8 @@ export interface PublicCatalogQuery
   minPrice?: number;
   maxPrice?: number;
   hallmarked?: boolean;
+  size?: string;
+  withImages?: boolean;
+  pricedOnly?: boolean;
   sort?: 'newest' | 'price_asc' | 'price_desc' | 'weight_asc' | 'weight_desc' | 'name';
 }

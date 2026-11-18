@@ -9,5 +9,8 @@ export * from './kaggle-pipeline-health';
 export * from './kaggle-recent-job';
 export * from './kaggle-recovery-result';
 export * from './kaggle-waiting-job';
+export * from './kaggle-warm-worker-health';
 export * from './marketing-render.service';
 export * from './marketing-worker-event';
+export * from './worker-session-answer';
+export * from './worker-session-poll';

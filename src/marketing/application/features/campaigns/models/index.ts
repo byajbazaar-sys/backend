@@ -8,3 +8,5 @@ export * from './marketing-brand-response.model';
 export * from './marketing-capacity-response.model';
 export * from './marketing-queue-message.model';
 export * from './marketing-worker-event.model';
+export * from './worker-session-poll-request.model';
+export * from './worker-session-poll-response.model';

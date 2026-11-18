@@ -18,6 +18,9 @@ export class KaggleCredentialResponseModel {
   status: string | null;
   @ApiPropertyOptional() @Expose() lastError: string | null;
   @ApiPropertyOptional() @Expose() gpuInfo: string | null;
+  @ApiPropertyOptional({ description: 'Private Kaggle dataset with every model (warm workers mount it), once built' })
+  @Expose()
+  modelsDataset: string | null;
   @ApiPropertyOptional() @Expose() readyAt: Date | null;
   @ApiPropertyOptional({ description: 'Weekly GPU hours left (fresh on create / verify, else the cached value)' })
   @Expose()

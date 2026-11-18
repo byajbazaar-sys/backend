@@ -63,6 +63,26 @@ export class ListPublicCatalogQueryModel {
   )
   hallmarked?: boolean;
 
+  @ApiPropertyOptional({ description: 'Exact size (ring size, bangle size, chain length…)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  size?: string;
+
+  @ApiPropertyOptional({ description: 'Only pieces with at least one photo' })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === 'true' || value === true ? true : value === 'false' || value === false ? false : undefined,
+  )
+  withImages?: boolean;
+
+  @ApiPropertyOptional({ description: 'Only pieces with a listed price (ignored when the shop hides prices)' })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === 'true' || value === true ? true : value === 'false' || value === false ? false : undefined,
+  )
+  pricedOnly?: boolean;
+
   @ApiPropertyOptional({ enum: PUBLIC_CATALOG_SORTS, default: 'newest' })
   @IsOptional()
   @IsIn(PUBLIC_CATALOG_SORTS)
