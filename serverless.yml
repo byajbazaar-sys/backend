@@ -24,6 +24,14 @@ custom:
       - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
       # Marketing / Kaggle settings go to the SSM parameter below instead (serverless/marketing-config.js).
       - MARKETING_CREDENTIALS_SECRET
+      # Instagram marketing settings are included by the MARKETING_ prefix in marketing-config.js.
+      - MARKETING_INSTAGRAM_APP_ID
+      - MARKETING_INSTAGRAM_APP_SECRET
+      - MARKETING_INSTAGRAM_CONFIG_ID
+      - MARKETING_INSTAGRAM_WEBHOOK_VERIFY_TOKEN
+      - MARKETING_INSTAGRAM_REDIRECT_URI
+      - MARKETING_INSTAGRAM_RETURN_URL
+      - MARKETING_INSTAGRAM_GRAPH_API_VERSION
       # No longer read: Kaggle accounts are managed in the admin screen (kaggle_credentials). Never ship these keys.
       - KAGGLE_WORKERS
       - KAGGLE_WORKER_CONCURRENCY
