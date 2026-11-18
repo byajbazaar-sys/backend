@@ -4,6 +4,7 @@ import { MarketingAdminController } from './application/controllers/marketing-ad
 import {
   MarketingInstagramCallbackController,
   MarketingInstagramController,
+  MarketingInstagramWebhookController,
 } from './application/controllers/marketing-instagram.controller';
 import { MarketingPhotoshootController } from './application/controllers/marketing-photoshoot.controller';
 import {
@@ -92,6 +93,7 @@ import { MarketingConfig } from './marketing.config';
     MarketingAdminController,
     MarketingInstagramController,
     MarketingInstagramCallbackController,
+    MarketingInstagramWebhookController,
     MarketingPhotoshootController,
     MarketingController,
     MarketingWorkerEventsController,

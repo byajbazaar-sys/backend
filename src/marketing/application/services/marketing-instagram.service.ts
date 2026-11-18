@@ -58,6 +58,9 @@ export class MarketingInstagramService {
       state,
       enable_fb_login: 'true',
     });
+    if (this.config.instagram.configId) {
+      params.set('config_id', this.config.instagram.configId);
+    }
     return { authorizationUrl: `${INSTAGRAM_AUTHORIZE_URL}?${params.toString()}` };
   }
 
