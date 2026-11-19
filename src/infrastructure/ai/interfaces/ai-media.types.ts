@@ -17,7 +17,7 @@ export interface AiJewelleryTryOnRequest {
   occasion?: string;
   color?: string;
   variations?: number;
-  /** Cloudflare Workers AI model key: klein-4b | klein-9b */
+  /** Cloudflare Workers AI model key: klein-9b (older values such as klein-4b resolve to 9B). */
   cloudflareModel?: string;
 }
 

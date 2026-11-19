@@ -11,7 +11,7 @@ export class CreateKaggleCredentialRequestModel {
   @Matches(/^[a-z0-9][a-z0-9_-]{0,99}$/, { message: 'username must be a valid Kaggle username' })
   username: string;
 
-  @ApiProperty({ description: 'API key from kaggle.json, or a KGAT_… access token. Stored encrypted.' })
+  @ApiProperty({ description: 'API key from kaggle.json, or a KGAT_… access token. Stored as plain text, never returned by the API.' })
   @Transform(trim)
   @IsString()
   @MinLength(8)

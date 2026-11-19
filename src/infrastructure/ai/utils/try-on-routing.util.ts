@@ -1,22 +1,22 @@
 import { requiresCloudflareOnly, type TryOnProviderRoute } from '../../../application';
 
-/** Per-user try-on attempt → provider/model (1-based). */
+/**
+ * Per-user try-on attempt → provider (1-based). Every Cloudflare attempt uses FLUX.2 [klein] 9B; Cloudflare-only
+ * jewellery types never go to Aivot.
+ */
 export function resolveTryOnProviderRoute(attemptNumber: number, jewelleryTypes?: string[]): TryOnProviderRoute {
   const attempt = Math.max(1, Math.floor(attemptNumber));
+  const cloudflare: TryOnProviderRoute = {
+    provider: 'cloudflare',
+    cloudflareModel: 'klein-9b',
+    attemptNumber: attempt,
+  };
 
   if (jewelleryTypes?.length && requiresCloudflareOnly(jewelleryTypes)) {
-    const cloudflareModel = attempt % 2 === 0 ? 'klein-9b' : 'klein-4b';
-    return { provider: 'cloudflare', cloudflareModel, attemptNumber: attempt };
+    return cloudflare;
   }
-
   if (attempt === 1 || attempt === 5) {
     return { provider: 'aivot', attemptNumber: attempt };
   }
-  if (attempt === 2 || attempt === 4) {
-    return { provider: 'cloudflare', cloudflareModel: 'klein-4b', attemptNumber: attempt };
-  }
-  if (attempt === 3) {
-    return { provider: 'cloudflare', cloudflareModel: 'klein-9b', attemptNumber: attempt };
-  }
-  return { provider: 'cloudflare', cloudflareModel: 'klein-4b', attemptNumber: attempt };
+  return cloudflare;
 }

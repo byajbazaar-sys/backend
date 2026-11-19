@@ -245,16 +245,31 @@ try:
     def pip(*args):
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", *args], check=True)
 
+    INSTALL_ERROR = []
+
+    def install_requirements():
+        """ComfyUI's packages, in the background while the models download (a warm session installs them at boot)."""
+        try:
+            boot = WORKER.get("boot", {}).get("comfy_requirements")
+            if boot is not None:
+                boot.wait(1500)  # never two pip installs at once
+            if not WORKER.get("comfy_requirements"):
+                pip("-r", f"{COMFY_DIR}/requirements.txt")
+                WORKER["comfy_requirements"] = True
+        except Exception as exc:
+            INSTALL_ERROR.append(f"{type(exc).__name__}: {exc}")
+
     report.send("setup", 3, f"Installing video engine ({GPU_COUNT} GPU)", force=True)
     MERGE_ONLY = not JOB.get("clips")  # joining finished clips needs ffmpeg only, no video model
+    INSTALLER = None
     if not MERGE_ONLY and not WORKER.get("video_installed"):
         if not os.path.isdir(COMFY_DIR):
             subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git", COMFY_DIR], check=True)
         C2C_DIR = f"{COMFY_DIR}/custom_nodes/ComfyUI-CustomNodePacks"
         if not os.path.isdir(C2C_DIR):
             subprocess.run(["git", "clone", "--depth", "1", "https://github.com/Code2Collapse/ComfyUI-CustomNodePacks.git", C2C_DIR], check=True)
-        pip("-r", f"{COMFY_DIR}/requirements.txt")
-        WORKER["video_installed"] = True
+        INSTALLER = threading.Thread(target=install_requirements, daemon=True)
+        INSTALLER.start()
     FFMPEG = find_ffmpeg()
     report.send("setup", 6, "Video engine installed", force=True)
 except Exception as e:
@@ -299,6 +314,12 @@ def download(url, rel, base_pct, span_pct, retries=4):
 try:
     for (url, rel), (base, span) in zip(MODEL_FILES, [(6, 18), (24, 5), (29, 1)]):  # 6..30 %
         download(url, rel, base, span)
+    if INSTALLER is not None:
+        report.send("downloading", 30, "Finishing the video engine install", force=True)
+        INSTALLER.join()
+        if INSTALL_ERROR:
+            raise RuntimeError("ComfyUI install failed: " + INSTALL_ERROR[0])
+        WORKER["video_installed"] = True
     report.send("downloading", 30, "Models ready", force=True)
 except Exception as e:
     report.send("failed", 0, f"Model download failed: {e}", status="failed", force=True)

@@ -9,7 +9,7 @@ import { GeneratedAiImage, IProductImageAiService, ITryOnAiService, ProductImage
 import {
   CLOUDFLARE_TRYON_MAX_IMAGE_PX,
   CLOUDFLARE_TRYON_MIME,
-  CLOUDFLARE_TRYON_MODEL_FAST,
+  CLOUDFLARE_TRYON_MODEL,
   resolveCloudflareTryOnModelId,
 } from '../ai.constants';
 import { CloudflareTryOnOptions, type CloudflareCredential } from '../cloudflare-try-on.options';
@@ -35,6 +35,8 @@ import {
   whiteBackdropCutout,
   buildTryOnImageSequence,
 } from '../utils';
+import { CloudflareAccountPool } from './cloudflare-account-pool.service';
+
 type ProductCutoutPurpose = 'white preview' | 'transparent storage';
 
 /** Keyed foreground above this share means a prop (bust, stand, packaging) is still in the picture. */
@@ -53,10 +55,9 @@ interface CloudflareRunResponse {
 
 @Injectable()
 export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiService {
-  private keyPointer = 0;
-
   constructor(
     private readonly options: CloudflareTryOnOptions,
+    private readonly pool: CloudflareAccountPool,
     @InjectPinoLogger(CloudflareTryOnService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -72,7 +73,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     request: AiJewelleryTryOnRequest,
     mode: 'jewellery' | 'outfit',
   ): Promise<GeneratedAiImage[]> {
-    this.assertConfigured();
     const count = Math.min(2, Math.max(1, request.variations ?? 2));
     const modelId = this.resolveModelId(request);
     this.logger.info(
@@ -81,7 +81,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
         model: modelId,
         mode,
         variations: count,
-        credentialCount: this.options.credentials.length,
         timeoutMs: this.options.timeoutMs,
         maxRetries: this.options.maxRetries,
       },
@@ -98,12 +97,12 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
   }
 
   async recolorOutfit(request: AiOutfitRecolorRequest): Promise<GeneratedAiImage> {
-    this.assertConfigured();
+    const credentials = await this.pool.credentials();
     const prompt = buildOutfitRecolorPrompt(request.color);
     const inputImage = await this.resizeForCloudflare(request.image);
     const modelId = resolveCloudflareTryOnModelId(undefined, this.options.modelId);
-    const credentialCount = this.options.credentials.length;
-    const maxAttempts = credentialCount * Math.max(1, this.options.maxRetries + 1);
+    const credentialCount = credentials.length;
+    const maxAttempts = this.maxAttempts(credentials);
     let lastError: unknown;
 
     this.logger.info(
@@ -111,14 +110,12 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       'Cloudflare outfit recolor started',
     );
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const credential = this.getCredential();
+    for (let attempt = 1; attempt <= maxAttempts && credentials.length; attempt++) {
+      const credential = this.pick(credentials);
       const started = Date.now();
       try {
-        const image = await withTimeout(
+        const image = await this.call('recolor', credential, modelId, this.options.timeoutMs, () =>
           this.invokeWorkersAi(prompt, [inputImage], credential, modelId),
-          this.options.timeoutMs,
-          modelId,
         );
         this.logger.info(
           {
@@ -134,7 +131,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       } catch (err) {
         lastError = err;
         const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
-        const willRotate = this.shouldRotateToken(err, status);
         this.logger.warn(
           {
             provider: 'cloudflare',
@@ -147,12 +143,8 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           },
           'Cloudflare outfit recolor attempt failed',
         );
-        if (willRotate) {
-          this.rotateApiToken();
-        }
-        if (attempt < maxAttempts) {
-          await this.delay(1_500 * attempt);
-        }
+        this.advance(credentials, credential, err, status);
+        if (attempt < maxAttempts) await this.retryDelay(attempt, credentials);
       }
     }
 
@@ -164,7 +156,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     prompt: string,
     size: { width: number; height: number } = { width: 720, height: 1280 },
   ): Promise<GeneratedAiImage> {
-    this.assertConfigured();
+    const credentials = await this.pool.credentials();
     // Whole product kept (no crop): the model restages it, it must not lose parts of the piece.
     const input = await sharp(Buffer.from(stripDataUrl(image.base64), 'base64'))
       .rotate()
@@ -173,17 +165,15 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       .jpeg({ quality: 90 })
       .toBuffer();
     const modelId = resolveCloudflareTryOnModelId(undefined, this.options.modelId);
-    const maxAttempts = this.options.credentials.length * Math.max(1, this.options.maxRetries + 1);
+    const maxAttempts = this.maxAttempts(credentials);
     let lastError: unknown;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const credential = this.getCredential();
+    for (let attempt = 1; attempt <= maxAttempts && credentials.length; attempt++) {
+      const credential = this.pick(credentials);
       const started = Date.now();
       try {
-        const generated = await withTimeout(
+        const generated = await this.call('marketing-image', credential, modelId, this.options.timeoutMs, () =>
           this.invokeWorkersAi(prompt, [input], credential, modelId, randomInt(1, 2_147_483_647), size),
-          this.options.timeoutMs,
-          modelId,
         );
         this.logger.info(
           { provider: 'cloudflare', model: modelId, attempt, durationMs: Date.now() - started, ...size },
@@ -204,8 +194,8 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           },
           'Cloudflare marketing image attempt failed',
         );
-        if (this.shouldRotateToken(err, status)) this.rotateApiToken();
-        if (attempt < maxAttempts) await this.delay(1_500 * attempt);
+        this.advance(credentials, credential, err, status);
+        if (attempt < maxAttempts) await this.retryDelay(attempt, credentials);
       }
     }
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
@@ -215,7 +205,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     prompt: string,
     size: { width: number; height: number } = { width: 1024, height: 1024 },
   ): Promise<GeneratedAiImage> {
-    this.assertConfigured();
     const modelId = resolveCloudflareTryOnModelId(undefined, this.options.modelId);
     return this.withCredentialRetries('text-to-image', modelId, (credential) =>
       this.invokeWorkersAi(prompt, [], credential, modelId, randomInt(1, 2_147_483_647), size),
@@ -227,7 +216,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     user: string,
     options: { maxTokens?: number; temperature?: number } = {},
   ): Promise<string> {
-    this.assertConfigured();
     const modelId = process.env.CLOUDFLARE_TEXT_MODEL?.trim() || '@cf/meta/llama-3.2-3b-instruct';
     return this.withCredentialRetries('text', modelId, async (credential) => {
       const response = await axios.post<{
@@ -268,12 +256,13 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     modelId: string,
     run: (credential: CloudflareCredential) => Promise<T>,
   ): Promise<T> {
-    const maxAttempts = this.options.credentials.length * Math.max(1, this.options.maxRetries + 1);
+    const credentials = await this.pool.credentials();
+    const maxAttempts = this.maxAttempts(credentials);
     let lastError: unknown;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const credential = this.getCredential();
+    for (let attempt = 1; attempt <= maxAttempts && credentials.length; attempt++) {
+      const credential = this.pick(credentials);
       try {
-        return await withTimeout(run(credential), this.options.timeoutMs, modelId);
+        return await this.call(label, credential, modelId, this.options.timeoutMs, () => run(credential));
       } catch (err) {
         lastError = err;
         const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
@@ -289,8 +278,8 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           },
           'Cloudflare request attempt failed',
         );
-        if (this.shouldRotateToken(err, status)) this.rotateApiToken();
-        if (attempt < maxAttempts) await this.delay(1_500 * attempt);
+        this.advance(credentials, credential, err, status);
+        if (attempt < maxAttempts) await this.retryDelay(attempt, credentials);
       }
     }
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
@@ -418,8 +407,9 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     purpose: ProductCutoutPurpose,
     refine: RefineOptions,
   ): Promise<ProductCutout> {
-    this.assertConfigured();
-    const modelId = CLOUDFLARE_TRYON_MODEL_FAST;
+    const credentials = await this.pool.credentials();
+    // FLUX.2 [klein] 9B (4B was removed): cleaner edges and fewer leftover props on jewellery.
+    const modelId = CLOUDFLARE_TRYON_MODEL;
     const original = Buffer.from(stripDataUrl(image.base64), 'base64');
     const modelInput = await prepareProductModelInput(original, CLOUDFLARE_TRYON_MAX_IMAGE_PX);
     const prompt = buildProductBackgroundRemovalPrompt();
@@ -431,27 +421,29 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
         purpose,
         mimeType: image.mimeType,
         modelInput: modelInput.layout,
-        credentialCount: this.options.credentials.length,
+        credentialCount: credentials.length,
       },
       'Cloudflare product background removal started',
     );
 
-    const credentialCount = this.options.credentials.length;
-    const maxAttempts = credentialCount * Math.max(1, this.options.maxRetries + 1);
+    const maxAttempts = this.maxAttempts(credentials);
     let lastError: unknown;
 
     const generate = async (credential: CloudflareCredential, retry: boolean): Promise<ProductCutout> => {
       const started = Date.now();
-      const generated = await withTimeout(
-        this.invokeWorkersAi(
-          retry ? buildProductBackgroundRemovalPrompt({ retry: true }) : prompt,
-          [modelInput.buffer],
-          credential,
-          modelId,
-          retry ? randomInt(1, 2_147_483_647) : undefined,
-        ),
-        Math.min(this.options.timeoutMs, 90_000),
+      const generated = await this.call(
+        'background-removal',
+        credential,
         modelId,
+        Math.min(this.options.timeoutMs, 90_000),
+        () =>
+          this.invokeWorkersAi(
+            retry ? buildProductBackgroundRemovalPrompt({ retry: true }) : prompt,
+            [modelInput.buffer],
+            credential,
+            modelId,
+            retry ? randomInt(1, 2_147_483_647) : undefined,
+          ),
       );
       const modelMs = Date.now() - started;
       const cutout = await refineProductCutout(
@@ -477,8 +469,8 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       return cutout;
     };
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const credential = this.getCredential();
+    for (let attempt = 1; attempt <= maxAttempts && credentials.length; attempt++) {
+      const credential = this.pick(credentials);
       try {
         const first = await generate(credential, false);
         if (!first.stats.unchangedPhoto) {
@@ -513,7 +505,6 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       } catch (err) {
         lastError = err;
         const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
-        const willRotate = this.shouldRotateToken(err, status);
         this.logger.warn(
           {
             provider: 'cloudflare',
@@ -527,34 +518,70 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           },
           'Cloudflare product background removal attempt failed',
         );
-        if (willRotate) {
-          this.rotateApiToken();
-        }
-        if (attempt < maxAttempts) {
-          await this.delay(1_500 * attempt);
-        }
+        this.advance(credentials, credential, err, status);
+        if (attempt < maxAttempts) await this.retryDelay(attempt, credentials);
       }
     }
 
     throw this.toTryOnException(lastError, (lastError as Error & { status?: number })?.status);
   }
 
-  private assertConfigured(): void {
-    if (!this.options.isConfigured) {
-      throw new BadRequestException(
-        'Try-on AI provider is not configured (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN missing)',
-      );
+  /** Each attempt moves to the next account; after one pass, maxRetries more attempts. */
+  private maxAttempts(credentials: CloudflareCredential[]): number {
+    return credentials.length + Math.max(0, this.options.maxRetries);
+  }
+
+  /** The account to try next: the head of this request's queue. */
+  private pick(credentials: CloudflareCredential[]): CloudflareCredential {
+    return credentials[0];
+  }
+
+  /** Short pause while other accounts are left to try; back off once every account has been tried. */
+  private retryDelay(attempt: number, credentials: CloudflareCredential[]): Promise<void> {
+    return this.delay(attempt < credentials.length ? 200 : 1_500 * attempt);
+  }
+
+  /**
+   * After a failed attempt: an account whose daily quota is used up, or whose token is rejected, leaves this
+   * request's queue; any other failure sends it to the back, so the next account is tried first.
+   */
+  private advance(
+    credentials: CloudflareCredential[],
+    credential: CloudflareCredential,
+    err: unknown,
+    status?: number,
+  ): void {
+    const index = credentials.indexOf(credential);
+    if (index < 0) return;
+    credentials.splice(index, 1);
+    if (!this.isAccountQuotaError(err, status) && status !== 401 && status !== 403) credentials.push(credential);
+  }
+
+  /** Runs one Workers AI call with a timeout and records it (account state + logs database). */
+  private async call<T>(
+    operation: string,
+    credential: CloudflareCredential,
+    modelId: string,
+    timeoutMs: number,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const started = Date.now();
+    try {
+      const result = await withTimeout(run(), timeoutMs, modelId);
+      this.pool.reportSuccess(credential, { operation, model: modelId, durationMs: Date.now() - started });
+      return result;
+    } catch (err) {
+      const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
+      this.pool.reportFailure(credential, {
+        operation,
+        model: modelId,
+        durationMs: Date.now() - started,
+        status,
+        message: this.errorMessage(err),
+        quota: this.isAccountQuotaError(err, status),
+      });
+      throw err;
     }
-  }
-
-  private getCredential(): CloudflareCredential {
-    return this.options.credentials[this.keyPointer % this.options.credentials.length];
-  }
-
-  private rotateApiToken(): void {
-    if (this.options.credentials.length <= 1) return;
-    this.keyPointer = (this.keyPointer + 1) % this.options.credentials.length;
-    this.logger.warn({ pointer: this.keyPointer }, 'Rotated Cloudflare API credential');
   }
 
   private errorMessage(err: unknown): string {
@@ -569,28 +596,11 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     );
   }
 
-  private shouldRotateToken(err: unknown, status?: number): boolean {
-    if (this.isAccountQuotaError(err, status)) {
-      return this.options.credentials.length > 1;
-    }
-    if (this.options.credentials.length <= 1) {
-      return false;
-    }
-    if (status === 401 || status === 403) {
-      return true;
-    }
-    if (status != null && status >= 500) {
-      return true;
-    }
-    const msg = this.errorMessage(err).toLowerCase();
-    return msg.includes('rate limit');
-  }
-
   private toTryOnException(err: unknown, status?: number): BadRequestException {
     const msg = this.errorMessage(err);
     if (this.isAccountQuotaError(err, status)) {
       return new BadRequestException(
-        'Cloudflare Workers AI daily quota is exhausted. Upgrade to Workers Paid or try again tomorrow.',
+        "Every Cloudflare account has used today's free Workers AI quota. Add another account in Admin → Cloudflare accounts, or try again after 00:00 UTC.",
       );
     }
     if (
@@ -600,7 +610,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
       msg.toLowerCase().includes('invalid api token')
     ) {
       return new BadRequestException(
-        'Cloudflare API token is invalid or missing Workers AI permissions. Update CLOUDFLARE_API_TOKEN.',
+        'Cloudflare API token is invalid or missing Workers AI permissions. Update it in Admin → Cloudflare accounts.',
       );
     }
     return new BadRequestException(msg || 'Cloudflare try-on request failed');
@@ -661,18 +671,16 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     const prompt = this.buildPrompt(request, mode);
     const inputImages = await this.buildInputImages(request);
     const modelId = this.resolveModelId(request);
-    const credentialCount = this.options.credentials.length;
-    const maxAttempts = credentialCount * Math.max(1, this.options.maxRetries + 1);
+    const credentials = await this.pool.credentials();
+    const maxAttempts = this.maxAttempts(credentials);
     let lastError: unknown;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const credential = this.getCredential();
+    for (let attempt = 1; attempt <= maxAttempts && credentials.length; attempt++) {
+      const credential = this.pick(credentials);
       const started = Date.now();
       try {
-        const image = await withTimeout(
+        const image = await this.call('try-on', credential, modelId, this.options.timeoutMs, () =>
           this.invokeWorkersAi(prompt, inputImages, credential, modelId, seed),
-          this.options.timeoutMs,
-          modelId,
         );
         this.logger.info(
           {
@@ -692,13 +700,11 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
         lastError = err;
         const status = err instanceof AxiosError ? err.response?.status : (err as Error & { status?: number }).status;
         const failureReason = this.errorMessage(err);
-        const willRotate = this.shouldRotateToken(err, status);
+        this.advance(credentials, credential, err, status);
         const nextAction =
-          attempt >= maxAttempts
+          attempt >= maxAttempts || !credentials.length
             ? 'no more Cloudflare retries — job will fail'
-            : willRotate
-              ? `rotate API credential and retry (attempt ${attempt + 1}/${maxAttempts})`
-              : `retry same credential (attempt ${attempt + 1}/${maxAttempts}) after ${1_500 * attempt}ms`;
+            : `retry on the next account (attempt ${attempt + 1}/${maxAttempts})`;
 
         this.logger.warn(
           {
@@ -715,12 +721,7 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
           },
           'Cloudflare try-on attempt failed',
         );
-        if (willRotate) {
-          this.rotateApiToken();
-        }
-        if (attempt < maxAttempts) {
-          await this.delay(1_500 * attempt);
-        }
+        if (attempt < maxAttempts) await this.retryDelay(attempt, credentials);
       }
     }
 

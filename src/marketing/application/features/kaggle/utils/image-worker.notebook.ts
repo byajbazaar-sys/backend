@@ -21,6 +21,18 @@ export const IMAGE_MODELS = {
   kleinVae: 'https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors',
 } as const;
 
+/** pip packages the image notebook needs (a warm worker session also installs them at boot, in the background). */
+export const IMAGE_PIP_PACKAGES = [
+  'transformers>=4.57,<5',
+  'accelerate>=1.2',
+  'bitsandbytes>=0.45',
+  'safetensors',
+  'pillow',
+  'timm',
+  'kornia',
+  'einops',
+];
+
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
 const code = (source: string) => ({ cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source });
 
@@ -34,6 +46,7 @@ import requests, websocket
 
 JOB = json.loads(__JOB_JSON__)
 MODELS = json.loads(__MODELS_JSON__)
+IMAGE_PIP = json.loads(__PIP_JSON__)
 # Inside a warm worker session WORKER survives between jobs: loaded analyst, running ComfyUI, installed packages,
 # and LOCAL_MODELS (Hugging Face repos symlinked from the private model dataset). Standalone runs start empty.
 WORKER = globals().setdefault("WORKER", {})
@@ -87,11 +100,23 @@ class Reporter:
 report = Reporter()
 report.send("imageSetup", 1, "Image worker started", force=True)
 
+
+
+def wait_boot(key, message, progress, stage="imageSetup"):
+    """Warm session: wait for one of the session's background setup steps (packages installed, or model files copied
+    from the read-only cache to the local disk). Standalone runs have no such steps and never wait."""
+    event = WORKER.get("boot", {}).get(key)
+    if event is not None and not event.is_set():
+        report.send(stage, progress, message, force=True)
+        started = time.time()
+        event.wait(1500)
+        print(f"waited {time.time() - started:.0f}s for the session's {key} step", flush=True)
+
+
 try:
+    wait_boot("image_packages", "Finishing the image packages install", 2)
     if not WORKER.get("image_packages"):
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q",
-                        "transformers>=4.57,<5", "accelerate>=1.2", "bitsandbytes>=0.45",
-                        "safetensors", "pillow", "timm", "kornia", "einops"], check=True)
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", *IMAGE_PIP], check=True)
         WORKER["image_packages"] = True
     if not JOB.get("hfToken"):
         raise RuntimeError("MARKETING_HF_TOKEN is not set: FLUX.2 [klein] 9B is gated on Hugging Face")
@@ -154,6 +179,7 @@ def load_vlm():
     if cached and cached[0] == VLM_ID:  # warm session: already on its GPU
         _, VLM, VLM_PROCESSOR = cached
         return
+    wait_boot("analyst", "Copying the image analyst to the local disk", 7, "imageAnalysis")
     from transformers import AutoProcessor, BitsAndBytesConfig, Qwen3VLForConditionalGeneration
     quantization = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
                                       bnb_4bit_compute_dtype=torch.float16)
@@ -236,6 +262,9 @@ def fallback_plan(target):
 PLAN_COMMON = (
     "You are the art director of a jewellery advert. The image is the real product photo. "
     "product = 2 to 5 words naming the jewellery type and metal (e.g. 'gold kundan necklace'). "
+    "metal = the metal colour you SEE in the photo, one of: silver, oxidised silver, yellow gold, rose gold, white "
+    "gold, platinum, two-tone — trust the photo over the shot direction (a grey-white shiny metal is silver). "
+    "colours = at most 8 words naming any enamel, meenakari or stone colours you see, or 'none'. "
     "product_box = a tight box around ONLY the jewellery (no hands, fingers, boxes or props) as [x1, y1, x2, y2] in "
     "0-1000 coordinates of the image width and height. ")
 PLAN_EXACT = PLAN_COMMON + (
@@ -245,14 +274,48 @@ PLAN_EXACT = PLAN_COMMON + (
     "resting on a surface in the lower middle); scene = the shot direction in at most 40 words describing ONLY the "
     "surroundings, adapted to this product (the right body part, pose and framing), calling it 'the jewellery' and "
     "never describing its design or adding other jewellery. "
-    'JSON only: {"product": "...", "product_box": [x1, y1, x2, y2], "shots": [{"index": 0, '
+    'JSON only: {"product": "...", "metal": "...", "colours": "...", "product_box": [x1, y1, x2, y2], '
+    '"shots": [{"index": 0, '
     '"placement": {"x": 0.5, "y": 0.5, "scale": 0.5}, "scene": "..."}]}')
 PLAN_AI = PLAN_COMMON + (
     "For each shot: ai_prompt = 50 to 90 words for an image-editing model that receives this photo as image 1, "
     "describing the finished photo (setting, person or surface, pose, outfit, light, camera) that follows the shot "
     "direction, calling the product 'the exact <product> from image 1' that must stay identical (design, motifs, "
     "stones, stone count, metal colour, proportions) at a realistic size, with no other jewellery. "
-    'JSON only: {"product": "...", "product_box": [x1, y1, x2, y2], "shots": [{"index": 0, "ai_prompt": "..."}]}')
+    "Name the metal you see in every ai_prompt. When a person wears it, describe exactly how it sits ON the body "
+    "(a bangle or kada encircles the wrist with the hand through it, a necklace lies on the collarbones, earrings hang "
+    "from the earlobes, a ring wraps the finger), touching the skin at its real-life size — never held up beside the "
+    "face, floating, or looking pasted on. "
+    'JSON only: {"product": "...", "metal": "...", "colours": "...", "product_box": [x1, y1, x2, y2], '
+    '"shots": [{"index": 0, "ai_prompt": "..."}]}')
+
+METAL = None  # the metal the analyst sees in the photo ("silver", "yellow gold", ...)
+COLOURS = None  # the enamel / stone colours it sees
+WHITE_METAL = re.compile(r"silver|platinum|white gold|steel", re.I)
+
+
+def metal_lock():
+    """One sentence pinning the metal and enamel colours the photo shows: without it the image model drifts silver
+    towards gold, especially under warm light."""
+    if not METAL:
+        return ""
+    text = f"The jewellery is {METAL}"
+    if COLOURS and COLOURS.lower() != "none":
+        text += f" with {COLOURS}"
+    text += f"; keep it exactly {METAL}"
+    if WHITE_METAL.search(METAL):
+        text += " — a cool white-grey metal, NOT gold, NOT yellow, no golden tint"
+    return text + ". "
+
+
+def fit_metal(prompt):
+    """The prompt with the metal lock up front; for a white metal also without gold wording, which tints the piece."""
+    prompt = str(prompt or "")
+    if METAL and WHITE_METAL.search(METAL):
+        prompt = re.sub(r"(?i)\\byellow\\s+gold\\b|\\bgold\\b", METAL, prompt)
+        prompt = re.sub(r"(?i)\\b(warm\\s+)?golden\\b", "soft", prompt)
+        prompt = re.sub(r"(?i)\\bwarm tone\\b", "cool tone", prompt)
+    return metal_lock() + prompt
 
 
 PRODUCT_BOX = None  # (x1, y1, x2, y2) pixels in the source photo, from the analyst
@@ -292,13 +355,16 @@ def plan_shots():
     budget = 120 + len(brief) * (170 if MODE == "ai" else 90)
     plans = {int(t["index"]): fallback_plan(t) for t in JOB["targets"]}
     report.send("imageAnalysis", 10, "Studying the product photo", force=True)
-    global PRODUCT_BOX
+    global PRODUCT_BOX, METAL, COLOURS
     by_index = {int(t["index"]): t for t in JOB["targets"]}
     for attempt in range(2):
         try:
             result = parse_json(ask_vlm([source_path], request, max_new_tokens=budget))
             PRODUCT_BOX = parse_box(result.get("product_box")) or PRODUCT_BOX
-            print("Product:", result.get("product"), "| box:", PRODUCT_BOX, flush=True)
+            METAL = words(result.get("metal"), 4).lower() or METAL
+            COLOURS = words(result.get("colours"), 10) or COLOURS
+            print("Product:", result.get("product"), "| metal:", METAL, "| colours:", COLOURS, "| box:", PRODUCT_BOX,
+                  flush=True)
             got = 0
             for shot in result.get("shots", []):
                 idx = int(shot.get("index", -1))
@@ -470,14 +536,34 @@ def fetch(url, dst, label):
     raise RuntimeError(f"Could not download {label}")
 
 
+def install_comfy_requirements():
+    """ComfyUI's own packages, installed while the weights download (a warm session does it at boot)."""
+    try:
+        if WORKER.get("comfy_requirements"):
+            return
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", f"{COMFY_DIR}/requirements.txt"],
+                       check=True, capture_output=True)
+        WORKER["comfy_requirements"] = True
+    except Exception as exc:
+        traceback.print_exc()
+        COMFY_STATE["error"] = f"ComfyUI install failed: {type(exc).__name__}: {exc}"
+
+
 def prefetch_engine():
-    """Background: clone ComfyUI and download the klein weights (network only — no pip, no GPU)."""
+    """Background: clone ComfyUI, then install its packages and download the klein weights at the same time. Each
+    file downloads to <name>.part on the local disk and is renamed into place only when complete."""
     try:
         if not os.path.isdir(COMFY_DIR):
             subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git",
                             COMFY_DIR], check=True, capture_output=True)
+        installer = None
+        if not WORKER.get("comfy_requirements") and "comfy_requirements" not in WORKER.get("boot", {}):
+            installer = threading.Thread(target=install_comfy_requirements, daemon=True)
+            installer.start()
         for (folder, url), label in zip(KLEIN.values(), [KLEIN_NAME, "its text encoder", "its VAE"]):
             fetch(url, os.path.join(COMFY_DIR, folder, url.split("/")[-1]), label)
+        if installer:
+            installer.join()
     except Exception as exc:
         traceback.print_exc()
         COMFY_STATE["error"] = f"{type(exc).__name__}: {exc}"
@@ -520,10 +606,15 @@ def ensure_comfy():
     if PREFETCH.is_alive():
         report.send("imageSetup", 20, f"Finishing the {KLEIN_NAME} download", force=True)
         PREFETCH.join()
+    wait_boot("comfy_requirements", f"Finishing the {KLEIN_NAME} engine install", 20)
+    wait_boot("klein", f"Copying {KLEIN_NAME} to the local disk", 20)
     if COMFY_STATE["error"]:
         raise RuntimeError(COMFY_STATE["error"])
-    report.send("imageSetup", 21, f"Installing the {KLEIN_NAME} image engine", force=True)
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", f"{COMFY_DIR}/requirements.txt"], check=True)
+    if not WORKER.get("comfy_requirements"):  # the session's boot install failed: do it now
+        install_comfy_requirements()
+        if COMFY_STATE["error"]:
+            raise RuntimeError(COMFY_STATE["error"])
+    report.send("imageSetup", 21, f"Starting the {KLEIN_NAME} image engine", force=True)
     start_comfy()
 
 
@@ -654,9 +745,11 @@ def snap16(value):
     return max(512, int(round(int(value) / 16)) * 16)
 
 
-def ai_shot(target, plan, seed):
+def ai_shot(target, plan, seed, fix=""):
     width, height = int(target["width"]), int(target["height"])
-    prompt = plan.get("ai_prompt") or plan["scene_prompt"]
+    prompt = fit_metal(plan.get("ai_prompt") or plan["scene_prompt"])
+    if fix:
+        prompt += " Avoid this mistake: " + fix
     image = klein(prompt, seed, snap16(width), snap16(height), reference=Image.open(REFERENCE_PATH).convert("RGB"))
     if image.size != (width, height):
         image = ImageOps.fit(image, (width, height), Image.Resampling.LANCZOS)
@@ -707,23 +800,38 @@ def composite(generated, layer, kind):
 
 
 def judge(candidate_path, target, plan):
-    """Runs on GPU 1 in a worker thread while GPU 0 paints the next take."""
+    """Qwen3-VL on GPU 1 scores a take 0-10 and names what is wrong. Two checks are not left to its overall score:
+    a metal that changed colour (AI mode) and a piece that is held or floating instead of worn (worn shots)."""
     if not JUDGE:
         return None
+    worn = target["kind"] == "worn"
     text = ("Image 1 is the real jewellery product. Image 2 is a generated advertising photo that must show exactly "
             "that product. Shot direction: " + words(plan["scene_prompt"], 60) + ". Score image 2 from 0 to 10 as a "
             "premium jewellery advert, strictly: the product appears exactly once and no extra or duplicate jewellery "
-            "was added; it sits naturally at a believable size (worn, held or resting correctly, edges blend in, no "
-            "halo or cut-out look, its lighting and shadow match the scene); faces, hands and fingers look "
+            "was added; it sits naturally at a believable real-life size (worn, held or resting correctly, edges blend "
+            "in, no halo or cut-out look, its lighting and shadow match the scene); faces, hands and fingers look "
             "anatomically correct; the photo looks like a real high-end camera shot (no plastic skin, smearing, "
             "warped background or AI artefacts); the scene matches the direction; no text or watermark. A 9 or 10 must "
             "be publishable as is. " +
             ("The product was redrawn by AI: compare it closely with image 1 — design, motifs, stones, stone count, "
-             "metal colour and proportions must match; any visible change scores at most 4. " if MODE == "ai" else "") +
-            'Answer with JSON only: {"score": 7, "issues": "short reason"}')
+             "enamel colours, metal colour and proportions must match; any visible change scores at most 4. "
+             if MODE == "ai" else "") +
+            "metal = the metal colour of the jewellery in image 2 (silver, yellow gold, rose gold, ...). "
+            "worn = true only if a person is physically wearing it on the body (around the wrist, on the neck, in the "
+            "ear, on the finger), touching the skin — false if it is held in the hand, floating or beside the body. "
+            'Answer with JSON only: {"score": 7, "metal": "silver", "worn": true, "issues": "short reason"}')
     try:
-        result = parse_json(ask_vlm([source_path, candidate_path], text, max_new_tokens=160))
-        return clamp(result.get("score"), 0, 10, 5.0), str(result.get("issues", ""))[:200]
+        result = parse_json(ask_vlm([source_path, candidate_path], text, max_new_tokens=180))
+        score = clamp(result.get("score"), 0, 10, 5.0)
+        issues = [str(result.get("issues", ""))[:200]]
+        seen = str(result.get("metal", "")).lower()
+        if MODE == "ai" and METAL and WHITE_METAL.search(METAL) and "gold" in seen and "white gold" not in seen:
+            score = min(score, 2.0)
+            issues.insert(0, f"the {METAL} jewellery was turned into {seen} — it must stay {METAL}")
+        if worn and result.get("worn") is False:
+            score = min(score, 4.0)
+            issues.insert(0, "the jewellery is held or floating instead of being worn on the body")
+        return score, "; ".join(i for i in issues if i)
     except Exception:
         traceback.print_exc()
         return None
@@ -817,7 +925,7 @@ def typeset_name(image, name):
 PLACEHOLDER = (128, 126, 122)
 
 
-def klein_paint(target, plan, seed):
+def klein_paint(target, plan, seed, fix=""):
     """exact mode: klein sees the product pinned on a grey placeholder (reference) and paints only the grey (mask);
     the untouched product pixels and a contact shadow then go back on top."""
     width, height = int(target["width"]), int(target["height"])
@@ -828,7 +936,7 @@ def klein_paint(target, plan, seed):
     canvas = canvas.convert("RGB")
     prompt = ("Replace the plain grey placeholder around the jewellery in image 1 with a photorealistic scene: " +
               plan["scene_prompt"] + ". The jewellery stays exactly where it is, at the same size, unchanged and shown "
-              "only once; no other jewellery. " + QUALITY + ".")
+              "only once; no other jewellery. " + QUALITY + "." + (" Avoid this mistake: " + fix if fix else ""))
     result = klein(prompt, seed, gen_w, gen_h, reference=canvas, canvas=canvas, mask=paint)
     if result.size != (gen_w, gen_h):
         result = result.resize((gen_w, gen_h), Image.Resampling.LANCZOS)
@@ -849,16 +957,17 @@ def klein_logo(target, seed):
     return typeset_name(image, JOB["title"]), prompt
 
 
-def make_shot(target, plan, seed):
+def make_shot(target, plan, seed, fix=""):
     if JOB["type"] == "logo":
         return klein_logo(target, seed)
-    return ai_shot(target, plan, seed) if MODE == "ai" else klein_paint(target, plan, seed)
+    return ai_shot(target, plan, seed, fix) if MODE == "ai" else klein_paint(target, plan, seed, fix)
 
 
 try:
-    from concurrent.futures import ThreadPoolExecutor
-    JUDGES = ThreadPoolExecutor(max_workers=1) if JUDGE else None  # GPU 1, in parallel with painting on GPU 0
-    TAKES = 4 if JUDGE else 1  # quality over speed: up to 4 takes per shot, the judge keeps the best
+    # Even the best model sometimes gets a hand, the scale or the metal wrong, so the judge checks the first take.
+    # A second take is painted only when the first is not publishable, and it is told what to fix.
+    TAKES = 2 if JUDGE else 1
+    GOOD_ENOUGH = 8
     report.send("imageGeneration", 20, "Preparing the FLUX.2 [klein] image engine", force=True)
     total = max(1, len(JOB["targets"]))
     failures = []
@@ -870,17 +979,14 @@ try:
         hi = 22 + 76 * (position + 1) / total
         label = f"image {position + 1}/{total}"
         try:
-            takes, errors = [], []
+            takes, errors, fix = [], [], ""
+            span = (hi - lo) / TAKES
             for attempt in range(TAKES):
-                scored = [t["future"].result() for t in takes if t["future"] and t["future"].done()]
-                if any(v and v[0] >= 9 for v in scored):
-                    break  # already publishable
-                span = (hi - lo) / TAKES
                 start = lo + span * attempt
                 report.send("imageGeneration", start, f"Painting {label}" +
-                            (f" · take {attempt + 1}/{TAKES}" if TAKES > 1 else ""), force=True, imageIndex=idx)
+                            (" · second take: " + fix[:120] if attempt else ""), force=True, imageIndex=idx)
                 try:
-                    image, used_prompt = make_shot(target, plan, random.randrange(2**31 - 1))
+                    image, used_prompt = make_shot(target, plan, random.randrange(2**31 - 1), fix)
                 except Exception as exc:
                     traceback.print_exc()
                     errors.append(f"{type(exc).__name__}: {exc}")
@@ -891,23 +997,27 @@ try:
                 path = os.path.join(OUT_DIR, f"image-{idx}-{attempt}.jpg")
                 image.save(path, "JPEG", quality=95, optimize=True)
                 del image
-                takes.append({"path": path, "prompt": used_prompt, "take": attempt + 1,
-                              "future": JUDGES.submit(judge, path, target, plan) if JUDGES else None})
+                if JUDGE:
+                    report.send("imageReview", start + span * 0.85, f"Checking {label}", force=True, imageIndex=idx)
+                verdict = judge(path, target, plan)
+                score = verdict[0] if verdict else 5.0
+                takes.append({"path": path, "prompt": used_prompt, "take": attempt + 1, "score": score})
+                if verdict:
+                    print(f"{label} take {attempt + 1}: score {score:.1f} — {verdict[1]}", flush=True)
+                if not verdict or score >= GOOD_ENOUGH:
+                    break  # publishable (or nothing to judge with): no second take
+                fix = verdict[1]
             if not takes:
                 raise RuntimeError(errors[-1] if errors else "no take was produced")
-            for take in takes:
-                verdict = take["future"].result() if take["future"] else None
-                take["score"] = verdict[0] if verdict else 5.0
-                if verdict:
-                    print(f"{label} take {take['take']}: score {take['score']:.1f} — {verdict[1]}", flush=True)
             takes.sort(key=lambda t: t["score"], reverse=True)
             if JUDGE and len(takes) > 1 and takes[0]["score"] - takes[1]["score"] <= 1 and prefer_second(
                     takes[0], takes[1], plan):
                 takes[0], takes[1] = takes[1], takes[0]
             best = takes[0]
             if JUDGE:
-                report.send("imageReview", hi - 0.5, f"{label.capitalize()}: kept take {best['take']} of "
-                            f"{len(takes)} ({best['score']:.0f}/10)", force=True, imageIndex=idx)
+                report.send("imageReview", hi - 0.5, f"{label.capitalize()}: " + (
+                    f"kept take {best['take']} of {len(takes)} ({best['score']:.0f}/10)" if len(takes) > 1 else
+                    f"quality {best['score']:.0f}/10"), force=True, imageIndex=idx)
             with open(best["path"], "rb") as image_file:
                 requests.put(target["uploadUrl"], data=image_file, headers={"Content-Type": "image/jpeg"},
                              timeout=300).raise_for_status()
@@ -936,9 +1046,9 @@ const pyJson = (value: unknown): string => JSON.stringify(JSON.stringify(value))
 
 export function buildImageWorkerNotebook(job: ImageNotebookJob): Record<string, unknown> {
   // Function replacements: a `$` in the job (titles, URLs) must not be read as a replacement pattern.
-  const setup = CELL_SETUP.replace('__JOB_JSON__', () => pyJson(job)).replace('__MODELS_JSON__', () =>
-    pyJson(IMAGE_MODELS),
-  );
+  const setup = CELL_SETUP.replace('__JOB_JSON__', () => pyJson(job))
+    .replace('__MODELS_JSON__', () => pyJson(IMAGE_MODELS))
+    .replace('__PIP_JSON__', () => pyJson(IMAGE_PIP_PACKAGES));
   return {
     nbformat: 4,
     nbformat_minor: 5,

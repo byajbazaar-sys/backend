@@ -1,3 +1,5 @@
+import { IMAGE_MODELS, IMAGE_PIP_PACKAGES } from './image-worker.notebook';
+import { IMAGE_COMFY_FILES } from './model-cache';
 import { WorkerSessionNotebookJob } from './worker-session-notebook-job';
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
@@ -59,6 +61,8 @@ const CELL_MODELS = `
 # The private model dataset (built by the account setup) is mounted read-only under /kaggle/input: symlink its files
 # where the job notebooks look for them, so they skip their downloads. Without it they download as usual.
 COMFY_DIR = "/tmp/ComfyUI"
+BOOT_CONFIG = json.loads(__BOOT_JSON__)
+LINKED = []  # (dataset file, symlink, group) — copied to the local disk in the background (next cell)
 try:
     if not os.path.isdir(COMFY_DIR):
         subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git", COMFY_DIR],
@@ -74,19 +78,92 @@ try:
                 continue
             if f["kind"] == "comfy":
                 dst = os.path.join(COMFY_DIR, f["path"])
+                group = "klein" if f["path"] in BOOT_CONFIG["kleinPaths"] else "video"
             else:
                 root = "/tmp/bb-hf/" + f["repo"].replace("/", "--")
                 dst = os.path.join(root, f["path"])
                 WORKER["local_models"][f["repo"]] = root
+                group = "analyst" if f["repo"] == BOOT_CONFIG["analyst"] else "segmenter"
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             if not os.path.lexists(dst):
                 os.symlink(src, dst)
                 linked += 1
+            if os.path.islink(dst):
+                LINKED.append((src, dst, group))
     MODELS_CACHED = linked > 0
     print(f"Model cache: {'mounted, ' + str(linked) + ' files linked' if MODELS_CACHED else 'not available'}", flush=True)
 except Exception as exc:
     traceback.print_exc()
     MODELS_CACHED = False
+`;
+
+const CELL_BOOT = `
+# Background setup, so jobs don't wait for it: pip installs for the image notebook and ComfyUI, and a local copy of
+# every cached model file. Files are copied to <name>.staging on the local disk and then renamed over the symlink, so
+# a job never sees a half-written file, and later loads (and reloads after switching between image and video work)
+# read the fast local disk instead of the dataset mount. Jobs wait for the step they need (WORKER["boot"]).
+import threading, shutil
+
+BOOT = {key: threading.Event() for key in ("image_packages", "comfy_requirements", "analyst", "segmenter", "klein",
+                                           "video")}
+WORKER["boot"] = BOOT
+DISK_RESERVE = 12e9  # left free for outputs, pip and ComfyUI's own files; files that don't fit stay on the mount
+
+
+def boot_installs():
+    steps = (("image_packages", BOOT_CONFIG["imagePip"]),
+             ("comfy_requirements", ["-r", f"{COMFY_DIR}/requirements.txt"]))
+    for key, args in steps:
+        started = time.time()
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "install", "-q", *args], check=True, capture_output=True)
+            WORKER[key] = True
+            print(f"Boot: {key} installed in {time.time() - started:.0f}s", flush=True)
+        except Exception as exc:
+            print(f"Boot: {key} install failed (the job installs it instead): {exc}", flush=True)
+        finally:
+            BOOT[key].set()
+
+
+def stage(src, dst):
+    size = os.path.getsize(src)
+    if shutil.disk_usage("/tmp").free - size < DISK_RESERVE:
+        return False
+    tmp = dst + ".staging"
+    try:
+        with open(src, "rb") as fin, open(tmp, "wb") as fout:
+            shutil.copyfileobj(fin, fout, 64 * 1024 * 1024)
+        os.replace(tmp, dst)
+        return True
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+def boot_staging():
+    started, copied, kept = time.time(), 0, 0
+    # In the order a job needs them: the analyst plans first, then klein paints; video files last.
+    for group in ("analyst", "segmenter", "klein", "video"):
+        try:
+            for src, dst, _ in [item for item in LINKED if item[2] == group]:
+                try:
+                    if os.path.islink(dst) and stage(src, dst):
+                        copied += 1
+                    else:
+                        kept += 1
+                except Exception as exc:
+                    kept += 1
+                    print(f"Boot: could not copy {os.path.basename(dst)} ({exc}); it is read from the mount", flush=True)
+        finally:
+            BOOT[group].set()
+    if LINKED:
+        print(f"Boot: {copied} model files copied to the local disk in {time.time() - started:.0f}s"
+              + (f", {kept} read from the dataset mount" if kept else ""), flush=True)
+
+
+threading.Thread(target=boot_installs, daemon=True).start()
+threading.Thread(target=boot_staging, daemon=True).start()
 `;
 
 const CELL_LOOP = `
@@ -181,6 +258,13 @@ release_all()
 session_event("completed", f"Warm worker stopped after {jobs_run} job(s): {reason}", status="completed")
 `;
 
+/** What the session's background setup installs, and which cached files belong to which model. */
+const BOOT_CONFIG = {
+  imagePip: IMAGE_PIP_PACKAGES,
+  analyst: IMAGE_MODELS.analyst,
+  kleinPaths: IMAGE_COMFY_FILES.map((f) => f.path),
+};
+
 /** Python string literal holding a JSON document (JSON escapes are valid Python string escapes). */
 const pyJson = (value: unknown): string => JSON.stringify(JSON.stringify(value));
 
@@ -205,7 +289,8 @@ export function buildWorkerSessionNotebook(job: WorkerSessionNotebookJob): Recor
           `keeps the models loaded between them.`,
       ),
       code(CELL_SESSION.replace('__JOB_JSON__', () => pyJson(job))),
-      code(CELL_MODELS),
+      code(CELL_MODELS.replace('__BOOT_JSON__', () => pyJson(BOOT_CONFIG))),
+      code(CELL_BOOT),
       code(CELL_LOOP),
     ],
   };

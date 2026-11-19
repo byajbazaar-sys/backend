@@ -1,6 +1,9 @@
 export interface CloudflareCredential {
   accountId: string;
   apiToken: string;
+  /** cloudflare_accounts row id (accounts added in admin); absent for CLOUDFLARE_ACCOUNT_ID / _API_TOKEN pairs. */
+  id?: string;
+  label?: string | null;
 }
 
 export function parseCloudflareCredentials(accountIdsRaw: string, tokensRaw: string): CloudflareCredential[] {
@@ -26,7 +29,7 @@ export function parseCloudflareCredentials(accountIdsRaw: string, tokensRaw: str
 
 export class CloudflareTryOnOptions {
   constructor(
-    /** Paired account ID + API token entries (supports rotation across accounts). */
+    /** CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN pairs — used only while no account is added in admin. */
     public credentials: CloudflareCredential[] = [],
     public modelId = '@cf/black-forest-labs/flux-2-klein-9b',
     public timeoutMs = 120_000,

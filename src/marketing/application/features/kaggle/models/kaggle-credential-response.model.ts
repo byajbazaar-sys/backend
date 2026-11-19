@@ -6,7 +6,7 @@ export class KaggleCredentialResponseModel {
   @ApiProperty() @Expose() username: string;
   @ApiPropertyOptional() @Expose() label: string | null;
   @ApiProperty({ example: 'KGAT…9f3a' }) @Expose() maskedKey: string;
-  @ApiProperty({ description: 'False when the stored key cannot be decrypted (secret changed) — re-enter it' })
+  @ApiProperty({ description: 'False when the stored key is empty or an old encrypted key could not be converted — re-enter it' })
   @Expose()
   keyReadable: boolean;
   @ApiProperty() @Expose() concurrency: number;

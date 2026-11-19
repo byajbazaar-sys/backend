@@ -2,6 +2,7 @@ import { JwtService } from '@nestjs/jwt';
 
 import { SettingsApiController } from './api-access';
 import { AuthController } from './auth';
+import { CloudflareAccountsAdminController, CloudflareAccountsAdminService } from './cloudflare-accounts';
 import { CustomersController } from './customers';
 import { DepositsController } from './deposits';
 import { EventsController, AdminEventsController } from './events';
@@ -62,6 +63,7 @@ export const Controllers = [
   WhatsAppController,
   WhatsAppWebhookController,
   VerificationController,
+  CloudflareAccountsAdminController,
 ];
 
 export const Services = [
@@ -70,4 +72,5 @@ export const Services = [
   OtpChallengeService,
   VerificationService,
   CouponAdminService,
+  CloudflareAccountsAdminService,
 ];

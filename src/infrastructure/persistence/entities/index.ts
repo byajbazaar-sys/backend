@@ -34,6 +34,7 @@ export * from './support-request.entity';
 export * from './transaction-log.entity';
 export * from './transaction.entity';
 export * from './try-on-asset.entity';
+export * from './cloudflare-account.entity';
 export * from './user.entity';
 export * from './websocket-connection.entity';
 export * from './whatsapp-business-connection.entity';

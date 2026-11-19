@@ -7,6 +7,7 @@ New to the project? Read these in order.
 | 1 | [CODE_STRUCTURE_CONVENTIONS.md](CODE_STRUCTURE_CONVENTIONS.md) | How the backend is organised (layers, folders, imports), the rules every change follows, and a step-by-step "add a feature" walkthrough. |
 | 2 | [MARKETING_KAGGLE_PIPELINE.md](MARKETING_KAGGLE_PIPELINE.md) | How a product photo becomes AI campaign images, photoshoots, logos and an Instagram reel on free Kaggle GPUs: image modes, the notebooks, warm workers, the model cache, settings, deploy and troubleshooting. |
 | 3 | [MARKETING_MEDIA_CDN.md](MARKETING_MEDIA_CDN.md) | How marketing images and videos are served from `media.byajbazaar.com` (Cloudflare Worker in front of the private B2 bucket), and how to set it up. |
+| 4 | [CLOUDFLARE_AI_ACCOUNTS.md](CLOUDFLARE_AI_ACCOUNTS.md) | The Cloudflare Workers AI accounts behind try-on and inventory background removal (FLUX.2 [klein] 9B): adding several in admin, rotation and cooldowns, and their logs in the logs database. |
 
 Elsewhere in the repo:
 
@@ -42,6 +43,7 @@ Elsewhere in the repo:
 | **Render job** | A marketing GPU task in `marketing_render_jobs` (images, video, logo, setup, warm worker). |
 | **Warm worker** | A long Kaggle session that keeps models loaded and pulls jobs one after another. |
 | **B2** | Backblaze B2, the S3-compatible object storage holding all files. |
+| **Cloudflare AI account** | A Cloudflare account whose Workers AI runs try-on / background removal (Admin → Cloudflare AI accounts). |
 | **Worker (Cloudflare)** | A small script on Cloudflare's edge — here, the image/media CDNs. Not the same as a warm worker. |
 
 ## Deploying, in short

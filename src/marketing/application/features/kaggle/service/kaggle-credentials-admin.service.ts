@@ -243,7 +243,7 @@ export class KaggleCredentialsAdminService {
   async verify(username: string): Promise<KaggleCredentialVerifyResponseModel> {
     const row = await this.require(username);
     if (!row.apiKey) {
-      return { username: row.username, valid: false, gpuHoursLeft: null, error: 'Stored key cannot be decrypted' };
+      return { username: row.username, valid: false, gpuHoursLeft: null, error: 'Stored key is missing or unreadable — re-enter it' };
     }
     try {
       const { hoursLeft } = await this.pool.verifyCredentials(row.username, row.apiKey);

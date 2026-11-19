@@ -1,6 +1,7 @@
 import { ApiAccessTokenEntity } from './api-access-token.entity';
 import { ApiConfigurationEntity } from './api-configuration.entity';
 import { BillLogEntity } from './bill-log.entity';
+import { CloudflareAccountEntity } from './cloudflare-account.entity';
 import { CouponRedemptionEntity } from './coupon-redemption.entity';
 import { CouponEntity } from './coupon.entity';
 import { CustomerEntity } from './customer.entity';
@@ -73,6 +74,7 @@ export const ENTITIES = [
   JewelleryEventEntity,
   LabelDesignerSettingsEntity,
   TryOnAssetEntity,
+  CloudflareAccountEntity,
   DepositAccountEntity,
   DepositTransactionEntity,
   DepositReceiptEntity,

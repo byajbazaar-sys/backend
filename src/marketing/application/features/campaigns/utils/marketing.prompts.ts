@@ -153,12 +153,12 @@ export function fallbackScene(style: MarketingStyle, index: number): ScenePrompt
 export function buildSceneImagePrompt(scene: string, title: string): string {
   const includesModel = /\b(model|person|woman|man|female|male)\b/i.test(scene);
   const people = includesModel
-    ? 'Show only the one adult model described in the scene, wearing the jewellery as intended, with natural anatomy and a pose that never covers it.'
+    ? 'Show only the one adult model described in the scene, physically wearing the jewellery on the body (touching the skin, at its real-life size, not held up or floating), with natural anatomy and a pose that never covers it.'
     : 'No people or hands.';
   return (
     `Professional vertical product photograph for a jewellery advertisement. Place the exact jewellery piece from the ` +
-    `reference image (${title}) ${scene}. Keep the jewellery identical: same design, shape, metal colour, stones and fine ` +
-    `details; do not add, remove or redesign any part. Product centred and fully visible, sharp focus, photorealistic, ` +
+    `reference image (${title}) ${scene}. Keep the jewellery identical: same design, shape, metal colour (silver stays ` +
+    `silver, gold stays gold), enamel colours, stones and fine details; do not add, remove or redesign any part. Product centred and fully visible, sharp focus, photorealistic, ` +
     `high detail, ${people} No text or watermark.`
   );
 }
@@ -198,6 +198,6 @@ export const LOGO_VIDEO_PROMPT =
 
 export const VIDEO_NEGATIVE =
   'low quality, worst quality, blurry, out of focus, flicker, jitter, judder, jerky movement, frame stutter, deformed, distorted, warped ' +
-  'geometry, melting, changing jewellery design, altered silhouette, wrong proportions, altered stone count, added or missing stones, ' +
+  'geometry, melting, changing jewellery design, metal colour change, silver turning gold, colour shift, altered enamel colours, altered silhouette, wrong proportions, altered stone count, added or missing stones, ' +
   'extra hands, extra fingers, deformed hands, extra people, duplicate jewellery, extra objects, abrupt cuts, camera shake, ' +
   'extreme close-up, cropped product, motion blur, text, subtitles, watermark, static frame, overexposed, oversaturated, jpeg artifacts';

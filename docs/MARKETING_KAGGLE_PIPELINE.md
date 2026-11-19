@@ -87,13 +87,14 @@ Example: a user creates a campaign with 4 scenes.
 4. **The warm worker asks for work** (`POST /api/v1/public/marketing/worker/next`). The backend claims the oldest
    waiting job for it and answers with that job's notebook code (`nextForSession` → `handToSession`).
 5. **The worker runs the image notebook code**:
-   - Qwen3-VL looks at the product photo once: a box around the jewellery and, for this scene, where the product
-     sits and a product-aware scene (one short answer).
+   - Qwen3-VL looks at the product photo once: a box around the jewellery, the **metal and enamel colours it sees**
+     and, for this scene, where the product sits and a product-aware scene (one short answer).
    - In Exact mode, BiRefNet cuts the jewellery out.
-   - FLUX.2 [klein] paints each scene — up to 4 tries per scene. Qwen3-VL scores every try and the best one is kept.
+   - FLUX.2 [klein] paints each scene. Qwen3-VL scores the try; only if it scores under 8 is a second try painted,
+     told what to fix. The better one is kept.
    - The best image is uploaded straight to the marketing bucket.
 6. **Progress flows back** after every step (`imageAnalysis`, `imageGeneration`, `imageDone`, …). The backend updates
-   the campaign and pushes it to the browser, so the user sees "Painting image 2/4 · take 3/4".
+   the campaign and pushes it to the browser, so the user sees "Painting image 2/4" and "Image 2/4: quality 9/10".
 7. **The last image job finishes** (`completed`; earlier ones just update their scene). If the user asked for a video,
    **one `CAMPAIGN` job per clip** is queued (4 scenes, plus the logo clip if the brand has none yet). They also run
    in parallel, with Wan 2.2. When the **last clip job** finishes, `finishVideoJob` queues one **merge-only** job
@@ -153,9 +154,9 @@ too slow and doesn't fit. klein runs in fp16 on a T4.
 
 | # | Cell | What it does |
 | --- | --- | --- |
-| 1 | setup | Installs packages (skipped in a warm worker), opens the progress reporter, downloads the product photo, picks the mode. |
-| 2 | engine | ComfyUI/klein helpers. Starts a **background download** of the klein files while the analyst works. |
-| 3 | analyst | One short Qwen3-VL answer with only what the mode needs: `product_box` + per shot `placement` and a product-aware `scene` (Exact), or `product_box` + `ai_prompt` (AI). Motion prompts and product descriptions come from the backend planner. Logos skip it. |
+| 1 | setup | Installs packages (a warm worker installed them at boot), opens the progress reporter, downloads the product photo, picks the mode. |
+| 2 | engine | ComfyUI/klein helpers. Starts in the **background**, while the analyst works: the klein downloads (each to `<file>.part`, renamed when complete) **and**, at the same time, ComfyUI's pip install. |
+| 3 | analyst | One short Qwen3-VL answer with only what the mode needs: `product_box`, `metal`, `colours` + per shot `placement` and a product-aware `scene` (Exact), or `ai_prompt` (AI). Motion prompts and product descriptions come from the backend planner. Logos skip it. |
 | 4 | cutout | Exact mode: BiRefNet cuts the jewellery out **inside the box** (so hands and props stay out). AI mode: saves the box crop as the reference. |
 | 5 | generate | Paints every shot, judges the tries, uploads the best one. |
 
@@ -169,7 +170,23 @@ too slow and doesn't fit. klein runs in fp16 on a T4.
 3. Prompt: "replace the grey placeholder with *<scene>*; the jewellery stays where it is, shown once".
 4. Add a soft contact shadow and paste the **original product pixels** back on top.
 
-**AI mode** (`ai_shot`): klein's standard image-edit graph — reference = product crop, prompt = `ai_prompt`.
+**AI mode** (`ai_shot`): klein's standard image-edit graph — reference = product crop, prompt = `ai_prompt` with a
+**metal lock** in front (`fit_metal`): "The jewellery is silver with pink and blue enamel; keep it exactly silver —
+NOT gold…". For a silver/platinum piece it also rewrites "gold"/"golden" wording in the prompt (warm golden light is
+what pushed silver pieces to gold).
+
+**Keeping the metal right** (this used to turn silver jewellery gold):
+
+1. The backend never guesses the metal. `normalizeMetal` returns `unknown` when neither the form, the inventory item
+   nor the item name says it (it used to default to gold), and the prompt then says "the exact metal colour seen in
+   the reference photo". For silver/platinum the scene light is neutral instead of "warm golden".
+2. The analyst reads the metal from the photo, and the photo wins over the direction.
+3. The judge names the metal it sees in each try; a silver piece that came out gold scores at most 2.
+
+**Worn shots** describe the piece physically on the body ("her hand passes through it and it rests on the wrist
+bone… not held, not floating"); the judge reports `worn`, and a piece held or floating beside the body scores at
+most 4. In Exact mode the original pixels are pasted, so a worn shot can still look stuck-on; use AI mode for sets
+with a model.
 
 **Logo** (`klein_logo`): klein paints a backdrop with an emblem, then the shop name is **typeset with a real font**
 (never AI-drawn), so it is always spelled correctly.
@@ -180,18 +197,20 @@ overflow) restarts ComfyUI once with a full-precision text encoder.
 ### How the two GPUs share the work
 
 ```
-GPU 0 (klein paints)     try 1 ── try 2 ── try 3 ── try 4
-GPU 1 (Qwen3-VL judges)          judge 1   judge 2   judge 3   judge 4
+GPU 0 (klein paints)     try 1 ─────────────── (only if try 1 < 8) try 2 with "Avoid this mistake: <issue>"
+GPU 1 (Qwen3-VL judges)          judge 1                                    judge 2
 ```
 
-- Up to **4 tries per shot** (1 if the session only has one GPU — then there is no judge).
-- Each try is judged on GPU 1 **while GPU 0 already paints the next one**, so judging adds almost no time.
-- Stops early once a try scores **9 or more**.
+- **At most 2 tries per shot** (1 if the session only has one GPU — then there is no judge). It used to be up to 4;
+  most of that time was spent on tries nobody saw.
+- Why judge at all with the best model? Every try is a random sample: even 9B sometimes gets a hand, the scale or
+  the metal wrong. The judge catches that before it reaches the user.
+- Try 1 is judged first; a score of **8 or more** is kept straight away. Otherwise try 2 is painted with the judge's
+  complaint added to the prompt, so it fixes that specific mistake instead of rolling the dice again.
 - The judge is strict (0–10): product shown once, natural size and placement, no halo or cut-out look, matching
   shadow, correct hands and faces, looks like a real camera photo, no text. In AI mode any visible change to the
-  product caps the score at 4.
-- If the two best tries are within 1 point, Qwen3-VL compares them side by side.
-- Only the best try is uploaded.
+  product caps the score at 4; a changed metal at 2; a worn shot that isn't worn at 4.
+- If both tries are within 1 point, Qwen3-VL compares them side by side. Only the best try is uploaded.
 
 We don't run a second painter on GPU 1 because Kaggle gives ~30 GB of RAM: two copies of klein plus Qwen3-VL would
 run out of memory.
@@ -203,7 +222,7 @@ retried by the watchdog when the session died). If one try fails after the engin
 
 ### How long it takes
 
-About 1–3 minutes per try with 9B, so one scene takes ~5–12 minutes. Scenes run in parallel on different accounts, so
+About 1–3 minutes per try with 9B, so one scene takes ~2–6 minutes. Scenes run in parallel on different accounts, so
 a 4-scene campaign takes about as long as one scene **when 4 accounts are free** (otherwise scenes queue for the next
 free worker). A brand-new session adds model loading (a few minutes from the model cache, longer when downloading); a
 warm worker starts the next job at once.
@@ -219,6 +238,10 @@ Wan 2.2 TI2V-5B (in ComfyUI) turns each image into a ~5-second clip; ffmpeg merg
 | `reel_fast` | 480×832 | 121 at 24 fps | 20 |
 
 Clips are upscaled to 1080×1920 afterwards, so `reel_fast` is softer but cheaper.
+
+Setup overlaps: ComfyUI's pip install runs in the background while the Wan files download (in a warm worker it was
+already done at boot). The video prompt and negative prompt lock the metal and enamel colours ("silver turning gold"
+is in the negative), since a clip starts from the scene image and must not drift away from it.
 
 **Out-of-memory protection** (this used to crash with "KSampler: Allocation on device 0 would exceed allowed memory"):
 
@@ -242,6 +265,16 @@ A **warm worker** is one long Kaggle session that does this once and then runs j
 1. **Start.** Dispatch pushes the worker notebook (`buildWorkerSessionNotebook`) to a Kaggle account. In the database
    it is a render job of kind `WORKER` that holds one slot of that account.
 2. **Boot.** The notebook links the account's model cache dataset (section 8) into place, so nothing downloads.
+   Then two **background threads** start, so the first job doesn't do this work itself:
+   - pip installs the image packages and ComfyUI's requirements;
+   - every cached model file is copied from the read-only dataset mount (`/kaggle/input`) to the local disk
+     (`/tmp`), in the order a job needs them (Qwen3-VL, BiRefNet, klein, then Wan). Each copy goes to
+     `<file>.staging` and is then renamed over the symlink, so nothing ever reads a half-written file. Later loads,
+     and reloads after switching between image and video work, read the fast local disk. Files that would leave less
+     than 12 GB free stay on the mount.
+
+   A job that needs a step that hasn't finished waits for it ("Copying the image analyst to the local disk"); the
+   Kaggle log shows `Boot: … installed in …s` and `Boot: N model files copied to the local disk in …s`.
 3. **Ask for work.** Every 10 s it calls `POST /api/v1/public/marketing/worker/next` (this is also its heartbeat).
 4. **Run a job.** The answer contains the job's notebook code. The worker runs it in-process. A `WORKER` dictionary
    survives between jobs and keeps the loaded Qwen3-VL, the running ComfyUI and the installed packages — so the
@@ -341,7 +374,7 @@ by `serverless/marketing-config.js`).
 | `KAGGLE_SESSION_HOURS` | No (12) | Kaggle's session limit; jobs hand over before it. |
 | `KAGGLE_MACHINE_SHAPE` | No | Kaggle accelerator (default T4 × 2). |
 
-Kaggle **accounts are not env vars** — admins add them on `/admin/kaggle` (stored encrypted in `kaggle_credentials`).
+Kaggle **accounts are not env vars** — admins add them on `/admin/kaggle` (keys stored as plain text in `kaggle_credentials.api_key`; keys saved before migration `1700000000010` are decrypted and rewritten on first read).
 
 Admin settings (stored in the marketing DB): **Auto-recover** and **Keep warm** (minutes).
 
@@ -431,7 +464,7 @@ Do the same with `buildWorkerNotebook` (video / setup) and `buildWorkerSessionNo
 | **Dispatch** | The step that matches waiting jobs to Kaggle capacity (starts warm workers). |
 | **Slot** | One concurrent Kaggle session on an account (the account's "parallel renders" setting). |
 | **Warm worker** | A long Kaggle session (`WORKER` job) that keeps models loaded and pulls jobs. |
-| **Take / try** | One attempt at painting a shot; the judge keeps the best. |
+| **Take / try** | One attempt at painting a shot (at most 2); the judge keeps the better one. |
 | **ComfyUI** | The open-source engine that runs klein and Wan graphs inside the notebook. |
 | **klein** | FLUX.2 [klein] 9B, the image model (needs `MARKETING_HF_TOKEN`). |
 | **Batch** | Jobs queued together (one per scene, shot or clip) that run in parallel and show as one status. |

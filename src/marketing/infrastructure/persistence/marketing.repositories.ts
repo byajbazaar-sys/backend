@@ -342,14 +342,20 @@ export class KaggleCredentialsRepository
     super(db, KaggleCredentialEntity);
   }
 
-  /** A key that can't be decrypted (secret changed) comes back as '' so one bad row never breaks the pool. */
-  private toDomain(row: KaggleCredentialEntity): KaggleCredential {
-    const { apiKeyEncrypted, ...rest } = row;
-    let apiKey = '';
-    try {
-      apiKey = this.cipher.decrypt(apiKeyEncrypted);
-    } catch {
-      // Left empty: the worker pool skips it and the admin list reports it as unreadable.
+  /**
+   * Keys are stored as plain text. A row written before that still holds AES ciphertext (`v1.<iv>.<tag>.<data>`):
+   * it is decrypted once and rewritten as plain text. One that can't be decrypted comes back as '' (re-enter it).
+   */
+  private async toDomain(row: KaggleCredentialEntity): Promise<KaggleCredential> {
+    const { apiKey: stored, ...rest } = row;
+    let apiKey = stored ?? '';
+    if (/^v1\.[\w-]+\.[\w-]+\.[\w-]*$/.test(apiKey)) {
+      try {
+        apiKey = this.cipher.decrypt(apiKey);
+        await (await this.repo()).update({ id: row.id }, { apiKey });
+      } catch {
+        apiKey = '';
+      }
     }
     return { ...rest, apiKey };
   }
@@ -358,7 +364,7 @@ export class KaggleCredentialsRepository
     const where: FindOptionsWhere<KaggleCredentialEntity> = {};
     if (filter.enabled !== undefined) where.enabled = filter.enabled;
     const rows = await (await this.repo()).find({ where, order: { username: 'ASC' } });
-    return rows.map((row) => this.toDomain(row));
+    return Promise.all(rows.map((row) => this.toDomain(row)));
   }
 
   async find(username: string): Promise<KaggleCredential | null> {
@@ -369,7 +375,7 @@ export class KaggleCredentialsRepository
   async create(credential: Omit<KaggleCredential, 'id' | 'createdAt' | 'updatedAt'>): Promise<KaggleCredential> {
     const repo = await this.repo();
     const { apiKey, ...rest } = credential;
-    const saved = await repo.save(repo.create({ ...rest, apiKeyEncrypted: this.cipher.encrypt(apiKey) }));
+    const saved = await repo.save(repo.create({ ...rest, apiKey }));
     return this.toDomain(saved);
   }
 
@@ -382,7 +388,7 @@ export class KaggleCredentialsRepository
     const changes = Object.fromEntries(
       Object.entries(rest).filter(([, value]) => value !== undefined),
     ) as Partial<KaggleCredentialEntity>;
-    if (apiKey !== undefined) changes.apiKeyEncrypted = this.cipher.encrypt(apiKey);
+    if (apiKey !== undefined) changes.apiKey = apiKey;
     if (Object.keys(changes).length) await repo.update({ username }, changes);
     return this.find(username);
   }

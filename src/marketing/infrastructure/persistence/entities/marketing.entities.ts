@@ -88,8 +88,8 @@ export class KaggleCredentialEntity {
   @Column({ type: 'varchar', length: 100 })
   username: string;
   @Column({ type: 'varchar', length: 255, nullable: true }) label: string | null;
-  /** AES-256-GCM ciphertext of the API key / access token. */
-  @Column({ type: 'text' }) apiKeyEncrypted: string;
+  /** API key / access token, stored as plain text (older rows may still hold `v1.…` ciphertext until first read). */
+  @Column({ type: 'text' }) apiKey: string;
   @Column({ type: 'smallint', default: 1 }) concurrency: number;
   @Column({ type: 'boolean', default: true }) enabled: boolean;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
