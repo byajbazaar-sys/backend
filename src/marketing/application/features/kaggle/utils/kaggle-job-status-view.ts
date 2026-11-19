@@ -15,4 +15,7 @@ export interface KaggleJobStatusView {
   startedAt: Date | null;
   finishedAt: Date | null;
   updatedAt: Date | null;
+  /** Admin-only in API responses. */
+  workerId?: string | null;
+  kernelRef?: string | null;
 }

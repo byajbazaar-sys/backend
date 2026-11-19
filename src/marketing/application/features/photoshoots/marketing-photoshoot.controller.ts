@@ -13,13 +13,18 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
+import { EUserType, Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 
 import { CreatePhotoshootRequestModel, PhotoshootResponseModel } from './models';
 import { MarketingPhotoshootService } from './service';
-const out = (value: unknown): PhotoshootResponseModel =>
-  plainToInstance(PhotoshootResponseModel, value, { excludeExtraneousValues: true });
+import { MARKETING_ADMIN_GROUP } from '../../shared/utils/customer-text';
+/** Admins also get the raw render details; customers get neutral text. */
+const out = (value: unknown, identity: IIdentity): PhotoshootResponseModel =>
+  plainToInstance(PhotoshootResponseModel, value, {
+    excludeExtraneousValues: true,
+    groups: identity.userType === EUserType.Admin ? [MARKETING_ADMIN_GROUP] : [],
+  });
 
 @ApiTags('marketing')
 @ApiBearerAuth('user')
@@ -32,17 +37,17 @@ export class MarketingPhotoshootController {
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'AI photoshoot: one product photo → 4 ad photos (model, close-up, hands, worn)' })
   async create(@Identity() identity: IIdentity, @Body() body: CreatePhotoshootRequestModel) {
-    return out(await this.photoshoots.create(identity.userId, body));
+    return out(await this.photoshoots.create(identity.userId, body), identity);
   }
 
   @Get()
   async list(@Identity() identity: IIdentity) {
-    return (await this.photoshoots.list(identity.userId)).map(out);
+    return (await this.photoshoots.list(identity.userId)).map((p) => out(p, identity));
   }
 
   @Get(':id')
   async get(@Identity() identity: IIdentity, @Param('id', new ParseUUIDPipe()) id: string) {
-    return out(await this.photoshoots.get(identity.userId, id));
+    return out(await this.photoshoots.get(identity.userId, id), identity);
   }
 
   @Delete(':id')
@@ -59,6 +64,6 @@ export class MarketingPhotoshootController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Param('index', ParseIntPipe) index: number,
   ) {
-    return out(await this.photoshoots.regenerateShot(identity.userId, id, index));
+    return out(await this.photoshoots.regenerateShot(identity.userId, id, index), identity);
   }
 }

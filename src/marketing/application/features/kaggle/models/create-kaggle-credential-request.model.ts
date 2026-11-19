@@ -22,7 +22,7 @@ export class CreateKaggleCredentialRequestModel {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(4)
+  @Max(2)
   concurrency?: number;
 
   @ApiPropertyOptional({ description: 'Free-text note (owner, purpose…)' })

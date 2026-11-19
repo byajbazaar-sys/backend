@@ -47,6 +47,22 @@ export function normalizeKernelRef(ref?: string | null): string | null {
   return parts.length >= 2 ? parts.slice(-2).join('/') : null;
 }
 
+/** Kaggle runs at most this many GPU sessions at once per account (setup, cache builds and workers included). */
+export const KAGGLE_MAX_GPU_SESSIONS = 2;
+
+/**
+ * Kaggle refused a push because the account already runs its maximum GPU sessions. Not an account fault: often a
+ * session we just closed is still shutting down on Kaggle's side. Retry later instead of resting the account.
+ */
+export function isSessionLimitError(message?: string | null): boolean {
+  return !!message && /maximum (?:batch )?gpu session count|session count of \d+ reached/i.test(message);
+}
+
+/** Parallel notebooks an account can actually run: its configured slots, capped at Kaggle's session limit. */
+export function effectiveConcurrency(concurrency: number): number {
+  return Math.max(1, Math.min(concurrency || 1, KAGGLE_MAX_GPU_SESSIONS));
+}
+
 export function isAccountCoolingDown(account: Pick<KaggleAccount, 'cooldownUntil'>): boolean {
   return !!account.cooldownUntil && new Date(account.cooldownUntil).getTime() > Date.now();
 }
@@ -69,6 +85,8 @@ export function kaggleJobStatus(job: RenderJob): KaggleJobStatusView {
     startedAt: job.startedAt ?? null,
     finishedAt: job.finishedAt ?? null,
     updatedAt: job.updatedAt ?? new Date(),
+    workerId: job.workerId ?? null,
+    kernelRef: job.kernelRef ?? null,
   };
 }
 
@@ -113,6 +131,8 @@ export function kaggleBatchStatus(jobs: RenderJob[]): KaggleJobStatusView | unde
     startedAt: started.length ? new Date(Math.min(...started)) : null,
     finishedAt: finished && ended.length ? new Date(Math.max(...ended)) : null,
     updatedAt: new Date(Math.max(...updated, 0)),
+    workerId: (active ?? views[views.length - 1]).workerId ?? null,
+    kernelRef: (active ?? views[views.length - 1]).kernelRef ?? null,
   };
 }
 

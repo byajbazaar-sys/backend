@@ -4,6 +4,7 @@ import { Expose, Type } from 'class-transformer';
 import { PhotoshootPieceResponseModel } from './photoshoot-piece-response.model';
 import { PhotoshootShotResponseModel } from './photoshoot-shot-response.model';
 import { KaggleJobStatusResponseModel } from '../../../shared';
+import { CustomerErrorText } from '../../../shared/utils/customer-text';
 
 export class PhotoshootResponseModel {
   @Expose() @ApiProperty() id: string;
@@ -20,7 +21,7 @@ export class PhotoshootResponseModel {
   @ApiProperty({ type: PhotoshootPieceResponseModel })
   piece: PhotoshootPieceResponseModel;
   @Expose() @ApiPropertyOptional() sourceImageUrl?: string;
-  @Expose() @ApiPropertyOptional() error?: string;
+  @Expose() @CustomerErrorText() @ApiPropertyOptional() error?: string;
   @Expose() @ApiProperty() createdAt: Date;
   @Expose()
   @Type(() => PhotoshootShotResponseModel)

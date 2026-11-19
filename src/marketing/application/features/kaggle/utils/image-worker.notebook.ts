@@ -862,6 +862,7 @@ try:
     report.send("imageGeneration", 20, "Preparing the FLUX.2 [klein] image engine", force=True)
     total = max(1, len(JOB["targets"]))
     failures = []
+    failure_reasons = []
     for position, target in enumerate(JOB["targets"]):
         idx = int(target["index"])
         plan = PLANS.get(idx) or fallback_plan(target)
@@ -915,12 +916,13 @@ try:
         except Exception as exc:
             traceback.print_exc()
             failures.append(idx)
+            failure_reasons.append(f"{idx}: {type(exc).__name__}: {str(exc)[:300]}")
             free_gpu()
             report.send("imageFailed", hi, f"Image {idx} failed: {type(exc).__name__}: {exc}", force=True,
                         imageIndex=idx)
 
     if len(failures) == len(JOB["targets"]):
-        raise RuntimeError("Every image failed: " + ", ".join(map(str, failures)))
+        raise RuntimeError("Every image failed — " + " | ".join(failure_reasons or map(str, failures)))
     report.send("completed", 100, f"Done ({total - len(failures)}/{total} images)", status="completed", force=True,
                 failedImages=failures)
 except Exception as exc:

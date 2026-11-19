@@ -137,10 +137,17 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
     const account = await this.account(workerId);
     const datasets = options.datasets ?? [];
     let res = await this.push(account, kernel, notebook, datasets);
-    if (datasets.length && (res.status >= 300 || (res.data as { error?: string })?.error)) {
+    const firstError = (res.data as { error?: string; message?: string } | undefined) ?? {};
+    const firstReason = firstError.error || firstError.message || '';
+    // Retry without the dataset only when the dataset could be the problem — not when the account is simply full.
+    if (
+      datasets.length &&
+      (res.status >= 300 || firstError.error) &&
+      !/maximum (?:batch )?gpu session count|session count of \d+ reached/i.test(firstReason)
+    ) {
       // The model dataset may still be processing (or was deleted): the notebook downloads the models instead.
       this.logger.warn(
-        { workerId, kernel: kernel.name, datasets, status: res.status },
+        { workerId, kernel: kernel.name, datasets, status: res.status, reason: firstReason },
         'Kaggle push with the model dataset failed — retrying without it',
       );
       res = await this.push(account, kernel, notebook, []);

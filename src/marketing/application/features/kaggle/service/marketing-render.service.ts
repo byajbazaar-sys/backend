@@ -74,6 +74,8 @@ import {
   WorkerNotebookJob,
   signMarketingWorkerToken,
   verifyMarketingWorkerToken,
+  effectiveConcurrency,
+  isSessionLimitError,
 } from '../utils';
 import { MarketingWorkerEvent } from './marketing-worker-event';
 import { WorkerSessionAnswer } from './worker-session-answer';
@@ -520,7 +522,7 @@ export class MarketingRenderService {
     // New accounts run their one-time setup notebook; ready ones may (re)build their model cache with it.
     for (const account of accounts) {
       if (account.status !== EKaggleAccountStatus.SettingUp && account.status !== EKaggleAccountStatus.Ready) continue;
-      if ((busy[account.username] ?? 0) >= workers.get(account.username).concurrency) continue;
+      if ((busy[account.username] ?? 0) >= effectiveConcurrency(workers.get(account.username).concurrency)) continue;
       const job = await this.jobs.claimNext(account.username, false);
       if (!job) continue;
       busy[account.username] = (busy[account.username] ?? 0) + 1;
@@ -528,13 +530,30 @@ export class MarketingRenderService {
     }
 
     const candidates: DispatchCandidate[] = [];
+    /** Why each account cannot take work right now (logged when renders wait with no free account). */
+    const unavailable: string[] = [];
     for (const account of accounts) {
-      if (account.status !== EKaggleAccountStatus.Ready || isAccountCoolingDown(account)) continue;
-      const concurrency = workers.get(account.username).concurrency;
+      if (account.status !== EKaggleAccountStatus.Ready) {
+        unavailable.push(`${account.username}: ${String(account.status).toLowerCase().replace(/_/g, ' ')}`);
+        continue;
+      }
+      if (isAccountCoolingDown(account)) {
+        unavailable.push(
+          `${account.username}: resting after "${(account.lastError ?? 'a failed start').slice(0, 120)}"`,
+        );
+        continue;
+      }
+      const concurrency = effectiveConcurrency(workers.get(account.username).concurrency);
       const used = busy[account.username] ?? 0;
-      if (used >= concurrency) continue;
+      if (used >= concurrency) {
+        unavailable.push(`${account.username}: all ${concurrency} GPU session(s) in use`);
+        continue;
+      }
       const quota = await this.gpuQuota(account);
-      if (!quota.usable) continue;
+      if (!quota.usable) {
+        unavailable.push(`${account.username}: weekly GPU quota nearly used (${quota.hoursLeft ?? '?'} h left)`);
+        continue;
+      }
       candidates.push({
         username: account.username,
         concurrency,
@@ -544,7 +563,8 @@ export class MarketingRenderService {
       });
     }
 
-    if (candidates.length === 0) await this.reportNoCapacity();
+    if (!workers.size) unavailable.push('no Kaggle account is configured');
+    if (candidates.length === 0) await this.reportNoCapacity(unavailable);
 
     if (this.config.publicApiBaseUrl) {
       await this.dispatchSessions(candidates);
@@ -639,6 +659,13 @@ export class MarketingRenderService {
       return true;
     } catch (err) {
       const reason = (err as Error).message;
+      if (isSessionLimitError(reason)) {
+        // Kaggle still counts a session we closed moments ago (or one started outside the pool): try again on the
+        // next dispatch round. No rest for the account, so its healthy workers keep running.
+        await this.endSession(session, 'Kaggle has no free GPU session on this account yet — retrying shortly');
+        this.logger.info({ account: workerId, slot }, 'Kaggle session limit reached — will retry');
+        return false;
+      }
       await this.endSession(session, `Could not start: ${reason}`, true);
       await this.accounts.update(workerId, {
         cooldownUntil: new Date(Date.now() + START_FAILURE_COOLDOWN_MS),
@@ -731,7 +758,8 @@ export class MarketingRenderService {
     if (remaining < SESSION_MIN_LEFT_SECONDS) return stop('the Kaggle session time is nearly used up');
     const account = session.workerId ? await this.accounts.find(session.workerId) : null;
     const enabled = (await this.pool.workers()).some((w) => w.id === session.workerId);
-    if (!account || !enabled || account.status !== EKaggleAccountStatus.Ready || isAccountCoolingDown(account)) {
+    // A rest (cooldown) only blocks *new* notebooks on the account: a session that is already up keeps working.
+    if (!account || !enabled || account.status !== EKaggleAccountStatus.Ready) {
       return stop('the account is not available for renders');
     }
     if (!(await this.gpuQuota(account)).usable) return stop('the account is out of GPU hours');
@@ -923,12 +951,13 @@ export class MarketingRenderService {
    * Renders are waiting but no account can take them: log why (CloudWatch) and tell admins (activity log), at most
    * every NO_CAPACITY_ALERT_MS per server so the 2-minute re-check does not flood either.
    */
-  private async reportNoCapacity(): Promise<void> {
+  private async reportNoCapacity(unavailable: string[] = []): Promise<void> {
     if (Date.now() - this.lastNoCapacityAlert < NO_CAPACITY_ALERT_MS) return;
     const health = await this.kaggleHealth.report();
     if (health.waiting === 0) return;
     this.lastNoCapacityAlert = Date.now();
-    const reasons = health.issues.filter((i) => i.level !== 'info').map((i) => i.message);
+    const issues = health.issues.filter((i) => i.level !== 'info').map((i) => i.message);
+    const reasons = [...unavailable, ...issues.filter((m) => !unavailable.includes(m))];
     this.logger.warn(
       { waiting: health.waiting, oldestWaitingMinutes: health.oldestWaitingMinutes, reasons },
       'Kaggle: renders are waiting but no account can take them',
@@ -1061,6 +1090,21 @@ export class MarketingRenderService {
       pushed = await this.pool.pushNotebook(workerId, kernel, notebook);
     } catch (err) {
       const reason = (err as Error).message;
+      if (isSessionLimitError(reason)) {
+        // The account is full on Kaggle's side for now: back to the queue untouched (same account for setups).
+        await this.jobs.update(job.id, {
+          status: ERenderJobStatus.Waiting,
+          ...(job.kind === ERenderJobKind.Setup ? {} : { workerId: null }),
+          slot: null,
+          kernelRef: null,
+          stageMessage: 'Waiting for a free GPU',
+        });
+        this.logger.info(
+          { jobId: job.id, kind: job.kind, account: workerId },
+          'Kaggle session limit reached — re-queued',
+        );
+        return false;
+      }
       if (job.kind === ERenderJobKind.Setup) {
         await this.failJob(job, `Could not start the GPU worker: ${reason}`);
         return false;
@@ -1312,6 +1356,10 @@ export class MarketingRenderService {
     if (event.stage === 'imageDone' && typeof event.imageIndex === 'number') {
       await this.imageDone(job, event.imageIndex, event.imagePrompt, event.motionPrompt);
     } else if (event.stage === 'imageFailed' && typeof event.imageIndex === 'number') {
+      this.logger.warn(
+        { jobId: job.id, account: job.workerId, imageIndex: event.imageIndex, reason: event.message },
+        'Render image failed',
+      );
       await this.imageFailed(job, event.imageIndex, event.message || 'Image generation failed');
     }
 

@@ -3,6 +3,18 @@ import { Inject, Injectable } from '@nestjs/common';
 import { KaggleJobStatusView } from '../../features';
 import { MarketingCampaign } from '../domain';
 import { IMarketingNotifier, MARKETING_NOTIFIER } from '../ports';
+import { customerErrorMessage, customerStageMessage } from '../utils/customer-text';
+
+/** Live ticks go to the customer's app: neutral wording, no render-account / notebook details. */
+function customerJob(job: KaggleJobStatusView): KaggleJobStatusView {
+  return {
+    ...job,
+    workerId: undefined,
+    kernelRef: undefined,
+    stageMessage: customerStageMessage(job.stageMessage) ?? null,
+    error: customerErrorMessage(job.error) ?? null,
+  };
+}
 
 /** Real-time events to the owner's open app sessions (AWS WebSocket). */
 @Injectable()
@@ -20,10 +32,10 @@ export class MarketingEvents {
         id: campaign.id,
         status: campaign.status,
         progress: campaign.progress,
-        stageMessage: campaign.stageMessage,
-        error: campaign.error,
+        stageMessage: customerStageMessage(campaign.stageMessage),
+        error: customerErrorMessage(campaign.error),
       },
-      ...(job ? { job } : {}),
+      ...(job ? { job: customerJob(job) } : {}),
       refresh,
       timestamp: new Date().toISOString(),
     });
@@ -34,7 +46,7 @@ export class MarketingEvents {
     return this.notifier.notifyUser(userId, {
       type: 'marketingPhotoshootUpdated',
       photoshoot: { id: photoshootId },
-      job,
+      job: customerJob(job),
       refresh: false,
       timestamp: new Date().toISOString(),
     });

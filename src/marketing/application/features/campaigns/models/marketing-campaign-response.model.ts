@@ -3,6 +3,7 @@ import { Expose, Type } from 'class-transformer';
 
 import { MarketingSceneResponseModel } from './marketing-scene-response.model';
 import { KaggleJobStatusResponseModel } from '../../../shared';
+import { CustomerErrorText, CustomerStageText } from '../../../shared/utils/customer-text';
 
 export class MarketingCampaignResponseModel {
   @Expose() @ApiProperty() id: string;
@@ -14,8 +15,8 @@ export class MarketingCampaignResponseModel {
   @Expose() @ApiProperty({ enum: ['exact', 'ai'] }) imageMode: string;
   @Expose() @ApiProperty() status: string;
   @Expose() @ApiProperty() progress: number;
-  @Expose() @ApiPropertyOptional() stageMessage?: string;
-  @Expose() @ApiPropertyOptional() error?: string;
+  @Expose() @CustomerStageText() @ApiPropertyOptional() stageMessage?: string;
+  @Expose() @CustomerErrorText() @ApiPropertyOptional() error?: string;
   @Expose() @ApiPropertyOptional() sourceImageUrl?: string;
   @Expose() @ApiPropertyOptional() coverImageUrl?: string;
   @Expose() @ApiPropertyOptional() coverSceneIndex?: number;
@@ -28,11 +29,11 @@ export class MarketingCampaignResponseModel {
   scenes?: MarketingSceneResponseModel[];
   @Expose()
   @Type(() => KaggleJobStatusResponseModel)
-  @ApiPropertyOptional({ type: KaggleJobStatusResponseModel, description: 'Latest Kaggle image-notebook run' })
+  @ApiPropertyOptional({ type: KaggleJobStatusResponseModel, description: 'Latest image generation run' })
   imageJob?: KaggleJobStatusResponseModel;
   @Expose()
   @Type(() => KaggleJobStatusResponseModel)
-  @ApiPropertyOptional({ type: KaggleJobStatusResponseModel, description: 'Latest Kaggle video-notebook run' })
+  @ApiPropertyOptional({ type: KaggleJobStatusResponseModel, description: 'Latest video generation run' })
   videoJob?: KaggleJobStatusResponseModel;
   @Expose() @Type(() => Date) @ApiProperty() createdAt: Date;
   @Expose() @Type(() => Date) @ApiProperty() updatedAt: Date;
