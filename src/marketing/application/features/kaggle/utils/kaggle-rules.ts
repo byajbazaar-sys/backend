@@ -1,7 +1,7 @@
 import { KaggleJobStatusView } from './kaggle-job-status-view';
 import { KaggleNotebook } from './kaggle-notebook';
 import { KaggleWorkNotebook } from './kaggle-work-notebook';
-import { KaggleAccount, RenderJob, ERenderJobKind } from '../../../shared';
+import { KaggleAccount, RenderJob, ERenderJobKind, ERenderJobStatus } from '../../../shared';
 
 /**
  * Pure Kaggle rules shared by dispatch (MarketingRenderService), the health report (KaggleHealthService) and the
@@ -72,18 +72,71 @@ export function kaggleJobStatus(job: RenderJob): KaggleJobStatusView {
   };
 }
 
+/**
+ * One notebook status for a batch of jobs queued together (one per scene / shot / clip, running in parallel on
+ * several accounts): the most active state, the average progress, and "2/4 done · <what the busiest one does>".
+ */
+export function kaggleBatchStatus(jobs: RenderJob[]): KaggleJobStatusView | undefined {
+  if (!jobs.length) return undefined;
+  if (jobs.length === 1) return kaggleJobStatus(jobs[0]);
+  const views = jobs.map(kaggleJobStatus);
+  const is = (status: string) => (view: KaggleJobStatusView) => String(view.status) === status;
+  const done = views.filter(is(ERenderJobStatus.Done)).length;
+  const failed = views.filter(is(ERenderJobStatus.Failed)).length;
+  const active =
+    views.find(is(ERenderJobStatus.Running)) ??
+    views.find(is(ERenderJobStatus.Starting)) ??
+    views.find(is(ERenderJobStatus.Waiting));
+  const finished = done + failed === views.length;
+  const status = active?.status ?? (done > 0 ? ERenderJobStatus.Done : ERenderJobStatus.Failed);
+  const progress = Math.round(
+    views.reduce((sum, view) => sum + (is(ERenderJobStatus.Done)(view) ? 100 : view.progress), 0) / views.length,
+  );
+  const times = (pick: (view: KaggleJobStatusView) => Date | null | undefined) =>
+    views
+      .map(pick)
+      .filter((value): value is Date => !!value)
+      .map((value) => new Date(value).getTime());
+  const started = times((view) => view.startedAt);
+  const queued = times((view) => view.queuedAt);
+  const ended = times((view) => view.finishedAt);
+  const updated = times((view) => view.updatedAt);
+  return {
+    id: (active ?? views[views.length - 1]).id,
+    notebook: views[0].notebook,
+    status,
+    progress: finished ? 100 : Math.min(99, progress),
+    stageMessage: [`${done}/${views.length} done`, active?.stageMessage].filter(Boolean).join(' · ').slice(0, 250),
+    error: failed ? (views.find((view) => view.error)?.error ?? null) : null,
+    attempts: Math.max(...views.map((view) => view.attempts)),
+    queuedAt: queued.length ? new Date(Math.min(...queued)) : null,
+    startedAt: started.length ? new Date(Math.min(...started)) : null,
+    finishedAt: finished && ended.length ? new Date(Math.max(...ended)) : null,
+    updatedAt: new Date(Math.max(...updated, 0)),
+  };
+}
+
 /** Short human label of what a job works on, for the admin screen ("Campaign images · Diwali set"). */
 export function jobTarget(job: RenderJob): string {
   const generation = job.payload?.imageGeneration;
   if (generation) {
     const what =
       generation.type === 'logo' ? 'Logo image' : generation.type === 'photoshoot' ? 'Photoshoot' : 'Campaign images';
-    const count = generation.targets?.length ?? 0;
-    return `${what} · ${generation.title}${count > 1 ? ` (${count} images)` : ''}`.slice(0, 200);
+    const targets = generation.targets ?? [];
+    const which =
+      targets.length > 1
+        ? ` (${targets.length} images)`
+        : targets.length === 1 && generation.type !== 'logo'
+          ? ` · #${targets[0].index + 1}`
+          : '';
+    return `${what} · ${generation.title}${which}`.slice(0, 200);
   }
   if (job.kind === ERenderJobKind.Setup) return 'Account setup check';
+  if (job.kind === ERenderJobKind.Worker) return 'Warm GPU worker';
   if (job.kind === ERenderJobKind.Logo) return 'Logo clip';
-  const clips = job.payload?.clips?.length ?? 0;
+  const clips = job.payload?.clips ?? [];
+  if (!clips.length && job.payload?.merge) return 'Campaign video · merge';
+  if (clips.length === 1) return `Campaign video · ${clips[0].key} clip${job.payload?.merge ? ' + merge' : ''}`;
   const merge = job.payload?.merge ? ' + merge' : '';
-  return `Campaign video${clips ? ` (${clips} clip${clips === 1 ? '' : 's'}${merge})` : ''}`;
+  return `Campaign video${clips.length ? ` (${clips.length} clips${merge})` : ''}`;
 }

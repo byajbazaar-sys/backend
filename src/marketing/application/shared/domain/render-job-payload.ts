@@ -29,6 +29,13 @@ export interface RenderJobPayload {
   done?: string[];
   /** The merged film was uploaded (no merge needed on continuation). */
   mergeDone?: boolean;
+  /**
+   * Jobs queued together (one per scene / shot / clip, so several Kaggle accounts render them in parallel) share it.
+   * The UI shows the batch as one notebook status; the last clip of a video batch queues the merge.
+   */
+  batchId?: string;
+  /** Video clip jobs: the merge to queue once the last clip job of the campaign has finished. */
+  mergeAfter?: { sceneKeys: string[]; outputKey: string } | null;
   /** Work job running inside a warm WORKER session: that session's job id. */
   sessionJobId?: string | null;
   /** WORKER jobs: what the warm session is doing. */

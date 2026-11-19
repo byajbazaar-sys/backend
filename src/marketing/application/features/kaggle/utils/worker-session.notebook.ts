@@ -163,10 +163,12 @@ while True:
     if not job:
         time.sleep(answer.get("pollSeconds") or 10)
         continue
-    if WORKER.get("pipeline") not in (None, job["pipeline"]):
-        print(f"Switching the GPUs from {WORKER['pipeline']} to {job['pipeline']} work", flush=True)
-        release_all()
-    WORKER["pipeline"] = job["pipeline"]
+    # "cpu" = a merge-only job (ffmpeg): keep whatever models are loaded for the next GPU job.
+    if job["pipeline"] != "cpu":
+        if WORKER.get("pipeline") not in (None, job["pipeline"]):
+            print(f"Switching the GPUs from {WORKER['pipeline']} to {job['pipeline']} work", flush=True)
+            release_all()
+        WORKER["pipeline"] = job["pipeline"]
     print(f"=== job {job['id']} ({job['kind']}) · {remaining() / 3600:.1f} h of session left", flush=True)
     started = time.time()
     job_error = run_job(job)

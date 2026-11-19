@@ -138,6 +138,12 @@ export class MarketingInstagramService {
     try {
       this.requireConfiguration();
       const token = await this.instagram.exchangeCode(code.replace(/#_$/, ''));
+      // What Meta actually granted (permissions + the Instagram / Page / business IDs each covers): explains
+      // "Requires instagram_basic permission" style failures. Best effort; never logs the token.
+      const granted = await this.instagram.inspectToken(token.accessToken).catch((err: unknown) => ({
+        inspectFailed: describeError(err),
+      }));
+      this.logger.info({ userId, granted }, 'Instagram Unified Login token granted');
       const accounts = await this.instagram.getAssignedAccounts(token.accessToken);
       const account = accounts[0];
       if (!account) throw new Error('No Instagram professional account was assigned to the app during login');

@@ -246,7 +246,8 @@ try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", *args], check=True)
 
     report.send("setup", 3, f"Installing video engine ({GPU_COUNT} GPU)", force=True)
-    if not WORKER.get("video_installed"):
+    MERGE_ONLY = not JOB.get("clips")  # joining finished clips needs ffmpeg only, no video model
+    if not MERGE_ONLY and not WORKER.get("video_installed"):
         if not os.path.isdir(COMFY_DIR):
             subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git", COMFY_DIR], check=True)
         C2C_DIR = f"{COMFY_DIR}/custom_nodes/ComfyUI-CustomNodePacks"
@@ -698,14 +699,10 @@ except Exception as e:
 
 /** Image-notebook models the setup check makes sure the account can download. */
 const IMAGE_MODEL_CHECKS = [
-  `https://huggingface.co/${IMAGE_MODELS.generator}/resolve/main/model_index.json`,
-  `https://huggingface.co/${IMAGE_MODELS.vae}/resolve/main/config.json`,
   `https://huggingface.co/${IMAGE_MODELS.segmenter}/resolve/main/config.json`,
-  `https://huggingface.co/${IMAGE_MODELS.analystLarge}/resolve/main/config.json`,
+  `https://huggingface.co/${IMAGE_MODELS.analyst}/resolve/main/config.json`,
   IMAGE_MODELS.kleinTextEncoder,
   IMAGE_MODELS.kleinVae,
-  IMAGE_MODELS.klein4bDiffusion,
-  IMAGE_MODELS.klein4bTextEncoder,
 ]
   .map((url) => JSON.stringify(url) + ',')
   .join('\n        ');
@@ -738,14 +735,17 @@ export function buildWorkerNotebook(job: WorkerNotebookJob): Record<string, unkn
           ),
           code(CELL_MODEL_CACHE),
         ]
-      : [
-          code(reporter),
-          code(CELL_INSTALL),
-          code(CELL_MODELS.replace('__VIDEO_MODEL_FILES__', () => VIDEO_MODEL_FILES_PY)),
-          code(CELL_COMFY),
-          code(CELL_RENDER_AND_MERGE),
-          code(CELL_RUN),
-        ];
+      : job.clips?.length
+        ? [
+            code(reporter),
+            code(CELL_INSTALL),
+            code(CELL_MODELS.replace('__VIDEO_MODEL_FILES__', () => VIDEO_MODEL_FILES_PY)),
+            code(CELL_COMFY),
+            code(CELL_RENDER_AND_MERGE),
+            code(CELL_RUN),
+          ]
+        : // Merge-only job (the clips were rendered in parallel by other jobs): no video model, no ComfyUI.
+          [code(reporter), code(CELL_INSTALL), code(CELL_RENDER_AND_MERGE), code(CELL_RUN)];
   return {
     nbformat: 4,
     nbformat_minor: 5,

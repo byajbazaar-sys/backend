@@ -29,32 +29,26 @@ const comfyFile = (folder: string, url: string): ComfyModelFile => ({
   path: `models/${folder}/${url.split('/').pop()}`,
 });
 
-/** FLUX.2 [klein] files the image notebook uses: 9B with a Hugging Face token (gated), else the open 4B. */
-export function imageComfyFiles(klein9b: boolean): ComfyModelFile[] {
-  return [
-    comfyFile('diffusion_models', klein9b ? IMAGE_MODELS.kleinDiffusion : IMAGE_MODELS.klein4bDiffusion),
-    comfyFile('text_encoders', klein9b ? IMAGE_MODELS.kleinTextEncoder : IMAGE_MODELS.klein4bTextEncoder),
-    comfyFile('vae', IMAGE_MODELS.kleinVae),
-  ];
-}
+/** FLUX.2 [klein] 9B files the image notebook uses (the diffusion model is gated: MARKETING_HF_TOKEN). */
+export const IMAGE_COMFY_FILES: ComfyModelFile[] = [
+  comfyFile('diffusion_models', IMAGE_MODELS.kleinDiffusion),
+  comfyFile('text_encoders', IMAGE_MODELS.kleinTextEncoder),
+  comfyFile('vae', IMAGE_MODELS.kleinVae),
+];
 
 /**
- * Everything the private per-account model dataset holds (~55 GB with 9B): ComfyUI files for both notebooks plus
- * the Hugging Face repos loaded with from_pretrained (Qwen3-VL 8B planner/judge, BiRefNet). The RealVisXL fallback and
- * the single-GPU 4B analyst are left out — they are downloaded only when needed.
+ * Everything the private per-account model dataset holds (~55 GB): ComfyUI files for both notebooks plus the
+ * Hugging Face repos loaded with from_pretrained (Qwen3-VL 8B planner/judge, BiRefNet).
  */
-export function modelCacheContents(klein9b: boolean): { comfy: ComfyModelFile[]; hf: string[] } {
+export function modelCacheContents(): { comfy: ComfyModelFile[]; hf: string[] } {
   return {
-    comfy: [...imageComfyFiles(klein9b), ...VIDEO_MODEL_FILES],
-    hf: [IMAGE_MODELS.analystLarge, IMAGE_MODELS.segmenter],
+    comfy: [...IMAGE_COMFY_FILES, ...VIDEO_MODEL_FILES],
+    hf: [IMAGE_MODELS.analyst, IMAGE_MODELS.segmenter],
   };
 }
 
-/** Dataset slug, versioned by its contents: changing a model (or 4B ↔ 9B) gives a new slug, so accounts rebuild it. */
-export function modelsDatasetSlug(klein9b: boolean): string {
-  const hash = createHash('sha1')
-    .update(JSON.stringify(modelCacheContents(klein9b)))
-    .digest('hex')
-    .slice(0, 8);
+/** Dataset slug, versioned by its contents: changing a model gives a new slug, so every account rebuilds it. */
+export function modelsDatasetSlug(): string {
+  const hash = createHash('sha1').update(JSON.stringify(modelCacheContents())).digest('hex').slice(0, 8);
   return `byajbazaar-models-${hash}`;
 }

@@ -36,7 +36,7 @@ import {
   MarketingKeys,
   resolveImageMode,
 } from '../../../shared';
-import { MarketingRenderService, kaggleJobStatus } from '../../kaggle';
+import { MarketingRenderService, kaggleBatchStatus } from '../../kaggle';
 
 const MAX_ACTIVE_PER_USER = 2;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
@@ -158,8 +158,8 @@ export class MarketingCampaignsService {
     if (await this.scheduledPosts.hasOpenForSource(userId, 'campaign', id)) {
       throw new ConflictException('Cancel this campaign’s scheduled Instagram posts before deleting it.');
     }
-    const job = await this.jobs.findOpenFor({ campaignId: id });
-    if (job && BUSY_RENDER_STATUSES.includes(job.status)) {
+    const open = await this.jobs.listOpenFor({ campaignId: id });
+    if (open.some((job) => BUSY_RENDER_STATUSES.includes(job.status))) {
       throw new ConflictException('This campaign is rendering right now. Delete it once it finishes.');
     }
     const scenes = await this.scenes.listForCampaign(id);
@@ -187,8 +187,8 @@ export class MarketingCampaignsService {
       throw new ConflictException('The scenes are still being prepared.');
     const scene = await this.scenes.findByIndex(id, index);
     if (!scene) throw new NotFoundException('Scene not found');
-    const job = await this.jobs.findOpenFor({ campaignId: id, kind: ERenderJobKind.Campaign });
-    if (job && BUSY_RENDER_STATUSES.includes(job.status)) {
+    const videoJobs = await this.jobs.listOpenFor({ campaignId: id, kind: ERenderJobKind.Campaign });
+    if (videoJobs.some((job) => BUSY_RENDER_STATUSES.includes(job.status))) {
       throw new ConflictException('This campaign is rendering right now. Try again when it finishes.');
     }
     const imageJob = await this.jobs.findOpenFor({ campaignId: id, kind: ERenderJobKind.Images });
@@ -269,10 +269,11 @@ export class MarketingCampaignsService {
       coverImageUrl,
       coverSceneIndex: cover?.index,
     };
-    const imageJob = jobs?.find((j) => j.kind === ERenderJobKind.Images);
-    const videoJob = jobs?.find((j) => j.kind === ERenderJobKind.Campaign);
-    if (imageJob) view.imageJob = kaggleJobStatus(imageJob);
-    if (videoJob) view.videoJob = kaggleJobStatus(videoJob);
+    // One status per notebook, even when its scenes run as parallel jobs on several accounts.
+    const imageJob = kaggleBatchStatus(jobs?.filter((j) => j.kind === ERenderJobKind.Images) ?? []);
+    const videoJob = kaggleBatchStatus(jobs?.filter((j) => j.kind === ERenderJobKind.Campaign) ?? []);
+    if (imageJob) view.imageJob = imageJob;
+    if (videoJob) view.videoJob = videoJob;
     if (withScenes) {
       view.scenes = await Promise.all(
         scenes.map(async (s) => ({

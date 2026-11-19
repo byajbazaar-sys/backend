@@ -76,7 +76,7 @@ export class MarketingConfig {
   readonly kaggleMachineShape = env('KAGGLE_MACHINE_SHAPE') ?? 'NvidiaTeslaT4';
   /**
    * Hugging Face token (read access) of an account that accepted the FLUX.2 [klein] 9B licence: the image notebooks
-   * then paint with 9B. Without it they use the open 4B model. Passed into the private Kaggle notebooks.
+   * paint with 9B. Required: without it image jobs fail with a clear error. Passed into the private Kaggle notebooks.
    */
   readonly huggingFaceToken = env('MARKETING_HF_TOKEN');
   /** Kaggle's GPU session limit; the notebook hands over to a new session before reaching it. */

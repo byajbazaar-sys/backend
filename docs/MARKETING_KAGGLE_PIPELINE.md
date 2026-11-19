@@ -77,23 +77,29 @@ Example: a user creates a campaign with 4 scenes.
 
 1. **The user clicks "Create"** in the web app (`components/marketing/MarketingContent.tsx`). They have also picked an
    image mode (Exact product or Full AI scene).
-2. **The backend saves the campaign** and creates a render job of kind `IMAGES` with status `WAITING`
-   (`queueCampaignImages`). It then schedules a **dispatch** (a queue message handled by
+2. **The backend saves the campaign** and creates **one `IMAGES` job per scene** (4 jobs, one shared `batchId`),
+   all `WAITING` (`queueCampaignImages`). It then schedules a **dispatch** (a queue message handled by
    `marketing-queue.consumer.ts`).
-3. **Dispatch looks for a GPU.** If a warm worker is idle, it will pick the job up by itself within ~10 seconds.
-   If every worker is busy, dispatch **starts a new warm worker** on the Kaggle account with the most free slots and
-   GPU hours (`dispatchSessions` → `startSession` → Kaggle API "push notebook").
+3. **Dispatch spreads the jobs over the GPUs.** Idle warm workers pick jobs up by themselves within ~10 seconds. For
+   every job no free worker will take, dispatch **starts a new warm worker** on the Kaggle account with the most free
+   slots and GPU hours (`dispatchSessions` → `startSession` → Kaggle API "push notebook"). With 4 accounts, the 4
+   scenes are painted **at the same time**.
 4. **The warm worker asks for work** (`POST /api/v1/public/marketing/worker/next`). The backend claims the oldest
    waiting job for it and answers with that job's notebook code (`nextForSession` → `handToSession`).
 5. **The worker runs the image notebook code**:
-   - Qwen3-VL looks at the product photo and plans each scene (prompts, where the product sits).
+   - Qwen3-VL looks at the product photo once: a box around the jewellery and, for this scene, where the product
+     sits and a product-aware scene (one short answer).
    - In Exact mode, BiRefNet cuts the jewellery out.
    - FLUX.2 [klein] paints each scene — up to 4 tries per scene. Qwen3-VL scores every try and the best one is kept.
    - The best image is uploaded straight to the marketing bucket.
 6. **Progress flows back** after every step (`imageAnalysis`, `imageGeneration`, `imageDone`, …). The backend updates
    the campaign and pushes it to the browser, so the user sees "Painting image 2/4 · take 3/4".
-7. **The image job finishes** (`completed`). If the user asked for a video, a `CAMPAIGN` job (the video notebook) is
-   queued next and goes through the same steps 3–6 with Wan 2.2.
+7. **The last image job finishes** (`completed`; earlier ones just update their scene). If the user asked for a video,
+   **one `CAMPAIGN` job per clip** is queued (4 scenes, plus the logo clip if the brand has none yet). They also run
+   in parallel, with Wan 2.2. When the **last clip job** finishes, `finishVideoJob` queues one **merge-only** job
+   (ffmpeg, no video model) that joins the clips into the reel.
+   The user sees one combined status per notebook ("2/4 done · Painting image…", average progress) —
+   `kaggleBatchStatus` in `kaggle-rules.ts`.
 8. **The worker stays warm.** It keeps the models loaded and asks for more work. With nothing to do it stops after
    the "Keep warm" time (default 45 minutes) to save GPU hours.
 
@@ -129,15 +135,16 @@ The mobile app does not send the mode yet, so it always gets `exact`.
 | --- | --- | --- |
 | Painter (both modes + logo backdrops) | **FLUX.2 [klein] 9B** distilled, fp8 weights (9.4 GB), fp16 maths on the T4 | ComfyUI, GPU 0 |
 | klein text encoder / VAE | `qwen_3_8b_fp8mixed` (8.7 GB) / `flux2-vae` | ComfyUI, GPU 0 |
-| Painter **without** a Hugging Face token | FLUX.2 [klein] 4B (open, Apache-2.0) | ComfyUI, GPU 0 |
-| Planner + judge | **Qwen3-VL-8B-Instruct**, 4-bit (4B on a single GPU) | GPU 1 |
+| Planner + judge | **Qwen3-VL-8B-Instruct**, 4-bit | GPU 1 |
 | Cut-out | **BiRefNet** | GPU 0, before ComfyUI starts |
-| Emergency fallback painter | RealVisXL V4 inpainting | GPU 0, only if klein can't start |
+
+There are **no lighter fallback models** (no klein 4B, no Qwen3-VL 4B, no RealVisXL): every image is made by the
+models above, or the job fails with a clear error.
 
 > **Licence warning.** FLUX.2 [klein] 9B is **gated** on Hugging Face and under the **FLUX Non-Commercial License**.
 > To use it, set `MARKETING_HF_TOKEN` to a read token of a Hugging Face account that has accepted the licence on
-> the model page, and get a commercial licence from Black Forest Labs for business use. **Without the token every
-> notebook automatically uses the open 4B model**, so images keep working.
+> the model page, and get a commercial licence from Black Forest Labs for business use. **The token is required:**
+> without it every image job fails at once with "MARKETING_HF_TOKEN is not set" (earlier versions silently used 4B).
 
 Why not Qwen-Image-Edit? ComfyUI only runs it in bf16/fp32. The T4 has no bf16, and fp32 for a 20B model is far
 too slow and doesn't fit. klein runs in fp16 on a T4.
@@ -148,7 +155,7 @@ too slow and doesn't fit. klein runs in fp16 on a T4.
 | --- | --- | --- |
 | 1 | setup | Installs packages (skipped in a warm worker), opens the progress reporter, downloads the product photo, picks the mode. |
 | 2 | engine | ComfyUI/klein helpers. Starts a **background download** of the klein files while the analyst works. |
-| 3 | analyst | Qwen3-VL writes a plan per shot as JSON: `scene_prompt`, `ai_prompt`, `placement`, `motion_prompt`, and one `product_box` around the jewellery. |
+| 3 | analyst | One short Qwen3-VL answer with only what the mode needs: `product_box` + per shot `placement` and a product-aware `scene` (Exact), or `product_box` + `ai_prompt` (AI). Motion prompts and product descriptions come from the backend planner. Logos skip it. |
 | 4 | cutout | Exact mode: BiRefNet cuts the jewellery out **inside the box** (so hands and props stay out). AI mode: saves the box crop as the reference. |
 | 5 | generate | Paints every shot, judges the tries, uploads the best one. |
 
@@ -191,14 +198,15 @@ run out of memory.
 
 ### When klein fails
 
-In Exact and logo jobs, if klein fails **before it has made a single image** (install, download, startup or graph
-error), RealVisXL takes over for the rest of the job. After klein has worked once, later errors only fail that one
-try. AI mode has no fallback.
+There is no lower-quality fallback. If the image engine can't start, the job fails with the ComfyUI error (and is
+retried by the watchdog when the session died). If one try fails after the engine started, only that try is lost.
 
 ### How long it takes
 
-About 1–3 minutes per try with 9B → roughly 15–40 minutes for a 4-scene campaign. A brand-new session adds model
-loading (a few minutes from the model cache, longer when downloading). A warm worker starts the next job at once.
+About 1–3 minutes per try with 9B, so one scene takes ~5–12 minutes. Scenes run in parallel on different accounts, so
+a 4-scene campaign takes about as long as one scene **when 4 accounts are free** (otherwise scenes queue for the next
+free worker). A brand-new session adds model loading (a few minutes from the model cache, longer when downloading); a
+warm worker starts the next job at once.
 
 ## 6. The video notebook
 
@@ -284,7 +292,7 @@ workers **mount** it (instant, no download).
 ### How it works, step by step
 
 1. The dataset name is `<kaggle-user>/byajbazaar-models-<hash>`. The hash is made from the model list
-   (`modelCacheContents` in `model-cache.ts`), so changing a model — or switching 4B ↔ 9B — gives a new name, and
+   (`modelCacheContents` in `model-cache.ts`), so changing a model gives a new name, and
    every account rebuilds automatically.
 2. **New accounts** build it during setup. The account is marked ready first (`accountReady` event), so it can render
    while the cache builds.
@@ -326,7 +334,7 @@ by `serverless/marketing-config.js`).
 | `MARKETING_API_BASE_URL` | Yes (prod) | Public API address, e.g. `https://…execute-api.ap-south-1.amazonaws.com` (no path, no trailing slash). Warm workers pull jobs from it; notebooks fall back to it for progress; QStash calls it. Empty → no warm workers. |
 | `WEBSOCKET_API_URL` | Yes | `wss://…` address the notebooks stream progress to. |
 | `MARKETING_WORKER_SECRET` | Recommended | Signs the per-job / per-worker tokens (falls back to `TOKEN_SECRET`). |
-| `MARKETING_HF_TOKEN` | For 9B | Hugging Face read token that accepted the FLUX.2 [klein] 9B licence. Empty → 4B. |
+| `MARKETING_HF_TOKEN` | **Yes** | Hugging Face read token of an account that accepted the FLUX.2 [klein] 9B licence. Empty → image jobs fail, and the model cache is not built. |
 | `MARKETING_MEDIA_CDN_URL` | Recommended | `https://media.byajbazaar.com` — see `MARKETING_MEDIA_CDN.md`. Empty → signed B2 URLs. |
 | `MARKETING_S3_*` | Yes | The marketing bucket (Backblaze B2). |
 | `MARKETING_DB_*` | Yes | The separate marketing database. |
@@ -404,7 +412,8 @@ Do the same with `buildWorkerNotebook` (video / setup) and `buildWorkerSessionNo
 | --- | --- |
 | Product pattern changes between scenes, blurry bands | An old notebook is deployed. Redeploy the backend. |
 | `Hugging Face refused …` | The `MARKETING_HF_TOKEN` account hasn't accepted the klein 9B licence, or the token is wrong. |
-| Log says "falling back to RealVisXL" | klein could not start. Look at `/tmp/comfyui-image.log` in the Kaggle output. |
+| `MARKETING_HF_TOKEN is not set` | Add the Hugging Face token to `.env.production` and deploy the backend. |
+| `ComfyUI exited` / `ComfyUI failed` | klein could not start. Look at `/tmp/comfyui-image.log` in the Kaggle output. |
 | `ComfyUI has no <Node> node` | ComfyUI is cloned fresh each session; rerun. If it persists, the node was renamed upstream. |
 | `<Node> has no input [...]` | ComfyUI changed a node's inputs; update `klein_workflow()`. |
 | `FLUX.2 [klein] produced a blank image` | fp16 overflow even after the restart; rerun (new seed). |
@@ -424,6 +433,7 @@ Do the same with `buildWorkerNotebook` (video / setup) and `buildWorkerSessionNo
 | **Warm worker** | A long Kaggle session (`WORKER` job) that keeps models loaded and pulls jobs. |
 | **Take / try** | One attempt at painting a shot; the judge keeps the best. |
 | **ComfyUI** | The open-source engine that runs klein and Wan graphs inside the notebook. |
-| **klein** | FLUX.2 [klein], the image model (9B with a token, else 4B). |
+| **klein** | FLUX.2 [klein] 9B, the image model (needs `MARKETING_HF_TOKEN`). |
+| **Batch** | Jobs queued together (one per scene, shot or clip) that run in parallel and show as one status. |
 | **Model cache** | The private Kaggle dataset with every model, built once per account. |
 | **Exact / AI mode** | The user's image choice: keep the real product pixels, or redraw everything. |

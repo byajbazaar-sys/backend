@@ -6,7 +6,8 @@ export interface WorkerSessionAnswer {
   job?: {
     id: string;
     kind: string;
-    pipeline: 'image' | 'video';
+    /** cpu = merge-only (ffmpeg); the worker keeps its loaded models. */
+    pipeline: 'image' | 'video' | 'cpu';
     /** The job notebook's code cells, run in order inside the session. */
     cells: string[];
   };

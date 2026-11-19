@@ -566,15 +566,37 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     return (await (await this.repo()).findOne({ where, order: { createdAt: 'DESC' } })) as unknown as RenderJob | null;
   }
 
+  async listOpenFor(filter: { campaignId?: string; userId?: string; kind?: string }): Promise<RenderJob[]> {
+    const where: FindOptionsWhere<RenderJobEntity> = {
+      status: In([ERenderJobStatus.Waiting, ...BUSY_RENDER_STATUSES]),
+    };
+    if (filter.campaignId) where.campaignId = filter.campaignId;
+    if (filter.userId) where.userId = filter.userId;
+    if (filter.kind) where.kind = filter.kind;
+    return (await (await this.repo()).find({ where, order: { createdAt: 'ASC' } })) as unknown as RenderJob[];
+  }
+
+  async listBatch(batchId: string): Promise<RenderJob[]> {
+    return (await (await this.repo())
+      .createQueryBuilder('j')
+      .where(`j.payload->>'batchId' = :batchId`, { batchId })
+      .orderBy('j.created_at', 'ASC')
+      .getMany()) as unknown as RenderJob[];
+  }
+
   async latestForCampaigns(campaignIds: string[]): Promise<RenderJob[]> {
     if (!campaignIds.length) return [];
     const repo = await this.repo();
     const rows = returnedRows(
       await repo.query(
-        `SELECT DISTINCT ON ("campaign_id", "kind") "id"
-           FROM "marketing_render_jobs"
-          WHERE "campaign_id" = ANY($1::uuid[]) AND "kind" = ANY($2::varchar[])
-          ORDER BY "campaign_id", "kind", "created_at" DESC`,
+        `WITH newest AS (
+           SELECT DISTINCT ON ("campaign_id", "kind") "id", "campaign_id", "kind", "payload"->>'batchId' AS "batch"
+             FROM "marketing_render_jobs"
+            WHERE "campaign_id" = ANY($1::uuid[]) AND "kind" = ANY($2::varchar[])
+            ORDER BY "campaign_id", "kind", "created_at" DESC)
+         SELECT j."id" FROM "marketing_render_jobs" j
+           JOIN newest n ON j."campaign_id" = n."campaign_id" AND j."kind" = n."kind"
+                        AND (j."id" = n."id" OR (n."batch" IS NOT NULL AND j."payload"->>'batchId' = n."batch"))`,
         [campaignIds, [ERenderJobKind.Images, ERenderJobKind.Campaign]],
       ),
     );
@@ -586,10 +608,16 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     const repo = await this.repo();
     const rows = returnedRows(
       await repo.query(
-        `SELECT DISTINCT ON ("payload"->'imageGeneration'->>'photoshootId') "id"
-           FROM "marketing_render_jobs"
-          WHERE "kind" = $2 AND "payload"->'imageGeneration'->>'photoshootId' = ANY($1::text[])
-          ORDER BY "payload"->'imageGeneration'->>'photoshootId', "created_at" DESC`,
+        `WITH newest AS (
+           SELECT DISTINCT ON ("payload"->'imageGeneration'->>'photoshootId') "id",
+                  "payload"->'imageGeneration'->>'photoshootId' AS "shoot", "payload"->>'batchId' AS "batch"
+             FROM "marketing_render_jobs"
+            WHERE "kind" = $2 AND "payload"->'imageGeneration'->>'photoshootId' = ANY($1::text[])
+            ORDER BY "payload"->'imageGeneration'->>'photoshootId', "created_at" DESC)
+         SELECT j."id" FROM "marketing_render_jobs" j
+           JOIN newest n ON j."payload"->'imageGeneration'->>'photoshootId' = n."shoot"
+                        AND (j."id" = n."id" OR (n."batch" IS NOT NULL AND j."payload"->>'batchId' = n."batch"))
+          WHERE j."kind" = $2`,
         [photoshootIds, ERenderJobKind.Images],
       ),
     );

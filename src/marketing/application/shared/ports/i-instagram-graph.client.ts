@@ -1,4 +1,4 @@
-import { InstagramProfile } from '../domain';
+import { InstagramProfile, InstagramTokenInfo } from '../domain';
 
 /** Instagram API with Unified Login (OAuth via Facebook Login for Business) and content publishing. */
 export const INSTAGRAM_GRAPH_CLIENT = 'INSTAGRAM_GRAPH_CLIENT';
@@ -10,6 +10,8 @@ export interface IInstagramGraphClient {
    * when the configuration issues tokens that never expire.
    */
   exchangeCode(code: string): Promise<{ accessToken: string; expiresIn: number | null }>;
+  /** Permissions and asset IDs granted with a token (Meta debug_token). Never includes the token. */
+  inspectToken(accessToken: string): Promise<InstagramTokenInfo>;
   /** The Instagram professional accounts the client assigned to the app (`/me/assigned_instagram_accounts`). */
   getAssignedAccounts(accessToken: string): Promise<InstagramProfile[]>;
   /** Creates a media container for an image or a reel; returns its ID. */

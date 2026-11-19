@@ -30,6 +30,10 @@ export interface IRenderJobsRepository {
   /** Live warm WORKER sessions (STARTING / RUNNING), oldest first. */
   listSessions(): Promise<RenderJob[]>;
   findStale(statuses: ERenderJobStatus[], olderThan: Date): Promise<RenderJob[]>;
+  /** Every waiting / busy job matching the filter, oldest first. */
+  listOpenFor(filter: { campaignId?: string; userId?: string; kind?: string }): Promise<RenderJob[]>;
+  /** All jobs of a batch (see RenderJobPayload.batchId), oldest first. */
+  listBatch(batchId: string): Promise<RenderJob[]>;
   /** Waiting / busy job for a campaign or brand logo, to avoid queuing duplicates. */
   findOpenFor(filter: {
     campaignId?: string;
@@ -37,10 +41,13 @@ export interface IRenderJobsRepository {
     kind?: string;
     workerId?: string;
   }): Promise<RenderJob | null>;
-  /** Newest IMAGES and CAMPAIGN (video) job of each campaign, for the image / video notebook status. */
+  /**
+   * Newest IMAGES and CAMPAIGN (video) job of each campaign — with every other job of its batch — for the image /
+   * video notebook status.
+   */
   latestForCampaigns(campaignIds: string[]): Promise<RenderJob[]>;
   /** Most recently finished (DONE / FAILED) non-setup jobs, newest first. */
   listRecentFinished(limit: number): Promise<RenderJob[]>;
-  /** Newest IMAGES job of each photoshoot. */
+  /** Newest IMAGES job of each photoshoot, with every other job of its batch. */
   latestForPhotoshoots(photoshootIds: string[]): Promise<RenderJob[]>;
 }

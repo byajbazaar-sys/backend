@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import axios from 'axios';
 
-import { InstagramProfile, IInstagramGraphClient } from '../../application';
+import { InstagramProfile, InstagramTokenInfo, IInstagramGraphClient } from '../../application';
 import { MarketingConfig } from '../../marketing.config';
 
 /**
@@ -59,6 +59,38 @@ export class InstagramGraphClient implements IInstagramGraphClient {
     if (!accessToken) throw new Error('Instagram code exchange failed');
     const expiresIn = Number(data.expires_in);
     return { accessToken, expiresIn: Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : null };
+  }
+
+  /**
+   * What Meta granted with a token (debug_token, called with the app token): its type, permissions and the asset IDs
+   * each permission covers. For diagnostics only: the token itself is never returned or logged.
+   */
+  async inspectToken(accessToken: string): Promise<InstagramTokenInfo> {
+    const response = await axios.get(`${this.graphUrl}/debug_token`, {
+      params: {
+        input_token: accessToken,
+        access_token: `${this.config.instagram.appId}|${this.config.instagram.appSecret}`,
+      },
+      timeout: 15_000,
+    });
+    const data = asRecord(asRecord(response.data).data);
+    const granular = Array.isArray(data.granular_scopes) ? data.granular_scopes : [];
+    return {
+      type: asString(data.type),
+      isValid: data.is_valid === true,
+      appId: asString(data.app_id),
+      expiresAt: Number(data.expires_at) || null,
+      scopes: (Array.isArray(data.scopes) ? data.scopes : []).map(asString).filter((s): s is string => !!s),
+      granularScopes: granular.map((g) => {
+        const record = asRecord(g);
+        return {
+          scope: asString(record.scope) ?? '',
+          targetIds: (Array.isArray(record.target_ids) ? record.target_ids : [])
+            .map(asString)
+            .filter((s): s is string => !!s),
+        };
+      }),
+    };
   }
 
   async getAssignedAccounts(accessToken: string): Promise<InstagramProfile[]> {

@@ -1,12 +1,14 @@
 import { ImageNotebookJob } from './image-notebook-job';
 
-/** Hugging Face models the image notebook downloads (all public, no token needed). Also checked by account setup. */
+/**
+ * Models the image notebook uses — the strongest that run on Kaggle's T4 × 2 (no lighter fallbacks). Also checked
+ * by account setup and stored in the per-account model cache.
+ */
 export const IMAGE_MODELS = {
-  generator: 'OzzyGT/RealVisXL_V4.0_inpainting',
-  vae: 'madebyollin/sdxl-vae-fp16-fix',
+  /** Cuts the jewellery out of the product photo (exact mode). */
   segmenter: 'ZhengPeng7/BiRefNet',
-  analystLarge: 'Qwen/Qwen3-VL-8B-Instruct',
-  analystSmall: 'Qwen/Qwen3-VL-4B-Instruct',
+  /** Plans every shot and judges every take (4-bit on GPU 1). */
+  analyst: 'Qwen/Qwen3-VL-8B-Instruct',
   /**
    * FLUX.2 [klein] 9B distilled (fp8 weights, fp16 compute on T4) for ComfyUI — paints every shot in both modes.
    * Gated on Hugging Face and under the FLUX Non-Commercial License: needs MARKETING_HF_TOKEN from an account that
@@ -17,10 +19,6 @@ export const IMAGE_MODELS = {
   kleinTextEncoder:
     'https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors',
   kleinVae: 'https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors',
-  /** FLUX.2 [klein] 4B (Apache-2.0, open) — used when no Hugging Face token is configured. */
-  klein4bDiffusion: 'https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/resolve/main/flux-2-klein-4b.safetensors',
-  klein4bTextEncoder:
-    'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors',
 } as const;
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
@@ -92,9 +90,11 @@ report.send("imageSetup", 1, "Image worker started", force=True)
 try:
     if not WORKER.get("image_packages"):
         subprocess.run([sys.executable, "-m", "pip", "install", "-q",
-                        "transformers>=4.57,<5", "diffusers>=0.34", "accelerate>=1.2", "bitsandbytes>=0.45",
+                        "transformers>=4.57,<5", "accelerate>=1.2", "bitsandbytes>=0.45",
                         "safetensors", "pillow", "timm", "kornia", "einops"], check=True)
         WORKER["image_packages"] = True
+    if not JOB.get("hfToken"):
+        raise RuntimeError("MARKETING_HF_TOKEN is not set: FLUX.2 [klein] 9B is gated on Hugging Face")
     import numpy as np
     import torch
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -140,7 +140,7 @@ except Exception as exc:
 const CELL_ANALYST = `
 VLM = None
 VLM_PROCESSOR = None
-VLM_ID = MODELS["analystLarge"] if GPU_COUNT >= 2 else MODELS["analystSmall"]
+VLM_ID = MODELS["analyst"]
 
 
 def free_gpu():
@@ -223,35 +223,37 @@ def placement_for(kind, raw):
 
 
 def fallback_plan(target):
-    return {"scene_prompt": words(target["prompt"], 55),
+    """The backend's own shot direction (it already describes only the surroundings) with default placement."""
+    return {"scene_prompt": words(target["prompt"], 60),
             "ai_prompt": words(target["prompt"], 110) + ". Keep the exact jewellery from image 1 identical: same "
                          "design, stones, metal colour and proportions. Photorealistic advertising photograph.",
-            "motion_prompt": target.get("motionPrompt") or "Slow gentle push-in, soft light glints, the jewellery stays sharp and unchanged.",
             "placement": placement_for(target["kind"], None)}
 
 
-PLAN_INSTRUCTIONS = (
-    "You are the art director of a jewellery advertising shoot. The image is the real product photo. "
-    "First list only visible facts about the jewellery: type, metal colour, stones and their colours, motifs, shape. "
-    "The real product cut-out will be composited into every shot unchanged, so for each requested shot write: "
-    "scene_prompt = at most 55 words describing ONLY what surrounds the product (background, surface, or the person "
-    "and body part wearing or holding it, outfit, lighting, camera framing), most important subject first; refer to "
-    "the product only as 'the jewellery' and never describe its design or add other jewellery. "
-    "placement = where the product's centre sits in the frame (x and y from 0 to 1) and its width as a fraction of "
-    "the frame width (scale 0.2 to 0.8) so it sits naturally: a necklace at the base of the neck, earrings at the "
-    "ears, a ring or bangle on the hand, a product resting on a surface in the lower middle. "
-    "motion_prompt = one gentle 5-second camera move that keeps the jewellery sharp and unchanged. "
-    "ai_prompt = 60 to 110 words for an image-editing model that receives this product photo as image 1: describe "
-    "the finished photo (setting, person or surface, pose, outfit, lighting, camera), and call the product 'the exact "
-    "jewellery from image 1' that must stay identical: same design, motifs, stones, stone count, metal colour and "
-    "proportions, at a realistic size; no other jewellery. "
-    "product_box = a tight box around ONLY the jewellery in the photo (no hands, fingers, boxes or props), as "
-    "[x1, y1, x2, y2] in 0-1000 coordinates of the image width and height. "
-    "Answer with JSON only, exactly this shape: "
-    '{"product_facts": "...", "product_box": [x1, y1, x2, y2], "shots": [{"index": 0, "scene_prompt": "...", '
-    '"ai_prompt": "...", "placement": {"x": 0.5, "y": 0.5, "scale": 0.5}, "motion_prompt": "..."}]}. '
-    "Include every requested index exactly once."
-)
+# One short call, asking only for what this mode uses: the box (cut-out / reference crop) plus, per shot, the
+# placement and a product-aware scene (exact) or the full-photo prompt (ai). Motion prompts and product
+# descriptions come from the backend's planner, so the analyst no longer writes them.
+PLAN_COMMON = (
+    "You are the art director of a jewellery advert. The image is the real product photo. "
+    "product = 2 to 5 words naming the jewellery type and metal (e.g. 'gold kundan necklace'). "
+    "product_box = a tight box around ONLY the jewellery (no hands, fingers, boxes or props) as [x1, y1, x2, y2] in "
+    "0-1000 coordinates of the image width and height. ")
+PLAN_EXACT = PLAN_COMMON + (
+    "The real product cut-out is pasted into every shot unchanged. For each shot: placement = the product's centre "
+    "(x and y from 0 to 1) and its width as a fraction of the frame width (scale 0.2 to 0.8) so it sits naturally "
+    "(a necklace at the base of the neck, earrings at the ears, a ring or bangle on the hand or wrist, a product "
+    "resting on a surface in the lower middle); scene = the shot direction in at most 40 words describing ONLY the "
+    "surroundings, adapted to this product (the right body part, pose and framing), calling it 'the jewellery' and "
+    "never describing its design or adding other jewellery. "
+    'JSON only: {"product": "...", "product_box": [x1, y1, x2, y2], "shots": [{"index": 0, '
+    '"placement": {"x": 0.5, "y": 0.5, "scale": 0.5}, "scene": "..."}]}')
+PLAN_AI = PLAN_COMMON + (
+    "For each shot: ai_prompt = 50 to 90 words for an image-editing model that receives this photo as image 1, "
+    "describing the finished photo (setting, person or surface, pose, outfit, light, camera) that follows the shot "
+    "direction, calling the product 'the exact <product> from image 1' that must stay identical (design, motifs, "
+    "stones, stone count, metal colour, proportions) at a realistic size, with no other jewellery. "
+    'JSON only: {"product": "...", "product_box": [x1, y1, x2, y2], "shots": [{"index": 0, "ai_prompt": "..."}]}')
+
 
 PRODUCT_BOX = None  # (x1, y1, x2, y2) pixels in the source photo, from the analyst
 
@@ -278,45 +280,44 @@ def padded_box(box, pad=0.06):
 
 
 def plan_shots():
-    if JOB["type"] == "logo":
-        return {int(t["index"]): {"scene_prompt": t["prompt"], "motion_prompt": t.get("motionPrompt") or "",
-                                  "placement": None} for t in JOB["targets"]}
+    if JOB["type"] == "logo":  # nothing to analyse: the backdrop is painted from text, the name is typeset
+        return {int(t["index"]): {"scene_prompt": t["prompt"], "placement": None} for t in JOB["targets"]}
     report.send("imageAnalysis", 7, f"Loading the image analyst ({VLM_ID.split('/')[-1]})", force=True)
     load_vlm()
-    brief = [{"index": t["index"], "kind": t["kind"], "direction": words(t["prompt"], 120),
-              "frame": f"{t['width']}x{t['height']}"} for t in JOB["targets"]]
-    request = (PLAN_INSTRUCTIONS + " Campaign: " + str(JOB["title"]) + ". Style: " +
-               str(JOB.get("style") or "premium jewellery advertising") + ". Requested shots: " +
+    brief = [{"index": t["index"], "kind": t["kind"], "direction": words(t["prompt"], 80)} for t in JOB["targets"]]
+    request = ((PLAN_AI if MODE == "ai" else PLAN_EXACT) + " Style: " +
+               str(JOB.get("style") or "premium jewellery advertising") + ". Shots: " +
                json.dumps(brief, ensure_ascii=False))
+    # Room for the answer only: ~90 tokens per exact shot, ~170 per AI shot.
+    budget = 120 + len(brief) * (170 if MODE == "ai" else 90)
     plans = {int(t["index"]): fallback_plan(t) for t in JOB["targets"]}
     report.send("imageAnalysis", 10, "Studying the product photo", force=True)
     global PRODUCT_BOX
+    by_index = {int(t["index"]): t for t in JOB["targets"]}
     for attempt in range(2):
         try:
-            result = parse_json(ask_vlm([source_path], request, max_new_tokens=2200))
-            print("Product facts:", result.get("product_facts", ""), flush=True)
+            result = parse_json(ask_vlm([source_path], request, max_new_tokens=budget))
             PRODUCT_BOX = parse_box(result.get("product_box")) or PRODUCT_BOX
-            print("Product box:", PRODUCT_BOX, flush=True)
-            by_kind = {int(t["index"]): t for t in JOB["targets"]}
+            print("Product:", result.get("product"), "| box:", PRODUCT_BOX, flush=True)
             got = 0
             for shot in result.get("shots", []):
                 idx = int(shot.get("index", -1))
-                if idx not in by_kind:
+                if idx not in by_index:
                     continue
-                scene = words(shot.get("scene_prompt"), 60)
-                if len(scene) >= 20:
-                    plans[idx]["scene_prompt"] = scene
+                if MODE == "ai":
+                    ai_prompt = words(shot.get("ai_prompt"), 120)
+                    if len(ai_prompt) >= 40:
+                        plans[idx]["ai_prompt"] = ai_prompt
+                        got += 1
+                else:
+                    scene = words(shot.get("scene"), 50)
+                    if len(scene) >= 20:
+                        plans[idx]["scene_prompt"] = scene
+                    plans[idx]["placement"] = placement_for(by_index[idx]["kind"], shot.get("placement"))
                     got += 1
-                ai_prompt = words(shot.get("ai_prompt"), 130)
-                if len(ai_prompt) >= 40:
-                    plans[idx]["ai_prompt"] = ai_prompt
-                motion = str(shot.get("motion_prompt") or "").strip()
-                if len(motion) >= 8:
-                    plans[idx]["motion_prompt"] = motion[:600]
-                plans[idx]["placement"] = placement_for(by_kind[idx]["kind"], shot.get("placement"))
-            if got == len(plans):
+            if got == len(plans) and PRODUCT_BOX:
                 break
-            print(f"Analyst planned {got}/{len(plans)} shots, retrying", flush=True)
+            print(f"Analyst planned {got}/{len(plans)} shots (box: {bool(PRODUCT_BOX)}), retrying", flush=True)
         except Exception:
             traceback.print_exc()
         request += " Return strictly valid JSON, no commentary."
@@ -416,8 +417,8 @@ except Exception as exc:
 `;
 
 const CELL_ENGINE = `
-# FLUX.2 [klein] 9B (fp8 weights, fp16 compute; 4B without a Hugging Face token) in ComfyUI on GPU 0 paints every
-# shot (Qwen-Image only runs in bf16/fp32 there).
+# FLUX.2 [klein] 9B (fp8 weights, fp16 compute) in ComfyUI on GPU 0 paints every shot (Qwen-Image only runs in
+# bf16/fp32 there, which the T4 cannot do).
 # exact mode: it paints only around the pinned product (latent noise mask), then the real pixels go back on top.
 # ai mode: it redraws the whole photo from the product reference. GPU 1 keeps Qwen3-VL to judge every take.
 # The ~18 GB of weights download in the background while the analyst plans the shots.
@@ -428,12 +429,11 @@ COMFY_STATE = WORKER.setdefault("comfy_image", {"proc": None, "info": None, "fp3
 COMFY_STATE["error"] = None
 if COMFY_STATE["proc"] is not None and COMFY_STATE["proc"].poll() is not None:
     COMFY_STATE.update(proc=None, info=None)  # it died since the last job: start a fresh one
-HF_TOKEN = JOB.get("hfToken") or ""
-KLEIN_9B = bool(HF_TOKEN)  # 9B is gated: without a token the open 4B model paints instead
-KLEIN_NAME = "FLUX.2 [klein] 9B" if KLEIN_9B else "FLUX.2 [klein] 4B"
+HF_TOKEN = JOB.get("hfToken") or ""  # FLUX.2 [klein] 9B is gated (checked in the setup cell)
+KLEIN_NAME = "FLUX.2 [klein] 9B"
 KLEIN = {
-    "unet": ("models/diffusion_models", MODELS["kleinDiffusion" if KLEIN_9B else "klein4bDiffusion"]),
-    "clip": ("models/text_encoders", MODELS["kleinTextEncoder" if KLEIN_9B else "klein4bTextEncoder"]),
+    "unet": ("models/diffusion_models", MODELS["kleinDiffusion"]),
+    "clip": ("models/text_encoders", MODELS["kleinTextEncoder"]),
     "vae": ("models/vae", MODELS["kleinVae"]),
 }
 
@@ -664,33 +664,8 @@ def ai_shot(target, plan, seed):
 `;
 
 const CELL_GENERATE = `
-STEPS = 30  # RealVisXL fallback only
 QUALITY = ("professional jewellery advertising photograph, photorealistic, shot on an 85mm lens, soft studio "
            "lighting, sharp focus, rich detail, natural skin texture, elegant composition")
-NEGATIVE = ("duplicate jewellery, extra jewellery, second necklace, extra earrings, extra rings, floating objects, "
-            "deformed hands, extra fingers, missing fingers, bad anatomy, distorted face, cross-eyed, text, letters, "
-            "watermark, logo, signature, lowres, blurry, jpeg artifacts, cartoon, illustration, cgi, 3d render, "
-            "oversaturated, overexposed")
-LOGO_NEGATIVE = ("text, letters, words, typography, numbers, watermark, signature, people, hands, clutter, busy "
-                 "pattern, lowres, blurry, cartoon")
-
-
-def load_generator():
-    from diffusers import AutoencoderKL, DPMSolverMultistepScheduler, StableDiffusionXLInpaintPipeline
-    vae = AutoencoderKL.from_pretrained(MODELS["vae"], torch_dtype=torch.float16)
-    pipe = StableDiffusionXLInpaintPipeline.from_pretrained(
-        MODELS["generator"], vae=vae, torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
-    pipe.scheduler = DPMSolverMultistepScheduler.from_config(
-        pipe.scheduler.config, use_karras_sigmas=True, algorithm_type="dpmsolver++")
-    pipe.to(GEN_DEVICE)
-    pipe.enable_vae_slicing()
-    pipe.enable_vae_tiling()
-    pipe.set_progress_bar_config(disable=True)
-    return pipe
-
-
-def snap(value):
-    return max(512, int(value) // 8 * 8)
 
 
 def layout(width, height, place):
@@ -713,14 +688,6 @@ def layout(width, height, place):
     keep = alpha.point(lambda v: 255 if v > 90 else 0).filter(ImageFilter.MaxFilter(5))
     paint = keep.point(lambda v: 255 - v)
     return layer, paint
-
-
-def initial_canvas(width, height, layer):
-    """Blurred source colours under the product: a colour hint for the painter."""
-    base = ImageOps.fit(source, (width, height), Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(40))
-    base = base.convert("RGBA")
-    base.alpha_composite(layer)
-    return base.convert("RGB")
 
 
 def composite(generated, layer, kind):
@@ -847,32 +814,6 @@ def typeset_name(image, name):
     return out
 
 
-def logo_backdrop(pipe, target, seed, callback):
-    width, height = snap(target["width"]), snap(target["height"])
-    prompt = ("luxury jewellery brand backdrop, deep black velvet texture with a subtle warm gold glow, a small ornate "
-              "gold emblem with a diamond motif in the upper third, wide empty dark space in the middle and lower half")
-    result = pipe(prompt=prompt, prompt_2="minimal premium brand identity, high contrast, ultra detailed",
-                  negative_prompt=LOGO_NEGATIVE, image=Image.new("RGB", (width, height), (12, 10, 8)),
-                  mask_image=Image.new("L", (width, height), 255), width=width, height=height, strength=1.0,
-                  guidance_scale=6.5, num_inference_steps=STEPS,
-                  generator=torch.Generator(device=GEN_DEVICE).manual_seed(seed),
-                  callback_on_step_end=callback).images[0]
-    return typeset_name(result, JOB["title"]), prompt
-
-
-def product_shot(pipe, target, plan, seed, callback):
-    width, height = snap(target["width"]), snap(target["height"])
-    layer, paint = layout(width, height, plan["placement"] or placement_for(target["kind"], None))
-    result = pipe(prompt=plan["scene_prompt"], prompt_2=QUALITY, negative_prompt=NEGATIVE,
-                  image=initial_canvas(width, height, layer), mask_image=paint, width=width, height=height,
-                  strength=1.0, guidance_scale=6.0, num_inference_steps=STEPS,
-                  generator=torch.Generator(device=GEN_DEVICE).manual_seed(seed),
-                  callback_on_step_end=callback).images[0]
-    if result.size != (width, height):
-        result = result.resize((width, height), Image.Resampling.LANCZOS)
-    return composite(result, layer, target["kind"]), plan["scene_prompt"]
-
-
 PLACEHOLDER = (128, 126, 122)
 
 
@@ -908,40 +849,10 @@ def klein_logo(target, seed):
     return typeset_name(image, JOB["title"]), prompt
 
 
-ENGINE = {"name": "klein", "ok": 0, "sdxl": None}
-
-
-def sdxl():
-    if ENGINE["sdxl"] is None:
-        report.send("imageGeneration", 22, "Loading RealVisXL (fallback image generator)", force=True)
-        ENGINE["sdxl"] = load_generator()
-    return ENGINE["sdxl"]
-
-
-def make_shot(target, plan, seed, on_step):
-    """klein for every shot; exact and logo jobs fall back to RealVisXL if klein never managed a single image."""
-    if ENGINE["name"] == "klein":
-        try:
-            if JOB["type"] == "logo":
-                result = klein_logo(target, seed)
-            elif MODE == "ai":
-                result = ai_shot(target, plan, seed)
-            else:
-                result = klein_paint(target, plan, seed)
-            ENGINE["ok"] += 1
-            return result
-        except Exception:
-            if MODE == "ai" or ENGINE["ok"]:
-                raise
-            traceback.print_exc()
-            print("FLUX.2 [klein] unavailable: falling back to RealVisXL", flush=True)
-            ENGINE["name"] = "sdxl"
-            if COMFY_STATE["proc"] is not None:
-                COMFY_STATE["proc"].terminate()
-                time.sleep(3)
+def make_shot(target, plan, seed):
     if JOB["type"] == "logo":
-        return logo_backdrop(sdxl(), target, seed, on_step)
-    return product_shot(sdxl(), target, plan, seed, on_step)
+        return klein_logo(target, seed)
+    return ai_shot(target, plan, seed) if MODE == "ai" else klein_paint(target, plan, seed)
 
 
 try:
@@ -967,21 +878,13 @@ try:
                 start = lo + span * attempt
                 report.send("imageGeneration", start, f"Painting {label}" +
                             (f" · take {attempt + 1}/{TAKES}" if TAKES > 1 else ""), force=True, imageIndex=idx)
-
-                def on_step(pipe, step, timestep, kwargs, start=start, span=span, attempt=attempt):
-                    if step % 5 == 0:
-                        report.send("imageGeneration", start + span * step / STEPS,
-                                    f"Painting {label}" + (f" · take {attempt + 1}" if TAKES > 1 else "") +
-                                    f" · step {step + 1}/{STEPS}", imageIndex=idx)
-                    return kwargs
-
                 try:
-                    image, used_prompt = make_shot(target, plan, random.randrange(2**31 - 1), on_step)
+                    image, used_prompt = make_shot(target, plan, random.randrange(2**31 - 1))
                 except Exception as exc:
                     traceback.print_exc()
                     errors.append(f"{type(exc).__name__}: {exc}")
                     free_gpu()
-                    if MODE == "ai" and COMFY_STATE["info"] is None:
+                    if COMFY_STATE["info"] is None:
                         raise  # the image engine never started: every take would fail the same way
                     continue
                 path = os.path.join(OUT_DIR, f"image-{idx}-{attempt}.jpg")
@@ -1008,8 +911,7 @@ try:
                 requests.put(target["uploadUrl"], data=image_file, headers={"Content-Type": "image/jpeg"},
                              timeout=300).raise_for_status()
             report.send("imageDone", hi, f"{label.capitalize()} ready", force=True, imageIndex=idx,
-                        imagePrompt=str(best["prompt"])[:4000], motionPrompt=str(plan.get("motion_prompt") or "")[:2000],
-                        qualityScore=best["score"])
+                        imagePrompt=str(best["prompt"])[:4000], qualityScore=best["score"])
         except Exception as exc:
             traceback.print_exc()
             failures.append(idx)
@@ -1046,9 +948,9 @@ export function buildImageWorkerNotebook(job: ImageNotebookJob): Record<string, 
     cells: [
       md(
         `# ByajBazaar marketing image worker\n\n` +
-          `Auto-generated for job \`${job.jobId}\` — do not edit. Qwen3-VL plans the shots and judges every take on ` +
-          `GPU 1; FLUX.2 [klein] paints on GPU 0 — around the untouched BiRefNet cut-out (exact mode) or the whole ` +
-          `photo from the product reference (AI mode). RealVisXL is only a fallback.`,
+          `Auto-generated for job \`${job.jobId}\` — do not edit. Qwen3-VL 8B plans the shots and judges every take on ` +
+          `GPU 1; FLUX.2 [klein] 9B paints on GPU 0 — around the untouched BiRefNet cut-out (exact mode) or the whole ` +
+          `photo from the product reference (AI mode).`,
       ),
       code(setup),
       code(CELL_ENGINE),

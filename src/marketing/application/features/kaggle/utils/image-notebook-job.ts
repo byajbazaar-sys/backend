@@ -12,6 +12,6 @@ export interface ImageNotebookJob {
   title: string;
   style?: string;
   targets: ImageNotebookTarget[];
-  /** Hugging Face token for the gated FLUX.2 [klein] 9B; without it the notebook uses the open 4B model. */
+  /** Hugging Face token for the gated FLUX.2 [klein] 9B (required). */
   hfToken?: string;
 }

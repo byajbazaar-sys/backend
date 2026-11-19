@@ -33,7 +33,7 @@ import {
   MarketingScheduler,
   resolveImageMode,
 } from '../../../shared';
-import { MarketingRenderService, kaggleJobStatus } from '../../kaggle';
+import { MarketingRenderService, kaggleBatchStatus } from '../../kaggle';
 import { buildShotPrompt, describePiece, PHOTOSHOOT_SHOT_KINDS } from '../utils';
 import { CreatePhotoshootInput } from './create-photoshoot-input';
 import { PhotoshootView } from './photoshoot-view';
@@ -170,7 +170,7 @@ export class MarketingPhotoshootService {
         this.view(
           s,
           shots.filter((x) => x.photoshootId === s.id),
-          jobs.find((j) => j.payload.imageGeneration?.photoshootId === s.id),
+          jobs.filter((j) => j.payload.imageGeneration?.photoshootId === s.id),
         ),
       ),
     );
@@ -182,7 +182,7 @@ export class MarketingPhotoshootService {
       this.shots.listFor([shoot.id]),
       this.jobs.latestForPhotoshoots([shoot.id]),
     ]);
-    return this.view(shoot, shots, jobs[0]);
+    return this.view(shoot, shots, jobs);
   }
 
   async remove(userId: string, id: string): Promise<void> {
@@ -262,11 +262,12 @@ export class MarketingPhotoshootService {
       : Promise.resolve(undefined);
   }
 
-  private async view(shoot: Photoshoot, shots: PhotoshootShot[], job?: RenderJob): Promise<PhotoshootView> {
+  /** `jobs`: the photoshoot's newest batch of image jobs (one per shot), shown as one notebook status. */
+  private async view(shoot: Photoshoot, shots: PhotoshootShot[], jobs: RenderJob[] = []): Promise<PhotoshootView> {
     const { sourceImageKey, ...rest } = shoot;
     return {
       ...rest,
-      imageJob: job ? kaggleJobStatus(job) : undefined,
+      imageJob: kaggleBatchStatus(jobs),
       sourceImageUrl: await this.url(sourceImageKey),
       shots: await Promise.all(
         shots

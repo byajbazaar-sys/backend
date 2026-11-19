@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { EAttachmentMimeType } from '@shared-libs';
+import { randomUUID } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { KaggleHealthService } from './kaggle-health.service';
@@ -57,6 +58,7 @@ import { buildLogoImagePrompt, buildSceneVideoPrompt, LOGO_VIDEO_PROMPT, VIDEO_N
 import {
   isAccountCoolingDown,
   kaggleJobStatus,
+  kaggleBatchStatus,
   jobTarget,
   kernelSlugOf,
   MIN_GPU_HOURS,
@@ -212,6 +214,11 @@ export class MarketingRenderService {
    * Queues scene images on the Kaggle image notebook. Scenes join the campaign's waiting image job when there is one;
    * while a notebook is already generating, the scenes it is not working on go to a follow-up job.
    */
+  /**
+   * Queues image generation for a campaign's scenes: **one IMAGES job per scene** (one batch), so free Kaggle
+   * accounts paint them in parallel. Scenes already being painted are skipped. Video follows once the last image job
+   * of the campaign has finished (`renderAfter`).
+   */
   async queueCampaignImages(
     campaignId: string,
     sceneIndexes?: number[],
@@ -220,53 +227,50 @@ export class MarketingRenderService {
     const campaign = await this.campaigns.findById(campaignId);
     if (!campaign) return null;
     const scenes = await this.scenes.listForCampaign(campaignId);
-    let targets = scenes.filter((s) => sceneIndexes?.includes(s.index) ?? s.imageStatus !== EAssetStatus.Ready);
-    const open = await this.jobs.findOpenFor({ campaignId, kind: ERenderJobKind.Images });
-    if (open && open.status !== ERenderJobStatus.Waiting) {
-      const inFlight = unfinishedImageIndexes(open);
-      targets = targets.filter((s) => !inFlight.has(s.index));
+    const open = await this.jobs.listOpenFor({ campaignId, kind: ERenderJobKind.Images });
+    const inFlight = new Set(open.flatMap((job) => [...unfinishedImageIndexes(job)]));
+    const targets = scenes
+      .filter((s) => sceneIndexes?.includes(s.index) ?? s.imageStatus !== EAssetStatus.Ready)
+      .filter((s) => !inFlight.has(s.index));
+    // Whichever image job finishes last decides about the video: keep the flag the same on all of them.
+    const wantsVideo = renderAfter || open.some((job) => job.payload.imageGeneration?.renderAfter);
+    if (wantsVideo) {
+      for (const job of open) {
+        const generation = job.payload.imageGeneration;
+        if (generation && !generation.renderAfter) {
+          await this.jobs.update(job.id, {
+            payload: { ...job.payload, imageGeneration: { ...generation, renderAfter: true } },
+          });
+        }
+      }
     }
     if (!targets.length) return null;
 
-    let job: RenderJob | null;
-    if (open?.status === ERenderJobStatus.Waiting) {
-      const existing = open.payload.imageGeneration;
-      if (existing?.type !== 'campaign') return null;
-      const known = new Set(existing.targets.map((t) => t.index));
-      job = await this.jobs.update(open.id, {
-        payload: {
-          ...open.payload,
-          imageGeneration: {
-            ...existing,
-            renderAfter: existing.renderAfter || renderAfter,
-            targets: [
-              ...existing.targets,
-              ...targets.filter((s) => !known.has(s.index)).map((s) => sceneImageTarget(campaign, s)),
-            ],
-          },
-        },
-      });
-    } else {
-      job = await this.jobs.create({
+    const batchId = randomUUID();
+    let first: RenderJob | null = null;
+    for (const scene of targets) {
+      const job = await this.jobs.create({
         kind: ERenderJobKind.Images,
         userId: campaign.userId,
         campaignId,
         status: ERenderJobStatus.Waiting,
         payload: {
           clips: [],
+          batchId,
           imageGeneration: {
             type: 'campaign',
             mode: resolveImageMode(campaign.imageMode),
             sourceImageKey: campaign.sourceImageKey,
             title: campaign.title,
             style: campaign.style,
-            renderAfter,
-            targets: targets.map((s) => sceneImageTarget(campaign, s)),
+            renderAfter: wantsVideo,
+            targets: [sceneImageTarget(campaign, scene)],
           },
         },
         progress: 0,
         attempts: 0,
       });
+      first ??= job;
     }
 
     for (const scene of targets) {
@@ -283,20 +287,22 @@ export class MarketingRenderService {
       completedAt: null,
     });
     await this.scheduler.schedule({ step: 'dispatch' });
-    return job;
+    return first;
   }
 
-  /** Queues one or more AI photoshoot shots on the same Kaggle image-only notebook. */
+  /** Queues photoshoot shots: **one IMAGES job per shot** (one batch), painted in parallel on free accounts. */
   async queuePhotoshootImages(photoshootId: string, onlyIndex?: number): Promise<RenderJob | null> {
     const shoot = await this.photoshoots.findById(photoshootId);
     if (!shoot) return null;
     const allShots = await this.photoshootShots.listFor([shoot.id]);
-    const selected = allShots.filter((s) =>
-      typeof onlyIndex === 'number' ? s.index === onlyIndex : !isStatus(s.status, EAssetStatus.Ready),
+    const open = (await this.jobs.listOpenFor({ userId: shoot.userId, kind: ERenderJobKind.Images })).filter(
+      (job) => job.payload.imageGeneration?.photoshootId === shoot.id,
     );
+    const inFlight = new Set(open.flatMap((job) => [...unfinishedImageIndexes(job)]));
+    const selected = allShots
+      .filter((s) => (typeof onlyIndex === 'number' ? s.index === onlyIndex : !isStatus(s.status, EAssetStatus.Ready)))
+      .filter((s) => !inFlight.has(s.index));
     if (!selected.length) return null;
-    const open = await this.jobs.findOpenFor({ userId: shoot.userId, kind: ERenderJobKind.Images });
-    if (open?.payload.imageGeneration?.photoshootId === shoot.id) return null;
     const size = PHOTOSHOOT_ASPECTS[shoot.aspect as PhotoshootAspect] ?? PHOTOSHOOT_ASPECTS['3:4'];
     const targets = selected.map((shot) => ({
       index: shot.index,
@@ -306,25 +312,31 @@ export class MarketingRenderService {
       width: size.width,
       height: size.height,
     }));
-    const job = await this.jobs.create({
-      kind: ERenderJobKind.Images,
-      userId: shoot.userId,
-      status: ERenderJobStatus.Waiting,
-      payload: {
-        clips: [],
-        imageGeneration: {
-          type: 'photoshoot',
-          mode: resolveImageMode(shoot.imageMode),
-          sourceImageKey: shoot.sourceImageKey,
-          title: shoot.title,
-          style: `${shoot.setting}; ${shoot.model}; ${shoot.outfit}`,
-          photoshootId: shoot.id,
-          targets,
+    const batchId = randomUUID();
+    let job: RenderJob | null = null;
+    for (const target of targets) {
+      const created = await this.jobs.create({
+        kind: ERenderJobKind.Images,
+        userId: shoot.userId,
+        status: ERenderJobStatus.Waiting,
+        payload: {
+          clips: [],
+          batchId,
+          imageGeneration: {
+            type: 'photoshoot',
+            mode: resolveImageMode(shoot.imageMode),
+            sourceImageKey: shoot.sourceImageKey,
+            title: shoot.title,
+            style: `${shoot.setting}; ${shoot.model}; ${shoot.outfit}`,
+            photoshootId: shoot.id,
+            targets: [target],
+          },
         },
-      },
-      progress: 0,
-      attempts: 0,
-    });
+        progress: 0,
+        attempts: 0,
+      });
+      job ??= created;
+    }
     for (const shot of selected) {
       await this.photoshootShots.update(shot.id, { status: EAssetStatus.Generating, error: null });
     }
@@ -385,8 +397,10 @@ export class MarketingRenderService {
   }
 
   /**
-   * Queues a Kaggle render for a campaign: the given scenes (default all with a ready image), the brand logo clip when
-   * the brand has no logo video yet, and the merge. Joins an already-waiting job of the campaign instead of duplicating.
+   * Queues the video render for a campaign: the given scenes (default all with a ready image) and the brand logo clip
+   * when the brand has no logo video yet — **one CAMPAIGN job per clip** (one batch), rendered in parallel on free
+   * accounts. When the last clip job of the campaign finishes, a merge-only job joins the clips (`finishVideoJob`).
+   * Clips already being rendered are skipped.
    */
   async queueCampaignRender(campaignId: string, sceneIndexes?: number[]): Promise<RenderJob | null> {
     const campaign = await this.campaigns.findById(campaignId);
@@ -425,29 +439,35 @@ export class MarketingRenderService {
       outputKey: MarketingKeys.merged(campaign.userId, campaign.id),
     };
 
-    const open = await this.jobs.findOpenFor({ campaignId, kind: ERenderJobKind.Campaign });
-    let job: RenderJob | null;
-    if (open?.status === ERenderJobStatus.Waiting) {
-      const known = new Set(open.payload.clips.map((c) => c.key));
-      job = await this.jobs.update(open.id, {
-        payload: { clips: [...open.payload.clips, ...clips.filter((c) => !known.has(c.key))], merge },
-      });
-    } else if (open) {
-      return null; // already rendering; the caller reports "busy"
-    } else {
-      job = await this.jobs.create({
+    const open = await this.jobs.listOpenFor({ campaignId, kind: ERenderJobKind.Campaign });
+    const busy = new Set(open.flatMap((job) => job.payload.clips.map((c) => c.key)));
+    const fresh = clips.filter((c) => !busy.has(c.key));
+    if (!fresh.length) return null; // already rendering; the caller reports "busy"
+
+    const batchId = randomUUID();
+    let job: RenderJob | null = null;
+    for (const clip of fresh) {
+      const created = await this.jobs.create({
         kind: ERenderJobKind.Campaign,
         userId: campaign.userId,
         campaignId,
         status: ERenderJobStatus.Waiting,
-        payload: { clips, merge },
+        payload: { clips: [clip], merge: null, mergeAfter: merge, batchId },
         progress: 0,
         attempts: 0,
       });
+      job ??= created;
     }
 
-    for (const s of wanted) await this.scenes.update(s.id, { videoStatus: EAssetStatus.Generating, error: null });
-    if (needsLogo) await this.brands.upsert({ userId: campaign.userId, logoVideoStatus: EAssetStatus.Generating });
+    const freshKeys = new Set(fresh.map((c) => c.key));
+    for (const s of wanted) {
+      if (freshKeys.has(sceneClipKey(s.index))) {
+        await this.scenes.update(s.id, { videoStatus: EAssetStatus.Generating, error: null });
+      }
+    }
+    if (needsLogo && freshKeys.has(LOGO_CLIP_KEY)) {
+      await this.brands.upsert({ userId: campaign.userId, logoVideoStatus: EAssetStatus.Generating });
+    }
     await this.setCampaign(campaign, { status: ECampaignStatus.WaitingGpu, stageMessage: 'Waiting for a free GPU' });
     await this.scheduler.schedule({ step: 'dispatch' });
     return job;
@@ -790,9 +810,9 @@ export class MarketingRenderService {
     const cells = ((notebook.cells as { cell_type: string; source: string }[]) ?? [])
       .filter((cell) => cell.cell_type === 'code')
       .map((cell) => cell.source);
-    return {
-      job: { id: job.id, kind: job.kind, pipeline: job.kind === ERenderJobKind.Images ? 'image' : 'video', cells },
-    };
+    // A merge-only job needs no GPU model: the worker keeps whatever it has loaded.
+    const pipeline = job.kind === ERenderJobKind.Images ? 'image' : job.payload.clips.length ? 'video' : 'cpu';
+    return { job: { id: job.id, kind: job.kind, pipeline, cells } };
   }
 
   /**
@@ -877,7 +897,8 @@ export class MarketingRenderService {
    * MODEL_CACHE_RETRY_MS); they keep rendering meanwhile, downloading the models in each session.
    */
   private async queueModelCaches(usernames: string[]): Promise<void> {
-    const dataset = modelsDatasetSlug(!!this.config.huggingFaceToken);
+    if (!this.config.huggingFaceToken) return;
+    const dataset = modelsDatasetSlug();
     for (const account of await this.accounts.list()) {
       if (!usernames.includes(account.username) || account.status !== EKaggleAccountStatus.Ready) continue;
       if (account.modelsDataset === `${account.username}/${dataset}`) continue;
@@ -1179,15 +1200,21 @@ export class MarketingRenderService {
   private async modelCacheFor(job: RenderJob): Promise<NotebookModelCache | undefined> {
     if (!job.workerId || !this.config.publicApiBaseUrl) return undefined;
     const account = await this.accounts.find(job.workerId);
-    const klein9b = !!this.config.huggingFaceToken;
-    const dataset = `${job.workerId}/${modelsDatasetSlug(klein9b)}`;
+    if (!this.config.huggingFaceToken) return undefined; // FLUX.2 [klein] 9B cannot be downloaded without it
+    const dataset = `${job.workerId}/${modelsDatasetSlug()}`;
     if (account?.modelsDataset === dataset) return undefined;
     const { username, key } = await this.pool.accountCredentials(job.workerId);
     await this.accounts.update(job.workerId, { modelsAttemptAt: new Date() });
-    return { dataset, username, key, ...modelCacheContents(klein9b) };
+    return { dataset, username, key, ...modelCacheContents() };
   }
 
   private async imageNotebookJob(job: RenderJob): Promise<ImageNotebookJob> {
+    if (!this.config.huggingFaceToken) {
+      throw new Error(
+        'MARKETING_HF_TOKEN is not set: FLUX.2 [klein] 9B is gated on Hugging Face. Add a read token of an account ' +
+          'that accepted its licence to the backend env and deploy.',
+      );
+    }
     const generation = job.payload.imageGeneration;
     if (!generation) throw new Error('The image job payload is missing its generation details');
     const done = new Set(generation.doneImages ?? []);
@@ -1266,7 +1293,7 @@ export class MarketingRenderService {
         stageMessage: event.message || 'Done',
         finishedAt: new Date(),
       });
-      await this.settleCampaign(job.campaignId);
+      await this.finishVideoJob(job);
       await this.scheduler.schedule({ step: 'dispatch' }); // free slot → next job
       return true;
     }
@@ -1436,11 +1463,14 @@ export class MarketingRenderService {
     if (generation.type === 'campaign' && job.campaignId) {
       const campaign = await this.campaigns.findById(job.campaignId);
       if (!campaign) return;
+      // Other scenes are still being painted on other accounts: the last image job decides what comes next.
+      if ((await this.jobs.listOpenFor({ campaignId: job.campaignId, kind: ERenderJobKind.Images })).length) return;
       const scenes = await this.scenes.listForCampaign(job.campaignId);
       const ready = scenes.filter((scene) => scene.imageStatus === EAssetStatus.Ready);
+      const someFailed = !success || scenes.some((scene) => scene.imageStatus === EAssetStatus.Failed);
       if (ready.length && generation.renderAfter) {
         await this.renderCampaignImages(generation, job.campaignId);
-      } else if (!ready.length || !success) {
+      } else if (!ready.length || someFailed) {
         await this.setCampaign(campaign, {
           status: campaign.mergedVideoKey ? ECampaignStatus.Partial : ECampaignStatus.Failed,
           stageMessage: ready.length ? 'Some images failed — try again' : 'Image generation failed',
@@ -1454,6 +1484,13 @@ export class MarketingRenderService {
         });
       }
     } else if (generation.photoshootId) {
+      const siblings = (await this.jobs.listOpenFor({ userId: job.userId, kind: ERenderJobKind.Images })).filter(
+        (open) => open.payload.imageGeneration?.photoshootId === generation.photoshootId,
+      );
+      if (siblings.length) {
+        await this.notifyPhotoshoot(generation.photoshootId); // finished shots show up while the rest paint
+        return;
+      }
       const shots = await this.photoshootShots.listFor([generation.photoshootId]);
       const ready = shots.filter((shot) => isStatus(shot.status, EAssetStatus.Ready)).length;
       const status =
@@ -1823,7 +1860,42 @@ export class MarketingRenderService {
       return;
     }
     for (const clip of job.payload.clips) await this.clipFailed(job, clip.key, message);
-    await this.settleCampaign(job.campaignId, message);
+    await this.finishVideoJob(job, message);
+  }
+
+  /**
+   * After a CAMPAIGN (video) job ended: when it was the campaign's last clip job, queue the merge-only job that joins
+   * all scene videos and the logo (it runs ffmpeg only, no video model); otherwise settle the campaign status.
+   */
+  private async finishVideoJob(job: RenderJob, error?: string): Promise<void> {
+    if (job.campaignId && job.payload.mergeAfter) {
+      const open = await this.jobs.listOpenFor({ campaignId: job.campaignId, kind: ERenderJobKind.Campaign });
+      const clipsLeft = open.some((other) => other.payload.clips.length > 0);
+      const mergeWaiting = open.some(
+        (other) => !other.payload.clips.length && other.status === ERenderJobStatus.Waiting,
+      );
+      const videos = (await this.scenes.listForCampaign(job.campaignId)).filter(
+        (scene) => scene.videoStatus === EAssetStatus.Ready,
+      );
+      if (!clipsLeft && !mergeWaiting && videos.length) {
+        await this.jobs.create({
+          kind: ERenderJobKind.Campaign,
+          userId: job.userId,
+          campaignId: job.campaignId,
+          status: ERenderJobStatus.Waiting,
+          payload: { clips: [], merge: job.payload.mergeAfter, batchId: job.payload.batchId },
+          progress: 0,
+          attempts: 0,
+        });
+        const campaign = await this.campaigns.findById(job.campaignId);
+        if (campaign) {
+          await this.setCampaign(campaign, { status: ECampaignStatus.Rendering, stageMessage: 'Merging the reel' });
+        }
+        await this.scheduler.schedule({ step: 'dispatch' });
+        return;
+      }
+    }
+    await this.settleCampaign(job.campaignId, error);
   }
 
   /** Final campaign status once its render job has finished. */
@@ -1860,13 +1932,23 @@ export class MarketingRenderService {
     status: ECampaignStatus,
     jobStatus: ERenderJobStatus = ERenderJobStatus.Running,
   ): Promise<void> {
-    const snapshot = kaggleJobStatus({
+    const current: RenderJob = {
       ...job,
       status: jobStatus,
       progress,
       stageMessage: (message || job.stageMessage || '').slice(0, 250) || null,
       updatedAt: new Date(),
-    });
+    };
+    // Jobs of one batch run in parallel on several accounts: owners see one status with the average progress.
+    let snapshot = kaggleJobStatus(current);
+    if (job.payload.batchId) {
+      const batch = (await this.jobs.listBatch(job.payload.batchId)).map((other) =>
+        other.id === job.id ? current : other,
+      );
+      snapshot = kaggleBatchStatus(batch) ?? snapshot;
+      progress = snapshot.progress;
+      message = snapshot.stageMessage ?? message;
+    }
     const photoshootId = job.payload.imageGeneration?.photoshootId;
     if (photoshootId && job.userId) await this.events.photoshootJob(job.userId, photoshootId, snapshot);
     if (!job.campaignId) return;
