@@ -15,6 +15,7 @@
    - [6b. The fast video notebook](#6b-the-fast-video-notebook-fast-render)
 7. [Warm workers](#7-warm-workers)
 8. [The model cache dataset](#8-the-model-cache-dataset)
+   - [8a. Colab Enterprise accounts](#8a-colab-enterprise-accounts)
 9. [Progress, status screens and admin](#9-progress-status-screens-and-admin)
 10. [Configuration reference](#10-configuration-reference)
 11. [How to… (common tasks)](#11-how-to-common-tasks)
@@ -376,6 +377,35 @@ fast / 40 min HD, then the measured average).
 Timing (estimate, not yet measured on Kaggle): ~13 min per 480p clip was reported for A14B + LightX2V on one T4 at
 6 steps; one expert per T4 removes the swapping. Check the "Rendering scene N · step x/y" timestamps on the first run.
 
+### Post-production (every scene clip)
+
+After the product lock and before the encode, on the CPU:
+- **Exposure steadying** (`steady_exposure`): Wan sometimes "breathes" (the whole frame brightens and darkens by
+  10–20 % over a second). Each frame's brightness is eased onto the clip's straight-line trend with a tone curve.
+- **Real glints** (`add_glints`): three short twinkles, each on a different specular highlight of the *locked* piece
+  (found in the still: bright and standing out from its surroundings), carried with the piece's per-frame position
+  and only on frames where it is locked. A camera-style four-point star, screen-blended and tinted by the highlight's
+  own colour. Added glints look real where AI-drawn sparkle looks fake.
+- **Grade** (`grade_frames`): a gentle S-curve, equal on R, G and B so gold and silver keep their hue, and a barely
+  visible vignette.
+- **Grain**: ffmpeg `noise` on the luma plane only, very fine; it breaks up banding in dark backdrops.
+
+**Quality gate additions (piece integrity).** Two more defects make a take worth a retake, both measured on the
+locked piece: it **moves on its own** — held more than 2 % of the frame width away from where the camera alone would
+put it for 6 frames in a row (the planned camera path in a first-last-frame render; the scene's own measured motion,
+ORB + RANSAC around the piece, in a fast render) — or it **vanishes** for 8 frames in a row (covered, lifted away or
+melted). Model scenes allow 2.5× both, since a worn piece moves a little with the body. On the 20 labelled
+product-only clips in `videos test/` (old start-frame renders: hands pushing, lifting or poking the piece, spins,
+melts) these two checks plus the lock rate agree with a human 20/20; they catch hands *through what they do to the
+piece*, which the off-the-shelf hand / person detectors (MediaPipe palm, YuNet face, MediaPipe person) did not on
+generated close-ups.
+
+Small worn pieces (a ring on a hand, ~60 px wide in the frame) have too few features to match frame by frame:
+`track_piece` follows them with ECC alignment of the still's own pixels around the piece, seeded by the camera path,
+and where it holds, the still's piece is used as is (`restore_product(..., trust=True)`), so its texture cannot melt.
+A redrawn still with no restored product gets a mask over the drawn piece (its matched outline, or the judge's
+`piece_box`), so even those clips are locked.
+
 ## 6a. The voice notebook (voiceovers)
 
 **What it is:** the Marketing page's **Voice studio** tab turns text into speech in the voice of an uploaded sample
@@ -576,6 +606,47 @@ workers **mount** it (instant, no download).
 
 A failed cache build never disables an account; it is logged as `KAGGLE_MODEL_CACHE_FAILED`.
 
+## 8a. Colab Enterprise accounts
+
+A GPU account can also be a **Google Cloud project** running the same notebooks on **Colab Enterprise** (Vertex AI
+notebook execution jobs). Everything else is shared: the same queue, warm workers, notebooks, status screens and
+admin page. Only the provider client differs (`ColabEnterpriseClient` next to `KaggleApiClient`, behind
+`KaggleWorkerPool`, which routes each call by the account's `provider`).
+
+| | Kaggle | Colab Enterprise |
+| --- | --- | --- |
+| Credential | username + API key / `KGAT_` token | account name + service-account key JSON |
+| GPUs | T4 × 2 (free weekly quota) | 2 × T4 (`n1-standard-8`) or 2 × L4 (`g2-standard-24`), billed per hour |
+| Start a run | `kernels/push` | `POST …/notebookExecutionJobs` (notebook inline, base64), display name `<account>--<kernel>` |
+| Run status | `GetKernelSessionStatus` | newest job with that display name (`jobState`) |
+| Kernel ref | `user/slug` | `colab/<project>/<account>/<kernel>` (the admin link opens the project's executions) |
+| Model cache | private dataset, mounted under `/kaggle/input` | `gs://<bucket>/byajbazaar-models/<slug>`, copied to the disk at boot |
+| Session cap | Kaggle's 12 h | the account's **Max hours per session** (default 6), also the job's `executionTimeout` |
+
+**Cost rules.** Colab accounts are billed while they run, so:
+- dispatch gives work to a **free Kaggle account first**; a Colab account only takes jobs no Kaggle account can;
+- a Colab warm session is **never the keeper**: idle, it stops after 5 minutes (Kaggle's keeper waits
+  `warmIdleMinutes`);
+- every run has a hard `executionTimeout` (the account's max hours) in case a VM hangs.
+
+**Setting one up (Google Cloud).**
+1. Pick a region with T4/L4 GPUs for Colab Enterprise (e.g. `asia-south1`, `us-central1`) and make sure the project
+   has GPU quota there (2 per session × parallel renders).
+2. Enable the **Vertex AI API**. Create a **bucket** in the same region (outputs + model cache; same region = fast,
+   no egress).
+3. Create a service account with **Vertex AI User** and **Service Account User** on the project and **Storage Object
+   Admin** on the bucket; download a JSON key.
+4. `/admin/kaggle` → **Add accounts** → **Colab Enterprise**: name, key JSON (paste or load the file), region,
+   bucket, GPUs, parallel renders, max hours. **Verify & save** checks the key, the Vertex AI permission and the bucket.
+5. The setup run checks the GPUs and disk, then downloads every model once and uploads it to the bucket (manifest
+   last). Sessions after that copy the models from the bucket in a few minutes.
+
+**Notebook differences.** The notebooks detect Colab themselves: the heavy `/tmp` folders (ComfyUI, model staging)
+are pointed at the VM's largest disk when `/tmp` is small (`big_disk()`), outputs go to `/tmp` instead of
+`/kaggle/working`, and the model cache comes from Cloud Storage (`gcs_download`, chunked and parallel for big files)
+instead of the dataset mount. Keys are stored as plain text like Kaggle keys and never returned by the API (the
+admin card shows the service account's email).
+
 ## 9. Progress, status screens and admin
 
 - Notebooks send `marketingProgress` events over the AWS WebSocket (`JOB["wsUrl"]`). If the socket is down they
@@ -623,6 +694,12 @@ Admin settings (stored in the marketing DB): **Auto-recover** and **Keep warm** 
 2. In ByajBazaar: `/admin/kaggle` → **Add accounts** → username + token (and "Parallel renders").
 3. The backend checks the key, then runs the **setup** notebook (GPU check, model check, model cache). The card shows
    "Setting up" → "Ready" → later "models cached".
+
+### …add a Colab Enterprise account
+
+See [8a](#8a-colab-enterprise-accounts): enable Vertex AI, create a bucket in the GPU region and a service account
+(Vertex AI User, Service Account User, Storage Object Admin on the bucket), then `/admin/kaggle` → **Add accounts** →
+**Colab Enterprise**. Set a budget alert on the project: it is billed per GPU-hour.
 
 ### …change or add a model
 
@@ -682,6 +759,13 @@ Do the same with `buildWorkerNotebook` (video / setup) and `buildWorkerSessionNo
      engine "one Wan expert per GPU, clips overlap".
    - On the first **Fast video** campaign, check whether C2C ran or fell back ("rendering on one GPU") and note the
      step timing.
+
+7. Colab Enterprise and post-production (this release):
+   - Migration `1700000000014` adds `provider` / `colab_config` to `kaggle_credentials` and widens `models_dataset`.
+   - Existing Kaggle accounts are unchanged (`provider` defaults to `kaggle`).
+   - Add a Colab account (8a) and watch its setup run; the card shows "Colab Enterprise · project · region".
+   - Scene clips now get glints, a light grade and fine grain (6, *Post-production*); compare one new clip with an
+     older one.
 
 ## 13. Troubleshooting
 

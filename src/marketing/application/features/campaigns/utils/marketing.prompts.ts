@@ -9,7 +9,10 @@ const STYLE_BRIEF: Record<MarketingStyle, string> = {
   minimal: 'minimal and airy: marble, linen, soft daylight, neutral tones, calm elegance',
 };
 
-/** Hand-written scenes per style, used when the text model is unavailable or returns something unusable. */
+/**
+ * Hand-written scenes per style, used when the text model is unavailable or returns something unusable. Every product
+ * scene rests the piece on a surface: "floating" or "turntable" stagings made the video model spin the piece.
+ */
 const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
   studio: [
     {
@@ -17,7 +20,7 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'very slow camera push-in, soft studio highlights gliding across the still metal',
     },
     {
-      scene: 'floating above a mirror floor with soft reflections and a warm key light',
+      scene: 'resting on a mirror floor with soft reflections and a warm key light',
       motion: 'gentle push-in towards the piece, reflections shimmering',
     },
     {
@@ -26,7 +29,7 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'the model holds still with a soft breath, very slow camera push-in towards the jewellery',
     },
     {
-      scene: 'on a rotating turntable with a deep blue backdrop and crisp edge lighting',
+      scene: 'on a round display plinth with a deep blue backdrop and crisp edge lighting',
       motion: 'slow camera tilt down onto the still piece, sparkling highlights',
     },
     {
@@ -72,8 +75,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'the model holds still with a soft breath, slow camera push-in, the jewellery sharp',
     },
     {
-      scene: 'on dark rippled water reflecting golden light, mysterious and rich',
-      motion: 'slow dolly over the surface, ripples catching the light',
+      scene: 'on a dark glossy stone beside still water reflecting golden light, mysterious and rich',
+      motion: 'slow dolly across the stone, soft ripples catching the light behind',
     },
     {
       scene: 'on a gold-leaf textured surface with deep shadows and a halo light',
@@ -99,7 +102,7 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'smooth push-in, light glinting softly',
     },
     {
-      scene: 'floating against a seamless warm-white backdrop with a soft shadow below',
+      scene: 'resting on a seamless warm-white surface with a soft shadow beneath it',
       motion: 'very slow camera push-in, minimal and elegant',
     },
   ],

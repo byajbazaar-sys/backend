@@ -6,6 +6,11 @@ export interface IRenderJobsRepository {
   create(job: Omit<RenderJob, 'id'>): Promise<RenderJob>;
   findById(id: string): Promise<RenderJob | null>;
   update(id: string, patch: Partial<RenderJob>): Promise<RenderJob | null>;
+  /**
+   * Applies `patch` only while the job is still STARTING / RUNNING; false when it already finished. Progress events
+   * are handled by parallel Lambdas, so a late one must never turn a DONE / FAILED job back into a running one.
+   */
+  updateIfBusy(id: string, patch: Partial<RenderJob>): Promise<boolean>;
   /** Busy slots per account (STARTING / RUNNING); jobs running inside a warm WORKER session count as its slot. */
   countBusyByWorker(): Promise<Record<string, number>>;
   /** Jobs currently on Kaggle (STARTING / RUNNING), oldest first. */

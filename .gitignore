@@ -57,3 +57,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .serverless_plugins/
 .webpack/
 scripts/
+
+videos test/

@@ -8,4 +8,8 @@ export interface WorkerSessionNotebookJob {
   wsUrl?: string;
   /** Seconds the session may run (Kaggle limit minus a margin). */
   sessionSeconds: number;
+  /** Where it runs: Kaggle (models mounted from the account's dataset) or Colab Enterprise. */
+  provider?: 'kaggle' | 'colab';
+  /** Colab: the account's model cache (gs:// prefix), copied to the local disk at boot. */
+  modelsGcs?: string;
 }

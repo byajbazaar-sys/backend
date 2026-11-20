@@ -1,11 +1,16 @@
 import { ComfyModelFile } from './model-cache';
 
-/** What the setup notebook publishes as the account's private model dataset, and the credentials to do it. */
+/**
+ * What the setup notebook publishes as the account's model cache: a private Kaggle dataset (with the account's own
+ * credentials), or a gs:// prefix in a Colab Enterprise account's bucket (written as the notebook's service account).
+ */
 export interface NotebookModelCache {
-  /** "user/slug". */
+  provider: 'kaggle' | 'colab';
+  /** Kaggle: "user/slug". Colab: "gs://bucket/byajbazaar-models/slug". */
   dataset: string;
-  username: string;
-  key: string;
+  /** Kaggle only. */
+  username?: string;
+  key?: string;
   comfy: ComfyModelFile[];
   hf: string[];
 }

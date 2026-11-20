@@ -192,7 +192,7 @@ try:
     VLM_DEVICE = "cuda:1" if GPU_COUNT >= 2 else "cuda:0"
     # With a second GPU the analyst stays loaded and judges every candidate; on one GPU it is unloaded after planning.
     JUDGE = GPU_COUNT >= 2 and JOB["type"] != "logo"
-    OUT_DIR = "/kaggle/working/marketing-images"
+    OUT_DIR = ("/kaggle/working" if os.path.isdir("/kaggle/working") else "/tmp") + "/marketing-images"
     os.makedirs(OUT_DIR, exist_ok=True)
 
     source = None
@@ -233,11 +233,13 @@ const CELL_ANALYST = `
 VLM = None
 VLM_PROCESSOR = None
 VLM_ID = MODELS["analyst"]
+# GPU_LOCK (engine cell): one model load or GPU call at a time in this process.
 
 
 def free_gpu():
-    gc.collect()
-    torch.cuda.empty_cache()
+    with GPU_LOCK:
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 def load_vlm():
@@ -250,10 +252,11 @@ def load_vlm():
     from transformers import AutoProcessor, BitsAndBytesConfig, Qwen3VLForConditionalGeneration
     quantization = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
                                       bnb_4bit_compute_dtype=torch.float16)
-    VLM = Qwen3VLForConditionalGeneration.from_pretrained(
-        VLM_ID, torch_dtype=torch.float16, quantization_config=quantization,
-        device_map={"": VLM_DEVICE}, low_cpu_mem_usage=True)
-    VLM.eval()
+    with GPU_LOCK, torch.cuda.device(VLM_DEVICE):
+        VLM = Qwen3VLForConditionalGeneration.from_pretrained(
+            VLM_ID, torch_dtype=torch.float16, quantization_config=quantization,
+            device_map={"": VLM_DEVICE}, low_cpu_mem_usage=True)
+        VLM.eval()
     VLM_PROCESSOR = AutoProcessor.from_pretrained(VLM_ID)
     WORKER["vlm"] = (VLM_ID, VLM, VLM_PROCESSOR)
 
@@ -268,9 +271,11 @@ def unload_vlm():
 def ask_vlm(image_paths, text, max_new_tokens=900):
     content = [{"type": "image", "image": path} for path in image_paths] + [{"type": "text", "text": text}]
     inputs = VLM_PROCESSOR.apply_chat_template(
-        [{"role": "user", "content": content}], tokenize=True, add_generation_prompt=True,
-        return_dict=True, return_tensors="pt").to(VLM_DEVICE)
-    with torch.inference_mode():
+        [{"role": "user", "content": content}], tokenize=True, add_generation_prompt=True, return_dict=True,
+        return_tensors="pt")
+    # 4-bit kernels run on the *current* CUDA device: pin it to the analyst's GPU, and keep other GPU work out.
+    with GPU_LOCK, torch.cuda.device(VLM_DEVICE), torch.inference_mode():
+        inputs = inputs.to(VLM_DEVICE)
         generated = VLM.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
     generated = generated[:, inputs["input_ids"].shape[1]:]
     return VLM_PROCESSOR.batch_decode(generated, skip_special_tokens=True)[0].strip()
@@ -333,38 +338,120 @@ PLAN_COMMON = (
     "gold, platinum, two-tone — trust the photo over the shot direction (a grey-white shiny metal is silver). "
     "colours = at most 8 words naming any enamel, meenakari or stone colours you see, or 'none'. "
     "product_box = a tight box around ONLY the jewellery (no hands, fingers, boxes or props) as [x1, y1, x2, y2] in "
-    "0-1000 coordinates of the image width and height. ")
+    "0-1000 coordinates of the image width and height. "
+    "wearer = who the piece is made for, judged from its design: male (a broad or flat-topped signet ring, a gents "
+    "kada, a heavy plain chain or bracelet), female (a mangalsutra, jhumkas, a nath, payal, a delicate or floral ring, a "
+    "necklace set) or any. "
+    "Each shot has people: people=none means the jewellery alone as a close-up product shot on its surface or prop — "
+    "no person, face, hand, finger, wrist, neck or other body part anywhere in the photo, and never add one; "
+    "people=model means exactly one adult model of the wearer's gender (a man for male pieces, a woman for female "
+    "pieces) wearing it. ")
 PLAN_EXACT = PLAN_COMMON + (
     "The real product cut-out is pasted into every shot unchanged. For each shot: placement = the product's centre "
     "(x and y from 0 to 1) and its width as a fraction of the frame width (scale 0.2 to 0.8) so it sits naturally "
-    "(a necklace at the base of the neck, earrings at the ears, a ring or bangle on the hand or wrist, a product "
-    "resting on a surface in the lower middle); scene = the shot direction in at most 40 words describing ONLY the "
-    "surroundings, adapted to this product (the right body part, pose and framing), calling it 'the jewellery' and "
-    "never describing its design or adding other jewellery. "
+    "(resting on its surface or prop, usually in the lower middle, large enough to show its detail); scene = the "
+    "shot direction in at most 40 words describing ONLY the surroundings (surface, props, background, light) as a "
+    "product close-up with no person or body part, calling it 'the jewellery' and never describing its design or "
+    "adding other jewellery. "
     'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", '
-    '"product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
+    '"wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
     '"placement": {"x": <0-1>, "y": <0-1>, "scale": <0.2-0.8>}, "scene": "<surroundings only>"}]}')
 PLAN_AI = PLAN_COMMON + (
     "For each shot: ai_prompt = 50 to 90 words for an image-editing model that receives this photo as image 1, "
-    "describing the finished photo (setting, person or surface, pose, outfit, light, camera) that follows the shot "
-    "direction, calling the product 'the exact <product> from image 1' that must stay identical (design, motifs, "
+    "describing the finished photo (setting, surface or — only for people=model — the model, pose and outfit; light, "
+    "camera) that follows the shot direction, calling the product 'the exact <product> from image 1' that must stay identical (design, motifs, "
     "stones, stone count, metal colour, proportions) at a realistic size, with no other jewellery. "
     "Name the metal you see in every ai_prompt. When a person wears it, describe exactly how it sits ON the body "
     "(a bangle or kada encircles the wrist with the hand through it, a necklace lies on the collarbones, earrings hang "
     "from the earlobes, a ring wraps the finger), touching the skin at its real-life size — never held up beside the "
     "face, floating, or looking pasted on. "
     'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", '
-    '"product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, "ai_prompt": "<50-90 words>"}]}')
+    '"wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
+    '"ai_prompt": "<50-90 words>"}]}')
 # Mixed job (exact mode with an on-body shot): paste shots get placement + scene, redraw shots an ai_prompt.
 PLAN_BOTH = PLAN_AI.split("JSON only:")[0] + (
     "Shots marked path=paste instead get placement (centre x, y from 0 to 1 and width as a fraction of the frame, "
     "0.2 to 0.8) and scene (at most 40 words, surroundings only). "
     'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", '
-    '"product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, "ai_prompt": "<redraw shots>", '
+    '"wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
+    '"ai_prompt": "<redraw shots>", '
     '"placement": {"x": <0-1>, "y": <0-1>, "scale": <0.2-0.8>}, "scene": "<paste shots>"}]}')
 
 ON_BODY_KINDS = {"present", "hands", "worn"}
 WITH_PERSON = re.compile(r"\\b(model|person|woman|man|bride|groom|wearing|worn|wears)\\b", re.I)
+# Any person or body part in a written shot: a product-only shot whose plan mentions one gets the backend's direction.
+BODY = re.compile(r"\\b(models?|person|people|wom[ae]n|m[ae]n|lady|ladies|gentleman|bride|groom|girl|boy|wearing|worn|"
+                  r"wears|hands?|fingers?|wrists?|forearms?|arms?|palms?|necks?|collarbones?|ears?|earlobes?|faces?|"
+                  r"skin|shoulders?|chest)\\b", re.I)
+WEARER = JOB.get("wearer") if JOB.get("wearer") in ("male", "female") else None  # the backend's hint wins
+ADULT = {"male": "an adult Indian man", "female": "an adult Indian woman"}
+OTHER_GENDER = {"male": re.compile(r"\\b(wom[ae]n'?s?|female|lady|ladies|girl|bride|she|her|hers)\\b", re.I),
+                "female": re.compile(r"\\b(m[ae]n'?s?|male|gentleman|boy|groom|he|his|him)\\b", re.I)}
+
+
+def shot_people(target):
+    """model: the shot may show one adult model (on-body photoshoot kinds, or a campaign scene that names one);
+    none: the jewellery alone, a product close-up — no person or body part."""
+    if target["kind"] in ON_BODY_KINDS:
+        return "model"
+    if target["kind"] == "scene" and WITH_PERSON.search(str(target.get("prompt") or "")):
+        return "model"
+    return "none"
+
+
+PRODUCT_NAME = ""  # what the analyst calls the piece ("gold signet ring")
+# Where each kind of piece is worn and how the model shot is framed for it (a ring drawn as a pendant was the most
+# common model-scene failure). Matched on the title and the analyst's name for the piece; first match wins.
+WEAR_ON = [
+    ("neck", r"mangal ?sutra", "around the neck, lying on the collarbones", "framed from the chest up"),
+    ("nose", r"\\bnose|\\bnath\\b|nosepin", "in the nose", "a close portrait"),
+    ("toe", r"toe ?ring|bichh?iya", "on the toe", "a close-up of the feet"),
+    ("ear", r"ear ?ring|jhumk|\\bstuds?\\b|\\bbali\\b|hoops?\\b|ear ?cuff",
+     "hanging from the earlobes", "a three-quarter portrait with the hair tucked behind the ear"),
+    ("finger", r"\\brings?\\b|\\bband\\b|anguthi",
+     "on the ring finger, the band wrapped around the finger",
+     "a close-up of the hand near the face or resting on the other hand, the ring large and sharp in the frame"),
+    ("wrist", r"bangle|\\bkada\\b|kangan|bracelet|\\bcuff",
+     "around the wrist, the hand passing through it",
+     "the forearm across the body at chest height, the piece facing the camera"),
+    ("ankle", r"anklet|payal|pajeb", "around the ankle", "a close-up of the feet"),
+    ("forehead", r"tikka|matha ?patti", "on the forehead along the hair parting", "a close portrait"),
+    ("waist", r"kamar ?bandh|waist ?chain|belt", "around the waist", "framed from the chest to the knees"),
+    ("neck", r"necklace|pendant|\\bchain|\\bhaar\\b|choker|locket|\\bmala\\b|\\bset\\b",
+     "around the neck, lying on the collarbones", "framed from the chest up"),
+]
+
+
+def wear_placement():
+    """(body part, where, framing) for this piece, or None when its kind is not known."""
+    text = f"{JOB.get('title') or ''} {PRODUCT_NAME}".lower()
+    for part, pattern, where, framing in WEAR_ON:
+        if re.search(pattern, text):
+            return part, where, framing
+    return None
+
+
+def people_rule(target):
+    """The sentence every take of the shot is painted with: who may (or may not) be in it."""
+    if shot_people(target) == "none":
+        return (" Product close-up: the jewellery alone, large in the frame on its surface, nothing in the photo but "
+                "the setting and props — no person, no hand, no fingers, no body part.")
+    who = f"The one model is {ADULT[WEARER]}" if WEARER else "Exactly one adult model"
+    placement = wear_placement()
+    if placement:
+        part, where, framing = placement
+        return f" {who}, wearing the jewellery {where}; {framing}. No other person in the photo."
+    return f" {who}; no other person in the photo."
+
+
+def with_wearer(text):
+    """The backend's 'one adult male or female model chosen to suit the piece' made specific once the wearer is known."""
+    if not WEARER:
+        return text
+    who = "man" if WEARER == "male" else "woman"
+    text = re.sub(r"(?i)\\b(adult\\s+)?male\\s+or\\s+female\\s+model\\b(\\s+chosen\\s+to\\s+suit\\s+the\\s+piece)?",
+                  f"adult Indian {who}", text)
+    return re.sub(r"(?i)\\b(man|woman)\\s+or\\s+(man|woman)\\b", who, text)
 
 
 def path_for(target):
@@ -429,6 +516,20 @@ def parse_box(raw):
     return (int(x1 / 1000 * w), int(y1 / 1000 * h), int(x2 / 1000 * w), int(y2 / 1000 * h))
 
 
+def box_in(raw, size, min_area=0.0002, max_area=0.25):
+    """0-1000 box -> pixels of an image of that size; None when unusable. Small allowed: a worn ring is ~0.1 % of it."""
+    try:
+        x1, y1, x2, y2 = [float(v) for v in raw][:4]
+    except Exception:
+        return None
+    x1, x2 = sorted((max(0.0, min(1000.0, x1)), max(0.0, min(1000.0, x2))))
+    y1, y2 = sorted((max(0.0, min(1000.0, y1)), max(0.0, min(1000.0, y2))))
+    if not min_area < (x2 - x1) * (y2 - y1) / 1e6 < max_area:
+        return None
+    w, h = size
+    return (int(x1 / 1000 * w), int(y1 / 1000 * h), int(np.ceil(x2 / 1000 * w)), int(np.ceil(y2 / 1000 * h)))
+
+
 def padded_box(box, pad=0.06):
     x1, y1, x2, y2 = box
     px, py = int((x2 - x1) * pad) + 4, int((y2 - y1) * pad) + 4
@@ -440,7 +541,7 @@ def plan_shots():
         return {int(t["index"]): {"scene_prompt": t["prompt"], "placement": None} for t in JOB["targets"]}
     report.send("imageAnalysis", 7, f"Loading the image analyst ({VLM_ID.split('/')[-1]})", force=True)
     load_vlm()
-    brief = [{"index": t["index"], "kind": t["kind"], "path": PATHS[int(t["index"])],
+    brief = [{"index": t["index"], "kind": t["kind"], "path": PATHS[int(t["index"])], "people": shot_people(t),
               "direction": words(t["prompt"], 80)} for t in JOB["targets"]]
     kinds = set(PATHS.values())
     plan_text = PLAN_AI if kinds == {"redraw"} else PLAN_EXACT if kinds == {"paste"} else PLAN_BOTH
@@ -450,7 +551,7 @@ def plan_shots():
     budget = 160 + sum(190 if p == "redraw" else 110 for p in PATHS.values())
     plans = {int(t["index"]): fallback_plan(t) for t in JOB["targets"]}
     report.send("imageAnalysis", 10, "Studying the product photo", force=True)
-    global PRODUCT_BOX, METAL, COLOURS
+    global PRODUCT_BOX, METAL, COLOURS, WEARER, PRODUCT_NAME
     by_index = {int(t["index"]): t for t in JOB["targets"]}
     for attempt in range(2):
         try:
@@ -459,8 +560,13 @@ def plan_shots():
             seen = words(result.get("metal"), 4).lower().strip("<>")
             METAL = KNOWN_METAL or seen or METAL
             COLOURS = words(result.get("colours"), 10).strip("<>") or COLOURS
+            seen_wearer = str(result.get("wearer") or "").lower().strip("<> ")
+            if not JOB.get("wearer") and seen_wearer in ("male", "female"):
+                WEARER = seen_wearer
+            PRODUCT_NAME = words(result.get("product"), 6).strip("<>").lower() or PRODUCT_NAME
             print("Product:", result.get("product"), "| metal:", METAL, f"(analyst saw: {seen or '-'})",
-                  "| colours:", COLOURS, "| box:", PRODUCT_BOX, flush=True)
+                  "| colours:", COLOURS, "| wearer:", WEARER or "any", f"(analyst: {seen_wearer or '-'})",
+                  "| box:", PRODUCT_BOX, flush=True)
             got = 0
             for shot in result.get("shots", []):
                 idx = int(shot.get("index", -1))
@@ -483,6 +589,23 @@ def plan_shots():
         except Exception:
             traceback.print_exc()
         request += " Return strictly valid JSON, no commentary."
+    for idx, target in by_index.items():  # who may be in each shot, made certain whatever the analyst wrote
+        plan, fallback = plans[idx], fallback_plan(target)
+        if shot_people(target) == "none":
+            for key in ("ai_prompt", "scene_prompt"):
+                if plan.get(key) and BODY.search(plan[key]):
+                    print(f"shot {idx}: the analyst put a person in a product-only shot; using the shot direction",
+                          flush=True)
+                    plan[key] = fallback.get(key, plan[key])
+        elif WEARER and plan.get("ai_prompt") and OTHER_GENDER[WEARER].search(plan["ai_prompt"]):
+            print(f"shot {idx}: the analyst wrote the wrong gender for a {WEARER} piece; using the shot direction",
+                  flush=True)
+            plan["ai_prompt"] = fallback["ai_prompt"]
+        for key in ("ai_prompt", "scene_prompt"):
+            if plan.get(key):
+                plan[key] = with_wearer(plan[key])
+        if plan.get("ai_prompt"):
+            plan["ai_prompt"] += people_rule(target)
     if not JUDGE:
         unload_vlm()
     return plans
@@ -588,6 +711,12 @@ except Exception as exc:
 `;
 
 const CELL_ENGINE = `
+# One model load or GPU call at a time in this process. The cut-out thread (BiRefNet, GPU 0) and the analyst / judge
+# (Qwen3-VL 4-bit, GPU 1) overlapping broke both in warm sessions: a model built while the other loads gets meta
+# tensors (from_pretrained's empty-weights init is process-wide), and a cache flush or BiRefNet pass during a 4-bit
+# generate hit "CUDA error: an illegal memory access" — after which every GPU call of the process fails.
+GPU_LOCK = threading.RLock()
+
 # FLUX.2 [klein] 9B (fp8 weights, fp16 compute) in ComfyUI on GPU 0 paints every shot (Qwen-Image only runs in
 # bf16/fp32 there, which the T4 cannot do).
 # exact mode: it paints only around the pinned product (latent noise mask), then the real pixels go back on top.
@@ -890,9 +1019,32 @@ def letterbox(image, side):
     return Image.fromarray(arr), (left, top, nw, nh)
 
 
+def load_segmenter(auto_cls):
+    """BiRefNet_HR on GPU 0. Some transformers builds create the remote-code model on the meta device and leave a few
+    of its tensors there ("Cannot copy out of meta tensor" on .to()); then it is built again with real CPU tensors."""
+    def on_gpu(model):
+        return model.to(GEN_DEVICE).eval().half()
+    try:
+        return on_gpu(auto_cls.from_pretrained(MODELS["segmenter"], trust_remote_code=True))
+    except NotImplementedError as exc:
+        if "meta" not in str(exc):
+            raise
+        print("BiRefNet_HR loaded with meta tensors; loading it again without lazy init:", exc, flush=True)
+        gc.collect()
+        torch.cuda.empty_cache()
+        return on_gpu(auto_cls.from_pretrained(MODELS["segmenter"], trust_remote_code=True, low_cpu_mem_usage=False,
+                                               device_map=None))
+
+
 def segment_full(image, sides=(2048, 1536, 1024)):
     """BiRefNet_HR over the whole product photo at 2048 px (1536 / 1024 if GPU memory runs out), aspect kept: a soft
-    0-1 mask at the photo's own size. Runs on GPU 0 before klein loads."""
+    0-1 mask at the photo's own size. Runs on GPU 0 before klein loads; never beside another model load or GPU call
+    of this process (GPU_LOCK)."""
+    with GPU_LOCK, torch.cuda.device(GEN_DEVICE):
+        return _segment_full(image, sides)
+
+
+def _segment_full(image, sides):
     from torchvision import transforms
     from transformers import AutoModelForImageSegmentation
     if COMFY_STATE["info"] is not None:  # warm session: klein holds GPU 0 — ComfyUI lets go of it for a moment
@@ -901,8 +1053,7 @@ def segment_full(image, sides=(2048, 1536, 1024)):
             time.sleep(2)
         except requests.RequestException:
             pass
-    model = AutoModelForImageSegmentation.from_pretrained(MODELS["segmenter"], trust_remote_code=True)
-    model.to(GEN_DEVICE).eval().half()
+    model = load_segmenter(AutoModelForImageSegmentation)
     normalise = transforms.Compose([transforms.ToTensor(),
                                     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
     try:
@@ -1065,6 +1216,14 @@ def composite(generated, layer, kind):
     return out
 
 
+def judge_reference():
+    """The product photo as the judge sees it: at most 1024 px (a full-size phone photo is thousands of image tokens)."""
+    path = os.path.join(OUT_DIR, "judge-reference.jpg")
+    if not os.path.exists(path):
+        save_view(Image.open(REFERENCE_PATH or source_path).convert("RGB"), path)
+    return path
+
+
 def save_view(image, path, long_side=1024, box=None):
     """A smaller copy (or a close-up of box) for the judge: fewer image tokens, same detail where it matters."""
     view = image.crop(box) if box else image.copy()
@@ -1074,7 +1233,9 @@ def save_view(image, path, long_side=1024, box=None):
 
 
 JUDGE_ANSWER = ('Answer with JSON only: {"score": <0-10>, "metal": "<metal colour of the jewellery in image 2>", '
-                '"worn": <true, false or null>, "extra_jewellery": <true or false>, '
+                '"worn": <true, false or null>, "extra_jewellery": <true or false>, "copies": <number>, '
+                '"people": "<none, man or woman>", "worn_on": "<finger, wrist, neck, ear, ankle, nose, forehead, toe, '
+                'waist, held or none>", "piece_box": [<x1>, <y1>, <x2>, <y2>], '
                 '"issues": "<what is wrong, short>", "fix": "<one sentence describing how the photo should look '
                 'instead, in positive words>"}')
 
@@ -1082,7 +1243,7 @@ JUDGE_ANSWER = ('Answer with JSON only: {"score": <0-10>, "metal": "<metal colou
 def ask_judge(images, text):
     for attempt in range(2):
         try:
-            return parse_json(ask_vlm(images, text, max_new_tokens=220))
+            return parse_json(ask_vlm(images, text, max_new_tokens=260))
         except Exception:
             traceback.print_exc()
     return None
@@ -1095,15 +1256,16 @@ def judge(candidate, target, plan, info, idx, attempt):
     Returns (score, issues, fix) or None without a judge."""
     if not JUDGE:
         return None
-    worn = target["kind"] == "worn"
-    images = [REFERENCE_PATH or source_path, save_view(candidate, os.path.join(OUT_DIR, f"judge-{idx}-{attempt}.jpg"))]
+    # A campaign's model scene is a worn shot too: its piece is drawn on the body, never pasted (no photo match cap).
+    worn = target["kind"] == "worn" or shot_people(target) == "model"
+    images = [judge_reference(), save_view(candidate, os.path.join(OUT_DIR, f"judge-{idx}-{attempt}.jpg"))]
     closeup = ""
     if info.get("box"):
         x1, y1, x2, y2 = info["box"]
-        px, py = int((x2 - x1) * 0.2) + 8, int((y2 - y1) * 0.2) + 8
+        px, py = int((x2 - x1) * 0.4) + 16, int((y2 - y1) * 0.4) + 16  # room around it: a tight crop read as "cut off"
         box = (max(0, x1 - px), max(0, y1 - py), min(candidate.width, x2 + px), min(candidate.height, y2 + py))
         images.append(save_view(candidate, os.path.join(OUT_DIR, f"judge-{idx}-{attempt}-closeup.jpg"), 768, box))
-        closeup = "Image 3 is a close-up of the jewellery in image 2. "
+        closeup = "Image 3 is a close-up of the jewellery in image 2 (only to show its detail; its edges are not the photo's). "
     text = ("Image 1 is the real jewellery product. Image 2 is a generated advertising photo that must show exactly "
             "that product. " + closeup + "Shot direction: " + words(plan["scene_prompt"], 60) + ". Score image 2 "
             "from 0 to 10 as a premium jewellery advert, strictly: the product appears exactly once and no extra or "
@@ -1115,10 +1277,18 @@ def judge(candidate, target, plan, info, idx, attempt):
             "motifs, stones, stone count, enamel colours, metal colour and proportions must match; any visible change "
             "scores at most 4. worn = true only if a person physically wears it on the body (around the wrist, on the "
             "neck, in the ear, on the finger), touching the skin; false if it is held, floating or beside the body; "
-            "null if no person is in the photo. " + JUDGE_ANSWER)
+            "null if no person is in the photo. people = none if no person and no body part (no hand, finger, wrist, "
+            "face) is visible anywhere in image 2, otherwise man or woman for the person you see. worn_on = where on "
+            "the body the jewellery from image 1 is worn in image 2 (held = in a hand, none = no person). copies = how "
+            "many separate copies of the product from image 1 you can see in image 2 — count every one, also smaller "
+            "or differently angled ones (a matching set counts as one; 0 if it is missing). piece_box = a tight box around ONLY the jewellery in image 2 (not the "
+            "hand or finger) as [x1, y1, x2, y2] in 0-1000 coordinates of image 2's width and height. " + JUDGE_ANSWER)
     result = ask_judge(images, text)
     if result is None:
         return 5.0, "the judge could not score this take", ""
+    # Where the piece sits in this take: a redrawn take without the real product restored still gets a mask from it,
+    # so the video holds this drawn piece steady instead of letting it melt from frame to frame.
+    info["drawn_box"] = box_in(result.get("piece_box"), candidate.size)
     score = clamp(result.get("score"), 0, 10, 5.0)
     issues = [str(result.get("issues", ""))[:200]]
     fix = str(result.get("fix", ""))[:240]
@@ -1134,6 +1304,40 @@ def judge(candidate, target, plan, info, idx, attempt):
     if result.get("extra_jewellery") is True:
         score = min(score, 3.0)
         issues.insert(0, "extra jewellery was added")
+    try:
+        copies = int(float(result.get("copies")))
+    except (TypeError, ValueError):
+        copies = 1
+    if copies == 0:
+        score = min(score, 2.0)
+        issues.insert(0, "the product is missing from the photo")
+    elif copies >= 2 and not info.get("duplicate"):
+        info["duplicate"] = True
+        issues.insert(0, f"the piece appears {copies} times")
+    if info.get("duplicate"):
+        score = min(score, 3.0)
+        if not any("appears" in i and "times" in i for i in issues):
+            issues.insert(0, "the piece appears twice (measured)")
+        fix = "The jewellery appears exactly once in the photo, a single piece, no second copy anywhere. " + fix
+    # Who is in the photo: product-only shots have nobody, the model shot has the piece's own wearer.
+    seen_people = str(result.get("people", "")).lower().strip("<> ")
+    if shot_people(target) == "none" and seen_people in ("man", "woman", "person", "yes", "both"):
+        score = min(score, 3.0)
+        issues.insert(0, "a person or hand appears in a product-only shot")
+        fix = ("The jewellery alone on its surface as a product close-up, with no person, hand or fingers anywhere in "
+               "the photo. " + fix)
+    elif shot_people(target) == "model" and WEARER and seen_people in ("man", "woman"):
+        want = "man" if WEARER == "male" else "woman"
+        if seen_people != want:
+            score = min(score, 3.0)
+            issues.insert(0, f"the model must be a {want} for this {WEARER} piece")
+            fix = f"Worn by {ADULT[WEARER]}. " + fix
+    placement = wear_placement() if shot_people(target) == "model" else None
+    worn_on = str(result.get("worn_on", "")).lower().strip("<> ")
+    if placement and worn_on and worn_on not in (placement[0], "none") and not worn_on.startswith(placement[0]):
+        score = min(score, 3.0)
+        issues.insert(0, f"the {PRODUCT_NAME or 'piece'} is worn on the {worn_on}, not {placement[1].split(',')[0]}")
+        fix = f"The model wears it {placement[1]}; {placement[2]}. " + fix
     if worn and result.get("worn") is False:
         score = min(score, 4.0)
         issues.insert(0, "the jewellery is held or floating instead of being worn on the body")
@@ -1150,7 +1354,10 @@ def prefer_second(first, second, plan):
             "image 1 and appears once at a natural size, people and hands look real, the light is believable and it "
             'looks like a real premium photo? Answer with JSON only: {"better": 2} or {"better": 3}')
     try:
-        answer = parse_json(ask_vlm([source_path, first["path"], second["path"]], text, max_new_tokens=40))
+        # Three full-size photos ran the judge's GPU out of memory: 768 px views keep the comparison possible.
+        views = [save_view(Image.open(p).convert("RGB"), os.path.join(OUT_DIR, f"prefer-{n}.jpg"), 768)
+                 for n, p in enumerate((REFERENCE_PATH or source_path, first["path"], second["path"]))]
+        answer = parse_json(ask_vlm(views, text, max_new_tokens=40))
         return int(answer.get("better", 2)) == 3
     except Exception:
         traceback.print_exc()
@@ -1246,7 +1453,7 @@ def paste_shot(target, plan, seed, fix=""):
     canvas = canvas.convert("RGB")
     prompt = ("Replace the plain grey placeholder around the jewellery in image 1 with a photorealistic scene: " +
               plan["scene_prompt"] + ". The jewellery stays exactly where it is, at the same size, unchanged and shown "
-              "only once; no other jewellery. " + QUALITY + "." + (" " + fix if fix else ""))
+              "only once; no other jewellery." + people_rule(target) + " " + QUALITY + "." + (" " + fix if fix else ""))
     scene = klein(prompt, seed, gen_w, gen_h, reference=canvas, canvas=canvas, mask=paint)
     scene = scene.resize((fw, fh), Image.Resampling.LANCZOS)
     layer, _ = layout(fw, fh, place)
@@ -1289,6 +1496,9 @@ def redraw_shot(target, plan, seed, fix=""):
             else:
                 info["metal_changed"] = metal_changed(rs.get("tone_product"), rs.get("tone_generated"))
                 info["why_not_restored"] = rs.get("reason")
+                # Where the drawn piece is (its outline, from the match): the video holds those pixels steady.
+                soft = cv2.warpPerspective(PRODUCT_ALPHA, H, (frame.shape[1], frame.shape[0]))
+                info["drawn_alpha"] = (np.clip(soft, 0, 1) * 255).astype(np.uint8)
         print(f"restore: {json.dumps({k: v for k, v in info.items() if k != 'box'}, default=str)} "
               f"({time.time() - started:.1f}s)", flush=True)
     return image, prompt, mask, info
@@ -1305,13 +1515,40 @@ def klein_logo(target, seed):
     return typeset_name(image, JOB["title"]), prompt
 
 
+def second_copy(image, info):
+    """True when the piece appears a second time beside the one placed in the take (klein sometimes paints another
+    copy into the scene): the real product's features matched again with the placed piece hidden."""
+    if PRODUCT_FEATS is None or not info.get("box"):
+        return False
+    frame = np.asarray(image.convert("RGB")).copy()
+    x1, y1, x2, y2 = info["box"]
+    pad = int(0.12 * max(x2 - x1, y2 - y1)) + 6
+    frame[max(0, y1 - pad):y2 + pad, max(0, x1 - pad):x2 + pad] = 127
+    try:
+        H, stats = match_product(PRODUCT_FEATS, frame)
+    except Exception:
+        return False
+    if H is not None:
+        print(f"second copy of the piece found ({stats.get('inliers')} inliers)", flush=True)
+    return H is not None
+
+
 def make_shot(target, plan, seed, fix=""):
     """(image, prompt used, product mask or None, info) for one take."""
+    image, prompt, mask, info = _make_shot(target, plan, seed, fix)
+    if info.get("path") != "logo":
+        info["duplicate"] = second_copy(image, info)
+    return image, prompt, mask, info
+
+
+def _make_shot(target, plan, seed, fix=""):
     path = PATHS.get(int(target["index"]), "paste")
     if path == "logo":
         image, prompt = klein_logo(target, seed)
         return image, prompt, None, {"path": "logo"}
-    if path == "paste" and PRODUCT is not None:
+    # The paste path needs a real cut-out: a photo that could not be separated (PRODUCT_MODE "frame") would be pasted
+    # as a rectangle — hand, table and all — so those shots are redrawn from it instead.
+    if path == "paste" and PRODUCT is not None and PRODUCT_MODE == "cutout":
         return paste_shot(target, plan, seed, fix)
     return redraw_shot(target, plan, seed, fix)
 
@@ -1327,16 +1564,51 @@ def put(url, path_or_bytes, content_type):
     with_retries("upload", once, attempts=5)
 
 
+def drawn_piece_mask(info, size):
+    """For a redrawn take whose real product could not be restored: a soft mask over the piece as drawn — its matched
+    outline when the photo was located, else the judge's box around it (with a little of the finger: it moves with the
+    piece). The video then keeps these pixels of the approved still in every frame. None for other takes."""
+    if info.get("path") != "redraw":
+        return None
+    w, h = size
+    if info.get("drawn_alpha") is not None and info["drawn_alpha"].shape[:2] == (h, w):
+        alpha = info["drawn_alpha"].astype(np.float32) / 255.0
+        if (alpha > 0.5).sum() >= 200:
+            alpha = cv2.dilate(alpha, np.ones((5, 5), np.uint8))
+            return (np.clip(cv2.GaussianBlur(alpha, (0, 0), 1.5), 0, 1) * 255 + 0.5).astype(np.uint8)
+    box = info.get("drawn_box")
+    if not box:
+        return None
+    x1, y1, x2, y2 = box
+    px, py = int((x2 - x1) * 0.12) + 6, int((y2 - y1) * 0.12) + 6
+    x1, y1, x2, y2 = max(0, x1 - px), max(0, y1 - py), min(w, x2 + px), min(h, y2 + py)
+    if (x2 - x1) * (y2 - y1) < 600:
+        return None
+    radius = max(2, int(min(x2 - x1, y2 - y1) * 0.2))
+    inner = np.zeros((h, w), np.float32)
+    cv2.rectangle(inner, (x1 + radius, y1), (x2 - radius - 1, y2 - 1), 1.0, -1)
+    cv2.rectangle(inner, (x1, y1 + radius), (x2 - 1, y2 - radius - 1), 1.0, -1)
+    for cx, cy in ((x1 + radius, y1 + radius), (x2 - radius - 1, y1 + radius), (x1 + radius, y2 - radius - 1),
+                   (x2 - radius - 1, y2 - radius - 1)):
+        cv2.circle(inner, (cx, cy), radius, 1.0, -1)
+    mask = cv2.GaussianBlur(inner, (0, 0), max(1.5, radius * 0.4))
+    return (np.clip(mask, 0, 1) * 255 + 0.5).astype(np.uint8)
+
+
 def upload_best(target, best):
     put(target["uploadUrl"], best["path"], "image/jpeg")
     if target.get("maskUploadUrl"):
         # Where the real product sits in this still: the video notebook locks those pixels in every frame.
         # A take without a restored product uploads an empty mask, so no earlier attempt's mask survives.
         buffer = io.BytesIO()
+        size = Image.open(best["path"]).size
+        drawn = None if best["mask"] is not None else drawn_piece_mask(best["info"], size)
         if best["mask"] is not None:
             Image.fromarray((np.clip(best["mask"], 0, 1) * 255 + 0.5).astype(np.uint8)).save(buffer, "PNG")
+        elif drawn is not None:
+            Image.fromarray(drawn).save(buffer, "PNG")
         else:
-            Image.new("L", Image.open(best["path"]).size, 0).save(buffer, "PNG")
+            Image.new("L", size, 0).save(buffer, "PNG")
         try:
             put(target["maskUploadUrl"], buffer.getvalue(), "image/png")
         except Exception as exc:

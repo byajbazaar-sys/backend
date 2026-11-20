@@ -146,9 +146,11 @@ def metal_tone(rgb, mask):
     return {"a": float(np.median(a)), "b": float(np.median(b)), "chroma": float(np.median(c))}
 
 
-def restore_product(target_rgb, product_rgb, product_alpha, H, min_coverage=0.45):
+def restore_product(target_rgb, product_rgb, product_alpha, H, min_coverage=0.45, trust=False):
     """Rebuilds the drawn piece from the real photo where the two agree. Returns (image, mask, stats); image is None
-    when too little of the piece agrees (then keep the generated take as it is)."""
+    when too little of the piece agrees (then keep the generated take as it is). trust = H was verified by tracking
+    the very pixels being restored (a video frame against its own still): fine detail that disagrees is the frame's
+    melting texture, so it is replaced too — only something in front of the piece (a colour or shading jump) is kept."""
     target = np.asarray(target_rgb)
     th, tw = target.shape[:2]
     product_rgb = np.asarray(product_rgb)
@@ -211,8 +213,12 @@ def restore_product(target_rgb, product_rgb, product_alpha, H, min_coverage=0.45
     cb = _masked_blur(lg[..., 2] - ls[..., 2], w, sigma) - db_raw
     shade = (low_g + 1.0) / (low_s + 1.0)
     colour_jump = np.hypot(ca, cb) > 16
-    disagree = (((texture > 0) & (ncc < 0.1)) | ((energy_g > 0.8) & (energy_s < 0.25)) | colour_jump
-                | (shade < 0.45) | (shade > 2.2))
+    if trust:
+        keep = np.ones_like(keep)
+        disagree = colour_jump | (shade < 0.45) | (shade > 2.2)
+    else:
+        disagree = (((texture > 0) & (ncc < 0.1)) | ((energy_g > 0.8) & (energy_s < 0.25)) | colour_jump
+                    | (shade < 0.45) | (shade > 2.2))
     disagree = cv2.dilate(disagree.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(np.float32) * w
     keep = keep * (1 - np.clip(_blur(disagree, sigma) * 2.5, 0, 1))
     # Light: the generated scene's large-scale brightness, within limits; detail: the real photo.

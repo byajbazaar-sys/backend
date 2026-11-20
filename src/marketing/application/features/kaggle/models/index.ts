@@ -1,5 +1,7 @@
 export * from './bulk-create-kaggle-credential-result.model';
 export * from './bulk-create-kaggle-credentials-request.model';
+export * from './colab-settings-request.model';
+export * from './colab-settings-response.model';
 export * from './create-kaggle-credential-request.model';
 export * from './kaggle-account-notebook-health.model';
 export * from './kaggle-credential-response.model';

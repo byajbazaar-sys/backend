@@ -14,6 +14,8 @@ export interface RenderJobPayload {
     photoshootId?: string;
     /** Metal the jeweller gave (gold | silver | rose_gold | platinum): wins over what the analyst reads off the photo. */
     metal?: string;
+    /** Who the piece is for, when its name says so (gents / ladies …): the model shot uses that gender. */
+    wearer?: 'male' | 'female';
     targets: {
       index: number;
       kind: string;

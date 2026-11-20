@@ -1,3 +1,4 @@
+import { COLAB_RUNTIME_PY } from './colab-runtime.notebook';
 import { IMAGE_MODELS, IMAGE_PIP_PACKAGES } from './image-worker.notebook';
 import { IMAGE_COMFY_FILES, VOICE_MODEL_FILES } from './model-cache';
 import { WorkerSessionNotebookJob } from './worker-session-notebook-job';
@@ -58,23 +59,37 @@ session_event("sessionBooting", "Warm GPU worker booting")
 `;
 
 const CELL_MODELS = `
-# The private model dataset (built by the account setup) is mounted read-only under /kaggle/input: symlink its files
-# where the job notebooks look for them, so they skip their downloads. Without it they download as usual.
+# The model cache built by the account setup: on Kaggle a private dataset mounted read-only under /kaggle/input (its
+# files are symlinked where the job notebooks look for them); on Colab Enterprise a gs:// prefix in the account's
+# bucket (its files are copied there in the background, next cell). Either way the jobs skip their downloads; without
+# a cache they download as usual.
 COMFY_DIR = "/tmp/ComfyUI"
 BOOT_CONFIG = json.loads(__BOOT_JSON__)
 LINKED = []  # (dataset file, symlink, group) — copied to the local disk in the background (next cell)
+GCS_FILES = []  # Colab: (gs:// uri, destination, group) — downloaded in the background (next cell)
+COLAB = SESSION.get("provider") == "colab"
+if COLAB:
+    big_disk()
 try:
-    if not os.path.isdir(COMFY_DIR):
+    if not os.path.isdir(os.path.join(COMFY_DIR, "comfy")):
         subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git", COMFY_DIR],
                        check=True, capture_output=True)
     manifests = glob.glob("/kaggle/input/**/byajbazaar-models.json", recursive=True)
+    prefix = SESSION.get("modelsGcs") if COLAB else None
+    if prefix:
+        try:
+            gcs_download(f"{prefix}/byajbazaar-models.json", "/tmp/bb-gcs/byajbazaar-models.json")
+            manifests = ["/tmp/bb-gcs/byajbazaar-models.json"]
+        except Exception as exc:
+            print("Model cache in Cloud Storage not readable (jobs download the models):", exc, flush=True)
+            prefix = None
     linked = 0
     if manifests:
         base = os.path.dirname(manifests[0])
         manifest = json.load(open(manifests[0]))
         for f in manifest.get("files", []):
             src = os.path.join(base, f["name"])
-            if not os.path.exists(src):
+            if not prefix and not os.path.exists(src):
                 continue
             if f["kind"] == "comfy":
                 dst = os.path.join(COMFY_DIR, f["path"])
@@ -86,13 +101,18 @@ try:
                 WORKER["local_models"][f["repo"]] = root
                 group = "analyst" if f["repo"] == BOOT_CONFIG["analyst"] else "segmenter"
             os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if prefix:
+                if not os.path.exists(dst):
+                    GCS_FILES.append((f"{prefix}/{f['name']}", dst, group))
+                    linked += 1
+                continue
             if not os.path.lexists(dst):
                 os.symlink(src, dst)
                 linked += 1
             if os.path.islink(dst):
                 LINKED.append((src, dst, group))
     MODELS_CACHED = linked > 0
-    print(f"Model cache: {'mounted, ' + str(linked) + ' files linked' if MODELS_CACHED else 'not available'}", flush=True)
+    print(f"Model cache: {('Cloud Storage, ' + str(linked) + ' files to copy') if prefix else ('mounted, ' + str(linked) + ' files linked') if MODELS_CACHED else 'not available'}", flush=True)
 except Exception as exc:
     traceback.print_exc()
     MODELS_CACHED = False
@@ -147,6 +167,14 @@ def boot_staging():
     # In the order a job needs them: the analyst plans first, then klein paints; video files last.
     for group in ("analyst", "segmenter", "klein", "voice", "video"):
         try:
+            for uri, dst, _ in [item for item in GCS_FILES if item[2] == group]:  # Colab: from the bucket
+                try:
+                    gcs_download(uri, dst)
+                    copied += 1
+                except Exception as exc:
+                    kept += 1
+                    print(f"Boot: could not copy {os.path.basename(dst)} from Cloud Storage ({exc}); the job "
+                          "downloads it", flush=True)
             for src, dst, _ in [item for item in LINKED if item[2] == group]:
                 try:
                     if os.path.islink(dst) and stage(src, dst):
@@ -158,9 +186,9 @@ def boot_staging():
                     print(f"Boot: could not copy {os.path.basename(dst)} ({exc}); it is read from the mount", flush=True)
         finally:
             BOOT[group].set()
-    if LINKED:
+    if LINKED or GCS_FILES:
         print(f"Boot: {copied} model files copied to the local disk in {time.time() - started:.0f}s"
-              + (f", {kept} read from the dataset mount" if kept else ""), flush=True)
+              + (f", {kept} not copied" if kept else ""), flush=True)
 
 
 threading.Thread(target=boot_installs, daemon=True).start()
@@ -347,6 +375,7 @@ export function buildWorkerSessionNotebook(job: WorkerSessionNotebookJob): Recor
           `keeps the models loaded between them.`,
       ),
       code(CELL_SESSION.replace('__JOB_JSON__', () => pyJson(job))),
+      code(COLAB_RUNTIME_PY),
       code(CELL_MODELS.replace('__BOOT_JSON__', () => pyJson(BOOT_CONFIG))),
       code(CELL_BOOT),
       code(CELL_LOOP),

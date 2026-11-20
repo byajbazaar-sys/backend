@@ -1,4 +1,5 @@
 export * from './worker-token.util';
+export * from './colab-settings';
 export * from './fast-reel-worker.notebook';
 export * from './image-notebook-job';
 export * from './image-notebook-target';

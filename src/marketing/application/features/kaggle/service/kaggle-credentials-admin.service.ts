@@ -19,7 +19,7 @@ import {
   RENDER_JOBS_REPOSITORY,
   MarketingScheduler,
 } from '../../../shared';
-import { jobTarget, notebookOf } from '../utils';
+import { colabSettings, jobTarget, notebookOf, parseServiceAccountKey, ServiceAccountKey } from '../utils';
 import { MarketingRenderService } from './marketing-render.service';
 import {
   BulkCreateKaggleCredentialResultModel,
@@ -37,6 +37,25 @@ function maskKey(key: string): string {
   if (!key) return '';
   if (key.length <= 8) return '****';
   return `${key.slice(0, 4)}…${key.slice(-4)}`;
+}
+
+/** A pasted Colab service-account key, or a 400 that says what is wrong with it. */
+function serviceAccountKeyOrThrow(json: string | undefined): ServiceAccountKey {
+  if (!json) throw new BadRequestException('Paste the service-account key JSON of the Colab account');
+  try {
+    return parseServiceAccountKey(json);
+  } catch (err) {
+    throw new BadRequestException((err as Error).message);
+  }
+}
+
+/** What the admin list shows instead of a Colab key: the service account it belongs to. */
+function colabKeyHint(json: string): string {
+  try {
+    return parseServiceAccountKey(json).client_email;
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -178,13 +197,32 @@ export class KaggleCredentialsAdminService {
   async create(body: CreateKaggleCredentialRequestModel, dispatch = true): Promise<KaggleCredentialResponseModel> {
     const username = body.username.trim().toLowerCase();
     if (await this.credentials.find(username)) {
-      throw new ConflictException(`Kaggle account ${username} already exists`);
+      throw new ConflictException(`GPU account ${username} already exists`);
     }
-    const gpuHoursLeft = body.skipVerification ? undefined : await this.verifyOrThrow(username, body.apiKey);
+    const provider = body.provider === 'colab' ? 'colab' : 'kaggle';
+    let apiKey = body.apiKey;
+    let colab = null;
+    if (provider === 'colab') {
+      const key = serviceAccountKeyOrThrow(body.serviceAccountKey);
+      if (!body.colab?.region || !body.colab?.bucket) {
+        throw new BadRequestException('A Colab account needs its region and Cloud Storage bucket');
+      }
+      try {
+        colab = colabSettings(key, { ...body.colab, region: body.colab.region, bucket: body.colab.bucket });
+      } catch (err) {
+        throw new BadRequestException((err as Error).message);
+      }
+      apiKey = body.serviceAccountKey;
+    }
+    const gpuHoursLeft = body.skipVerification
+      ? undefined
+      : await this.verifyOrThrow({ username, apiKey, provider, colab });
 
     const row = await this.credentials.create({
       username,
-      apiKey: body.apiKey,
+      apiKey,
+      provider,
+      colab,
       concurrency: body.concurrency ?? 1,
       enabled: body.enabled ?? true,
       label: body.label || null,
@@ -194,7 +232,7 @@ export class KaggleCredentialsAdminService {
       status: EKaggleAccountStatus.New,
       lastError: null,
     });
-    this.logger.info({ account: username }, 'Kaggle account added');
+    this.logger.info({ account: username, provider }, 'GPU account added');
     if (gpuHoursLeft !== undefined) {
       await this.accounts.update(username, { gpuHoursLeft, quotaCheckedAt: new Date() });
     }
@@ -204,19 +242,50 @@ export class KaggleCredentialsAdminService {
 
   async update(username: string, body: UpdateKaggleCredentialRequestModel): Promise<KaggleCredentialResponseModel> {
     const existing = await this.require(username);
-    const keyChanged = body.apiKey !== undefined && body.apiKey !== existing.apiKey;
-    if (keyChanged && !body.skipVerification) await this.verifyOrThrow(existing.username, body.apiKey);
+    const colabUpdate =
+      existing.provider === 'colab' && (body.serviceAccountKey !== undefined || body.colab !== undefined);
+    const newKey = existing.provider === 'colab' ? body.serviceAccountKey : body.apiKey;
+    const keyChanged = newKey !== undefined && newKey !== existing.apiKey;
+    let colab = existing.colab ?? null;
+    if (colabUpdate) {
+      const key = serviceAccountKeyOrThrow(keyChanged ? newKey : existing.apiKey);
+      try {
+        colab = colabSettings(
+          key,
+          {
+            ...body.colab,
+            region: body.colab?.region ?? existing.colab?.region ?? '',
+            bucket: body.colab?.bucket ?? existing.colab?.bucket ?? '',
+          },
+          existing.colab,
+        );
+      } catch (err) {
+        throw new BadRequestException((err as Error).message);
+      }
+      if (!colab.region || !colab.bucket) {
+        throw new BadRequestException('A Colab account needs its region and Cloud Storage bucket');
+      }
+    }
+    if ((keyChanged || colabUpdate) && !body.skipVerification) {
+      await this.verifyOrThrow({
+        username: existing.username,
+        apiKey: keyChanged ? newKey : existing.apiKey,
+        provider: existing.provider,
+        colab,
+      });
+    }
 
     const updated = await this.credentials.update(existing.username, {
-      apiKey: keyChanged ? body.apiKey : undefined,
+      apiKey: keyChanged ? newKey : undefined,
+      ...(colabUpdate ? { colab } : {}),
       concurrency: body.concurrency,
       enabled: body.enabled,
       label: body.label === undefined ? undefined : body.label || null,
     });
-    if (!updated) throw new NotFoundException(`Kaggle account ${username} not found`);
+    if (!updated) throw new NotFoundException(`GPU account ${username} not found`);
 
-    // A failed setup is retried right away with the new key instead of waiting for the retry window.
-    if (keyChanged) {
+    // A failed setup is retried right away with the new key / settings instead of waiting for the retry window.
+    if (keyChanged || colabUpdate) {
       await this.accounts.transition(existing.username, [EKaggleAccountStatus.Failed], {
         status: EKaggleAccountStatus.New,
         lastError: null,
@@ -251,7 +320,7 @@ export class KaggleCredentialsAdminService {
       };
     }
     try {
-      const { hoursLeft } = await this.pool.verifyCredentials(row.username, row.apiKey);
+      const { hoursLeft } = await this.pool.verifyCredentials(row);
       await this.accounts.update(row.username, { gpuHoursLeft: hoursLeft, quotaCheckedAt: new Date() });
       return { username: row.username, valid: true, gpuHoursLeft: hoursLeft };
     } catch (err) {
@@ -265,11 +334,14 @@ export class KaggleCredentialsAdminService {
     return row;
   }
 
-  private async verifyOrThrow(username: string, apiKey: string): Promise<number | null> {
+  private async verifyOrThrow(
+    credential: Parameters<IKaggleWorkerPool['verifyCredentials']>[0],
+  ): Promise<number | null> {
     try {
-      return (await this.pool.verifyCredentials(username, apiKey)).hoursLeft;
+      return (await this.pool.verifyCredentials(credential)).hoursLeft;
     } catch (err) {
-      throw new BadRequestException(`Kaggle credentials check failed: ${(err as Error).message}`);
+      const what = credential.provider === 'colab' ? 'Colab Enterprise' : 'Kaggle';
+      throw new BadRequestException(`${what} credentials check failed: ${(err as Error).message}`);
     }
   }
 
@@ -286,8 +358,10 @@ export class KaggleCredentialsAdminService {
     return {
       id: row.id,
       username: row.username,
+      provider: row.provider,
+      colab: row.colab ?? null,
       label: row.label ?? null,
-      maskedKey: maskKey(row.apiKey),
+      maskedKey: row.provider === 'colab' ? colabKeyHint(row.apiKey) : maskKey(row.apiKey),
       keyReadable: !!row.apiKey,
       concurrency: row.concurrency,
       enabled: row.enabled,

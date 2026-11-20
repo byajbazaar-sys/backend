@@ -1,11 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
+
+import { ColabSettingsResponseModel } from './colab-settings-response.model';
 /** Never contains the key itself — only a masked hint. */
 export class KaggleCredentialResponseModel {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() username: string;
+  @ApiProperty({ enum: ['kaggle', 'colab'] }) @Expose() provider: string;
+  @ApiPropertyOptional({ type: ColabSettingsResponseModel, description: 'Colab Enterprise settings (no key)' })
+  @Expose()
+  @Type(() => ColabSettingsResponseModel)
+  colab: ColabSettingsResponseModel | null;
   @ApiPropertyOptional() @Expose() label: string | null;
-  @ApiProperty({ example: 'KGAT…9f3a' }) @Expose() maskedKey: string;
+  @ApiProperty({ example: 'KGAT…9f3a', description: 'Kaggle: masked key; Colab: the service account' })
+  @Expose()
+  maskedKey: string;
   @ApiProperty({
     description: 'False when the stored key is empty or an old encrypted key could not be converted — re-enter it',
   })

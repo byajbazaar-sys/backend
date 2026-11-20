@@ -1,3 +1,4 @@
+import { COLAB_RUNTIME_PY } from './colab-runtime.notebook';
 import { IMAGE_MODELS } from './image-worker.notebook';
 import { FAST_VIDEO_MODEL_FILES, VIDEO_MODEL_FILES, VIDEO_MODEL_NAMES, VOICE_MODEL_FILES } from './model-cache';
 import { PRODUCT_RESTORE_PY } from './product-restore.notebook';
@@ -121,9 +122,12 @@ def find_ffmpeg():
 /** One-time account check: Kaggle GPU access, model hosting, ffmpeg, and the callback channel. */
 const CELL_SETUP_CHECK = `
 try:
+    COLAB = JOB.get("provider") == "colab"
     gpus = gpu_names()
     if not gpus:
-        raise RuntimeError("No GPU in this session. Kaggle needs a verified phone number for GPU access.")
+        raise RuntimeError("No GPU in this session. " + (
+            "Check the Colab account's GPU type and the project's GPU quota in its region." if COLAB else
+            "Kaggle needs a verified phone number for GPU access."))
     model_checks = [
         __VIDEO_MODEL_CHECKS__
         __IMAGE_MODEL_CHECKS__
@@ -138,13 +142,16 @@ try:
             raise RuntimeError(f"Hugging Face refused {model_url.split('/')[-1]} (HTTP {r.status_code}): accept the "
                                "FLUX.2 [klein] 9B licence on huggingface.co with the account of MARKETING_HF_TOKEN.")
         if r.status_code >= 400:
-            raise RuntimeError(f"Model host not reachable: {model_url} (HTTP {r.status_code}). Check Kaggle Internet access.")
+            raise RuntimeError(f"Model host not reachable: {model_url} (HTTP {r.status_code}). Check the notebook's "
+                               "Internet access.")
     ffmpeg = find_ffmpeg()
-    disk = shutil.disk_usage("/tmp").free / 1e9
+    disk = big_disk()  # Colab: the heavy folders go to the VM's largest disk
     need = 120 if JOB.get("modelCache") else 25  # the cache build stages ~52 GB of models
     if disk < need:
-        raise RuntimeError(f"Only {disk:.0f} GB free in /tmp; the models need ~{need} GB.")
-    info = f"{len(gpus)} GPU: " + "; ".join(g.split(" (UUID")[0] for g in gpus) + f" | /tmp {disk:.0f} GB free"
+        raise RuntimeError(f"Only {disk:.0f} GB of disk free; the models need ~{need} GB" +
+                           (" (raise the Colab account's disk size)." if COLAB else "."))
+    info = (("Colab " if COLAB else "") + f"{len(gpus)} GPU: " + "; ".join(g.split(" (UUID")[0] for g in gpus) +
+            f" | {disk:.0f} GB free")
     if JOB.get("modelCache"):
         # Renders may start on this account now; the model cache keeps building in this session.
         report.send("accountReady", 10, "Account ready — building the model cache", force=True, gpuInfo=info,
@@ -204,8 +211,69 @@ def dataset_state(ref):
     return "missing" if r.returncode != 0 else "ready" if "ready" in text else "error" if "error" in text else "pending"
 
 
+def build_cache_dir(ref):
+    """Every model file downloaded once into one folder, with the manifest the sessions read."""
+    DIR = "/tmp/bb-model-cache"
+    os.makedirs(DIR, exist_ok=True)
+    manifest = {"dataset": ref, "files": []}
+    items = len(CACHE["comfy"]) + len(CACHE["hf"])
+    for i, f in enumerate(CACHE["comfy"]):
+        report.send("modelCache", 12 + 40 * i / items, f"Downloading models for the cache ({i + 1}/{items})")
+        name = "comfy--" + f["path"].replace("/", "--")
+        cache_download(f["url"], os.path.join(DIR, name))
+        manifest["files"].append({"name": name, "kind": "comfy", "path": f["path"]})
+    from huggingface_hub import snapshot_download
+    for j, repo in enumerate(CACHE["hf"]):
+        n = len(CACHE["comfy"]) + j
+        report.send("modelCache", 12 + 40 * n / items, f"Downloading models for the cache ({n + 1}/{items})")
+        local = snapshot_download(repo, local_dir=f"/tmp/bb-hf-stage/{repo.replace('/', '--')}")
+        for root, dirs, files in os.walk(local):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for fn in files:
+                rel = os.path.relpath(os.path.join(root, fn), local)
+                name = "hf--" + repo.replace("/", "--") + "--" + rel.replace("/", "--")
+                os.replace(os.path.join(root, fn), os.path.join(DIR, name))
+                manifest["files"].append({"name": name, "kind": "hf", "repo": repo, "path": rel})
+    json.dump(manifest, open(os.path.join(DIR, "byajbazaar-models.json"), "w"))
+    return DIR
+
+
+def publish_to_gcs(DIR, ref):
+    """Colab Enterprise: the cache goes to the account's bucket (same region: fast, no egress). The manifest is
+    written last, so a half-finished upload is never taken for a cache."""
+    from concurrent.futures import ThreadPoolExecutor
+    names = [n for n in os.listdir(DIR) if n != "byajbazaar-models.json" and not n.endswith(".part")]
+    size = sum(os.path.getsize(os.path.join(DIR, n)) for n in names) / 1e9
+    report.send("modelCache", 55, f"Uploading the model cache to Cloud Storage ({size:.0f} GB)", force=True)
+    done = [0]
+
+    def one(name):
+        gcs_upload(os.path.join(DIR, name), f"{ref}/{name}")
+        done[0] += 1
+        report.send("modelCache", 55 + 40 * done[0] / max(1, len(names)),
+                    f"Uploading the model cache ({done[0]}/{len(names)})")
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(one, names))
+    gcs_upload(os.path.join(DIR, "byajbazaar-models.json"), f"{ref}/byajbazaar-models.json")
+
+
 CACHE = JOB.get("modelCache")
-if CACHE:
+if CACHE and CACHE.get("provider") == "colab":
+    try:
+        ref = CACHE["dataset"]
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "huggingface_hub"], check=True)
+        if gcs_exists(f"{ref}/byajbazaar-models.json"):
+            print("The model cache is already in Cloud Storage:", ref, flush=True)
+        else:
+            publish_to_gcs(build_cache_dir(ref), ref)
+        report.send("completed", 100, "Account ready · model cache built", status="completed", force=True,
+                    modelsDataset=ref)
+    except Exception as e:
+        traceback.print_exc()
+        report.send("completed", 100, f"Account ready (model cache not built: {e})"[:240], status="completed",
+                    force=True, modelsCacheError=str(e)[:400])
+elif CACHE:
     try:
         ref = CACHE["dataset"]
         key = CACHE["key"]
@@ -222,28 +290,7 @@ if CACHE:
 
         state = dataset_state(ref)
         if state != "ready":
-            DIR = "/tmp/bb-model-cache"
-            os.makedirs(DIR, exist_ok=True)
-            manifest = {"dataset": ref, "files": []}
-            items = len(CACHE["comfy"]) + len(CACHE["hf"])
-            for i, f in enumerate(CACHE["comfy"]):
-                report.send("modelCache", 12 + 40 * i / items, f"Downloading models for the cache ({i + 1}/{items})")
-                name = "comfy--" + f["path"].replace("/", "--")
-                cache_download(f["url"], os.path.join(DIR, name))
-                manifest["files"].append({"name": name, "kind": "comfy", "path": f["path"]})
-            from huggingface_hub import snapshot_download
-            for j, repo in enumerate(CACHE["hf"]):
-                n = len(CACHE["comfy"]) + j
-                report.send("modelCache", 12 + 40 * n / items, f"Downloading models for the cache ({n + 1}/{items})")
-                local = snapshot_download(repo, local_dir=f"/tmp/bb-hf-stage/{repo.replace('/', '--')}")
-                for root, dirs, files in os.walk(local):
-                    dirs[:] = [d for d in dirs if not d.startswith(".")]
-                    for fn in files:
-                        rel = os.path.relpath(os.path.join(root, fn), local)
-                        name = "hf--" + repo.replace("/", "--") + "--" + rel.replace("/", "--")
-                        os.replace(os.path.join(root, fn), os.path.join(DIR, name))
-                        manifest["files"].append({"name": name, "kind": "hf", "repo": repo, "path": rel})
-            json.dump(manifest, open(os.path.join(DIR, "byajbazaar-models.json"), "w"))
+            DIR = build_cache_dir(ref)
             json.dump({"title": "ByajBazaar models " + ref.split("-")[-1], "id": ref,
                        "licenses": [{"name": "other"}]}, open(os.path.join(DIR, "dataset-metadata.json"), "w"))
             size = sum(os.path.getsize(os.path.join(DIR, n)) for n in os.listdir(DIR)) / 1e9
@@ -277,7 +324,7 @@ try:
         raise RuntimeError("No GPU in this session (accelerator must be GPU T4 x2).")
     BIG_DIR = "/tmp"
     COMFY_DIR = f"{BIG_DIR}/ComfyUI"
-    OUT_DIR = "/kaggle/working/outputs"
+    OUT_DIR = ("/kaggle/working" if os.path.isdir("/kaggle/working") else "/tmp") + "/outputs"
     os.makedirs(OUT_DIR, exist_ok=True)
     try:
         import cv2
@@ -615,6 +662,11 @@ OUT_W, OUT_H, OUT_FPS = 1080, 1920, 30
 # QA_JUMP_RATIO x the clip's median change) is a cut or morph; a frame-to-frame brightness wobble above QA_FLICKER is
 # flicker; the real piece must be matched in at least QA_MIN_LOCKED of the frames. One new take when it fails.
 QA_RETRIES, QA_JUMP_MIN, QA_JUMP_RATIO, QA_FLICKER, QA_MIN_LOCKED = 1, 18.0, 6.0, 6.0, 0.4
+# The piece may only move with the camera: held off its place by more than this share of the frame width for
+# PIECE_DRIFT_FRAMES frames in a row, it was pushed, picked up or turned (a hand came in) — a defect worth a retake.
+PIECE_DRIFT_MAX, PIECE_DRIFT_FRAMES = 0.02, 6
+# ...and it may not vanish: not found for this many frames in a row (covered, lifted away or melted) is a defect too.
+PIECE_GAP_FRAMES = 8
 # Kaggle has 4 vCPUs: 3 for matching, restoring and frame loading, one left for the ComfyUIs rendering meanwhile.
 CPU_WORKERS = max(2, min(4, os.cpu_count() or 4) - 1)
 LOCK_RAMP = 4  # frames over which the rebuilt piece fades in / out next to a frame where it could not be rebuilt
@@ -818,7 +870,107 @@ def rect_to_h(r, src_offset=(0, 0)):
     return np.array([[sx, 0, (ox - r[0]) * sx], [0, sy, (oy - r[1]) * sy], [0, 0, 1]], dtype=np.float64)
 
 
-def lock_product(frames, still, mask, rects=None):
+def track_piece(frames, still, box, rects=None):
+    """Per frame, the homography from the piece's crop of the still (box = x1, y1, x2, y2 in still pixels) to the
+    frame, or None where it was lost. ECC alignment of the still's pixels around the piece (a similarity-like affine,
+    frame after frame, each started from the last one moved along the camera path), checked by its correlation and
+    a plausible step, then smoothed over 5 frames so the rebuilt piece never jitters against the hand under it."""
+    n = len(frames)
+    x1, y1, x2, y2 = box
+    bw, bh = x2 - x1, y2 - y1
+    mx, my = int(bw * 0.35) + 12, int(bh * 0.35) + 12  # context around the piece: the finger moves with it
+    tx1, ty1 = max(0, x1 - mx), max(0, y1 - my)
+    tx2, ty2 = min(still.width, x2 + mx), min(still.height, y2 + my)
+    gray = cv2.cvtColor(np.asarray(still), cv2.COLOR_RGB2GRAY).astype(np.float32)
+    template = cv2.GaussianBlur(gray[ty1:ty2, tx1:tx2], (0, 0), 1.0)
+    if template.shape[0] < 24 or template.shape[1] < 24 or template.std() < 4:
+        return [None] * n
+    shift = np.array([[1, 0, tx1], [0, 1, ty1], [0, 0, 1]], dtype=np.float64)  # template -> still pixels
+    # ECC costs grow with the template: a big piece (a necklace) is followed at <= 256 px, a ring at full size.
+    k = min(1.0, 256.0 / max(template.shape[:2]))
+    S, S_inv = np.diag([k, k, 1.0]), np.diag([1 / k, 1 / k, 1.0])
+    small = cv2.resize(template, None, fx=k, fy=k, interpolation=cv2.INTER_AREA) if k < 1 else template
+
+    def path(i):
+        if rects is None:  # fast render: the clip starts on the whole still
+            return np.diag([OUT_W / still.width, OUT_H / still.height, 1.0])
+        return rect_to_h(tuple(a + (b - a) * ease(i / max(1, n - 1)) for a, b in zip(*rects)))
+
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 60, 1e-4)
+
+    def align(frame_gray, guess):
+        # Solved at scale k (template and frame both scaled), returned for full-size pixels.
+        warp = (S @ guess @ S_inv)[:2].astype(np.float32)
+        try:
+            cc, warp = cv2.findTransformECC(small, frame_gray, warp, cv2.MOTION_AFFINE, criteria, None, 5)
+        except cv2.error:
+            return None, 0.0
+        return S_inv @ np.vstack([warp.astype(np.float64), [0, 0, 1]]) @ S, float(cc)
+
+    def plausible(w, ref):
+        if w is None or ref is None:
+            return w is not None
+        s_w, s_r = np.sqrt(abs(np.linalg.det(w[:2, :2]))), np.sqrt(abs(np.linalg.det(ref[:2, :2])))
+        centre = np.array([template.shape[1] / 2, template.shape[0] / 2, 1.0])
+        step = np.linalg.norm((w @ centre)[:2] - (ref @ centre)[:2])
+        return 0.9 < s_w / max(s_r, 1e-6) < 1.11 and step < OUT_W * 0.06
+
+    warps, last = [None] * n, None
+    cv2.setNumThreads(CPU_WORKERS)
+    try:
+        for i in range(n):
+            frame_gray = cv2.GaussianBlur(cv2.cvtColor(frames[i], cv2.COLOR_RGB2GRAY).astype(np.float32), (0, 0), 1.0)
+            if k < 1:
+                frame_gray = cv2.resize(frame_gray, None, fx=k, fy=k, interpolation=cv2.INTER_AREA)
+            planned = path(i) @ shift
+            guesses = ([path(i) @ np.linalg.inv(path(last)) @ warps[last]] if last is not None else []) + [planned]
+            for guess in guesses:
+                w, cc = align(frame_gray, guess)
+                if cc >= 0.8 and plausible(w, warps[last] if last is not None else planned):
+                    warps[i], last = w, i
+                    break
+    finally:
+        cv2.setNumThreads(0)
+    # Smooth the six affine numbers over runs of tracked frames (centred, 5 frames).
+    out = [None] * n
+    for i in range(n):
+        if warps[i] is None:
+            continue
+        near = [warps[j] for j in range(max(0, i - 2), min(n, i + 3)) if warps[j] is not None]
+        w = np.mean(near, axis=0)
+        # crop pixels (the piece's own box) -> template -> frame
+        out[i] = w @ np.array([[1, 0, x1 - tx1], [0, 1, y1 - ty1], [0, 0, 1]], dtype=np.float64)
+    return out
+
+
+def steady_exposure(frames):
+    """Wan sometimes 'breathes': the whole frame brightens and darkens by 10-20 % over a second or so. Each frame's
+    mean brightness is eased onto the clip's own straight-line trend (a deliberate fade or a brighter end frame
+    stays), with a tone curve that keeps black and white where they are. Clips that do not pump are left alone."""
+    n = len(frames)
+    if n < 12:
+        return frames
+    means = np.array([cv2.resize(cv2.cvtColor(f, cv2.COLOR_RGB2GRAY), (68, 120), interpolation=cv2.INTER_AREA)
+                      .mean() for f in frames], dtype=np.float64)
+    t = np.arange(n)
+    trend = np.polyval(np.polyfit(t, means, 1), t)
+    residual = means - trend
+    if np.abs(residual).max() < 4.0:  # under ~1.5 %: nothing visible to fix
+        return frames
+    out = []
+    for f, m, target in zip(frames, means, trend):
+        m, target = min(max(m, 8.0), 247.0) / 255.0, min(max(target, 8.0), 247.0) / 255.0
+        gamma = float(np.clip(np.log(target) / np.log(m), 0.8, 1.25))
+        if abs(gamma - 1.0) < 0.004:
+            out.append(f)
+            continue
+        lut = np.clip(((np.arange(256) / 255.0) ** gamma) * 255.0 + 0.5, 0, 255).astype(np.uint8)
+        out.append(cv2.LUT(f, lut))
+    print(f"exposure steadied: brightness swing {np.ptp(residual):.1f} levels around the trend", flush=True)
+    return out
+
+
+def lock_product(frames, still, mask, rects=None, info=None):
     """The real product, back in every frame: features of the piece in the still are matched in each frame (the camera
     path from the keyframes is the fallback), then restore_product() rebuilds the piece from the still's pixels where
     the frame agrees. Bells, enamel and metal colour can no longer melt or drift. CPU, 3 threads."""
@@ -851,6 +1003,18 @@ def lock_product(frames, still, mask, rects=None):
     finally:
         cv2.setNumThreads(0)
     found = [i for i, h in enumerate(hs) if h is not None]
+    # Restore only where the frame agrees — except in frames where the piece was tracked pixel for pixel.
+    trusted = [False] * n
+    if True:
+        # A small piece (a ring on a hand is ~60 px wide in the frame) has too few features to match every frame,
+        # and its fine texture melts, which the agreement check then keeps: follow it from the still's own pixels
+        # around it, seeded by where the camera is; where that holds, the still's piece is used as is.
+        tracked = track_piece(frames, still, (x1, y1, x2, y2), rects)
+        trusted = [h is not None for h in tracked]
+        if any(trusted):
+            print(f"piece tracked in {sum(trusted)}/{n} frames (feature matches: {len(found)})", flush=True)
+            hs = [t if t is not None else h for t, h in zip(tracked, hs)]
+            found = [i for i, h in enumerate(hs) if h is not None]
     if not found:
         return frames, 0
     for i in range(n):  # gaps: the nearest found frame's geometry, shifted along the planned camera path
@@ -867,7 +1031,7 @@ def lock_product(frames, still, mask, rects=None):
     def one(i):
         if hs[i] is None:
             return None
-        out, _, _ = restore_product(frames[i], src_rgb, src_alpha, hs[i], min_coverage=0.3)
+        out, _, _ = restore_product(frames[i], src_rgb, src_alpha, hs[i], min_coverage=0.3, trust=trusted[i])
         return out
 
     try:
@@ -885,14 +1049,127 @@ def lock_product(frames, still, mask, rects=None):
             continue
         w = min(1.0, min((abs(i - j) for j in gaps), default=LOCK_RAMP) / LOCK_RAMP)
         out.append(restored[i] if w >= 1 else cv2.addWeighted(restored[i], w, frames[i], 1 - w, 0))
+    if info is not None:  # where the real piece is in each frame: add_glints() and piece_drift() follow it
+        info.update(hs=hs, restored=[r is not None for r in restored], src_rgb=src_rgb, src_alpha=src_alpha,
+                    box=(x1, y1, x2, y2))
     return out, n - len(gaps)
+
+
+GLINTS = 3  # twinkles per clip, each on a different highlight of the real piece
+
+
+def glint_points(src_rgb, src_alpha, count=GLINTS):
+    """The piece's own specular highlights (crop pixels of the still): small spots that are very bright AND stand out
+    from their surroundings (a polished edge, a stone's facet), spread over the piece."""
+    a = src_alpha > 0.6
+    if a.sum() < 400:
+        return []
+    lum = cv2.cvtColor(np.ascontiguousarray(src_rgb), cv2.COLOR_RGB2GRAY).astype(np.float32)
+    size = float(np.sqrt(a.sum()))
+    k = max(3, int(size / 25) | 1)
+    tophat = cv2.morphologyEx(lum, cv2.MORPH_TOPHAT, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3 * k, 3 * k)))
+    score = (0.6 * tophat + 0.4 * lum) * a
+    threshold = np.percentile(score[a], 99.0)
+    work, points, spacing = score.copy(), [], size * 0.25
+    for _ in range(60):
+        y, x = np.unravel_index(int(np.argmax(work)), work.shape)
+        if work[y, x] <= 0 or work[y, x] < threshold or lum[y, x] < 170:
+            break
+        if all((x - px) ** 2 + (y - py) ** 2 >= spacing ** 2 for px, py in points):
+            points.append((float(x), float(y)))
+            if len(points) >= count:
+                break
+        cv2.circle(work, (int(x), int(y)), int(max(2, spacing / 2)), 0, -1)
+    return points
+
+
+def star_sprite(radius):
+    """A soft four-point star like a camera's specular glint: two thin bright rays, two fainter diagonals, a core."""
+    r = max(6, int(radius))
+    yy, xx = np.mgrid[-r:r + 1, -r:r + 1].astype(np.float32)
+    d = np.sqrt(xx ** 2 + yy ** 2) / r
+    w = max(0.8, r * 0.035)
+
+    def ray(u, v, width):
+        return np.exp(-(v / width) ** 2) * np.clip(1 - np.abs(u) / r, 0, 1) ** 2.2
+
+    diag1, diag2 = (xx + yy) / np.sqrt(2), (xx - yy) / np.sqrt(2)
+    star = ray(xx, yy, w) + ray(yy, xx, w)
+    star += 0.35 * (ray(diag1, diag2, 0.8 * w) + ray(diag2, diag1, 0.8 * w)) * np.clip(1 - 1.4 * d, 0, 1)
+    star += 0.9 * np.exp(-(4.0 * d) ** 2)
+    return np.clip(star, 0, 1)
+
+
+def add_glints(frames, info):
+    """Real glints instead of AI sparkle: a few short twinkles on the piece's own brightest highlights, carried along
+    with the locked piece (its per-frame position from lock_product) and only on frames where it is locked. Screen
+    blend, tinted by the highlight's own colour, at the size of the piece."""
+    if not info or not info.get("hs"):
+        return frames
+    n = len(frames)
+    points = glint_points(info["src_rgb"], info["src_alpha"])
+    if not points or n < 30:
+        return frames
+    hs, restored, src = info["hs"], info["restored"], info["src_rgb"]
+    piece = float(np.sqrt((info["src_alpha"] > 0.5).sum()))
+    dur = max(10, int(n * 0.11))
+    out = list(frames)
+    for (px, py), at in zip(points, (0.3, 0.56, 0.8)):
+        centre = int(n * at)
+        colour = src[int(py), int(px)].astype(np.float32) / 255.0
+        tint = 0.78 + 0.22 * colour / max(1e-3, float(colour.max()))  # mostly white, a hint of the metal's colour
+        for i in range(max(0, centre - dur // 2), min(n, centre + dur // 2 + 1)):
+            if hs[i] is None or not restored[i]:
+                continue
+            env = float(np.sin(np.pi * (i - (centre - dur // 2)) / dur) ** 2)
+            if env < 0.03:
+                continue
+            H = hs[i]
+            p = H @ np.array([px, py, 1.0])
+            fx, fy = p[0] / p[2], p[1] / p[2]
+            scale = float(np.sqrt(abs(np.linalg.det(H[:2, :2] / H[2, 2]))))
+            sprite = star_sprite(np.clip(0.14 * piece * scale, 10, 80) * (0.6 + 0.4 * env)) * (0.9 * env)
+            r = sprite.shape[0] // 2
+            x1, y1, x2, y2 = int(round(fx)) - r, int(round(fy)) - r, int(round(fx)) + r + 1, int(round(fy)) + r + 1
+            fh, fw = out[i].shape[:2]
+            cx1, cy1, cx2, cy2 = max(0, x1), max(0, y1), min(fw, x2), min(fh, y2)
+            if cx2 <= cx1 or cy2 <= cy1:
+                continue
+            if out[i] is frames[i]:
+                out[i] = frames[i].copy()
+            glow = sprite[cy1 - y1:cy2 - y1, cx1 - x1:cx2 - x1, None] * tint[None, None, :]
+            region = out[i][cy1:cy2, cx1:cx2].astype(np.float32) / 255.0
+            out[i][cy1:cy2, cx1:cx2] = (np.clip(1 - (1 - region) * (1 - glow), 0, 1) * 255 + 0.5).astype(np.uint8)
+    return out
+
+
+GRADE = {}
+
+
+def grade_frames(frames):
+    """A light premium grade, the same on every frame (no flicker): a gentle S-curve for depth (equal on R, G and B,
+    so gold and silver keep their hue) and a barely visible vignette that keeps the eye on the centre."""
+    if not frames:
+        return frames
+    h, w = frames[0].shape[:2]
+    if (h, w) not in GRADE:
+        x = np.arange(256, dtype=np.float32) / 255.0
+        curve = x + 0.04 * np.sin(2 * np.pi * (x - 0.5)) * (0.5 - np.abs(x - 0.5)) * 2  # +/- ~5 levels, ends fixed
+        lut = np.clip(curve * 255 + 0.5, 0, 255).astype(np.uint8)
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        dist = np.sqrt(((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2) / np.sqrt(2)
+        vignette = 1 - 0.1 * np.clip((dist - 0.45) / 0.55, 0, 1) ** 2
+        # 8-bit gain (255 = unchanged) so OpenCV applies it with SIMD: ~10x faster than float frames.
+        GRADE[(h, w)] = (lut, cv2.merge([np.round(vignette * 255).astype(np.uint8)] * 3))
+    lut, vignette = GRADE[(h, w)]
+    return [cv2.multiply(cv2.LUT(f, lut), vignette, scale=1 / 255.0) for f in frames]
 
 
 def encode_frames(frames, fps_in, dst, polish=False):
     """One lossy encode per clip: raw RGB frames -> 1080x1920 30 fps H.264 (CRF 16, preset slow), silent AAC. The
     RGB -> YUV conversion is BT.709 and tagged so (untagged, phones and Instagram read the colours with the wrong
-    matrix and gold shifts hue). polish (scene clips): a short deflicker (steps in brightness from Wan's tiled decode)
-    and a light luma-only adaptive sharpen of the 2x upscale, when this ffmpeg has the filters."""
+    matrix and gold shifts hue). polish (scene clips): a short deflicker (steps in brightness from Wan's tiled decode),
+    a light luma-only adaptive sharpen of the 2x upscale and a very fine luma grain, when this ffmpeg has the filters."""
     # RIFE's 32 fps frames are played at 30 fps (5.4 s, a touch slower — every frame kept, no judder); Wan's own
     # 16 fps is blended up to 30 fps; anything else is resampled.
     if 28 <= fps_in <= 34:
@@ -906,6 +1183,8 @@ def encode_frames(frames, fps_in, dst, polish=False):
         finish += "deflicker=size=5:mode=pm,"
     if polish and has_filter("cas"):
         finish += "cas=strength=0.3:planes=1,"
+    if polish and has_filter("noise"):
+        finish += "noise=c0s=3:c0f=t,"  # very fine luma-only grain: breaks up banding in dark backdrops
     cmd = [FFMPEG, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{OUT_W}x{OUT_H}",
            "-r", str(rate), "-i", "-", "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
            "-map", "0:v:0", "-map", "1:a:0", "-shortest",
@@ -1006,7 +1285,97 @@ def frame_stats(frames):
     return means, spreads, diffs
 
 
-def clip_qa(frames, expected, locked=None):
+def scene_motion(frames, box):
+    """Per frame, the similarity taking frame 0 to that frame for the scene around the piece (the camera's own move):
+    ORB + RANSAC on quarter-size frames with the piece masked out, kept only when plausible for a slow camera move;
+    otherwise the last good one (a plain backdrop has nothing to follow — and then the camera barely matters)."""
+    s = 0.25
+    small = lambda f: cv2.resize(cv2.cvtColor(f, cv2.COLOR_RGB2GRAY), None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+    g0 = small(frames[0])
+    mask = np.full(g0.shape, 255, np.uint8)
+    x1, y1, x2, y2 = [int(v * s) for v in box]
+    pad = int(0.15 * max(x2 - x1, y2 - y1))
+    mask[max(0, y1 - pad):y2 + pad, max(0, x1 - pad):x2 + pad] = 0
+    orb = cv2.ORB_create(800, fastThreshold=10)
+    k0, d0 = orb.detectAndCompute(g0, mask)
+    S, S_inv = np.diag([s, s, 1.0]), np.diag([1 / s, 1 / s, 1.0])
+    matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    warps, last = [np.eye(3)], np.eye(3)
+    for f in frames[1:]:
+        found = None
+        if d0 is not None and len(k0) >= 25:
+            k1, d1 = orb.detectAndCompute(small(f), mask)
+            if d1 is not None and len(k1) >= 25:
+                m = matcher.match(d0, d1)
+                if len(m) >= 20:
+                    a = np.float32([k0[x.queryIdx].pt for x in m])
+                    b = np.float32([k1[x.trainIdx].pt for x in m])
+                    A, inliers = cv2.estimateAffinePartial2D(a, b, method=cv2.RANSAC, ransacReprojThreshold=2.0)
+                    if A is not None and inliers is not None and inliers.sum() >= 15:
+                        scale = float(np.sqrt(abs(np.linalg.det(A[:, :2]))))
+                        if 0.85 < scale < 1.2 and np.hypot(A[0, 2], A[1, 2]) < 0.25 * g0.shape[1]:
+                            found = S_inv @ np.vstack([A, [0, 0, 1]]) @ S
+        last = found if found is not None else last
+        warps.append(last)
+    return warps
+
+
+def piece_drift(frames, info, rects=None):
+    """How far the locked piece moved against where the camera alone would put it, as a share of the frame width,
+    held for PIECE_DRIFT_FRAMES frames in a row (0 = it only moved with the camera). The camera is the planned path
+    (first-last-frame render) or, without one (fast render), the scene's own measured motion."""
+    hs = (info or {}).get("hs")
+    if not hs or "box" not in info:
+        return 0.0
+    n = len(hs)
+    x1, y1, x2, y2 = info["box"]
+    centre = np.array([(x2 - x1) / 2.0, (y2 - y1) / 2.0, 1.0])  # crop pixels
+    found = [i for i, h in enumerate(hs) if h is not None]
+    if len(found) < PIECE_DRIFT_FRAMES:
+        return 0.0
+    if rects is not None:
+        def expected(i):
+            path = rect_to_h(tuple(a + (b - a) * ease(i / max(1, n - 1)) for a, b in zip(*rects)))
+            p = path @ np.array([x1 + centre[0], y1 + centre[1], 1.0])
+            return p[:2] / p[2]
+    else:
+        h0 = hs[found[0]]
+        corners = np.float32([[0, 0], [x2 - x1, 0], [x2 - x1, y2 - y1], [0, y2 - y1]]).reshape(-1, 1, 2)
+        bx = cv2.perspectiveTransform(corners, h0).reshape(-1, 2)
+        bx1, by1 = bx.min(0)
+        bx2, by2 = bx.max(0)
+        camera = scene_motion(frames, (max(0, bx1), max(0, by1), bx2, by2))
+        p0 = h0 @ centre
+        p0 = p0 / p0[2]
+        start = np.linalg.inv(camera[found[0]])
+
+        def expected(i):
+            p = camera[i] @ start @ p0
+            return p[:2] / p[2]
+
+    drift = np.full(n, np.nan)
+    for i in found:
+        p = hs[i] @ centre
+        drift[i] = float(np.linalg.norm(p[:2] / p[2] - expected(i))) / OUT_W
+    held = 0.0
+    for i in range(n - PIECE_DRIFT_FRAMES + 1):
+        window = drift[i:i + PIECE_DRIFT_FRAMES]
+        if not np.isnan(window).any():
+            held = max(held, float(window.min()))
+    return held
+
+
+def longest_gap(flags):
+    """Longest run of False in a list of per-frame flags."""
+    best = run = 0
+    for flag in flags:
+        run = 0 if flag else run + 1
+        best = max(best, run)
+    return best
+
+
+def clip_qa(frames, expected, locked=None, drift=None, drift_limit=PIECE_DRIFT_MAX, gap=None,
+            gap_limit=PIECE_GAP_FRAMES):
     """What is visibly wrong with a take, as (score, problems); 0 = clean, lower is better. Broken frames (black, blown
     out or blank: fp16 NaNs) are fatal (score >= 1000). A sudden jump (one frame change far above the clip's own
     motion: a cut or a morph), brightness flicker, and a real piece found in too few frames (it drifted, melted or
@@ -1033,6 +1402,12 @@ def clip_qa(frames, expected, locked=None):
         if rate < QA_MIN_LOCKED:
             problems.append(f"real piece matched in only {rate:.0%} of frames")
             score += 8 * (1 + QA_MIN_LOCKED - rate)
+    if drift is not None and drift > drift_limit:
+        problems.append(f"the piece moves on its own ({drift:.1%} of the frame) — something pushed or picked it up")
+        score += 10
+    if gap is not None and locked and gap >= gap_limit:
+        problems.append(f"the piece is hidden or gone for {gap} frames in a row")
+        score += 8
     return score, problems
 
 
@@ -1167,6 +1542,11 @@ def prepare_clip(work):
                 mask = ImageOps.fit(fetch_image(clip["maskUrl"], "L"), (OUT_W, OUT_H), Image.Resampling.BILINEAR)
             except Exception as exc:
                 print("no product mask for this scene (the frames keep the generated pixels):", exc, flush=True)
+        if mask is not None and int((np.asarray(mask) > 5).sum()) < 500:
+            # The image worker uploads an empty mask when the still has no real product pixels (a redrawn shot):
+            # nothing to lock, so the quality gate must not demand a lock (it would force a hopeless retake).
+            print("the product mask of this scene is empty: no product lock for it", flush=True)
+            mask = None
         focus = None
         if mask is not None:
             ys, xs = np.where(np.asarray(mask) > 128)
@@ -1176,10 +1556,12 @@ def prepare_clip(work):
         move, reverse = camera_move(clip["prompt"])
         if globals().get("FAST_VIDEO"):  # TI2V-5B starts from the whole still; the prompt alone moves the camera
             full = (0.0, 0.0, float(still.width), float(still.height))
-            work.prep = {"still": still, "mask": mask, "rects": (full, full), "lock_rects": None, "inputs": {}}
+            work.prep = {"still": still, "mask": mask, "rects": (full, full), "lock_rects": None, "inputs": {},
+                         "with_model": with_model}
         else:
             rects = keyframe_rects(still.size, move, focus, with_model, reverse)
-            work.prep = {"still": still, "mask": mask, "rects": rects, "lock_rects": rects, "inputs": {}}
+            work.prep = {"still": still, "mask": mask, "rects": rects, "lock_rects": rects, "inputs": {},
+                         "with_model": with_model}
     p = work.size()
     size = (p["width"], p["height"])
     if size not in work.prep["inputs"]:
@@ -1256,14 +1638,23 @@ def stage_cpu(work, progress):
         work.files = []
         if len(frames) < 20:
             raise RuntimeError(f"Only {len(frames)} frames were produced for {work.key}")
-        prep, locked = work.prep, None
+        frames = steady_exposure(frames)
+        prep, locked, drift, gap = work.prep, None, None, None
         if prep["mask"] is not None:
             progress(work, 0.8, f"Locking the real product into {work.label}", True)
             t_lock = time.time()
-            frames, locked = lock_product(frames, prep["still"], prep["mask"], prep["lock_rects"])
+            lock_info = {}
+            frames, locked = lock_product(frames, prep["still"], prep["mask"], prep["lock_rects"], lock_info)
             print(f"{work.label}: real product locked in {locked}/{len(frames)} frames ({time.time() - t_lock:.0f}s)",
                   flush=True)
-        score, problems = clip_qa(frames, work.p["frames"], locked)
+            drift = piece_drift(frames, lock_info, prep["lock_rects"])
+            gap = longest_gap(lock_info.get("restored") or []) if lock_info.get("hs") else None
+            frames = add_glints(frames, lock_info)  # real glints on the locked piece's own highlights
+            del lock_info
+        # A worn piece may move a little with the model (a breath, a hand settling); a piece on a surface may not.
+        relaxed = 2.5 if prep.get("with_model") else 1.0
+        score, problems = clip_qa(frames, work.p["frames"], locked, drift, PIECE_DRIFT_MAX * relaxed, gap,
+                                  int(PIECE_GAP_FRAMES * relaxed))
         print(f"{work.label} take {work.attempt + 1} (seed {work.seed}): quality score {score:.1f}",
               "; ".join(problems) or "clean", flush=True)
         if work.best is None or score < work.best["score"]:
@@ -1283,7 +1674,7 @@ def stage_cpu(work, progress):
         frames, locked = best.pop("frames"), best["locked"]
         progress(work, 0.9, f"Encoding {work.label}" +
                  (f" · real product in {locked}/{len(frames)} frames" if locked is not None else ""), True)
-        encode_frames(frames, best["fps"], reel, polish=True)
+        encode_frames(grade_frames(frames), best["fps"], reel, polish=True)
         del frames
         notes, seed = best["problems"], best["seed"]
     # A mostly dark animated logo compresses to a few hundred KB; a scene clip that small means a broken render.
@@ -1337,8 +1728,12 @@ def run():
     Every clip gets exactly the graph, steps and checks it would get on its own."""
     import queue as _queue
     import itertools
-    p = PRESETS.get(JOB.get("preset") or "reel_fast", PRESETS["reel_fast"])
     specs = JOB.get("clips") or []
+    if not specs:  # a restarted job whose clips were all delivered: no engine was started, nothing left to render
+        report.send("completed", 100, "Done (nothing left to render)", status="completed", force=True, failedClips=[])
+        return
+    split = bool(globals().get("SPLIT"))  # set by the engine cell; read once so every stage agrees
+    p = PRESETS.get(JOB.get("preset") or "reel_fast", PRESETS["reel_fast"])
     count = max(1, len(specs))
     works = [ClipWork(spec, n, count, p) for n, spec in enumerate(specs)]
     # First-clip guess for Wan 2.2 A14B (LightX2V, one expert per T4) incl. model load, product lock and encode.
@@ -1404,7 +1799,7 @@ def run():
                 return
             work.started = time.time()
         stage_gpu0(work, progress)
-        (gpu1 if SPLIT else cpu).put(work)
+        (gpu1 if split else cpu).put(work)
 
     def on_gpu1(work):
         stage_gpu1(work, progress)
@@ -1428,7 +1823,7 @@ def run():
             gpu0.put((1, next(order), work))
     threads = [threading.Thread(target=worker, args=(gpu0, "a", on_gpu0), daemon=True),
                threading.Thread(target=worker, args=(cpu, "cpu", on_cpu), daemon=True)]
-    if SPLIT:
+    if split:
         threads.append(threading.Thread(target=worker, args=(gpu1, "b", on_gpu1), daemon=True))
     for t in threads:
         t.start()
@@ -1502,6 +1897,7 @@ export function buildWorkerNotebook(job: WorkerNotebookJob): Record<string, unkn
     job.kind === 'setup'
       ? [
           code(reporter),
+          code(COLAB_RUNTIME_PY),
           code(
             CELL_SETUP_CHECK.replace('__VIDEO_MODEL_CHECKS__', () => VIDEO_MODEL_CHECKS)
               .replace('__IMAGE_MODEL_CHECKS__', () => IMAGE_MODEL_CHECKS)

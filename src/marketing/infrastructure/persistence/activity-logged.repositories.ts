@@ -187,7 +187,13 @@ export function kaggleCredentialsWithActivityLog(
         action: 'KAGGLE_ACCOUNT_ADDED',
         entityType: 'kaggle_account',
         entityId: c.username,
-        data: { label: c.label ?? null, concurrency: c.concurrency, enabled: c.enabled },
+        data: {
+          label: c.label ?? null,
+          concurrency: c.concurrency,
+          enabled: c.enabled,
+          provider: c.provider,
+          ...(c.colab && { project: c.colab.projectId, region: c.colab.region, gpu: c.colab.acceleratorType }),
+        },
       }),
     },
     update: {
@@ -203,6 +209,7 @@ export function kaggleCredentialsWithActivityLog(
                 ...(patch?.label !== undefined && { label: patch.label }),
                 ...(patch?.concurrency !== undefined && { concurrency: patch.concurrency }),
                 ...(patch?.enabled !== undefined && { enabled: patch.enabled }),
+                ...(patch?.colab !== undefined && { colabSettingsChanged: true }),
               },
             }
           : null,

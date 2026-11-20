@@ -1,131 +1,105 @@
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
-import axios, { AxiosRequestConfig } from 'axios';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
+import { ColabAccount, ColabEnterpriseClient } from './colab-enterprise.client';
+import { KaggleApiClient } from './kaggle-api.client';
 import {
+  IKaggleCredentialsRepository,
+  IKaggleWorkerPool,
+  KAGGLE_CREDENTIALS_REPOSITORY,
+  KaggleCredential,
   KagglePushResult,
   KaggleSessionState,
   KaggleWorker,
-  IKaggleCredentialsRepository,
-  KAGGLE_CREDENTIALS_REPOSITORY,
-  IKaggleWorkerPool,
-  normalizeKernelRef,
+  ModelCacheTarget,
+  parseServiceAccountKey,
 } from '../../application';
-import { MarketingConfig } from '../../marketing.config';
 
-/** RPC endpoints used by the official `kaggle` CLI (≥ 2.x). */
-const KAGGLE_API = 'https://api.kaggle.com/v1/kernels.KernelsApiService';
-const KAGGLE_KERNEL_PUSH_API = 'https://www.kaggle.com/api/v1/kernels/push';
+type CredentialLike = Pick<KaggleCredential, 'username' | 'apiKey' | 'provider' | 'colab'>;
 
-interface KaggleAccountCredentials {
-  id: string;
-  key: string;
-}
-
-/** "123.5s" (protobuf Duration JSON) → seconds. */
-function durationSeconds(value: unknown): number | null {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string' && /^[\d.]+s$/.test(value)) return Number(value.slice(0, -1));
-  return null;
-}
-
+/**
+ * Every GPU account behind one pool: Kaggle accounts (free weekly quota) and Colab Enterprise projects (billed).
+ * Accounts come from kaggle_credentials (managed by admins), read on every call so changes apply at once; each call
+ * goes to the account's own provider.
+ */
 @Injectable()
-/** Kaggle accounts come from kaggle_credentials (managed by admins), read on every call so changes apply at once. */
 export class KaggleWorkerPool implements IKaggleWorkerPool {
   constructor(
-    private readonly config: MarketingConfig,
     @Inject(KAGGLE_CREDENTIALS_REPOSITORY) private readonly credentials: IKaggleCredentialsRepository,
+    private readonly kaggle: KaggleApiClient,
+    private readonly colab: ColabEnterpriseClient,
     @InjectPinoLogger(KaggleWorkerPool.name) private readonly logger: PinoLogger,
   ) {}
 
   async workers(): Promise<KaggleWorker[]> {
     const rows = await this.credentials.list({ enabled: true });
-    for (const row of rows.filter((r) => !r.apiKey)) {
-      this.logger.warn({ account: row.username }, 'Kaggle API key could not be decrypted — account skipped');
+    const workers: KaggleWorker[] = [];
+    for (const row of rows) {
+      if (!row.apiKey) {
+        this.logger.warn({ account: row.username }, 'GPU account key could not be read — account skipped');
+        continue;
+      }
+      if (row.provider === 'colab' && !row.colab) {
+        this.logger.warn({ account: row.username }, 'Colab account has no settings — account skipped');
+        continue;
+      }
+      workers.push({
+        id: row.username,
+        concurrency: Math.min(4, Math.max(1, row.concurrency || 1)),
+        provider: row.provider,
+        ...(row.provider === 'colab' && row.colab ? { maxSessionSeconds: row.colab.maxSessionHours * 3600 } : {}),
+      });
     }
-    return rows
-      .filter((r) => r.apiKey)
-      .map((r) => ({ id: r.username, concurrency: Math.min(4, Math.max(1, r.concurrency || 1)) }));
+    return workers;
   }
 
-  private async account(workerId: string): Promise<KaggleAccountCredentials> {
+  private async row(workerId: string): Promise<KaggleCredential> {
     const row = await this.credentials.find(workerId);
     if (!row || !row.enabled || !row.apiKey) {
-      throw new ServiceUnavailableException(`Kaggle account ${workerId} is not configured`);
+      throw new ServiceUnavailableException(`GPU account ${workerId} is not configured`);
     }
-    return { id: row.username, key: row.apiKey };
+    return row;
   }
 
-  private request(account: KaggleAccountCredentials): AxiosRequestConfig {
-    const auth = account.key.startsWith('KGAT_')
-      ? { headers: { Authorization: `Bearer ${account.key}`, 'Content-Type': 'application/json' } }
-      : { auth: { username: account.id, password: account.key }, headers: { 'Content-Type': 'application/json' } };
-    return { ...auth, timeout: 60_000, validateStatus: () => true };
+  /** The Colab account behind a credential row (throws when its key or settings are unusable). */
+  private colabAccount(row: CredentialLike): ColabAccount {
+    if (!row.colab) throw new ServiceUnavailableException(`Colab account ${row.username} has no settings`);
+    let key;
+    try {
+      key = parseServiceAccountKey(row.apiKey);
+    } catch (err) {
+      throw new ServiceUnavailableException((err as Error).message);
+    }
+    return { id: row.username, key, config: row.colab };
   }
 
   async gpuQuota(workerId: string): Promise<{ hoursLeft: number | null }> {
-    return this.quota(await this.account(workerId));
+    return this.verifyCredentials(await this.row(workerId));
   }
 
-  async verifyCredentials(username: string, apiKey: string): Promise<{ hoursLeft: number | null }> {
-    return this.quota({ id: username, key: apiKey });
-  }
-
-  private async quota(account: KaggleAccountCredentials): Promise<{ hoursLeft: number | null }> {
-    const workerId = account.id;
-    const res = await axios.post(`${KAGGLE_API}/GetAcceleratorQuotaStatistics`, {}, this.request(account));
-    if (res.status === 401 || res.status === 403) {
-      throw new ServiceUnavailableException(`Kaggle rejected the credentials for ${workerId} (HTTP ${res.status})`);
-    }
-    if (res.status >= 300) {
-      throw new ServiceUnavailableException(`Kaggle quota check failed for ${workerId} (HTTP ${res.status})`);
-    }
-    const gpu = (res.data as { gpuQuota?: Record<string, unknown> })?.gpuQuota ?? {};
-    const total = durationSeconds(gpu.totalTimeAllowed);
-    const used = durationSeconds(gpu.timeUsed) ?? 0;
-    return { hoursLeft: total === null ? null : Math.max(0, (total - used) / 3600) };
+  async verifyCredentials(credential: CredentialLike): Promise<{ hoursLeft: number | null }> {
+    if (credential.provider === 'colab') return this.colab.verify(this.colabAccount(credential));
+    return this.kaggle.quota({ id: credential.username, key: credential.apiKey });
   }
 
   async sessionStatus(
     workerId: string,
     kernelName: string,
   ): Promise<{ state: KaggleSessionState; failureMessage?: string }> {
+    let row: KaggleCredential;
     try {
-      const account = await this.account(workerId);
-      const res = await axios.post(
-        `${KAGGLE_API}/GetKernelSessionStatus`,
-        { userName: account.id, kernelSlug: kernelName },
-        this.request(account),
-      );
-      if (res.status >= 300) {
-        const detail = JSON.stringify(res.data ?? '').slice(0, 300);
-        this.logger.warn({ workerId, kernelName, status: res.status, detail }, 'Kaggle session status rejected');
-        return { state: 'unknown', failureMessage: `Kaggle status check failed (HTTP ${res.status})` };
-      }
-      const data = (res.data ?? {}) as { status?: string; failureMessage?: string };
-      // Enum names may come bare ("RUNNING") or prefixed ("KERNEL_WORKER_STATUS_RUNNING").
-      const raw = String(data.status ?? 'QUEUED').toUpperCase();
-      const state: KaggleSessionState = raw.includes('CANCEL')
-        ? 'cancelled'
-        : raw.includes('ERROR')
-          ? 'error'
-          : raw.includes('COMPLETE')
-            ? 'complete'
-            : raw.includes('RUNNING')
-              ? 'running'
-              : raw.includes('QUEUED') || raw.includes('NEW_SCRIPT')
-                ? 'queued'
-                : 'unknown';
-      return { state, failureMessage: data.failureMessage ?? undefined };
+      row = await this.row(workerId);
     } catch (err) {
-      this.logger.warn({ workerId, kernelName, err: (err as Error).message }, 'Kaggle session status check failed');
       return { state: 'unknown', failureMessage: (err as Error).message };
     }
-  }
-
-  async accountCredentials(workerId: string): Promise<{ username: string; key: string }> {
-    const account = await this.account(workerId);
-    return { username: account.id, key: account.key };
+    if (row.provider === 'colab') {
+      try {
+        return await this.colab.sessionStatus(this.colabAccount(row), kernelName);
+      } catch (err) {
+        return { state: 'unknown', failureMessage: (err as Error).message };
+      }
+    }
+    return this.kaggle.sessionStatus({ id: row.username, key: row.apiKey }, kernelName);
   }
 
   async pushNotebook(
@@ -134,73 +108,18 @@ export class KaggleWorkerPool implements IKaggleWorkerPool {
     notebook: Record<string, unknown>,
     options: { datasets?: string[] } = {},
   ): Promise<KagglePushResult> {
-    const account = await this.account(workerId);
-    const datasets = options.datasets ?? [];
-    let res = await this.push(account, kernel, notebook, datasets);
-    const firstError = (res.data as { error?: string; message?: string } | undefined) ?? {};
-    const firstReason = firstError.error || firstError.message || '';
-    // Retry without the dataset only when the dataset could be the problem — not when the account is simply full.
-    if (
-      datasets.length &&
-      (res.status >= 300 || firstError.error) &&
-      !/maximum (?:batch )?gpu session count|session count of \d+ reached/i.test(firstReason)
-    ) {
-      // The model dataset may still be processing (or was deleted): the notebook downloads the models instead.
-      this.logger.warn(
-        { workerId, kernel: kernel.name, datasets, status: res.status, reason: firstReason },
-        'Kaggle push with the model dataset failed — retrying without it',
-      );
-      res = await this.push(account, kernel, notebook, []);
-    }
-    const data = (res.data ?? {}) as {
-      ref?: string;
-      url?: string;
-      versionNumber?: number;
-      error?: string;
-      message?: string;
-    };
-    if (res.status >= 300 || data.error) {
-      const reason = data.error || data.message || `HTTP ${res.status}`;
-      this.logger.error({ workerId, kernel: kernel.name, status: res.status, reason }, 'Kaggle notebook push failed');
-      throw new ServiceUnavailableException(`Kaggle push failed on ${workerId}: ${reason}`);
-    }
-    this.logger.info(
-      { workerId, kernel: kernel.name, ref: data.ref, version: data.versionNumber, datasets },
-      'Kaggle notebook pushed',
-    );
-    return {
-      ref: normalizeKernelRef(data.ref) ?? `${account.id}/${kernel.name}`,
-      url: data.url ?? '',
-      versionNumber: data.versionNumber,
-    };
+    const row = await this.row(workerId);
+    // Colab mounts no datasets: the session notebook copies its model cache from the account's bucket itself.
+    if (row.provider === 'colab') return this.colab.pushNotebook(this.colabAccount(row), kernel, notebook);
+    return this.kaggle.pushNotebook({ id: row.username, key: row.apiKey }, kernel, notebook, options.datasets ?? []);
   }
 
-  private push(
-    account: KaggleAccountCredentials,
-    kernel: { name: string; title: string },
-    notebook: Record<string, unknown>,
-    datasets: string[],
-  ) {
-    return axios.post(
-      KAGGLE_KERNEL_PUSH_API,
-      {
-        slug: `${account.id}/${kernel.name}`,
-        newTitle: kernel.title,
-        text: JSON.stringify(notebook),
-        language: 'python',
-        kernelType: 'notebook',
-        isPrivate: true,
-        enableGpu: true,
-        enableTpu: false,
-        enableInternet: true,
-        machineShape: this.config.kaggleMachineShape, // GPU T4 × 2
-        datasetDataSources: datasets,
-        kernelDataSources: [],
-        competitionDataSources: [],
-        modelDataSources: [],
-        categoryIds: [],
-      },
-      this.request(account),
-    );
+  async modelCacheTarget(workerId: string): Promise<ModelCacheTarget> {
+    const row = await this.row(workerId);
+    if (row.provider === 'colab') {
+      const { config } = this.colabAccount(row);
+      return { provider: 'colab', gcsPrefix: `gs://${config.bucket}/byajbazaar-models` };
+    }
+    return { provider: 'kaggle', username: row.username, key: row.apiKey };
   }
 }

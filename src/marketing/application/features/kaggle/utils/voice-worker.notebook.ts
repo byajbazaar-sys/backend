@@ -17,7 +17,7 @@ VOICE = f"http://127.0.0.1:{VOICE_PORT}"
 NODE_DIR = f"{COMFY_DIR}/custom_nodes/ComfyUI_Fill-ChatterBox"
 NODE_REPO = "https://github.com/filliptm/ComfyUI_Fill-ChatterBox.git"
 VOICE_FILES = __VOICE_MODEL_FILES__
-OUT_DIR = "/kaggle/working/voice"
+OUT_DIR = ("/kaggle/working" if os.path.isdir("/kaggle/working") else "/tmp") + "/voice"
 NEED_MIB = 5000  # VRAM the voice engine wants free on its GPU
 
 

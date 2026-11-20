@@ -58,7 +58,13 @@ import {
   sceneClipKey,
   sceneIndexFromClipKey,
 } from '../../../shared';
-import { buildLogoImagePrompt, buildSceneVideoPrompt, LOGO_VIDEO_PROMPT, VIDEO_NEGATIVE } from '../../campaigns';
+import {
+  buildLogoImagePrompt,
+  buildSceneVideoPrompt,
+  jewelleryWearer,
+  LOGO_VIDEO_PROMPT,
+  VIDEO_NEGATIVE,
+} from '../../campaigns';
 import {
   isAccountCoolingDown,
   kaggleJobStatus,
@@ -139,14 +145,17 @@ interface DispatchCandidate {
   username: string;
   concurrency: number;
   used: number;
+  /** Colab Enterprise: billed per hour — only used when no free (Kaggle) account can take the work. */
+  paid?: boolean;
   /** null = Kaggle reported no limit. */
   gpuHoursLeft: number | null;
   lastAssignedAt: number;
 }
 
 /**
- * Next account to give a job to: the one with the largest share of free slots (an idle account before a half-busy
- * one), then the most GPU hours left (spreads the weekly quota), then the one that waited longest (round robin).
+ * Next account to give a job to: a free (Kaggle) account before a paid (Colab) one, then the one with the largest
+ * share of free slots (an idle account before a half-busy one), then the most GPU hours left (spreads the weekly
+ * quota), then the one that waited longest (round robin).
  */
 export function pickDispatchCandidate(candidates: DispatchCandidate[]): DispatchCandidate | null {
   let best: DispatchCandidate | null = null;
@@ -154,6 +163,10 @@ export function pickDispatchCandidate(candidates: DispatchCandidate[]): Dispatch
   const hours = (c: DispatchCandidate): number => c.gpuHoursLeft ?? Number.POSITIVE_INFINITY;
   for (const c of candidates) {
     if (c.used >= c.concurrency) continue;
+    if (best && !!c.paid !== !!best.paid) {
+      if (!c.paid) best = c;
+      continue;
+    }
     if (
       !best ||
       free(c) > free(best) ||
@@ -283,6 +296,7 @@ export class MarketingRenderService {
             sourceImageKey: campaign.sourceImageKey,
             title: campaign.title,
             style: campaign.style,
+            wearer: jewelleryWearer(campaign.title),
             renderAfter: wantsVideo,
             targets: [sceneImageTarget(campaign, scene)],
           },
@@ -603,6 +617,7 @@ export class MarketingRenderService {
         username: account.username,
         concurrency,
         used,
+        paid: workers.get(account.username).provider === 'colab',
         gpuHoursLeft: quota.hoursLeft,
         lastAssignedAt: account.lastAssignedAt ? new Date(account.lastAssignedAt).getTime() : 0,
       });
@@ -714,18 +729,23 @@ export class MarketingRenderService {
     });
     const account = await this.accounts.find(workerId);
     try {
+      const worker = (await this.pool.workers()).find((w) => w.id === workerId);
+      const colab = worker?.provider === 'colab';
+      const cache = account?.modelsDataset ?? null;
       const notebook = buildWorkerSessionNotebook({
         jobId: session.id,
         token: signMarketingWorkerToken(session.id),
         apiBaseUrl: this.config.publicApiBaseUrl,
         wsUrl: this.config.websocketUrl,
-        sessionSeconds: Math.max(3600, this.config.kaggleSessionHours * 3600 - SESSION_MARGIN_SECONDS),
+        sessionSeconds: this.sessionSecondsFor(worker),
+        provider: colab ? 'colab' : 'kaggle',
+        ...(colab && cache?.startsWith('gs://') ? { modelsGcs: cache } : {}),
       });
       const pushed = await this.pool.pushNotebook(
         workerId,
         { name: `byajbazaar-worker-${slot}`, title: `ByajBazaar Worker ${slot}` },
         notebook,
-        { datasets: account?.modelsDataset ? [account.modelsDataset] : [] },
+        { datasets: !colab && cache ? [cache] : [] },
       );
       await this.jobs.update(session.id, { kernelRef: pushed.ref });
       await this.accounts.update(workerId, { lastAssignedAt: new Date(), lastError: null });
@@ -752,6 +772,18 @@ export class MarketingRenderService {
       });
       return false;
     }
+  }
+
+  /**
+   * Seconds a notebook session may run: the Kaggle session limit, or a Colab account's own cap when lower, minus the
+   * margin for handing over in time.
+   */
+  private sessionSecondsFor(worker?: { maxSessionSeconds?: number } | null): number {
+    const limit = Math.min(
+      this.config.kaggleSessionHours * 3600,
+      worker?.maxSessionSeconds ?? Number.POSITIVE_INFINITY,
+    );
+    return Math.max(3600, limit - SESSION_MARGIN_SECONDS);
   }
 
   /** Sessions that never booted, or stopped polling while idle, are closed (their slot frees up). */
@@ -831,7 +863,9 @@ export class MarketingRenderService {
 
     if (remaining < SESSION_MIN_LEFT_SECONDS) return stop('the Kaggle session time is nearly used up');
     const account = session.workerId ? await this.accounts.find(session.workerId) : null;
-    const enabled = (await this.pool.workers()).some((w) => w.id === session.workerId);
+    const workers = await this.pool.workers();
+    const enabled = workers.some((w) => w.id === session.workerId);
+    const paid = new Set(workers.filter((w) => w.provider === 'colab').map((w) => w.id));
     // A rest (cooldown) only blocks *new* notebooks on the account: a session that is already up keeps working.
     if (!account || !enabled || account.status !== EKaggleAccountStatus.Ready) {
       return stop('the account is not available for renders');
@@ -845,13 +879,20 @@ export class MarketingRenderService {
     const idleSince = state.state === 'idle' && state.idleSince ? state.idleSince : new Date(now).toISOString();
     const idleMs = now - Date.parse(idleSince);
     const idleOthers = (await this.jobs.listSessions()).filter(
-      (s) => s.id !== session.id && s.status === ERenderJobStatus.Running && s.payload.session?.state === 'idle',
+      (s) =>
+        s.id !== session.id &&
+        s.status === ERenderJobStatus.Running &&
+        s.payload.session?.state === 'idle' &&
+        !paid.has(s.workerId ?? ''),
     );
-    // The session with the most time left (ties: lowest id) stays warm; the others go home early.
-    const keeper = idleOthers.every((s) => {
-      const left = s.payload.session?.remainingSeconds ?? 0;
-      return left < remaining || (left === remaining && s.id > session.id);
-    });
+    // The free session with the most time left (ties: lowest id) stays warm; the others go home early. A Colab
+    // session is billed while it waits, so it never stays warm.
+    const keeper =
+      !paid.has(session.workerId ?? '') &&
+      idleOthers.every((s) => {
+        const left = s.payload.session?.remainingSeconds ?? 0;
+        return left < remaining || (left === remaining && s.id > session.id);
+      });
     const limitMs = (await this.settings.kaggle()).warmIdleMinutes * 60_000;
     if (idleMs >= (keeper ? limitMs : Math.min(limitMs, EXTRA_IDLE_MS))) {
       return stop(`idle for ${Math.round(idleMs / 60_000)} min`);
@@ -1091,7 +1132,8 @@ export class MarketingRenderService {
     const dataset = modelsDatasetSlug();
     for (const account of await this.accounts.list()) {
       if (!usernames.includes(account.username) || account.status !== EKaggleAccountStatus.Ready) continue;
-      if (account.modelsDataset === `${account.username}/${dataset}`) continue;
+      // Kaggle "user/slug" or Colab "gs://bucket/byajbazaar-models/slug": current when it ends in the slug.
+      if (account.modelsDataset?.endsWith(`/${dataset}`)) continue;
       if (account.modelsAttemptAt && Date.now() - new Date(account.modelsAttemptAt).getTime() < MODEL_CACHE_RETRY_MS) {
         continue;
       }
@@ -1344,9 +1386,11 @@ export class MarketingRenderService {
       apiBaseUrl: this.config.publicApiBaseUrl,
     };
     if (job.kind === ERenderJobKind.Setup) {
+      const worker = (await this.pool.workers()).find((w) => w.id === job.workerId);
       return {
         ...base,
         kind: 'setup',
+        provider: worker?.provider ?? 'kaggle',
         modelCache: await this.modelCacheFor(job),
         hfToken: this.config.huggingFaceToken,
       };
@@ -1375,7 +1419,7 @@ export class MarketingRenderService {
       preset: campaign?.quality === 'hd' ? 'reel_hq' : 'reel_fast',
       clips,
       sessionBudgetSeconds:
-        budgetSeconds ?? Math.max(3600, this.config.kaggleSessionHours * 3600 - SESSION_MARGIN_SECONDS),
+        budgetSeconds ?? this.sessionSecondsFor((await this.pool.workers()).find((w) => w.id === job.workerId)),
     };
   }
 
@@ -1387,18 +1431,24 @@ export class MarketingRenderService {
   }
 
   /**
-   * What the setup notebook publishes as the account's private model dataset (with the account's own credentials),
-   * or undefined when it already has the current one. Only with warm sessions — per-job notebooks don't mount it.
+   * What the setup notebook publishes as the account's model cache — a private Kaggle dataset (with the account's own
+   * credentials), or a gs:// prefix in a Colab account's bucket — or undefined when it already has the current one.
+   * Only with warm sessions — per-job notebooks don't use it.
    */
   private async modelCacheFor(job: RenderJob): Promise<NotebookModelCache | undefined> {
     if (!job.workerId || !this.config.publicApiBaseUrl) return undefined;
     const account = await this.accounts.find(job.workerId);
     if (!this.config.huggingFaceToken) return undefined; // FLUX.2 [klein] 9B cannot be downloaded without it
-    const dataset = `${job.workerId}/${modelsDatasetSlug()}`;
+    const target = await this.pool.modelCacheTarget(job.workerId);
+    const dataset =
+      target.provider === 'colab'
+        ? `${target.gcsPrefix}/${modelsDatasetSlug()}`
+        : `${job.workerId}/${modelsDatasetSlug()}`;
     if (account?.modelsDataset === dataset) return undefined;
-    const { username, key } = await this.pool.accountCredentials(job.workerId);
     await this.accounts.update(job.workerId, { modelsAttemptAt: new Date() });
-    return { dataset, username, key, ...modelCacheContents() };
+    return target.provider === 'colab'
+      ? { provider: 'colab', dataset, ...modelCacheContents() }
+      : { provider: 'kaggle', dataset, username: target.username, key: target.key, ...modelCacheContents() };
   }
 
   private async voiceNotebookJob(job: RenderJob): Promise<VoiceNotebookJob> {
@@ -1479,6 +1529,7 @@ export class MarketingRenderService {
       title: generation.title,
       style: generation.style,
       metal: generation.metal,
+      wearer: generation.wearer,
       targets,
       hfToken: this.config.huggingFaceToken,
     };
@@ -1527,6 +1578,7 @@ export class MarketingRenderService {
 
     if (event.status === 'completed') {
       for (const key of event.failedClips ?? []) await this.clipFailed(job, key, 'Rendering failed');
+      await this.settleUnreportedClips(job, event.failedClips ?? []);
       if (job.workerId) await this.accounts.recordOutcome(job.workerId, 'completed');
       await this.jobs.update(job.id, {
         status: ERenderJobStatus.Done,
@@ -1540,12 +1592,13 @@ export class MarketingRenderService {
     }
 
     const progress = Math.max(job.progress ?? 0, Math.min(99, Math.round(Number(event.progress) || 0)));
-    await this.jobs.update(job.id, {
+    // Conditional: a clipDone handled beside the final event (parallel Lambdas) must not revive the finished job.
+    const live = await this.jobs.updateIfBusy(job.id, {
       status: ERenderJobStatus.Running,
       progress,
       stageMessage: (event.message || job.stageMessage || '').slice(0, 250),
     });
-    await this.reportJobProgress(job, progress, event.message, ECampaignStatus.Rendering);
+    if (live) await this.reportJobProgress(job, progress, event.message, ECampaignStatus.Rendering);
     return true;
   }
 
@@ -1561,12 +1614,12 @@ export class MarketingRenderService {
       return true;
     }
     const progress = Math.max(job.progress ?? 0, Math.min(99, Math.round(Number(event.progress) || 0)));
-    await this.jobs.update(job.id, {
+    const live = await this.jobs.updateIfBusy(job.id, {
       status: ERenderJobStatus.Running,
       progress,
       stageMessage: (event.message || job.stageMessage || 'Speaking').slice(0, 250),
     });
-    await this.reportJobProgress(job, progress, event.message, ECampaignStatus.Rendering);
+    if (live) await this.reportJobProgress(job, progress, event.message, ECampaignStatus.Rendering);
     return true;
   }
 
@@ -1635,12 +1688,12 @@ export class MarketingRenderService {
       return true;
     }
 
-    await this.jobs.update(job.id, {
+    const live = await this.jobs.updateIfBusy(job.id, {
       status: ERenderJobStatus.Running,
       progress,
       stageMessage: (event.message || job.stageMessage || 'Generating images').slice(0, 250),
     });
-    await this.reportJobProgress(job, progress, event.message, ECampaignStatus.Planning);
+    if (live) await this.reportJobProgress(job, progress, event.message, ECampaignStatus.Planning);
     return true;
   }
 
@@ -1937,7 +1990,7 @@ export class MarketingRenderService {
       });
       await markReady();
       if (event.modelsDataset && job.workerId) {
-        await this.accounts.update(job.workerId, { modelsDataset: event.modelsDataset.slice(0, 200) });
+        await this.accounts.update(job.workerId, { modelsDataset: event.modelsDataset.slice(0, 400) });
         this.logger.info({ account: job.workerId, dataset: event.modelsDataset }, 'Kaggle model cache ready');
       } else if (event.modelsCacheError) {
         this.logger.warn({ account: job.workerId, err: event.modelsCacheError }, 'Kaggle model cache not built');
@@ -1990,6 +2043,19 @@ export class MarketingRenderService {
     await this.scenes.update(scene.id, { videoKey: spec.outputKey, videoStatus: EAssetStatus.Ready, error: null });
     const campaign = await this.campaigns.findById(job.campaignId);
     if (campaign) await this.events.campaign(campaign, true);
+  }
+
+  /**
+   * The final event can be handled before (or beside) a clip's clipDone — API Gateway runs each WebSocket message in
+   * its own Lambda — and a clipDone that arrives after the job is DONE is dropped. So on completion every clip not yet
+   * recorded is settled here: delivered when its upload exists, failed otherwise (clipDone checks that itself).
+   */
+  private async settleUnreportedClips(job: RenderJob, failed: string[]): Promise<void> {
+    const fresh = (await this.jobs.findById(job.id)) ?? job;
+    const done = new Set(fresh.payload.done ?? []);
+    for (const clip of fresh.payload.clips) {
+      if (!done.has(clip.key) && !failed.includes(clip.key)) await this.clipDone(fresh, clip.key);
+    }
   }
 
   private async clipFailed(job: RenderJob, key: string, message?: string): Promise<void> {

@@ -77,7 +77,7 @@ export class KaggleAccountEntity {
   @Column({ type: 'timestamptz', nullable: true }) quotaCheckedAt: Date | null;
   @Column({ type: 'timestamptz', nullable: true }) cooldownUntil: Date | null;
   @Column({ type: 'timestamptz', nullable: true }) lastAssignedAt: Date | null;
-  @Column({ type: 'varchar', length: 200, nullable: true }) modelsDataset: string | null;
+  @Column({ type: 'varchar', length: 400, nullable: true }) modelsDataset: string | null;
   @Column({ type: 'timestamptz', nullable: true }) modelsAttemptAt: Date | null;
   @Column({ type: 'integer', default: 0 }) jobsCompleted: number;
   @Column({ type: 'integer', default: 0 }) jobsFailed: number;
@@ -94,6 +94,9 @@ export class KaggleCredentialEntity {
   @Column({ type: 'varchar', length: 255, nullable: true }) label: string | null;
   /** API key / access token, stored as plain text (older rows may still hold `v1.…` ciphertext until first read). */
   @Column({ type: 'text' }) apiKey: string;
+  /** kaggle | colab (Colab Enterprise: apiKey is the service-account key JSON, settings in colab_config). */
+  @Column({ type: 'varchar', length: 10, default: 'kaggle' }) provider: string;
+  @Column({ type: 'jsonb', nullable: true }) colabConfig: Record<string, unknown> | null;
   @Column({ type: 'smallint', default: 1 }) concurrency: number;
   @Column({ type: 'boolean', default: true }) enabled: boolean;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;

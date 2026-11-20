@@ -15,6 +15,7 @@ import { MarketingDatabase } from './marketing-database';
 import { returnedRows } from './returned-rows';
 import {
   KaggleAccount,
+  ColabEnterpriseConfig,
   KaggleCredential,
   MarketingBrand,
   MarketingCampaign,
@@ -347,7 +348,7 @@ export class KaggleCredentialsRepository
    * it is decrypted once and rewritten as plain text. One that can't be decrypted comes back as '' (re-enter it).
    */
   private async toDomain(row: KaggleCredentialEntity): Promise<KaggleCredential> {
-    const { apiKey: stored, ...rest } = row;
+    const { apiKey: stored, provider, colabConfig, ...rest } = row;
     let apiKey = stored ?? '';
     if (/^v1\.[\w-]+\.[\w-]+\.[\w-]*$/.test(apiKey)) {
       try {
@@ -357,7 +358,12 @@ export class KaggleCredentialsRepository
         apiKey = '';
       }
     }
-    return { ...rest, apiKey };
+    return {
+      ...rest,
+      apiKey,
+      provider: provider === 'colab' ? 'colab' : 'kaggle',
+      colab: provider === 'colab' ? ((colabConfig as unknown as ColabEnterpriseConfig) ?? null) : null,
+    };
   }
 
   async list(filter: { enabled?: boolean } = {}): Promise<KaggleCredential[]> {
@@ -374,21 +380,29 @@ export class KaggleCredentialsRepository
 
   async create(credential: Omit<KaggleCredential, 'id' | 'createdAt' | 'updatedAt'>): Promise<KaggleCredential> {
     const repo = await this.repo();
-    const { apiKey, ...rest } = credential;
-    const saved = await repo.save(repo.create({ ...rest, apiKey }));
+    const { apiKey, colab, provider, ...rest } = credential;
+    const saved = await repo.save(
+      repo.create({
+        ...rest,
+        apiKey,
+        provider,
+        colabConfig: provider === 'colab' ? ((colab as unknown as Record<string, unknown>) ?? null) : null,
+      }),
+    );
     return this.toDomain(saved);
   }
 
   async update(
     username: string,
-    patch: Partial<Pick<KaggleCredential, 'apiKey' | 'concurrency' | 'enabled' | 'label'>>,
+    patch: Partial<Pick<KaggleCredential, 'apiKey' | 'concurrency' | 'enabled' | 'label' | 'colab'>>,
   ): Promise<KaggleCredential | null> {
     const repo = await this.repo();
-    const { apiKey, ...rest } = patch;
+    const { apiKey, colab, ...rest } = patch;
     const changes = Object.fromEntries(
       Object.entries(rest).filter(([, value]) => value !== undefined),
     ) as Partial<KaggleCredentialEntity>;
     if (apiKey !== undefined) changes.apiKey = apiKey;
+    if (colab !== undefined) changes.colabConfig = (colab as unknown as Record<string, unknown>) ?? null;
     if (Object.keys(changes).length) await repo.update({ username }, changes);
     return this.find(username);
   }
@@ -417,6 +431,13 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
   async update(id: string, patch: Partial<RenderJob>): Promise<RenderJob | null> {
     await (await this.repo()).update({ id }, patch as unknown as Partial<RenderJobEntity>);
     return this.findById(id);
+  }
+
+  async updateIfBusy(id: string, patch: Partial<RenderJob>): Promise<boolean> {
+    const result = await (
+      await this.repo()
+    ).update({ id, status: In(BUSY_RENDER_STATUSES) }, patch as unknown as Partial<RenderJobEntity>);
+    return !!result.affected;
   }
 
   async countBusyByWorker(): Promise<Record<string, number>> {

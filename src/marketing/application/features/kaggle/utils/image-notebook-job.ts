@@ -13,6 +13,8 @@ export interface ImageNotebookJob {
   style?: string;
   /** Metal the jeweller gave (gold | silver | rose_gold | platinum); it wins over what the analyst reads. */
   metal?: string;
+  /** Who the piece is for, when its name says so; otherwise the analyst decides from the photo. */
+  wearer?: 'male' | 'female';
   targets: ImageNotebookTarget[];
   /** Hugging Face token for the gated FLUX.2 [klein] 9B (required). */
   hfToken?: string;
