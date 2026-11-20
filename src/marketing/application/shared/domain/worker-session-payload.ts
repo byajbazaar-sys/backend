@@ -8,7 +8,7 @@ export interface WorkerSessionPayload {
   /** Session seconds left, as reported by the notebook at its last poll. */
   remainingSeconds?: number | null;
   /** Pipeline currently loaded on the GPUs (image or video). */
-  pipeline?: 'image' | 'video' | null;
+  pipeline?: 'image' | 'video' | 'video-fast' | null;
   jobsRun?: number;
   /** The private model dataset was mounted (no downloads). */
   modelsCached?: boolean;
@@ -17,4 +17,6 @@ export interface WorkerSessionPayload {
    * (WebSocket), so a job that is still busy then is treated as crashed.
    */
   settle?: { jobId: string; at: string } | null;
+  /** WebSocket the idle session listens on: new work is pushed there instead of waiting for its next poll. */
+  connectionId?: string | null;
 }

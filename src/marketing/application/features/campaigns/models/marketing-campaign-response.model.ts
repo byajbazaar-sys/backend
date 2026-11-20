@@ -13,6 +13,7 @@ export class MarketingCampaignResponseModel {
   @Expose() @ApiProperty() style: string;
   @Expose() @ApiProperty() quality: string;
   @Expose() @ApiProperty({ enum: ['exact', 'ai'] }) imageMode: string;
+  @Expose() @ApiProperty({ enum: ['detailed', 'fast'] }) videoEngine: string;
   @Expose() @ApiProperty() status: string;
   @Expose() @ApiProperty() progress: number;
   @Expose() @CustomerStageText() @ApiPropertyOptional() stageMessage?: string;
@@ -21,7 +22,9 @@ export class MarketingCampaignResponseModel {
   @Expose() @ApiPropertyOptional() coverImageUrl?: string;
   @Expose() @ApiPropertyOptional() coverSceneIndex?: number;
   @Expose()
-  @ApiPropertyOptional({ description: 'All scenes merged with transitions, ending on the logo' })
+  @ApiPropertyOptional({
+    description: 'Merged film of campaigns made before every clip became a reel (new campaigns have none)',
+  })
   mergedVideoUrl?: string;
   @Expose()
   @Type(() => MarketingSceneResponseModel)

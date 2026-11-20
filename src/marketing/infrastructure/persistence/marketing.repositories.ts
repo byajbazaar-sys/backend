@@ -483,7 +483,17 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
     return rows.map((r) => r.slot).filter((s): s is number => s !== null && s !== undefined);
   }
 
-  async claimNextForSession(session: RenderJob): Promise<RenderJob | null> {
+  /**
+   * Oldest waiting job, preferring the kinds that match what the session already has loaded (an image session keeps
+   * klein + Qwen3-VL warm, a video session keeps Wan): switching pipelines means minutes of model loading.
+   */
+  async claimNextForSession(session: RenderJob, pipeline?: string | null): Promise<RenderJob | null> {
+    const preferred =
+      pipeline === 'image'
+        ? [ERenderJobKind.Images, ERenderJobKind.Logo, ERenderJobKind.Voice]
+        : pipeline === 'video' || pipeline === 'video-fast'
+          ? [ERenderJobKind.Campaign, ERenderJobKind.Logo, ERenderJobKind.Voice]
+          : [];
     const rows = returnedRows(
       await (
         await this.repo()
@@ -495,7 +505,7 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
           WHERE "id" = (
             SELECT "id" FROM "marketing_render_jobs"
              WHERE "status" = $6 AND "kind" = ANY($7::varchar[])
-             ORDER BY "created_at" ASC
+             ORDER BY ("kind" = ANY($8::varchar[])) DESC, "created_at" ASC
              LIMIT 1
              FOR UPDATE SKIP LOCKED
           )
@@ -507,12 +517,63 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
           session.kernelRef ?? null,
           session.id,
           ERenderJobStatus.Waiting,
-          [ERenderJobKind.Images, ERenderJobKind.Campaign, ERenderJobKind.Logo],
+          [ERenderJobKind.Images, ERenderJobKind.Campaign, ERenderJobKind.Logo, ERenderJobKind.Voice],
+          preferred,
         ],
       ),
     );
     const id = rows[0]?.id as string | undefined;
     return id ? this.findById(id) : null;
+  }
+
+  async absorbWaiting(
+    into: RenderJob,
+    match: { kind: ERenderJobKind; batchId?: string; campaignId?: string; videoEngine?: string },
+    limit: number,
+  ): Promise<RenderJob[]> {
+    if (limit <= 0 || (!match.batchId && !match.campaignId)) return [];
+    const rows = returnedRows(
+      await (
+        await this.repo()
+      ).query(
+        `UPDATE "marketing_render_jobs"
+            SET "status" = $1, "finished_at" = now(), "updated_at" = now(),
+                "stage_message" = 'Rendered together with another job on a warm GPU worker',
+                "payload" = jsonb_set(jsonb_set("payload", '{mergedInto}', to_jsonb($2::text)),
+                                      '{batchId}', to_jsonb($3::text))
+          WHERE "id" IN (
+            SELECT "id" FROM "marketing_render_jobs"
+             WHERE "status" = $4 AND "kind" = $5 AND "id" <> $2::uuid
+               AND (CASE WHEN $6::text IS NOT NULL THEN "payload"->>'batchId' = $6::text
+                         ELSE "campaign_id" = $7::uuid END)
+               AND ($9::text IS NULL OR COALESCE("payload"->>'videoEngine', 'detailed') = $9::text)
+             ORDER BY "created_at" ASC
+             LIMIT $8
+             FOR UPDATE SKIP LOCKED
+          )
+          RETURNING "id"`,
+        [
+          ERenderJobStatus.Done,
+          into.id,
+          into.payload.batchId ?? into.id,
+          ERenderJobStatus.Waiting,
+          match.kind,
+          match.batchId ?? null,
+          match.campaignId ?? null,
+          limit,
+          match.videoEngine ?? null,
+        ],
+      ),
+    );
+    return this.byIds(rows.map((r) => r.id as string));
+  }
+
+  async releaseAbsorbed(jobs: RenderJob[]): Promise<void> {
+    for (const job of jobs) {
+      const payload = { ...job.payload };
+      delete payload.mergedInto;
+      await this.update(job.id, { status: ERenderJobStatus.Waiting, finishedAt: null, payload });
+    }
   }
 
   async listSessions(): Promise<RenderJob[]> {
@@ -625,6 +686,23 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
                         AND (j."id" = n."id" OR (n."batch" IS NOT NULL AND j."payload"->>'batchId' = n."batch"))
           WHERE j."kind" = $2`,
         [photoshootIds, ERenderJobKind.Images],
+      ),
+    );
+    return this.byIds(rows.map((r) => r.id as string));
+  }
+
+  /** The newest VOICE job of each voiceover. */
+  async latestForVoiceovers(voiceoverIds: string[]): Promise<RenderJob[]> {
+    if (!voiceoverIds.length) return [];
+    const rows = returnedRows(
+      await (
+        await this.repo()
+      ).query(
+        `SELECT DISTINCT ON ("payload"->'voice'->>'voiceoverId') "id"
+           FROM "marketing_render_jobs"
+          WHERE "kind" = $2 AND "payload"->'voice'->>'voiceoverId' = ANY($1::text[])
+          ORDER BY "payload"->'voice'->>'voiceoverId', "created_at" DESC`,
+        [voiceoverIds, ERenderJobKind.Voice],
       ),
     );
     return this.byIds(rows.map((r) => r.id as string));

@@ -6,4 +6,6 @@ export interface CreateCampaignInput {
   quality?: string;
   /** exact = keep the real product, new background (default); ai = full AI scene. */
   imageMode?: string;
+  /** detailed (default) = slower, most faithful video; fast = quicker video render. */
+  videoEngine?: string;
 }

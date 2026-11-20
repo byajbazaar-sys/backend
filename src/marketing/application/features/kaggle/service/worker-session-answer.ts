@@ -3,11 +3,13 @@ export interface WorkerSessionAnswer {
   stop?: boolean;
   reason?: string;
   pollSeconds?: number;
+  /** The backend knows the session's WebSocket (it pushes `marketingWake` when work arrives); false: register again. */
+  listening?: boolean;
   job?: {
     id: string;
     kind: string;
-    /** cpu = merge-only (ffmpeg); the worker keeps its loaded models. */
-    pipeline: 'image' | 'video' | 'cpu';
+    /** cpu = no GPU model needed (the CPU-animated logo clip); the worker keeps its loaded models. */
+    pipeline: 'image' | 'video' | 'video-fast' | 'cpu' | 'voice';
     /** The job notebook's code cells, run in order inside the session. */
     cells: string[];
   };

@@ -3,4 +3,5 @@ export enum EAttachmentMimeType {
   ImageJpeg = 'image/jpeg',
   ImagePng = 'image/png',
   VideoMp4 = 'video/mp4',
+  AudioMpeg = 'audio/mpeg',
 }

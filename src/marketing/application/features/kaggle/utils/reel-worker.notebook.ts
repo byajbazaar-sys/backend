@@ -1,11 +1,13 @@
 import { IMAGE_MODELS } from './image-worker.notebook';
-import { VIDEO_MODEL_FILES } from './model-cache';
+import { FAST_VIDEO_MODEL_FILES, VIDEO_MODEL_FILES, VIDEO_MODEL_NAMES, VOICE_MODEL_FILES } from './model-cache';
+import { PRODUCT_RESTORE_PY } from './product-restore.notebook';
 import { WorkerNotebookJob } from './worker-notebook-job';
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
 const code = (source: string) => ({ cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source });
 
-const CELL_REPORTER = `
+/** Progress reporter + helpers shared with the voice notebook (JOB, WORKER, report, gpu_names, find_ffmpeg). */
+export const CELL_REPORTER = `
 import os, sys, json, time, subprocess, shutil, glob, traceback, threading, uuid, random, io, re
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "websocket-client", "requests"], check=False)
 import requests, websocket
@@ -20,7 +22,7 @@ class Reporter:
     """Pushes progress to the ByajBazaar AWS WebSocket (API Gateway). Falls back to HTTPS if the socket is down."""
 
     def __init__(self, job):
-        self.job, self.ws, self.lock = job, None, threading.Lock()
+        self.job, self.ws, self.lock, self.send_lock = job, None, threading.Lock(), threading.Lock()
         self.last_sent, self.last_stage = 0.0, None
 
     def _connect(self):
@@ -38,7 +40,43 @@ class Reporter:
             payload["status"] = status
         payload.update(extra)
         print(f"[{time.strftime('%H:%M:%S')}] {stage} {payload['progress']}% {message}", flush=True)
+        self._enqueue(payload, wait=bool(status))
+        return True
+
+    def _enqueue(self, payload, wait):
+        """Delivery happens on a background thread, so a slow or dropped socket never stalls the GPU work; a final
+        event (status set) waits until everything before it was delivered."""
+        import queue as _queue
         with self.lock:
+            if getattr(self, "outbox", None) is None:
+                self.outbox = _queue.Queue()
+                threading.Thread(target=self._pump, daemon=True).start()
+        self.outbox.put(payload)
+        if wait:
+            self.outbox.put(None)  # the pump stops (and closes the socket) after the final event
+            deadline = time.time() + 90
+            while getattr(self, "outbox", None) is not None and time.time() < deadline:
+                time.sleep(0.1)
+
+    def _pump(self):
+        box = self.outbox
+        while True:
+            payload = box.get()
+            if payload is None:
+                break
+            try:
+                self._deliver(payload)
+            except Exception as exc:
+                print("progress delivery failed:", exc, flush=True)
+        with self.lock:
+            try:
+                self.ws and self.ws.close()
+            except Exception:
+                pass
+            self.ws, self.outbox = None, None
+
+    def _deliver(self, payload):
+        with self.send_lock:
             for attempt in range(2):
                 try:
                     if self.ws is None:
@@ -87,7 +125,7 @@ try:
     if not gpus:
         raise RuntimeError("No GPU in this session. Kaggle needs a verified phone number for GPU access.")
     model_checks = [
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors",
+        __VIDEO_MODEL_CHECKS__
         __IMAGE_MODEL_CHECKS__
     ]
     HF_TOKEN = JOB.get("hfToken") or ""
@@ -231,7 +269,7 @@ if CACHE:
                     force=True, modelsCacheError=str(e)[:400])
 `;
 
-const CELL_INSTALL = `
+export const CELL_INSTALL = `
 try:
     GPUS = gpu_names()
     GPU_COUNT = len(GPUS)
@@ -241,35 +279,133 @@ try:
     COMFY_DIR = f"{BIG_DIR}/ComfyUI"
     OUT_DIR = "/kaggle/working/outputs"
     os.makedirs(OUT_DIR, exist_ok=True)
+    try:
+        import cv2
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "opencv-python-headless"], check=True)
+        import cv2
+    import numpy as np
+    from PIL import Image, ImageOps
 
     def pip(*args):
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", *args], check=True)
 
+    # Custom nodes: the GGUF loader (required: the Wan experts are GGUF), MultiGPU (each Wan expert stays resident on
+    # its own T4, so they never swap) and RIFE frame interpolation (16 -> 32 fps). The last two are optional: without
+    # them the experts share GPU 0 and ffmpeg blends frames instead.
+    FAST = bool(globals().get("FAST_VIDEO"))  # the fast notebook (TI2V-5B) sets it before this cell
+    NODE_PACKS = {
+        # Fast render: one core-loaded model, split over both T4s by C2C Multi-GPU Split (optional: one GPU without).
+        "ComfyUI-CustomNodePacks": ("https://github.com/Code2Collapse/ComfyUI-CustomNodePacks.git", [], False),
+    } if FAST else {
+        "ComfyUI-GGUF": ("https://github.com/city96/ComfyUI-GGUF.git", ["gguf>=0.13.0", "sentencepiece", "protobuf"], True),
+        "ComfyUI-MultiGPU": ("https://github.com/pollockjj/ComfyUI-MultiGPU.git", [], False),
+        "ComfyUI-Frame-Interpolation": ("https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git",
+                                        ["-r", "<dir>/requirements-no-cupy.txt"], False),
+    }
+    RIFE_URLS = ["https://huggingface.co/marduk191/rife/resolve/main/rife47.pth",
+                 "https://huggingface.co/MachineDelusions/RIFE/resolve/main/rife47.pth"]
     INSTALL_ERROR = []
+    HANDOFF_NODE = """
+import os
+import torch
+
+
+class BBSaveHandoff:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"positive": ("CONDITIONING",), "negative": ("CONDITIONING",), "latent": ("LATENT",),
+                             "path": ("STRING", {"default": ""})}}
+
+    RETURN_TYPES = ()
+    FUNCTION = "save"
+    OUTPUT_NODE = True
+    CATEGORY = "byajbazaar"
+
+    def save(self, positive, negative, latent, path):
+        part = path + ".part"
+        torch.save({"positive": positive, "negative": negative, "latent": latent}, part)
+        os.replace(part, path)
+        return {"ui": {"handoff": [path]}}
+
+
+class BBLoadHandoff:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"path": ("STRING", {"default": ""})}}
+
+    RETURN_TYPES = ("CONDITIONING", "CONDITIONING", "LATENT")
+    FUNCTION = "load"
+    CATEGORY = "byajbazaar"
+
+    @classmethod
+    def IS_CHANGED(cls, path):
+        return os.path.getmtime(path) if os.path.exists(path) else float("nan")
+
+    def load(self, path):
+        data = torch.load(path, map_location="cpu", weights_only=False)
+        return (data["positive"], data["negative"], data["latent"])
+
+
+NODE_CLASS_MAPPINGS = {"BBSaveHandoff": BBSaveHandoff, "BBLoadHandoff": BBLoadHandoff}
+"""
 
     def install_requirements():
-        """ComfyUI's packages, in the background while the models download (a warm session installs them at boot)."""
+        """ComfyUI's and the node packs' packages, in the background while the models download (a warm session
+        installs ComfyUI's at boot; never two pip installs at once)."""
         try:
             boot = WORKER.get("boot", {}).get("comfy_requirements")
             if boot is not None:
-                boot.wait(1500)  # never two pip installs at once
+                boot.wait(1500)
             if not WORKER.get("comfy_requirements"):
                 pip("-r", f"{COMFY_DIR}/requirements.txt")
                 WORKER["comfy_requirements"] = True
+            for name, (url, reqs, required) in NODE_PACKS.items():
+                folder = f"{COMFY_DIR}/custom_nodes/{name}"
+                args = [r.replace("<dir>", folder) for r in reqs]
+                if not reqs or not os.path.isdir(folder) or ("-r" in args and not os.path.exists(args[-1])):
+                    continue
+                try:
+                    pip(*args)
+                except Exception as exc:
+                    if required:
+                        raise
+                    print(f"{name} packages failed ({exc}); continuing without it", flush=True)
         except Exception as exc:
             INSTALL_ERROR.append(f"{type(exc).__name__}: {exc}")
 
     report.send("setup", 3, f"Installing video engine ({GPU_COUNT} GPU)", force=True)
-    MERGE_ONLY = not JOB.get("clips")  # joining finished clips needs ffmpeg only, no video model
+    NEED_GPU = any(c["key"] != "logo" for c in JOB.get("clips") or [])  # the logo clip is animated on the CPU
     INSTALLER = None
-    if not MERGE_ONLY and not WORKER.get("video_installed"):
+    if NEED_GPU and not WORKER.get("video_installed"):
         if not os.path.isdir(COMFY_DIR):
             subprocess.run(["git", "clone", "--depth", "1", "https://github.com/comfyanonymous/ComfyUI.git", COMFY_DIR], check=True)
-        C2C_DIR = f"{COMFY_DIR}/custom_nodes/ComfyUI-CustomNodePacks"
-        if not os.path.isdir(C2C_DIR):
-            subprocess.run(["git", "clone", "--depth", "1", "https://github.com/Code2Collapse/ComfyUI-CustomNodePacks.git", C2C_DIR], check=True)
+        for name, (url, reqs, required) in NODE_PACKS.items():
+            folder = f"{COMFY_DIR}/custom_nodes/{name}"
+            if os.path.isdir(folder):
+                continue
+            done = subprocess.run(["git", "clone", "--depth", "1", url, folder], capture_output=True, text=True)
+            if done.returncode != 0:
+                if required:
+                    raise RuntimeError(f"Could not install {name}: {done.stderr.strip()[-300:]}")
+                print(f"{name} not installed ({done.stderr.strip()[-200:]}); continuing without it", flush=True)
+        rife = f"{COMFY_DIR}/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife/rife47.pth"
+        if not FAST and os.path.isdir(os.path.dirname(os.path.dirname(os.path.dirname(rife)))) and not os.path.exists(rife):
+            os.makedirs(os.path.dirname(rife), exist_ok=True)
+            for url in RIFE_URLS:
+                try:
+                    r = requests.get(url, timeout=120)
+                    r.raise_for_status()
+                    open(rife, "wb").write(r.content)
+                    break
+                except Exception as exc:
+                    print("RIFE checkpoint download failed:", exc, flush=True)
         INSTALLER = threading.Thread(target=install_requirements, daemon=True)
         INSTALLER.start()
+    if NEED_GPU and not FAST:
+        # Two tiny nodes that pass the high-noise pass's result (conditioning + latent, unchanged tensors) from the
+        # ComfyUI on GPU 0 to the one on GPU 1, so each runs its own Wan expert and the two overlap across clips.
+        open(f"{COMFY_DIR}/custom_nodes/bb_handoff.py", "w").write(HANDOFF_NODE)
     FFMPEG = find_ffmpeg()
     report.send("setup", 6, "Video engine installed", force=True)
 except Exception as e:
@@ -277,7 +413,7 @@ except Exception as e:
     raise
 `;
 
-const CELL_MODELS = `
+export const CELL_MODELS = `
 MODEL_FILES = __VIDEO_MODEL_FILES__
 
 
@@ -312,8 +448,9 @@ def download(url, rel, base_pct, span_pct, retries=4):
 
 
 try:
-    for (url, rel), (base, span) in zip(MODEL_FILES, [(6, 18), (24, 5), (29, 1)]):  # 6..30 %
-        download(url, rel, base, span)
+    if NEED_GPU:
+        for i, (url, rel) in enumerate(MODEL_FILES):  # 6..30 %, one equal slice per file
+            download(url, rel, 6 + 24 * i / len(MODEL_FILES), 24 / len(MODEL_FILES))
     if INSTALLER is not None:
         report.send("downloading", 30, "Finishing the video engine install", force=True)
         INSTALLER.join()
@@ -326,75 +463,196 @@ except Exception as e:
     raise
 `;
 
-const CELL_COMFY = `
-try:
-    COMFY = "http://127.0.0.1:8188"
-    cached = WORKER.get("comfy_video")
-    if cached and cached["proc"].poll() is None:  # warm session: Wan is already loaded
-        comfy_proc, OBJECT_INFO = cached["proc"], cached["info"]
-    else:
-        subprocess.run(["pkill", "-f", f"{COMFY_DIR}/main.py"], check=False)
-        time.sleep(3)
-        env = dict(os.environ)
-        env.pop("CUDA_VISIBLE_DEVICES", None)
-        env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-        COMFY_LOG = f"{BIG_DIR}/comfyui.log"
-        comfy_proc = subprocess.Popen(
-            [sys.executable, f"{COMFY_DIR}/main.py", "--listen", "127.0.0.1", "--port", "8188",
-             "--disable-pinned-memory", "--reserve-vram", "1.0", "--preview-method", "none"],
-            cwd=COMFY_DIR, env=env, stdout=open(COMFY_LOG, "w"), stderr=subprocess.STDOUT)
-        for _ in range(180):
-            if comfy_proc.poll() is not None:
+export const CELL_COMFY = `
+COMFY = "http://127.0.0.1:8188"
+COMFY_LOG = f"{BIG_DIR}/comfyui.log"
+HANDOFF_DIR = f"{BIG_DIR}/bb-handoff"
+COMFY_FLAGS = ["--disable-pinned-memory", "--reserve-vram", "0.8", "--preview-method", "none"]
+
+
+def mem_available_gb():
+    try:
+        for line in open("/proc/meminfo"):
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) / 1e6
+    except Exception:
+        pass
+    return 0.0
+
+
+def launch_comfy(name):
+    """Starts one ComfyUI: "a" on port 8188 (GPU 0 — or both GPUs when not split), "b" on 8189 (GPU 1, its own
+    user / temp directories so the two never share a database or wipe each other's temp files)."""
+    spec = ENGINE_SPECS[name]
+    subprocess.run(["pkill", "-f", f"main.py --listen 127.0.0.1 --port {spec['port']}"], check=False)
+    time.sleep(3)
+    env = dict(os.environ)
+    env.pop("CUDA_VISIBLE_DEVICES", None)
+    if spec["gpus"] is not None:
+        env["CUDA_VISIBLE_DEVICES"] = spec["gpus"]
+    env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    extra = []
+    if spec.get("home"):
+        os.makedirs(f"{spec['home']}/user", exist_ok=True)
+        extra = ["--user-directory", f"{spec['home']}/user", "--temp-directory", spec["home"]]
+    proc = subprocess.Popen(
+        [sys.executable, f"{COMFY_DIR}/main.py", "--listen", "127.0.0.1", "--port", str(spec["port"]), *COMFY_FLAGS,
+         *extra], cwd=COMFY_DIR, env=env, stdout=open(spec["log"], "w"), stderr=subprocess.STDOUT)
+    url = f"http://127.0.0.1:{spec['port']}"
+    for _ in range(180):
+        if proc.poll() is not None:
+            break
+        try:
+            if requests.get(f"{url}/system_stats", timeout=3).ok:
                 break
-            try:
-                if requests.get(f"{COMFY}/system_stats", timeout=3).ok:
-                    break
-            except requests.RequestException:
-                pass
-            time.sleep(2)
-        if comfy_proc.poll() is not None:
-            raise RuntimeError("ComfyUI exited: " + open(COMFY_LOG).read()[-1500:])
-        OBJECT_INFO = requests.get(f"{COMFY}/object_info", timeout=60).json()
-        WORKER["comfy_video"] = {"proc": comfy_proc, "info": OBJECT_INFO}  # the warm session stops it when switching
+        except requests.RequestException:
+            pass
+        time.sleep(2)
+    if proc.poll() is not None:
+        raise RuntimeError(f"ComfyUI ({name}) exited: " + open(spec["log"]).read()[-1500:])
+    info = requests.get(f"{url}/object_info", timeout=60).json()
+    need = "UNETLoader" if globals().get("FAST_VIDEO") else "UnetLoaderGGUF"
+    if need not in info:
+        raise RuntimeError(f"ComfyUI has no {need} node: " + open(spec["log"]).read()[-1200:])
+    ENGINES[name] = {"name": name, "url": url, "port": spec["port"], "proc": proc, "log": spec["log"]}
+    return info
+
+
+def start_engines(split):
+    """split: one ComfyUI per T4, each holding its Wan expert (the clips overlap); else one ComfyUI on both GPUs
+    with the experts pinned by ComfyUI-MultiGPU (the clips run one after another)."""
+    global SPLIT, OBJECT_INFO, NODES, comfy_proc
+    for port in (8188, 8189):
+        subprocess.run(["pkill", "-f", f"main.py --listen 127.0.0.1 --port {port}"], check=False)
+    ENGINES.clear()
+    ENGINE_SPECS.clear()
+    if split:
+        ENGINE_SPECS["a"] = {"port": 8188, "gpus": "0", "log": COMFY_LOG}
+        ENGINE_SPECS["b"] = {"port": 8189, "gpus": "1", "log": f"{BIG_DIR}/comfyui-b.log", "home": "/tmp/comfy-b"}
+    else:
+        ENGINE_SPECS["a"] = {"port": 8188, "gpus": None, "log": COMFY_LOG}
+    OBJECT_INFO = launch_comfy("a")
+    if split:
+        info_b = launch_comfy("b")
+        missing = [n for n in ("BBSaveHandoff", "BBLoadHandoff") if n not in OBJECT_INFO or n not in info_b]
+        if missing:
+            raise RuntimeError(f"the hand-off nodes did not load: {missing}")
+    SPLIT = split
     NODES = set(OBJECT_INFO.keys())
-    report.send("rendering", 32, "Video engine ready", force=True)
+    comfy_proc = ENGINES["a"]["proc"]
+    # The warm session stops them when switching pipelines (release_all kills every ComfyUI).
+    WORKER["comfy_video"] = {"proc": comfy_proc, "info": OBJECT_INFO, "engines": dict(ENGINES),
+                             "specs": dict(ENGINE_SPECS), "split": split}
+
+
+def restart_engine(name):
+    """After a crash: the same ComfyUI again (its expert reloads on the next prompt)."""
+    launch_comfy(name)
+    WORKER.setdefault("comfy_video", {})["engines"] = dict(ENGINES)
+    if name == "a":
+        WORKER["comfy_video"]["proc"] = ENGINES["a"]["proc"]
+
+
+def engine_alive(engine):
+    return engine is not None and engine["proc"].poll() is None
+
+
+def comfy_alive():
+    return all(engine_alive(e) for e in ENGINES.values()) if ENGINES else False
+
+
+try:
+    OBJECT_INFO, NODES, SPLIT = {}, set(), False
+    ENGINES, ENGINE_SPECS = {}, {}
+    os.makedirs(HANDOFF_DIR, exist_ok=True)
+    cached = WORKER.get("comfy_video")
+    if not NEED_GPU:
+        pass  # logo clip only: no GPU work
+    elif cached and cached.get("engines") and all(e["proc"].poll() is None for e in cached["engines"].values()):
+        # Warm session: Wan is already loaded on both GPUs.
+        ENGINES.update(cached["engines"])
+        ENGINE_SPECS.update(cached.get("specs") or {})
+        OBJECT_INFO, SPLIT = cached["info"], bool(cached.get("split"))
+        comfy_proc = ENGINES["a"]["proc"]
+        NODES = set(OBJECT_INFO.keys())
+    else:
+        # Split needs both T4s and a little RAM for the second ComfyUI; if it ever fails, this session stays on one.
+        want_split = (GPU_COUNT >= 2 and not globals().get("FAST_VIDEO") and not WORKER.get("video_split_off")
+                      and mem_available_gb() >= 8)
+        try:
+            start_engines(want_split)
+        except Exception as exc:
+            if not want_split:
+                raise
+            traceback.print_exc()
+            print("Two-engine video setup failed; using one ComfyUI on both GPUs:", exc, flush=True)
+            WORKER["video_split_off"] = True
+            start_engines(False)
+    report.send("rendering", 32, "Video engine ready" + (" · one Wan expert per GPU, clips overlap" if SPLIT else
+                                                         " · fast render" if globals().get("FAST_VIDEO") else ""),
+                force=True)
 except Exception as e:
     report.send("failed", 0, f"Video engine failed to start: {e}", status="failed", force=True)
     raise
 `;
 
-/** Clip rendering + Reel encode + upload, and the crossfade merge. merge_clips() is also unit-tested locally. */
+/** Clip rendering, the one H.264 encode and upload of each scene clip (each clip is a deliverable; no merged film). */
 export const CELL_RENDER_AND_MERGE = `
 PRESETS = {
-    # Wan 2.2 TI2V-5B is trained at 1280x704 (portrait 704x1280); everything is upscaled to 1080x1920 afterwards.
-    "reel_hq":   {"width": 704, "height": 1280, "frames": 121, "fps": 24, "steps": 30},
-    "reel_fast": {"width": 480, "height": 832, "frames": 121, "fps": 24, "steps": 20},
+    # Wan 2.2 I2V A14B renders 81 frames at its native 16 fps (5 s); RIFE doubles that to 32 fps, then 30 fps.
+    # LightX2V distill: half the steps on the high-noise expert, half on the low-noise expert.
+    "reel_hq":   {"width": 544, "height": 960, "frames": 81, "steps": 8},
+    "reel_fast": {"width": 480, "height": 832, "frames": 81, "steps": 6},
 }
-# Smaller sizes tried, in order, when a clip runs out of GPU memory (all multiples of 32, 9:16-ish).
-SIZE_LADDER = [(704, 1280), (608, 1088), (544, 960), (480, 832)]
-# Higher denoise and a gentler shift preserve jewellery detail without making the motion too mechanical.
-CFG, SHIFT = 4.5, 6.0
+# Smaller sizes tried, in order, when a clip runs out of GPU memory (multiples of 16, 9:16).
+SIZE_LADDER = [(544, 960), (480, 832), (448, 784), (416, 736)]
+WAN_FPS = 16
+SHIFT, CFG = 5.0, 1.0  # LightX2V settings: euler / simple, shift 5, CFG 1 (a negative prompt has no effect at CFG 1)
+NAMES = __VIDEO_MODEL_NAMES__
 VIDEO_EXT = (".mp4", ".webm", ".mov", ".mkv")
 OUT_W, OUT_H, OUT_FPS = 1080, 1920, 30
-# Transitions between scenes (smooth / diffusion-like), and into the logo.
-SCENE_TRANSITIONS = ["fade", "smoothleft", "dissolve", "circleopen", "smoothup"]
-LOGO_TRANSITION = "fadewhite"
-TRANSITION_SECONDS = 0.7
+# Quality gate on every scene take (1/8-size grey frames, 0-255): a frame change above max(QA_JUMP_MIN,
+# QA_JUMP_RATIO x the clip's median change) is a cut or morph; a frame-to-frame brightness wobble above QA_FLICKER is
+# flicker; the real piece must be matched in at least QA_MIN_LOCKED of the frames. One new take when it fails.
+QA_RETRIES, QA_JUMP_MIN, QA_JUMP_RATIO, QA_FLICKER, QA_MIN_LOCKED = 1, 18.0, 6.0, 6.0, 0.4
+# Kaggle has 4 vCPUs: 3 for matching, restoring and frame loading, one left for the ComfyUIs rendering meanwhile.
+CPU_WORKERS = max(2, min(4, os.cpu_count() or 4) - 1)
+LOCK_RAMP = 4  # frames over which the rebuilt piece fades in / out next to a frame where it could not be rebuilt
 
 
-def decode_node(samples, vae):
-    """Tiled VAE decode (121 frames at once does not fit a T4); plain decode on old ComfyUI checkouts."""
-    info = OBJECT_INFO.get("VAEDecodeTiled")
-    if not info:
-        return {"class_type": "VAEDecode", "inputs": {"samples": samples, "vae": vae}}
-    inputs = {"samples": samples, "vae": vae}
-    preferred = {"tile_size": 256, "overlap": 64, "temporal_size": 32, "temporal_overlap": 8}
-    for name, item in info.get("input", {}).get("required", {}).items():
+def comfy_node(cls, **inputs):
+    """A ComfyUI API node checked against /object_info: unknown inputs fail loudly, missing widgets get defaults."""
+    info = OBJECT_INFO.get(cls)
+    if info is None:
+        raise RuntimeError(f"ComfyUI has no {cls} node")
+    spec = info.get("input", {})
+    known = {**spec.get("required", {}), **spec.get("optional", {})}
+    unknown = [k for k in inputs if k not in known]
+    if unknown:
+        raise RuntimeError(f"{cls} has no input {unknown}; it takes {list(known)}")
+    for name, item in spec.get("required", {}).items():
         if name in inputs:
             continue
+        kind = item[0]
         cfg = item[1] if len(item) > 1 and isinstance(item[1], dict) else {}
-        inputs[name] = preferred.get(name, cfg.get("default"))
-    return {"class_type": "VAEDecodeTiled", "inputs": inputs}
+        options = kind if isinstance(kind, list) else cfg.get("options") if kind == "COMBO" else None
+        if "default" in cfg:
+            inputs[name] = cfg["default"]
+        elif options:
+            inputs[name] = options[0]
+        else:
+            raise RuntimeError(f"{cls}: required input {name} is not wired")
+    return {"class_type": cls, "inputs": inputs}
+
+
+def options_of(cls, name):
+    spec = OBJECT_INFO.get(cls, {}).get("input", {})
+    item = {**spec.get("required", {}), **spec.get("optional", {})}.get(name)
+    if not item:
+        return []
+    kind = item[0]
+    cfg = item[1] if len(item) > 1 and isinstance(item[1], dict) else {}
+    return kind if isinstance(kind, list) else cfg.get("options") or []
 
 
 def is_oom(error):
@@ -402,84 +660,290 @@ def is_oom(error):
     return "out of memory" in text or "allocation on device" in text or "outofmemory" in text
 
 
-def free_comfy_memory():
+def free_comfy_memory(engine):
     try:
-        requests.post(f"{COMFY}/free", json={"unload_models": True, "free_memory": True}, timeout=60)
+        requests.post(f"{engine['url']}/free", json={"unload_models": True, "free_memory": True}, timeout=60)
         time.sleep(5)
     except requests.RequestException as exc:
         print("could not free ComfyUI memory:", exc, flush=True)
 
 
-def render_clip_safely(clip, p, idx, count):
-    """render_clip, stepping down SIZE_LADDER when the GPU runs out of memory instead of failing the clip."""
-    start = next((i for i, (w, h) in enumerate(SIZE_LADDER) if w <= p["width"] and h <= p["height"]), 0)
-    for rung in range(start, len(SIZE_LADDER)):
-        width, height = SIZE_LADDER[rung]
-        try:
-            return render_clip(clip, dict(p, width=width, height=height), idx, count)
-        except Exception as exc:
-            if not is_oom(exc) or rung == len(SIZE_LADDER) - 1:
-                raise
-            free_comfy_memory()
-            smaller = SIZE_LADDER[rung + 1]
-            report.send("rendering", 32 + 56 * idx / count, f"Out of GPU memory at {width}x{height} — retrying at "
-                        f"{smaller[0]}x{smaller[1]}", force=True, clipKey=clip["key"])
+def is_crash(error, engine):
+    """That ComfyUI went away (killed, crashed) or stopped answering: worth one restart, not a failed clip."""
+    closed = getattr(websocket, "WebSocketConnectionClosedException", ConnectionError)
+    return isinstance(error, (requests.ConnectionError, ConnectionError, closed)) or not engine_alive(engine)
 
 
-def make_workflow(prompt, negative, seed, p, image_name, prefix):
-    latent = {"width": p["width"], "height": p["height"], "length": p["frames"], "batch_size": 1, "vae": ["39", 0]}
-    model_ref = ["48", 0]
-    wf = {
-        "37": {"class_type": "UNETLoader", "inputs": {"unet_name": "wan2.2_ti2v_5B_fp16.safetensors", "weight_dtype": "default"}},
-        "38": {"class_type": "CLIPLoader", "inputs": {"clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan", "device": "default"}},
-        "39": {"class_type": "VAELoader", "inputs": {"vae_name": "wan2.2_vae.safetensors"}},
-        "6":  {"class_type": "CLIPTextEncode", "inputs": {"clip": ["38", 0], "text": prompt}},
-        "7":  {"class_type": "CLIPTextEncode", "inputs": {"clip": ["38", 0], "text": negative}},
-        "48": {"class_type": "ModelSamplingSD3", "inputs": {"model": ["37", 0], "shift": SHIFT}},
-        "55": {"class_type": "Wan22ImageToVideoLatent", "inputs": latent},
-        "8":  decode_node(["3", 0], ["39", 0]),
-        "57": {"class_type": "CreateVideo", "inputs": {"images": ["8", 0], "fps": p["fps"]}},
-        "58": {"class_type": "SaveVideo", "inputs": {"video": ["57", 0], "filename_prefix": prefix, "format": "auto", "codec": "auto"}},
-    }
-    if GPU_COUNT >= 2 and "C2CSequenceParallel" in NODES:  # both T4s on every sampling step
-        wf["49"] = {"class_type": "C2CSequenceParallel", "inputs": {
-            "model": ["48", 0], "gpus": 0, "strategy": "ring", "min_tokens_per_gpu": 1024,
-            "fast_link_gpus": 0, "rank_backend": "threads"}}
-        model_ref = ["49", 0]
-    wf["3"] = {"class_type": "KSampler", "inputs": {
-        "model": model_ref, "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["55", 0],
-        "seed": seed, "steps": p["steps"], "cfg": CFG, "sampler_name": "uni_pc", "scheduler": "simple", "denoise": 1.0}}
-    if image_name:
-        wf["56"] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
-        latent["start_image"] = ["56", 0]
-    return wf
+def expert_loader(name, device):
+    """One Wan expert on its own T4: split, each ComfyUI sees only its GPU; otherwise pinned by ComfyUI-MultiGPU (no
+    swapping between the two 14B experts), or — without it — both share GPU 0 and ComfyUI swaps them."""
+    if SPLIT:
+        return comfy_node("UnetLoaderGGUF", unet_name=name)
+    if GPU_COUNT >= 2 and device in options_of("UnetLoaderGGUFMultiGPU", "device"):
+        return comfy_node("UnetLoaderGGUFMultiGPU", unet_name=name, device=device)
+    return comfy_node("UnetLoaderGGUF", unet_name=name)
 
 
-def prepare_image(data, w, h):
-    from PIL import Image, ImageFilter, ImageOps
-    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
-    if abs((img.width / img.height) / (w / h) - 1) < 0.12:
-        out = ImageOps.fit(img, (w, h), Image.LANCZOS)
+def make_workflow(prompt, seed, p, start_name, end_name, prefix, part="all", handoff=None, negative=None):
+    """Wan 2.2 I2V A14B first-last-frame graph: both keyframes are crops of the jeweller's still, so the clip starts
+    AND ends on the real piece and the camera move is fixed by the keyframes, not by the prompt.
+    part "all": the whole clip in one ComfyUI. Split over two ComfyUIs — the very same nodes and numbers, cut where
+    the high-noise expert hands over: "a" (GPU 0) encodes, runs the first half of the steps and saves the
+    conditioning + latent to handoff; "b" (GPU 1) loads them, runs the second half, decodes and interpolates.
+    Returns (graph, fps of the frames it saves)."""
+    steps = int(p["steps"])
+    split = steps // 2
+    sample = {"steps": steps, "cfg": CFG, "sampler_name": "euler", "scheduler": "simple"}
+    g = {}
+    if part in ("all", "a"):
+        g.update({
+            "clip": comfy_node("CLIPLoader", clip_name=NAMES["clip"], type="wan"),
+            "vae": comfy_node("VAELoader", vae_name=NAMES["vae"]),
+            "pos": comfy_node("CLIPTextEncode", clip=["clip", 0], text=prompt),
+            "neg": comfy_node("ConditioningZeroOut", conditioning=["pos", 0]),
+            "start": comfy_node("LoadImage", image=start_name),
+            "end": comfy_node("LoadImage", image=end_name),
+            "hi": expert_loader(NAMES["high"], "cuda:0"),
+        })
+        g["flf"] = comfy_node("WanFirstLastFrameToVideo", positive=["pos", 0], negative=["neg", 0], vae=["vae", 0],
+                              width=p["width"], height=p["height"], length=p["frames"], batch_size=1,
+                              start_image=["start", 0], end_image=["end", 0])
+        g["hilora"] = comfy_node("LoraLoaderModelOnly", model=["hi", 0], lora_name=NAMES["highLora"],
+                                 strength_model=1.0)
+        g["hishift"] = comfy_node("ModelSamplingSD3", model=["hilora", 0], shift=SHIFT)
+        g["s1"] = comfy_node("KSamplerAdvanced", model=["hishift", 0], add_noise="enable", noise_seed=seed,
+                             positive=["flf", 0], negative=["flf", 1], latent_image=["flf", 2], start_at_step=0,
+                             end_at_step=split, return_with_leftover_noise="enable", **sample)
+        cond = (["flf", 0], ["flf", 1], ["s1", 0])
+    if part == "a":
+        g["handoff"] = comfy_node("BBSaveHandoff", positive=cond[0], negative=cond[1], latent=cond[2], path=handoff)
+        return g, None
+    if part == "b":
+        g["vae"] = comfy_node("VAELoader", vae_name=NAMES["vae"])
+        g["load"] = comfy_node("BBLoadHandoff", path=handoff)
+        cond = (["load", 0], ["load", 1], ["load", 2])
+    g["lo"] = expert_loader(NAMES["low"], "cuda:1")
+    g["lolora"] = comfy_node("LoraLoaderModelOnly", model=["lo", 0], lora_name=NAMES["lowLora"], strength_model=1.0)
+    g["loshift"] = comfy_node("ModelSamplingSD3", model=["lolora", 0], shift=SHIFT)
+    g["s2"] = comfy_node("KSamplerAdvanced", model=["loshift", 0], add_noise="disable", noise_seed=seed,
+                         positive=cond[0], negative=cond[1], latent_image=cond[2], start_at_step=split,
+                         end_at_step=10000, return_with_leftover_noise="disable", **sample)
+    if "VAEDecodeTiled" in NODES:  # 81 frames at once do not fit a T4
+        tiles = {"tile_size": 256, "overlap": 64, "temporal_size": 32, "temporal_overlap": 8}
+        known = {**OBJECT_INFO["VAEDecodeTiled"]["input"].get("required", {})}
+        g["decode"] = comfy_node("VAEDecodeTiled", samples=["s2", 0], vae=["vae", 0],
+                                 **{k: v for k, v in tiles.items() if k in known})
     else:
-        out = ImageOps.fit(img, (w, h), Image.LANCZOS).filter(ImageFilter.GaussianBlur(40))
-        fg = ImageOps.contain(img, (w, h), Image.LANCZOS)
-        out.paste(fg, ((w - fg.width) // 2, (h - fg.height) // 2))
+        g["decode"] = comfy_node("VAEDecode", samples=["s2", 0], vae=["vae", 0])
+    frames, fps = ["decode", 0], WAN_FPS
+    rife_ckpt = f"{COMFY_DIR}/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife/rife47.pth"
+    if "RIFE VFI" in NODES and "rife47.pth" in options_of("RIFE VFI", "ckpt_name") and os.path.exists(rife_ckpt):
+        extra = {"dtype": "float16"} if "float16" in options_of("RIFE VFI", "dtype") else {}
+        g["rife"] = comfy_node("RIFE VFI", ckpt_name="rife47.pth", frames=frames, multiplier=2, fast_mode=False,
+                               ensemble=True, **extra)
+        frames, fps = ["rife", 0], WAN_FPS * 2
+    g["save"] = comfy_node("SaveImage", images=frames, filename_prefix=prefix)
+    return g, fps
+
+
+def camera_move(prompt):
+    """(move, reverse) the keyframes must make, read from the CAMERA sentence so they never contradict the text:
+    push (in) / pull back, sideways dolly (right, or left), tilt (down, or up), crane (down, or up)."""
+    text = str(prompt or "").lower()
+    text = text.split("camera:", 1)[1] if "camera:" in text else text
+    text = text.split(".", 1)[0]
+    if "tilt" in text:
+        return "tilt", " up" in f" {text.split('tilt', 1)[1]}"[:12]
+    if "crane" in text:
+        return "crane", " up" in f" {text.split('crane', 1)[1]}"[:12]
+    if any(w in text for w in ("pull back", "pull-back", "dolly out", "dolly-out", "zoom out")):
+        return "push", True
+    if any(w in text for w in ("dolly-in", "dolly in", "push-in", "push in", "zoom in")):
+        return "push", False
+    if any(w in text for w in ("dolly", "sideways", "pan", "track", "slide")):
+        return "dolly", "left" in text
+    return "push", False
+
+
+def ease(t):
+    t = min(1.0, max(0.0, t))
+    return t * t * (3 - 2 * t)
+
+
+def keyframe_rects(size, move, focus, with_model, reverse=False):
+    """Start and end crop rectangles (x1, y1, x2, y2) of the still, same 9:16 shape: push-in = full frame to a 1.15x
+    crop on the piece; dolly = a sideways slide; tilt = top to bottom; crane = high and wide to low and close."""
+    W, H = size
+    fx, fy = focus or (W / 2, H / 2)
+
+    def rect(cx, cy, zoom):
+        w, h = W / zoom, H / zoom
+        x = min(max(cx - w / 2, 0), W - w)
+        y = min(max(cy - h / 2, 0), H - h)
+        return (x, y, x + w, y + h)
+
+    zoom = 1.08 if with_model else 1.15
+    if move == "dolly":
+        pair = rect(fx - W * 0.05, fy, 1.12), rect(fx + W * 0.05, fy, 1.12)
+    elif move == "tilt":
+        pair = rect(fx, fy - H * 0.05, 1.12), rect(fx, fy + H * 0.05, 1.12)
+    elif move == "crane":
+        pair = rect(fx, fy - H * 0.04, 1.04), rect(fx, fy, zoom + 0.03)
+    else:
+        pair = (0.0, 0.0, float(W), float(H)), rect(fx, fy, zoom)
+    return (pair[1], pair[0]) if reverse else pair
+
+
+def fetch_image(url, mode="RGB"):
+    def get():
+        r = requests.get(url, timeout=120)
+        r.raise_for_status()
+        return r.content
+    return ImageOps.exif_transpose(Image.open(io.BytesIO(with_retries("image download", get)))).convert(mode)
+
+
+def upload_input(image, name):
     buf = io.BytesIO()
-    out.save(buf, "PNG")
-    return buf.getvalue()
+    image.save(buf, "PNG", compress_level=1)
+    up = requests.post(f"{COMFY}/upload/image", files={"image": (name, buf.getvalue(), "image/png")},
+                       data={"type": "input", "overwrite": "true"}, timeout=180)
+    up.raise_for_status()
+    return up.json()["name"]
 
 
-def encode_reel(src, dst):
-    """1080x1920 @30 fps H.264 (Instagram Reels), silent AAC track."""
-    smooth_fps = (f"minterpolate=fps={OUT_FPS}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1"
-                  if has_filter("minterpolate") else f"fps={OUT_FPS}")
-    vf = (f"{smooth_fps},scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase:flags=lanczos,"
-          f"crop={OUT_W}:{OUT_H},unsharp=5:5:0.4:5:5:0.0,setsar=1,format=yuv420p")
-    subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", src,
-                    "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-                    "-map", "0:v:0", "-map", "1:a:0", "-shortest", "-vf", vf,
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high", "-level", "4.2",
-                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", dst], check=True)
+def rect_to_h(r, src_offset=(0, 0)):
+    """Homography from still pixels (minus src_offset) to frame pixels for a camera looking at crop r."""
+    sx, sy = OUT_W / (r[2] - r[0]), OUT_H / (r[3] - r[1])
+    ox, oy = src_offset
+    return np.array([[sx, 0, (ox - r[0]) * sx], [0, sy, (oy - r[1]) * sy], [0, 0, 1]], dtype=np.float64)
+
+
+def lock_product(frames, still, mask, rects=None):
+    """The real product, back in every frame: features of the piece in the still are matched in each frame (the camera
+    path from the keyframes is the fallback), then restore_product() rebuilds the piece from the still's pixels where
+    the frame agrees. Bells, enamel and metal colour can no longer melt or drift. CPU, 3 threads."""
+    m = np.asarray(mask, dtype=np.float32) / 255.0
+    ys, xs = np.where(m > 0.02)
+    if len(xs) < 500:
+        return frames, 0
+    x1, y1 = max(0, xs.min() - 8), max(0, ys.min() - 8)
+    x2, y2 = min(m.shape[1], xs.max() + 9), min(m.shape[0], ys.max() + 9)
+    src_rgb = np.ascontiguousarray(np.asarray(still)[y1:y2, x1:x2])
+    src_alpha = np.ascontiguousarray(m[y1:y2, x1:x2])
+    feats = product_features(src_rgb, src_alpha)
+    n = len(frames)
+    corners = np.float32([[0, 0], [x2 - x1, 0], [x2 - x1, y2 - y1], [0, y2 - y1]]).reshape(-1, 1, 2)
+
+    def locate(i):
+        h, _ = match_product(feats, frames[i], long_side=1100)
+        if h is not None and rects is not None:  # without a camera plan (fast render) every match is trusted
+            guess = rect_to_h(tuple(a + (b - a) * ease(i / max(1, n - 1)) for a, b in zip(*rects)), (x1, y1))
+            drift = np.abs(cv2.perspectiveTransform(corners, h) - cv2.perspectiveTransform(corners, guess)).max()
+            if drift > OUT_W * 0.25:  # a match far from where the camera can be: a different part of the frame
+                h = None
+        return h
+
+    from concurrent.futures import ThreadPoolExecutor
+    cv2.setNumThreads(1)  # one OpenCV thread per worker: the frames run side by side on all 4 vCPUs instead
+    try:
+        with ThreadPoolExecutor(max_workers=CPU_WORKERS) as pool:
+            hs = list(pool.map(locate, range(n)))  # same result as one by one, in order
+    finally:
+        cv2.setNumThreads(0)
+    found = [i for i, h in enumerate(hs) if h is not None]
+    if not found:
+        return frames, 0
+    for i in range(n):  # gaps: the nearest found frame's geometry, shifted along the planned camera path
+        if hs[i] is None:
+            j = min(found, key=lambda k: abs(k - i))
+            if rects is None:  # no planned path to shift along: only a neighbour 1-2 frames away is close enough
+                if abs(j - i) <= 2:
+                    hs[i] = hs[j]
+            elif abs(j - i) <= 6:
+                path = lambda k: rect_to_h(tuple(a + (b - a) * ease(k / max(1, n - 1)) for a, b in zip(*rects)))
+                hs[i] = path(i) @ np.linalg.inv(path(j)) @ hs[j]
+    cv2.setNumThreads(1)
+
+    def one(i):
+        if hs[i] is None:
+            return None
+        out, _, _ = restore_product(frames[i], src_rgb, src_alpha, hs[i], min_coverage=0.3)
+        return out
+
+    try:
+        with ThreadPoolExecutor(max_workers=CPU_WORKERS) as pool:
+            restored = list(pool.map(one, range(n)))
+    finally:
+        cv2.setNumThreads(0)
+    # Where the piece could not be rebuilt it would snap between the photo's pixels and the generated ones; instead
+    # the rebuild fades out over LOCK_RAMP frames towards every such frame and back in after it.
+    gaps = [i for i, r in enumerate(restored) if r is None]
+    out = []
+    for i in range(n):
+        if restored[i] is None:
+            out.append(frames[i])
+            continue
+        w = min(1.0, min((abs(i - j) for j in gaps), default=LOCK_RAMP) / LOCK_RAMP)
+        out.append(restored[i] if w >= 1 else cv2.addWeighted(restored[i], w, frames[i], 1 - w, 0))
+    return out, n - len(gaps)
+
+
+def encode_frames(frames, fps_in, dst, polish=False):
+    """One lossy encode per clip: raw RGB frames -> 1080x1920 30 fps H.264 (CRF 16, preset slow), silent AAC. The
+    RGB -> YUV conversion is BT.709 and tagged so (untagged, phones and Instagram read the colours with the wrong
+    matrix and gold shifts hue). polish (scene clips): a short deflicker (steps in brightness from Wan's tiled decode)
+    and a light luma-only adaptive sharpen of the 2x upscale, when this ffmpeg has the filters."""
+    # RIFE's 32 fps frames are played at 30 fps (5.4 s, a touch slower — every frame kept, no judder); Wan's own
+    # 16 fps is blended up to 30 fps; anything else is resampled.
+    if 28 <= fps_in <= 34:
+        rate, convert = OUT_FPS, ""
+    elif fps_in < 24 and has_filter("framerate"):
+        rate, convert = fps_in, f"framerate=fps={OUT_FPS},"
+    else:
+        rate, convert = fps_in, f"fps={OUT_FPS},"
+    finish = ""
+    if polish and has_filter("deflicker"):
+        finish += "deflicker=size=5:mode=pm,"
+    if polish and has_filter("cas"):
+        finish += "cas=strength=0.3:planes=1,"
+    cmd = [FFMPEG, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{OUT_W}x{OUT_H}",
+           "-r", str(rate), "-i", "-", "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+           "-map", "0:v:0", "-map", "1:a:0", "-shortest",
+           "-vf", convert + "scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int,"
+                  "format=yuv420p," + finish + "setsar=1",
+           "-c:v", "libx264", "-preset", "slow", "-crf", "16", "-profile:v", "high", "-level", "4.2",
+           "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+           "-threads", "3", "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-movflags", "+faststart", dst]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    for frame in frames:
+        proc.stdin.write(np.ascontiguousarray(frame, dtype=np.uint8).tobytes())
+    proc.stdin.close()
+    if proc.wait() != 0:
+        raise RuntimeError("ffmpeg could not encode the clip")
+
+
+def render_logo_clip(clip, dst):
+    """The brand logo, animated on the CPU (no video model, so the typeset name stays spelled exactly): a fade in,
+    a slow 5% zoom and a light sweep across the gold lettering and emblem."""
+    logo = np.asarray(ImageOps.fit(fetch_image(clip["imageUrl"]), (OUT_W, OUT_H), Image.Resampling.LANCZOS),
+                      dtype=np.float32) / 255.0
+    lum = logo @ np.float32([0.299, 0.587, 0.114])
+    shine = np.clip((lum - 0.35) / 0.4, 0, 1)[..., None]
+    yy, xx = np.mgrid[0:OUT_H, 0:OUT_W].astype(np.float32)
+    diag = (xx / OUT_W + 0.45 * yy / OUT_H) / 1.45
+    seconds, frames = 5.0, []
+    for i in range(int(seconds * OUT_FPS)):
+        t = i / OUT_FPS
+        z = 1.0 + 0.05 * ease(t / seconds)
+        m = cv2.getRotationMatrix2D((OUT_W / 2, OUT_H / 2), 0, z)
+        base = cv2.warpAffine(logo, m, (OUT_W, OUT_H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
+        glow = cv2.warpAffine(shine, m, (OUT_W, OUT_H), flags=cv2.INTER_LINEAR)[..., None]
+        pos = -0.2 + 1.4 * ease((t - 0.6) / 2.2)
+        band = np.exp(-((diag - pos) / 0.05) ** 2)[..., None]
+        frame = base + glow * band * np.float32([0.55, 0.48, 0.32])
+        frame *= min(1.0, t / 0.5)
+        frames.append((np.clip(frame, 0, 1) * 255 + 0.5).astype(np.uint8))
+    encode_frames(frames, OUT_FPS, dst)
 
 
 def validate_render(path, width=OUT_W, height=OUT_H, fps=OUT_FPS, min_duration=4.5, min_bytes=1_000_000):
@@ -507,6 +971,10 @@ def validate_render(path, width=OUT_W, height=OUT_H, fps=OUT_FPS, min_duration=4
         raise RuntimeError(f"Video fps too far from target: {video_fps} != {fps}")
     if size < min_bytes:
         raise RuntimeError(f"Video too small for production output: {size} bytes")
+    decoded = subprocess.run([FFMPEG, "-v", "error", "-i", path, "-map", "0:v:0", "-f", "null", "-"],
+                             capture_output=True, text=True)
+    if decoded.returncode != 0 or decoded.stderr.strip():
+        raise RuntimeError("The encoded clip does not decode cleanly: " + decoded.stderr.strip()[-300:])
     return {"width": int(video_w), "height": int(video_h), "fps": float(video_fps), "duration": duration, "size": size}
 
 
@@ -519,125 +987,335 @@ def video_duration(path):
     return int(h) * 3600 + int(mnt) * 60 + float(s)
 
 
+FILTERS = {}
+
+
 def has_filter(name):
-    out = subprocess.run([FFMPEG, "-hide_banner", "-filters"], capture_output=True, text=True).stdout
-    return re.search(rf"\\s{name}\\s", out) is not None
+    if FFMPEG not in FILTERS:
+        FILTERS[FFMPEG] = subprocess.run([FFMPEG, "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+    return re.search(rf"\\s{name}\\s", FILTERS[FFMPEG]) is not None
 
 
-def merge_clips(paths, dst, transitions, t=TRANSITION_SECONDS):
-    """Chains clips with smooth transitions, each normalised to 1080x1920 @30 fps, plus a silent track.
-    Uses ffmpeg's xfade (varied transitions, ffmpeg >= 4.3); older builds get an alpha crossfade (dissolve)."""
-    if len(paths) == 1:
-        shutil.copy2(paths[0], dst)
-        return
-    durations = [video_duration(p) for p in paths]
-    total = sum(durations) - t * (len(paths) - 1)
-    inputs, parts = [], []
-    for i, p in enumerate(paths):
-        inputs += ["-i", p]
-        parts.append(f"[{i}:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,crop={OUT_W}:{OUT_H},"
-                     f"fps={OUT_FPS},setsar=1,format=yuv420p,settb=AVTB,setpts=PTS-STARTPTS[v{i}]")
-    offsets, offset = [0.0], 0.0
-    for i in range(1, len(paths)):
-        offset += durations[i - 1] - t
-        offsets.append(offset)
-    if has_filter("xfade"):
-        prev = "v0"
-        for i in range(1, len(paths)):
-            parts.append(f"[{prev}][v{i}]xfade=transition={transitions[i - 1]}:duration={t}:offset={offsets[i]:.3f}[x{i}]")
-            prev = f"x{i}"
-        parts.append(f"[{prev}]format=yuv420p[out]")
-    else:
-        # Base = first clip held to the full length; each next clip fades in (alpha) on top at its offset.
-        parts.append(f"[v0]tpad=stop_mode=clone:stop_duration={total - durations[0] + 1:.3f}[b0]")
-        prev = "b0"
-        for i in range(1, len(paths)):
-            parts.append(f"[v{i}]format=yuva420p,fade=t=in:st=0:d={t}:alpha=1,setpts=PTS+{offsets[i]:.3f}/TB[f{i}]")
-            parts.append(f"[{prev}][f{i}]overlay=format=yuv420[o{i}]")
-            prev = f"o{i}"
-        parts.append(f"[{prev}]trim=duration={total:.3f},format=yuv420p[out]")
-    subprocess.run([FFMPEG, "-y", "-loglevel", "error", *inputs,
-                    "-f", "lavfi", "-t", f"{total:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-                    "-filter_complex", ";".join(parts), "-map", "[out]", "-map", f"{len(paths)}:a",
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-profile:v", "high", "-level", "4.2",
-                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-shortest", dst], check=True)
+def frame_stats(frames):
+    """Per-frame brightness (mean, spread) and the mean change from the previous frame, on 1/8-size grey copies."""
+    small = [cv2.cvtColor(cv2.resize(f, (OUT_W // 8, OUT_H // 8), interpolation=cv2.INTER_AREA),
+                          cv2.COLOR_RGB2GRAY).astype(np.float32) for f in frames]
+    means = np.array([s.mean() for s in small], dtype=np.float32)
+    spreads = np.array([s.std() for s in small], dtype=np.float32)
+    diffs = np.array([np.abs(a - b).mean() for a, b in zip(small[1:], small[:-1])], dtype=np.float32)
+    return means, spreads, diffs
 
 
-def render_clip(clip, p, idx, count, base=32, span=56):
-    """Renders one clip; progress maps onto [base, base+span] split evenly across clips."""
-    lo = base + span * idx / count
-    hi = base + span * (idx + 1) / count
-    img = requests.get(clip["imageUrl"], timeout=120)
-    img.raise_for_status()
-    up = requests.post(f"{COMFY}/upload/image",
-                       files={"image": (f"{clip['key']}_{uuid.uuid4().hex[:6]}.png", prepare_image(img.content, p["width"], p["height"]), "image/png")},
-                       data={"type": "input", "overwrite": "true"}, timeout=180)
-    up.raise_for_status()
-    seed = random.randrange(2**63 - 1) if int(clip.get("seed", -1)) < 0 else int(clip["seed"])
-    client_id = uuid.uuid4().hex
-    cws = websocket.create_connection(f"ws://127.0.0.1:8188/ws?clientId={client_id}", timeout=30)
-    prefix = f"reel/{JOB['jobId'][:8]}_{clip['key']}"
-    r = requests.post(f"{COMFY}/prompt", timeout=180, json={
-        "prompt": make_workflow(clip["prompt"], clip["negative"], seed, p, up.json()["name"], prefix),
-        "client_id": client_id})
-    if not r.ok:
-        raise RuntimeError("ComfyUI rejected the workflow: " + r.text[:1500])
-    pid = r.json()["prompt_id"]
-    label = "logo" if clip["key"] == "logo" else f"scene {int(clip['key'].split('-')[-1]) + 1}"
-    report.send("rendering", lo, f"Rendering {label} ({idx + 1}/{count})", force=True, clipKey=clip["key"])
-    t0 = time.time()
-    cws.settimeout(600)
-    while True:  # ComfyUI WebSocket events instead of polling /history
-        if time.time() - t0 > 3 * 3600:
-            raise TimeoutError("Rendering took longer than 3 hours")
+def clip_qa(frames, expected, locked=None):
+    """What is visibly wrong with a take, as (score, problems); 0 = clean, lower is better. Broken frames (black, blown
+    out or blank: fp16 NaNs) are fatal (score >= 1000). A sudden jump (one frame change far above the clip's own
+    motion: a cut or a morph), brightness flicker, and a real piece found in too few frames (it drifted, melted or
+    was covered) are defects worth a re-render with a new seed."""
+    if len(frames) < expected * 0.9:
+        return 1000.0, [f"only {len(frames)} of {expected} frames"]
+    means, spreads, diffs = frame_stats(frames)
+    problems, score = [], 0.0
+    broken = int(((means < 8) | (means > 247) | (spreads < 2)).sum())
+    if broken:
+        problems.append(f"{broken} broken frame(s)")
+        score += 1000 + broken
+    if len(diffs) > 4:
+        jumps = int((diffs > max(QA_JUMP_MIN, QA_JUMP_RATIO * float(np.median(diffs)))).sum())
+        if jumps:
+            problems.append(f"{jumps} sudden jump(s)")
+            score += 10 * jumps
+        wobble = float(np.abs(np.diff(means, 2)).max())
+        if wobble > QA_FLICKER:
+            problems.append(f"brightness flicker ({wobble:.1f})")
+            score += 5
+    if locked is not None and len(frames):
+        rate = locked / len(frames)
+        if rate < QA_MIN_LOCKED:
+            problems.append(f"real piece matched in only {rate:.0%} of frames")
+            score += 8 * (1 + QA_MIN_LOCKED - rate)
+    return score, problems
+
+
+def with_retries(what, fn, attempts=4):
+    """fn() with backoff on network errors; a client error (expired or wrong URL) fails at once."""
+    for attempt in range(1, attempts + 1):
         try:
-            msg = cws.recv()
-        except websocket.WebSocketTimeoutException:
-            # Long silent steps (model load, VAE decode): ask ComfyUI directly instead of failing the clip.
-            hist = requests.get(f"{COMFY}/history/{pid}", timeout=60).json().get(pid, {})
-            if hist.get("status", {}).get("completed") or hist.get("outputs"):
+            return fn()
+        except requests.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if attempt == attempts or (status is not None and 400 <= status < 500 and status not in (408, 429)):
+                raise
+            print(f"{what} failed ({exc}); retry {attempt}/{attempts - 1}", flush=True)
+            time.sleep(min(30, 3 * 2 ** (attempt - 1)))
+
+
+def upload_clip(path, url):
+    def put():
+        with open(path, "rb") as fh:
+            requests.put(url, data=fh, headers={"Content-Type": "video/mp4"}, timeout=600).raise_for_status()
+    with_retries("clip upload", put, attempts=5)
+
+
+def run_prompt(engine, workflow, on_step=None, on_wait=None):
+    """Runs one graph on one ComfyUI and follows it over its WebSocket until it finishes; returns its history item.
+    Errors, and that ComfyUI dying, raise."""
+    client_id = uuid.uuid4().hex
+    cws = websocket.create_connection(f"ws://127.0.0.1:{engine['port']}/ws?clientId={client_id}", timeout=30)
+    try:
+        r = requests.post(f"{engine['url']}/prompt", timeout=180, json={"prompt": workflow, "client_id": client_id})
+        if not r.ok:
+            raise RuntimeError("ComfyUI rejected the workflow: " + r.text[:1500])
+        pid = r.json()["prompt_id"]
+        t0 = time.time()
+        cws.settimeout(600)
+        while True:  # ComfyUI WebSocket events instead of polling /history
+            if time.time() - t0 > 3 * 3600:
+                raise TimeoutError("Rendering took longer than 3 hours")
+            try:
+                msg = cws.recv()
+            except websocket.WebSocketTimeoutException:
+                # Long silent steps (model load, VAE decode): ask ComfyUI directly instead of failing the clip.
+                if not engine_alive(engine):
+                    raise ConnectionError("ComfyUI stopped while rendering")
+                hist = requests.get(f"{engine['url']}/history/{pid}", timeout=60).json().get(pid, {})
+                if hist.get("status", {}).get("completed") or hist.get("outputs"):
+                    break
+                if hist.get("status", {}).get("status_str") == "error":
+                    raise RuntimeError("ComfyUI reported an error: " + json.dumps(hist.get("status"))[:800])
+                if on_wait:
+                    on_wait()
+                continue
+            if not isinstance(msg, str):
+                continue
+            evt = json.loads(msg)
+            kind, data = evt.get("type"), evt.get("data", {})
+            if data.get("prompt_id") not in (None, pid):
+                continue
+            if kind == "progress" and data.get("max") and on_step:
+                on_step(data["value"], data["max"])
+            elif kind == "execution_error":
+                raise RuntimeError(f"{data.get('node_type')}: {data.get('exception_message')}")
+            elif kind == "execution_success" or (kind == "executing" and data.get("node") is None):
                 break
-            if hist.get("status", {}).get("status_str") == "error":
-                raise RuntimeError("ComfyUI reported an error: " + json.dumps(hist.get("status"))[:800])
-            report.send("rendering", lo, f"Rendering {label} ({idx + 1}/{count}) · still working", force=True,
-                        clipKey=clip["key"])
-            continue
-        if not isinstance(msg, str):
-            continue
-        evt = json.loads(msg)
-        kind, data = evt.get("type"), evt.get("data", {})
-        if data.get("prompt_id") not in (None, pid):
-            continue
-        if kind == "progress" and data.get("max"):
-            report.send("rendering", lo + (hi - lo) * 0.92 * data["value"] / data["max"],
-                        f"Rendering {label} ({idx + 1}/{count}) · step {data['value']}/{data['max']}", clipKey=clip["key"])
-        elif kind == "execution_error":
-            raise RuntimeError(f"{data.get('node_type')}: {data.get('exception_message')}")
-        elif kind == "execution_success" or (kind == "executing" and data.get("node") is None):
-            break
-    cws.close()
-    item = requests.get(f"{COMFY}/history/{pid}", timeout=60).json().get(pid, {})
-    raw = None
+        return requests.get(f"{engine['url']}/history/{pid}", timeout=60).json().get(pid, {})
+    finally:
+        try:
+            cws.close()
+        except Exception:
+            pass
+
+
+def frame_files(item):
+    files = []
     for out in item.get("outputs", {}).values():
-        for key in ("videos", "gifs", "images"):
-            for f in out.get(key) or []:
-                if isinstance(f, dict) and str(f.get("filename", "")).lower().endswith(VIDEO_EXT):
-                    raw = os.path.join(COMFY_DIR, f.get("type") or "output", f.get("subfolder", ""), f["filename"])
-    if not raw:
-        found = sorted(glob.glob(os.path.join(COMFY_DIR, "output", prefix + "*")), key=os.path.getmtime)
-        if not found:
-            raise RuntimeError(f"No video produced for {clip['key']}")
-        raw = found[-1]
-    reel = os.path.join(OUT_DIR, f"{clip['key']}.mp4")
-    encode_reel(raw, reel)
-    validate_render(reel, OUT_W, OUT_H, OUT_FPS, min_duration=4.5, min_bytes=1_000_000)
-    with open(reel, "rb") as fh:
-        requests.put(clip["uploadUrl"], data=fh, headers={"Content-Type": "video/mp4"}, timeout=600).raise_for_status()
-    report.send("clipDone", hi, f"{label.capitalize()} ready", force=True, clipKey=clip["key"])
-    return reel
+        for f in out.get("images") or []:
+            files.append(os.path.join(COMFY_DIR, f.get("type") or "output", f.get("subfolder", ""), f["filename"]))
+    return sorted(set(files))
+
+
+def load_frames(files):
+    """The saved frames at 1080x1920; the PNGs are deleted. OpenCV decodes and resizes without holding the GIL, so
+    all frames load side by side."""
+    def load(f):
+        return cv2.resize(cv2.cvtColor(cv2.imread(f, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB), (OUT_W, OUT_H),
+                          interpolation=cv2.INTER_LANCZOS4)
+    from concurrent.futures import ThreadPoolExecutor
+    try:
+        with ThreadPoolExecutor(max_workers=CPU_WORKERS) as pool:
+            return list(pool.map(load, files))
+    finally:
+        for f in files:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+
+
+def remove_prefix(prefix):
+    for f in glob.glob(os.path.join(COMFY_DIR, "output", prefix + "*")):
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+
+
+class ClipWork:
+    """One clip moving through the pipeline: GPU 0 stage, GPU 1 stage (split), CPU finish."""
+
+    def __init__(self, spec, n, count, p):
+        self.spec, self.key, self.n, self.count = spec, spec["key"], n, count
+        self.label = "logo" if self.key == "logo" else f"scene {int(self.key.split('-')[-1]) + 1}"
+        self.p = dict(p)
+        self.rung = next((i for i, (w, h) in enumerate(SIZE_LADDER) if w <= p["width"] and h <= p["height"]), 0)
+        self.attempt, self.restarts, self.best, self.prep = 0, set(), None, None
+        self.share, self.started, self.take_started = 0.0, None, None
+        self.seed, self.handoff, self.prefix, self.files, self.fps = None, None, None, [], WAN_FPS
+
+    def size(self):
+        width, height = SIZE_LADDER[self.rung]
+        return dict(self.p, width=width, height=height)
+
+
+def prepare_clip(work):
+    """Once per clip: the still, its product mask and the keyframe crops; the keyframes are uploaded per size."""
+    if work.prep is None:
+        clip = work.spec
+        still = ImageOps.fit(fetch_image(clip["imageUrl"]), (OUT_W, OUT_H), Image.Resampling.LANCZOS)  # never blur-pad
+        mask = None
+        if clip.get("maskUrl"):
+            try:
+                mask = ImageOps.fit(fetch_image(clip["maskUrl"], "L"), (OUT_W, OUT_H), Image.Resampling.BILINEAR)
+            except Exception as exc:
+                print("no product mask for this scene (the frames keep the generated pixels):", exc, flush=True)
+        focus = None
+        if mask is not None:
+            ys, xs = np.where(np.asarray(mask) > 128)
+            if len(xs):
+                focus = (float(xs.mean()), float(ys.mean()))
+        with_model = bool(re.search(r"\\b(model|person|woman|man|wearing|worn)\\b", clip["prompt"], re.I))
+        move, reverse = camera_move(clip["prompt"])
+        if globals().get("FAST_VIDEO"):  # TI2V-5B starts from the whole still; the prompt alone moves the camera
+            full = (0.0, 0.0, float(still.width), float(still.height))
+            work.prep = {"still": still, "mask": mask, "rects": (full, full), "lock_rects": None, "inputs": {}}
+        else:
+            rects = keyframe_rects(still.size, move, focus, with_model, reverse)
+            work.prep = {"still": still, "mask": mask, "rects": rects, "lock_rects": rects, "inputs": {}}
+    p = work.size()
+    size = (p["width"], p["height"])
+    if size not in work.prep["inputs"]:
+        tag = uuid.uuid4().hex[:6]
+        work.prep["inputs"][size] = [upload_input(work.prep["still"].crop(tuple(int(round(v)) for v in r)).resize(
+            size, Image.Resampling.LANCZOS), f"{work.key}_{tag}_{n}.png")
+            for n, r in (("first", work.prep["rects"][0]), ("last", work.prep["rects"][1]))]
+    return work.prep["inputs"][size]
+
+
+def stage_gpu0(work, progress):
+    """GPU 0: the high-noise pass (split), or the whole clip on one ComfyUI."""
+    p = work.size()
+    names = prepare_clip(work)
+    fixed = int(work.spec.get("seed", -1))
+    work.seed = fixed if work.attempt == 0 and fixed >= 0 else random.randrange(2**63 - 1)
+    work.take_started = time.time()
+    work.prefix = f"reel/{JOB['jobId'][:8]}_{work.key}_{uuid.uuid4().hex[:6]}_t{work.attempt}"
+    take = " · new take" if work.attempt else ""
+    if SPLIT:
+        work.handoff = os.path.join(HANDOFF_DIR, f"{work.key}_{uuid.uuid4().hex[:8]}.pt")
+        graph, _ = make_workflow(work.spec["prompt"], work.seed, p, names[0], names[1], None, "a", work.handoff,
+                                 negative=work.spec.get("negative"))
+        run_prompt(ENGINES["a"], graph,
+                   lambda v, m: progress(work, 0.05 + 0.35 * v / m, f"Rendering {work.label}{take} · motion pass "
+                                                                     f"step {v}/{m}"),
+                   lambda: progress(work, 0.05, f"Rendering {work.label}{take} · still working", True))
+        if not os.path.exists(work.handoff):
+            raise RuntimeError("the high-noise pass saved no hand-off")
+        return
+    graph, work.fps = make_workflow(work.spec["prompt"], work.seed, p, names[0], names[1], work.prefix,
+                                    negative=work.spec.get("negative"))
+    try:
+        item = run_prompt(ENGINES["a"], graph,
+                          lambda v, m: progress(work, 0.05 + 0.7 * v / m, f"Rendering {work.label}{take} · step "
+                                                                            f"{v}/{m}"),
+                          lambda: progress(work, 0.05, f"Rendering {work.label}{take} · still working", True))
+        work.files = frame_files(item)
+    except Exception:
+        remove_prefix(work.prefix)
+        raise
+
+
+def stage_gpu1(work, progress):
+    """GPU 1 (split): the low-noise pass from the hand-off, the VAE decode and the RIFE interpolation."""
+    p = work.size()
+    graph, work.fps = make_workflow(None, work.seed, p, None, None, work.prefix, "b", work.handoff)
+    try:
+        item = run_prompt(ENGINES["b"], graph,
+                          lambda v, m: progress(work, 0.4 + 0.35 * v / m, f"Rendering {work.label} · detail pass "
+                                                                           f"step {v}/{m}"),
+                          lambda: progress(work, 0.4, f"Rendering {work.label} · still working", True))
+        work.files = frame_files(item)
+    except Exception:
+        remove_prefix(work.prefix)
+        raise
+    finally:
+        try:
+            os.remove(work.handoff)
+        except OSError:
+            pass
+
+
+def stage_cpu(work, progress):
+    """CPU: frames loaded, the real product locked in, the quality gate. Returns "retake" (the take failed the gate
+    and the session has time for another), or encodes, checks and uploads the better take and returns "done"."""
+    reel = os.path.join(OUT_DIR, f"{work.key}.mp4")
+    if work.key == "logo":
+        progress(work, 0.1, f"Animating the {work.label}", True)
+        render_logo_clip(work.spec, reel)
+        notes, seed = [], None
+    else:
+        frames = load_frames(work.files)
+        work.files = []
+        if len(frames) < 20:
+            raise RuntimeError(f"Only {len(frames)} frames were produced for {work.key}")
+        prep, locked = work.prep, None
+        if prep["mask"] is not None:
+            progress(work, 0.8, f"Locking the real product into {work.label}", True)
+            t_lock = time.time()
+            frames, locked = lock_product(frames, prep["still"], prep["mask"], prep["lock_rects"])
+            print(f"{work.label}: real product locked in {locked}/{len(frames)} frames ({time.time() - t_lock:.0f}s)",
+                  flush=True)
+        score, problems = clip_qa(frames, work.p["frames"], locked)
+        print(f"{work.label} take {work.attempt + 1} (seed {work.seed}): quality score {score:.1f}",
+              "; ".join(problems) or "clean", flush=True)
+        if work.best is None or score < work.best["score"]:
+            work.best = {"score": score, "problems": problems, "frames": frames, "fps": work.fps, "locked": locked,
+                         "seed": work.seed}
+        del frames
+        if score > 0 and work.attempt < QA_RETRIES:
+            left = globals().get("time_left")
+            if left is None or left() >= (time.time() - work.take_started) * 1.2 + 300:
+                progress(work, 0.05, f"Quality check on {work.label}: {', '.join(problems)} — rendering a new take",
+                         True)
+                return "retake"
+            print(f"{work.label}: no session time for another take; keeping the best one", flush=True)
+        best, work.best = work.best, None
+        if best["score"] >= 1000:
+            raise RuntimeError(f"{work.label.capitalize()} failed the quality check: " + ", ".join(best["problems"]))
+        frames, locked = best.pop("frames"), best["locked"]
+        progress(work, 0.9, f"Encoding {work.label}" +
+                 (f" · real product in {locked}/{len(frames)} frames" if locked is not None else ""), True)
+        encode_frames(frames, best["fps"], reel, polish=True)
+        del frames
+        notes, seed = best["problems"], best["seed"]
+    # A mostly dark animated logo compresses to a few hundred KB; a scene clip that small means a broken render.
+    validate_render(reel, OUT_W, OUT_H, OUT_FPS, min_duration=4.5, min_bytes=30_000 if work.key == "logo" else 500_000)
+    upload_clip(reel, work.spec["uploadUrl"])
+    progress(work, 1.0, f"{work.label.capitalize()} ready", True, stage="clipDone",
+             seed=None if seed is None else str(seed), qualityNotes=[n[:120] for n in notes[:8]])
+    return "done"
+
+
+def release_clip(work):
+    """Everything a finished (or failed) clip left behind: keyframe inputs, a hand-off, frames, the held best take."""
+    for names in ((work.prep or {}).get("inputs") or {}).values():
+        for name in names:
+            try:
+                os.remove(os.path.join(COMFY_DIR, "input", name))
+            except OSError:
+                pass
+    if work.handoff:
+        try:
+            os.remove(work.handoff)
+        except OSError:
+            pass
+    for f in work.files:
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+    work.files, work.best, work.prep = [], None, None
 `;
 
-const CELL_RUN = `
+export const CELL_RUN = `
 class SessionHandover(Exception):
     """Raised when the next step would not finish inside this Kaggle session."""
 
@@ -653,58 +1331,127 @@ def handover(progress, what):
 
 
 def run():
+    """The clips as a pipeline over both GPUs and the CPU. Split: GPU 0 runs clip N+1's high-noise pass while GPU 1
+    runs clip N's low-noise pass, decode and RIFE, and the CPU locks the product into, checks and encodes the clip
+    before. Not split: one ComfyUI renders the clips one after another while the CPU finishes the previous one.
+    Every clip gets exactly the graph, steps and checks it would get on its own."""
+    import queue as _queue
+    import itertools
     p = PRESETS.get(JOB.get("preset") or "reel_fast", PRESETS["reel_fast"])
-    clips = JOB.get("clips") or []
-    local, failed, clip_seconds = {}, [], []
-    default_clip = 3600 if JOB.get("preset") == "reel_hq" else 1800  # first-clip guess on T4 x2; premium jobs need more time budget to stay stable
-    for i, clip in enumerate(clips):
-        estimate = (sum(clip_seconds) / len(clip_seconds)) if clip_seconds else default_clip
-        if time_left() < estimate * 1.2 + 300:
-            handover(32 + 56 * i / max(1, len(clips)), f"clip {clip['key']}")
-        started = time.time()
-        try:
-            local[clip["key"]] = render_clip_safely(clip, p, i, len(clips))
-            clip_seconds.append(time.time() - started)
-        except Exception as e:  # keep going: one bad scene must not lose the others
-            traceback.print_exc()
-            failed.append(clip["key"])
-            report.send("clipFailed", 32 + 56 * (i + 1) / max(1, len(clips)), f"{type(e).__name__}: {e}",
-                        force=True, clipKey=clip["key"])
+    specs = JOB.get("clips") or []
+    count = max(1, len(specs))
+    works = [ClipWork(spec, n, count, p) for n, spec in enumerate(specs)]
+    # First-clip guess for Wan 2.2 A14B (LightX2V, one expert per T4) incl. model load, product lock and encode.
+    default_clip = globals().get("DEFAULT_CLIP_SECONDS", {"reel_hq": 2400, "reel_fast": 1500}).get(
+        JOB.get("preset") or "reel_fast", 1500)
+    clip_seconds = []
+    gpu0, gpu1, cpu = _queue.PriorityQueue(), _queue.Queue(), _queue.Queue()
+    order = itertools.count()
+    ended = _queue.Queue()  # one ("done" | "failed" | "deferred", work, error) per clip
+    lock = threading.Lock()
 
-    merge = JOB.get("merge")
-    if merge:
-        if time_left() < 900:
-            handover(90, "merging")
-        report.send("merging", 90, "Merging scenes with transitions", force=True)
-        def fetch(key, url):
-            path = os.path.join(OUT_DIR, f"src_{key}.mp4")
-            r = requests.get(url, timeout=300)
-            r.raise_for_status()
-            open(path, "wb").write(r.content)
-            return path
-        paths = []
-        for key in merge["order"]:
-            if key in local:
-                paths.append(local[key])
-            elif merge["sources"].get(key):
-                paths.append(fetch(key, merge["sources"][key]))
-        transitions = [SCENE_TRANSITIONS[i % len(SCENE_TRANSITIONS)] for i in range(max(0, len(paths) - 1))]
-        logo_key = merge.get("logoKey")
-        if logo_key and logo_key in local:
-            paths.append(local[logo_key]); transitions.append(LOGO_TRANSITION)
-        elif merge.get("logoUrl"):
-            paths.append(fetch("logo", merge["logoUrl"])); transitions.append(LOGO_TRANSITION)
-        if len(paths) >= 2:
-            merged = os.path.join(OUT_DIR, "merged.mp4")
-            merge_clips(paths, merged, transitions)
-            report.send("merging", 96, "Uploading merged video", force=True)
-            with open(merged, "rb") as fh:
-                requests.put(merge["uploadUrl"], data=fh, headers={"Content-Type": "video/mp4"}, timeout=900).raise_for_status()
-            report.send("mergeDone", 98, "Merged video ready", force=True)
+    def overall():
+        return 32 + 56 * sum(w.share for w in works) / count
 
-    if clips and len(failed) == len(clips):
+    def progress(work, share, message, force=False, stage="rendering", **extra):
+        with lock:  # sent under the lock too (it only queues the message), so the bar never steps back
+            work.share = max(work.share, min(1.0, share))
+            report.send(stage, overall(), message, force=force, clipKey=work.key, **extra)
+
+    def retry(work, error, engine_name):
+        """Out of GPU memory: the next smaller size; a crashed ComfyUI: restarted once. Back to GPU 0 either way."""
+        engine = ENGINES.get(engine_name)
+        if is_oom(error) and work.rung < len(SIZE_LADDER) - 1 and engine_alive(engine):
+            free_comfy_memory(engine)
+            old = SIZE_LADDER[work.rung]
+            work.rung += 1
+            progress(work, 0, f"Out of GPU memory at {old[0]}x{old[1]} — retrying {work.label} at "
+                     f"{SIZE_LADDER[work.rung][0]}x{SIZE_LADDER[work.rung][1]}", True)
+        elif engine is not None and engine_name not in work.restarts and is_crash(error, engine):
+            work.restarts.add(engine_name)
+            print(f"ComfyUI ({engine_name}) crashed:", error, open(engine["log"]).read()[-1500:]
+                  if os.path.exists(engine["log"]) else "", flush=True)
+            progress(work, 0, f"The video engine stopped — restarting it and rendering {work.label} again", True)
+            restart_engine(engine_name)
+        else:
+            return False
+        gpu0.put((0, next(order), work))
+        return True
+
+    def worker(source, name, handle):
+        while True:
+            item = source.get()
+            work = item[-1] if isinstance(item, tuple) else item
+            if work is None:
+                return
+            try:
+                handle(work)
+            except BaseException as exc:  # never lose a clip: every one ends with exactly one event
+                if name in ("a", "b"):
+                    try:
+                        if retry(work, exc, name):
+                            continue
+                    except BaseException as again:
+                        exc = again
+                traceback.print_exc()
+                ended.put(("failed", work, exc))
+
+    def on_gpu0(work):
+        if work.started is None:  # a new clip: only when it can still finish inside this Kaggle session
+            estimate = (sum(clip_seconds) / len(clip_seconds)) if clip_seconds else default_clip
+            if time_left() < estimate * 1.2 + 300:
+                ended.put(("deferred", work, None))
+                return
+            work.started = time.time()
+        stage_gpu0(work, progress)
+        (gpu1 if SPLIT else cpu).put(work)
+
+    def on_gpu1(work):
+        stage_gpu1(work, progress)
+        cpu.put(work)
+
+    def on_cpu(work):
+        if work.key == "logo" and work.started is None:
+            work.started = time.time()
+        if stage_cpu(work, progress) == "retake":
+            work.attempt += 1
+            gpu0.put((0, next(order), work))  # a new take goes before the next new clip
+            return
+        if work.key != "logo":  # the CPU-only logo would make the estimate for the next scene far too short
+            clip_seconds.append(time.time() - work.started)
+        ended.put(("done", work, None))
+
+    for work in works:  # the logo clip is animated on the CPU while GPU 0 starts on the first scene
+        if work.key == "logo":
+            cpu.put(work)
+        else:
+            gpu0.put((1, next(order), work))
+    threads = [threading.Thread(target=worker, args=(gpu0, "a", on_gpu0), daemon=True),
+               threading.Thread(target=worker, args=(cpu, "cpu", on_cpu), daemon=True)]
+    if SPLIT:
+        threads.append(threading.Thread(target=worker, args=(gpu1, "b", on_gpu1), daemon=True))
+    for t in threads:
+        t.start()
+
+    failed, deferred = [], []
+    try:
+        for _ in works:
+            outcome, work, error = ended.get()
+            release_clip(work)
+            if outcome == "failed":
+                failed.append(work.key)
+                progress(work, 1.0, f"{type(error).__name__}: {error}", True, stage="clipFailed")
+            elif outcome == "deferred":
+                deferred.append(work.key)
+    finally:
+        gpu0.put((-1, -1, None))
+        gpu1.put(None)
+        cpu.put(None)
+    if deferred:
+        handover(overall(), f"clip {deferred[0]}")
+    if works and len(failed) == len(works):
         raise RuntimeError("Every clip failed: " + ", ".join(failed))
-    report.send("completed", 100, f"Done ({len(clips) - len(failed)}/{len(clips)} clips)", status="completed",
+    report.send("completed", 100, f"Done ({len(works) - len(failed)}/{len(works)} clips)", status="completed",
                 force=True, failedClips=failed)
 
 
@@ -730,29 +1477,35 @@ const IMAGE_MODEL_CHECKS = [
 /** Gated downloads, checked only when a Hugging Face token is configured. */
 const GATED_MODEL_CHECKS = JSON.stringify(IMAGE_MODELS.kleinDiffusion);
 
+/** Every video and voice file must be reachable from the account (setup check). */
+const VIDEO_MODEL_CHECKS = [...VIDEO_MODEL_FILES, ...FAST_VIDEO_MODEL_FILES, ...VOICE_MODEL_FILES]
+  .map((f) => JSON.stringify(f.url) + ',')
+  .join('\n        ');
+
 /** Python string literal holding the job JSON (JSON escapes are valid Python string escapes). */
-function jobLiteral(job: WorkerNotebookJob): string {
+export function jobLiteral(job: WorkerNotebookJob): string {
   return JSON.stringify(JSON.stringify(job));
 }
 
-/** VIDEO_MODEL_FILES as a Python list of (url, path) tuples (JSON strings are valid Python strings). */
-const VIDEO_MODEL_FILES_PY =
-  '[\n' +
-  VIDEO_MODEL_FILES.map((f) => `    (${JSON.stringify(f.url)},\n     ${JSON.stringify(f.path)}),`).join('\n') +
-  '\n]';
+/** Model files as a Python list of (url, path) tuples (JSON strings are valid Python strings). */
+export function modelFilesPy(files: { url: string; path: string }[]): string {
+  return '[\n' + files.map((f) => `    (${JSON.stringify(f.url)},\n     ${JSON.stringify(f.path)}),`).join('\n') + '\n]';
+}
+
+const VIDEO_MODEL_FILES_PY = modelFilesPy(VIDEO_MODEL_FILES);
 
 export function buildWorkerNotebook(job: WorkerNotebookJob): Record<string, unknown> {
   // Function replacement: a `$` in the job (titles, presigned URLs) must not be read as a replacement pattern.
   const reporter = CELL_REPORTER.replace('__JOB_JSON__', () => jobLiteral(job));
+  const render = CELL_RENDER_AND_MERGE.replace('__VIDEO_MODEL_NAMES__', () => JSON.stringify(VIDEO_MODEL_NAMES));
   const cells =
     job.kind === 'setup'
       ? [
           code(reporter),
           code(
-            CELL_SETUP_CHECK.replace('__IMAGE_MODEL_CHECKS__', () => IMAGE_MODEL_CHECKS).replace(
-              '__GATED_MODEL_CHECKS__',
-              () => GATED_MODEL_CHECKS,
-            ),
+            CELL_SETUP_CHECK.replace('__VIDEO_MODEL_CHECKS__', () => VIDEO_MODEL_CHECKS)
+              .replace('__IMAGE_MODEL_CHECKS__', () => IMAGE_MODEL_CHECKS)
+              .replace('__GATED_MODEL_CHECKS__', () => GATED_MODEL_CHECKS),
           ),
           code(CELL_MODEL_CACHE),
         ]
@@ -762,11 +1515,12 @@ export function buildWorkerNotebook(job: WorkerNotebookJob): Record<string, unkn
             code(CELL_INSTALL),
             code(CELL_MODELS.replace('__VIDEO_MODEL_FILES__', () => VIDEO_MODEL_FILES_PY)),
             code(CELL_COMFY),
-            code(CELL_RENDER_AND_MERGE),
+            code(PRODUCT_RESTORE_PY),
+            code(render),
             code(CELL_RUN),
           ]
-        : // Merge-only job (the clips were rendered in parallel by other jobs): no video model, no ComfyUI.
-          [code(reporter), code(CELL_INSTALL), code(CELL_RENDER_AND_MERGE), code(CELL_RUN)];
+        : // A job without clips (left over from the retired merge step): nothing to render, it just completes.
+          [code(reporter), code(CELL_INSTALL), code(render), code(CELL_RUN)];
   return {
     nbformat: 4,
     nbformat_minor: 5,

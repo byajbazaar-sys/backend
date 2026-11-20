@@ -17,6 +17,10 @@ import {
   MarketingRenderService,
   MarketingPhotoshootController,
   MarketingPhotoshootService,
+  MarketingVoiceoverController,
+  MarketingVoiceoverService,
+  MARKETING_VOICEOVERS_REPOSITORY,
+  MARKETING_TEXT_WRITER,
   MarketingQueueConsumer,
   IKaggleCredentialsRepository,
   KAGGLE_CREDENTIALS_REPOSITORY,
@@ -51,6 +55,7 @@ import {
   ByajBazaarActivityLogAdapter,
   ByajBazaarCatalogAdapter,
   ByajBazaarNotifierAdapter,
+  ByajBazaarTextWriterAdapter,
   LambdaMarketingWorkerInvoker,
   loadMarketingSettings,
   MarketingSecretCipher,
@@ -64,6 +69,7 @@ import {
   MarketingInstagramRepository,
   MarketingPhotoshootShotsRepository,
   MarketingPhotoshootsRepository,
+  MarketingVoiceoversRepository,
   KaggleAccountsRepository,
   KaggleCredentialsRepository,
   MarketingBrandsRepository,
@@ -85,7 +91,7 @@ import { MarketingConfig } from './marketing.config';
  *
  * Flow: input image → [queue: plan] 5 prompts (cheap text model) + 5 scene images (image-to-image) + brand logo
  * → [queue: dispatch] Kaggle notebook renders 5 × 5 s clips (+ logo clip once) and merges them, ending on the logo
- * → progress over the AWS WebSocket → clips + merged film in the marketing bucket.
+ * → progress over the AWS WebSocket → scene clips in the marketing bucket.
  */
 @Module({
   controllers: [
@@ -94,6 +100,7 @@ import { MarketingConfig } from './marketing.config';
     MarketingInstagramCallbackController,
     MarketingInstagramWebhookController,
     MarketingPhotoshootController,
+    MarketingVoiceoverController,
     MarketingController,
     MarketingWorkerEventsController,
     MarketingQueueController,
@@ -130,6 +137,7 @@ import { MarketingConfig } from './marketing.config';
     },
     { provide: MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY, useClass: MarketingPhotoshootShotsRepository },
     { provide: MARKETING_BRANDS_REPOSITORY, useClass: MarketingBrandsRepository },
+    { provide: MARKETING_VOICEOVERS_REPOSITORY, useClass: MarketingVoiceoversRepository },
     { provide: KAGGLE_ACCOUNTS_REPOSITORY, useClass: KaggleAccountsRepository },
     { provide: MARKETING_SETTINGS_REPOSITORY, useClass: MarketingSettingsRepository },
     MarketingSecretCipher,
@@ -152,12 +160,14 @@ import { MarketingConfig } from './marketing.config';
     { provide: KAGGLE_WORKER_POOL, useClass: KaggleWorkerPool },
     { provide: MARKETING_CATALOG, useClass: ByajBazaarCatalogAdapter },
     { provide: MARKETING_NOTIFIER, useClass: ByajBazaarNotifierAdapter },
+    { provide: MARKETING_TEXT_WRITER, useClass: ByajBazaarTextWriterAdapter },
     MarketingEvents,
     MarketingScheduler,
     KaggleHealthService,
     MarketingRenderService,
     MarketingPlannerService,
     MarketingPhotoshootService,
+    MarketingVoiceoverService,
     MarketingInstagramService,
     MarketingPublishingService,
     MarketingCampaignsService,

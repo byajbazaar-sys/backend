@@ -5,7 +5,7 @@ New to the project? Read these in order.
 | # | Doc | Read it to learn |
 | --- | --- | --- |
 | 1 | [CODE_STRUCTURE_CONVENTIONS.md](CODE_STRUCTURE_CONVENTIONS.md) | How the backend is organised (layers, folders, imports), the rules every change follows, and a step-by-step "add a feature" walkthrough. |
-| 2 | [MARKETING_KAGGLE_PIPELINE.md](MARKETING_KAGGLE_PIPELINE.md) | How a product photo becomes AI campaign images, photoshoots, logos and an Instagram reel on free Kaggle GPUs: image modes, the notebooks, warm workers, the model cache, settings, deploy and troubleshooting. |
+| 2 | [MARKETING_KAGGLE_PIPELINE.md](MARKETING_KAGGLE_PIPELINE.md) | How a product photo becomes AI campaign images, photoshoots, logos and Instagram reels — and text becomes voiceovers (§6a) — on free Kaggle GPUs: image modes, the notebooks, warm workers, the model cache, settings, deploy and troubleshooting. |
 | 3 | [MARKETING_MEDIA_CDN.md](MARKETING_MEDIA_CDN.md) | How marketing images and videos are served from `media.byajbazaar.com` (Cloudflare Worker in front of the private B2 bucket), and how to set it up. |
 | 4 | [CLOUDFLARE_AI_ACCOUNTS.md](CLOUDFLARE_AI_ACCOUNTS.md) | The Cloudflare Workers AI accounts behind try-on and inventory background removal (FLUX.2 [klein] 9B): adding several in admin, rotation and cooldowns, and their logs in the logs database. |
 
@@ -31,7 +31,7 @@ Elsewhere in the repo:
         │                                            └──► WebSocket API (live progress to browsers)
         │ dispatch
         ▼
- Kaggle notebooks (T4 × 2 GPUs) ── marketing AI: Qwen3-VL, BiRefNet, FLUX.2 [klein], Wan 2.2
+ Kaggle notebooks (T4 × 2 GPUs) ── marketing AI: Qwen3-VL, BiRefNet_HR, FLUX.2 [klein] 9B, Wan 2.2 A14B, ChatterBox
 ```
 
 ## Words you will see

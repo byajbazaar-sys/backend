@@ -66,7 +66,7 @@ export class MarketingPlannerService {
         await this.render.queueCampaignRender(campaign.id);
         return;
       }
-      await this.update(campaign, 8, 'Queueing Qwen3-VL image analysis and SDXL scene generation');
+      await this.update(campaign, 8, 'Queueing the product analysis and scene images');
       const job = await this.render.queueCampaignImages(campaign.id, pending, true);
       if (!job) throw new Error('The campaign images could not be queued');
     } catch (err) {

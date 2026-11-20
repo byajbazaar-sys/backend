@@ -17,12 +17,15 @@ export function notebookOf(kind: ERenderJobKind | string): KaggleNotebook {
   const value = String(kind);
   if (value === String(ERenderJobKind.Images)) return 'image';
   if (value === String(ERenderJobKind.Setup)) return 'setup';
+  if (value === String(ERenderJobKind.Voice)) return 'voice';
   return 'video';
 }
 
 /** Render job kinds each work notebook runs. */
 export function kindsOf(notebook: KaggleWorkNotebook): ERenderJobKind[] {
-  return notebook === 'image' ? [ERenderJobKind.Images] : [ERenderJobKind.Campaign, ERenderJobKind.Logo];
+  if (notebook === 'image') return [ERenderJobKind.Images];
+  if (notebook === 'voice') return [ERenderJobKind.Voice];
+  return [ERenderJobKind.Campaign, ERenderJobKind.Logo];
 }
 
 /**
@@ -94,7 +97,10 @@ export function kaggleJobStatus(job: RenderJob): KaggleJobStatusView {
  * One notebook status for a batch of jobs queued together (one per scene / shot / clip, running in parallel on
  * several accounts): the most active state, the average progress, and "2/4 done · <what the busiest one does>".
  */
-export function kaggleBatchStatus(jobs: RenderJob[]): KaggleJobStatusView | undefined {
+export function kaggleBatchStatus(all: RenderJob[]): KaggleJobStatusView | undefined {
+  // A job rendered inside another one (payload.mergedInto) is not separate work: that job's status covers it.
+  const live = all.filter((job) => !job.payload?.mergedInto);
+  const jobs = live.length ? live : all;
   if (!jobs.length) return undefined;
   if (jobs.length === 1) return kaggleJobStatus(jobs[0]);
   const views = jobs.map(kaggleJobStatus);
@@ -154,9 +160,8 @@ export function jobTarget(job: RenderJob): string {
   if (job.kind === ERenderJobKind.Setup) return 'Account setup check';
   if (job.kind === ERenderJobKind.Worker) return 'Warm GPU worker';
   if (job.kind === ERenderJobKind.Logo) return 'Logo clip';
+  if (job.kind === ERenderJobKind.Voice) return 'Voiceover';
   const clips = job.payload?.clips ?? [];
-  if (!clips.length && job.payload?.merge) return 'Campaign video · merge';
-  if (clips.length === 1) return `Campaign video · ${clips[0].key} clip${job.payload?.merge ? ' + merge' : ''}`;
-  const merge = job.payload?.merge ? ' + merge' : '';
-  return `Campaign video${clips.length ? ` (${clips.length} clips${merge})` : ''}`;
+  if (clips.length === 1) return `Campaign video · ${clips[0].key} clip`;
+  return `Campaign video${clips.length ? ` (${clips.length} clips)` : ''}`;
 }

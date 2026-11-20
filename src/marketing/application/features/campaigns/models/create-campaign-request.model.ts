@@ -5,6 +5,7 @@ import { IsIn, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'c
 import {
   MARKETING_IMAGE_MODES,
   MARKETING_QUALITIES,
+  MARKETING_VIDEO_ENGINES,
   MARKETING_STYLES,
   MarketingImageInputModel,
 } from '../../../shared';
@@ -45,4 +46,13 @@ export class CreateCampaignRequestModel {
   @IsOptional()
   @IsIn(MARKETING_IMAGE_MODES)
   imageMode?: string;
+
+  @ApiPropertyOptional({
+    enum: MARKETING_VIDEO_ENGINES,
+    default: 'detailed',
+    description: 'detailed = slower video, the most faithful jewellery; fast = several times quicker video render',
+  })
+  @IsOptional()
+  @IsIn(MARKETING_VIDEO_ENGINES)
+  videoEngine?: string;
 }

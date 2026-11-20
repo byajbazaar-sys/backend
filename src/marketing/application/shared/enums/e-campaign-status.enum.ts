@@ -1,4 +1,4 @@
-/** Campaign = one input image → 5 scenes (image + 5 s video each) → merged film ending on the brand logo. */
+/** Campaign = one input image → 5 scenes (image + 5 s video each; every clip is a reel). */
 export enum ECampaignStatus {
   /** Writing prompts and generating the 5 scene images (Kaggle). */
   Planning = 'PLANNING',

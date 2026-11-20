@@ -14,7 +14,6 @@ import {
   RenderJob,
   WorkerSessionPayload,
   BUSY_RENDER_STATUSES,
-  CAMPAIGN_SCENES,
   EAssetStatus,
   ECampaignStatus,
   EKaggleAccountStatus,
@@ -51,6 +50,11 @@ import {
   MarketingScheduler,
   LOGO_CLIP_KEY,
   MarketingKeys,
+  productMaskKey,
+  EVoiceoverStatus,
+  IMarketingVoiceoversRepository,
+  MARKETING_VOICEOVERS_REPOSITORY,
+  VOICE_LANGUAGES,
   sceneClipKey,
   sceneIndexFromClipKey,
 } from '../../../shared';
@@ -65,8 +69,11 @@ import {
   STARTING_MAX_MS,
   buildImageWorkerNotebook,
   ImageNotebookJob,
+  buildFastReelNotebook,
   buildWorkerNotebook,
   buildWorkerSessionNotebook,
+  buildVoiceWorkerNotebook,
+  VoiceNotebookJob,
   modelCacheContents,
   modelsDatasetSlug,
   NotebookClip,
@@ -113,6 +120,13 @@ const SESSION_MIN_LEFT_SECONDS = 45 * 60;
 const EXTRA_IDLE_MS = 5 * 60 * 1000;
 /** Idle warm sessions poll this often. */
 const SESSION_POLL_SECONDS = 10;
+/**
+ * A warm session pipelines several scenes of one campaign over its two GPUs (images: GPU 0 paints the next while GPU
+ * 1 judges; video: GPU 0 runs the next clip's high-noise pass while GPU 1 finishes the current one). Waiting
+ * siblings are taken into the job it starts — up to these totals, and never the ones another free session can take.
+ */
+const PIPELINE_MAX_IMAGES = 4;
+const PIPELINE_MAX_CLIPS = 3;
 /** An idle warm session that stopped polling this long ago is gone. */
 const SESSION_LOST_MS = 5 * 60 * 1000;
 /** A job a session finished is checked for its final event after this long. */
@@ -154,6 +168,9 @@ export function pickDispatchCandidate(candidates: DispatchCandidate[]): Dispatch
 
 /** Photoshoot rows store statuses as plain strings. */
 const isStatus = (value: string, status: EAssetStatus): boolean => value === String(status);
+
+/** Metals the image notebook can lock (a photoshoot's 'unknown' / 'diamond' leave it to the analyst and the photo). */
+const KNOWN_METALS = new Set(['gold', 'silver', 'rose_gold', 'platinum']);
 
 /** Scene images are rendered at the reel's 9:16 shape (upscaled to 1080×1920 by the video notebook). */
 const SCENE_IMAGE_SIZE = { width: 720, height: 1280 };
@@ -198,6 +215,7 @@ export class MarketingRenderService {
     private readonly events: MarketingEvents,
     @Inject(MARKETING_SETTINGS_REPOSITORY) private readonly settings: IMarketingSettingsRepository,
     @Inject(MARKETING_ACTIVITY_LOG) private readonly activity: IMarketingActivityLog,
+    @Inject(MARKETING_VOICEOVERS_REPOSITORY) private readonly voiceovers: IMarketingVoiceoversRepository,
     @InjectPinoLogger(MarketingRenderService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -331,6 +349,7 @@ export class MarketingRenderService {
             title: shoot.title,
             style: `${shoot.setting}; ${shoot.model}; ${shoot.outfit}`,
             photoshootId: shoot.id,
+            metal: KNOWN_METALS.has(shoot.piece?.metal ?? '') ? shoot.piece.metal : undefined,
             targets: [target],
           },
         },
@@ -346,7 +365,7 @@ export class MarketingRenderService {
     return job;
   }
 
-  /** Generates the business logo with SDXL in the Kaggle image notebook. */
+  /** Generates the business logo backdrop with FLUX.2 [klein] in the Kaggle image notebook (the name is typeset). */
   async queueLogoImage(userId: string, businessName: string, renderVideo = false): Promise<RenderJob | null> {
     const open = await this.jobs.findOpenFor({ userId, kind: ERenderJobKind.Images });
     if (open?.payload.imageGeneration?.type === 'logo') {
@@ -401,8 +420,8 @@ export class MarketingRenderService {
   /**
    * Queues the video render for a campaign: the given scenes (default all with a ready image) and the brand logo clip
    * when the brand has no logo video yet — **one CAMPAIGN job per clip** (one batch), rendered in parallel on free
-   * accounts. When the last clip job of the campaign finishes, a merge-only job joins the clips (`finishVideoJob`).
-   * Clips already being rendered are skipped.
+   * accounts. Each scene's clip is the deliverable (there is no merged film). Clips already being rendered are skipped.
+   * Called per scene as soon as its image is ready, so clips render while the other images are still painting.
    */
   async queueCampaignRender(campaignId: string, sceneIndexes?: number[]): Promise<RenderJob | null> {
     const campaign = await this.campaigns.findById(campaignId);
@@ -417,7 +436,7 @@ export class MarketingRenderService {
       key: sceneClipKey(s.index),
       sceneId: s.id,
       imageKey: s.imageKey,
-      prompt: buildSceneVideoPrompt(s.motionPrompt),
+      prompt: buildSceneVideoPrompt(s.motionPrompt, s.imagePrompt),
       outputKey: MarketingKeys.sceneVideo(campaign.userId, campaign.id, s.index),
     }));
 
@@ -436,11 +455,6 @@ export class MarketingRenderService {
         outputKey: MarketingKeys.logoVideo(campaign.userId),
       });
     }
-    const merge = {
-      sceneKeys: Array.from({ length: CAMPAIGN_SCENES }, (_, i) => sceneClipKey(i)),
-      outputKey: MarketingKeys.merged(campaign.userId, campaign.id),
-    };
-
     const open = await this.jobs.listOpenFor({ campaignId, kind: ERenderJobKind.Campaign });
     const busy = new Set(open.flatMap((job) => job.payload.clips.map((c) => c.key)));
     const fresh = clips.filter((c) => !busy.has(c.key));
@@ -454,7 +468,7 @@ export class MarketingRenderService {
         userId: campaign.userId,
         campaignId,
         status: ERenderJobStatus.Waiting,
-        payload: { clips: [clip], merge: null, mergeAfter: merge, batchId },
+        payload: { clips: [clip], batchId, videoEngine: campaign.videoEngine === 'fast' ? 'fast' : 'detailed' },
         progress: 0,
         attempts: 0,
       });
@@ -470,7 +484,38 @@ export class MarketingRenderService {
     if (needsLogo && freshKeys.has(LOGO_CLIP_KEY)) {
       await this.brands.upsert({ userId: campaign.userId, logoVideoStatus: EAssetStatus.Generating });
     }
-    await this.setCampaign(campaign, { status: ECampaignStatus.WaitingGpu, stageMessage: 'Waiting for a free GPU' });
+    // While other scene images are still painting, the campaign keeps showing their progress.
+    if (!(await this.jobs.listOpenFor({ campaignId, kind: ERenderJobKind.Images })).length) {
+      await this.setCampaign(campaign, { status: ECampaignStatus.WaitingGpu, stageMessage: 'Waiting for a free GPU' });
+    }
+    await this.scheduler.schedule({ step: 'dispatch' });
+    return job;
+  }
+
+  /**
+   * Queues a voiceover for the voice notebook (ChatterBox Multilingual). It waits for a free warm worker like every
+   * other job; small enough to run beside a session's loaded image models instead of replacing them.
+   */
+  async queueVoiceover(voiceoverId: string): Promise<RenderJob | null> {
+    const voiceover = await this.voiceovers.findById(voiceoverId);
+    if (!voiceover) return null;
+    const open = (await this.jobs.listOpenFor({ userId: voiceover.userId, kind: ERenderJobKind.Voice })).find(
+      (job) => job.payload.voice?.voiceoverId === voiceoverId,
+    );
+    if (open) return open;
+    const job = await this.jobs.create({
+      kind: ERenderJobKind.Voice,
+      userId: voiceover.userId,
+      status: ERenderJobStatus.Waiting,
+      payload: {
+        clips: [],
+        voice: { voiceoverId, outputKey: MarketingKeys.voiceAudio(voiceover.userId, voiceoverId) },
+      },
+      progress: 0,
+      stageMessage: 'Waiting for a free GPU',
+      attempts: 0,
+    });
+    await this.events.voiceover(voiceover.userId, voiceoverId, false, kaggleJobStatus(job));
     await this.scheduler.schedule({ step: 'dispatch' });
     return job;
   }
@@ -493,7 +538,6 @@ export class MarketingRenderService {
             outputKey: MarketingKeys.logoVideo(userId),
           },
         ],
-        merge: null,
       },
       progress: 0,
       attempts: 0,
@@ -512,6 +556,7 @@ export class MarketingRenderService {
    * control); a job an account fails to start goes to another account in the same round.
    */
   async dispatch(): Promise<void> {
+    await this.wakeIdleSessions(); // first: an idle warm session takes the new job within a second
     await this.failStaleJobs();
     await this.syncAccounts();
 
@@ -626,6 +671,34 @@ export class MarketingRenderService {
     }
   }
 
+  /**
+   * Idle warm sessions sleep on their WebSocket between polls: tell them work is waiting so they ask for it now
+   * instead of at their next poll. A connection that is gone is forgotten (the session registers a new one).
+   */
+  private async wakeIdleSessions(): Promise<void> {
+    if (!(await this.jobs.countWaiting())) return;
+    const idle = (await this.jobs.listSessions()).filter(
+      (s) =>
+        s.status === ERenderJobStatus.Running && s.payload.session?.state === 'idle' && s.payload.session?.connectionId,
+    );
+    await Promise.all(
+      idle.map(async (s) => {
+        const delivered = await this.notifier.notifyConnection(s.payload.session.connectionId, {
+          type: 'marketingWake',
+        });
+        if (!delivered) {
+          const fresh = (await this.jobs.findById(s.id)) ?? s;
+          await this.jobs.update(s.id, {
+            payload: {
+              ...fresh.payload,
+              session: { ...(fresh.payload.session ?? { state: 'idle' }), connectionId: null },
+            },
+          });
+        }
+      }),
+    );
+  }
+
   /** Pushes a warm worker session notebook (with the account's model dataset mounted when it has one). */
   private async startSession(workerId: string, slot: number): Promise<boolean> {
     const session = await this.jobs.create({
@@ -633,7 +706,7 @@ export class MarketingRenderService {
       workerId,
       slot,
       status: ERenderJobStatus.Starting,
-      payload: { clips: [], merge: null, session: { state: 'starting', jobsRun: 0 } },
+      payload: { clips: [], session: { state: 'starting', jobsRun: 0 } },
       progress: 0,
       stageMessage: 'Warm GPU worker booting',
       attempts: 0,
@@ -645,6 +718,7 @@ export class MarketingRenderService {
         jobId: session.id,
         token: signMarketingWorkerToken(session.id),
         apiBaseUrl: this.config.publicApiBaseUrl,
+        wsUrl: this.config.websocketUrl,
         sessionSeconds: Math.max(3600, this.config.kaggleSessionHours * 3600 - SESSION_MARGIN_SECONDS),
       });
       const pushed = await this.pool.pushNotebook(
@@ -764,8 +838,8 @@ export class MarketingRenderService {
     }
     if (!(await this.gpuQuota(account)).usable) return stop('the account is out of GPU hours');
 
-    const job = await this.jobs.claimNextForSession(session);
-    if (job) return this.handToSession(session, base, job, remaining);
+    const job = await this.jobs.claimNextForSession(session, base.pipeline);
+    if (job) return this.handToSession(session, base, await this.absorbSiblings(session, job), remaining);
 
     const now = Date.now();
     const idleSince = state.state === 'idle' && state.idleSince ? state.idleSince : new Date(now).toISOString();
@@ -787,7 +861,82 @@ export class MarketingRenderService {
       stageMessage: `Warm · idle ${Math.floor(idleMs / 60_000)} min`,
       payload: { ...session.payload, session: { ...base, state: 'idle', idleSince } },
     });
-    return { pollSeconds: SESSION_POLL_SECONDS };
+    return { pollSeconds: SESSION_POLL_SECONDS, listening: !!state.connectionId };
+  }
+
+  /**
+   * Takes waiting jobs of the same batch (image shots of one photo) or campaign (scene clips) into the job a session is
+   * starting, so the session pipelines them over its two GPUs. Jobs that the other idle or booting sessions would take
+   * are left for them — real parallel accounts beat a pipeline. Returns the job with the extra clips / images.
+   */
+  private async absorbSiblings(session: RenderJob, job: RenderJob): Promise<RenderJob> {
+    const generation = job.payload.imageGeneration;
+    const isImages = job.kind === ERenderJobKind.Images && !!generation && generation.type !== 'logo';
+    const isVideo = job.kind === ERenderJobKind.Campaign && !!job.campaignId;
+    if (!isImages && !isVideo) return job;
+    const match = isImages
+      ? { kind: job.kind, batchId: job.payload.batchId }
+      : {
+          kind: job.kind,
+          campaignId: job.campaignId ?? undefined,
+          videoEngine: job.payload.videoEngine ?? 'detailed',
+        };
+    if (isImages && !match.batchId) return job;
+    const done = new Set(job.payload.done ?? []);
+    const pending = isImages
+      ? unfinishedImageIndexes(job).size
+      : job.payload.clips.filter((c) => !done.has(c.key)).length;
+    const room = (isImages ? PIPELINE_MAX_IMAGES : PIPELINE_MAX_CLIPS) - pending;
+    if (room <= 0) return job;
+    const waiting = (await this.jobs.listOpenFor({ campaignId: job.campaignId ?? undefined, kind: job.kind })).filter(
+      (other) =>
+        other.id !== job.id &&
+        other.status === ERenderJobStatus.Waiting &&
+        (isImages
+          ? other.payload.batchId === match.batchId
+          : other.campaignId === job.campaignId &&
+            (other.payload.videoEngine ?? 'detailed') === (job.payload.videoEngine ?? 'detailed')),
+    );
+    const others = (await this.jobs.listSessions()).filter(
+      (s) => s.id !== session.id && (s.status === ERenderJobStatus.Starting || s.payload.session?.state !== 'busy'),
+    ).length;
+    const take = Math.min(room, waiting.length - others);
+    if (take <= 0) return job;
+    const taken = await this.jobs.absorbWaiting(job, match, take);
+    if (!taken.length) return job;
+    const payload = { ...job.payload, batchId: job.payload.batchId ?? job.id };
+    if (isImages && generation) {
+      const targets = [...generation.targets];
+      for (const other of taken) {
+        const otherDone = new Set(other.payload.imageGeneration?.doneImages ?? []);
+        for (const target of other.payload.imageGeneration?.targets ?? []) {
+          if (!otherDone.has(target.index) && !targets.some((t) => t.index === target.index)) targets.push(target);
+        }
+      }
+      payload.imageGeneration = { ...generation, targets };
+    } else {
+      const clips = [...job.payload.clips];
+      for (const other of taken) {
+        const otherDone = new Set(other.payload.done ?? []);
+        for (const clip of other.payload.clips) {
+          if (!otherDone.has(clip.key) && !clips.some((c) => c.key === clip.key)) clips.push(clip);
+        }
+      }
+      payload.clips = clips;
+    }
+    const updated = await this.jobs.update(job.id, { payload }).catch((err: unknown) => {
+      this.logger.error({ err, jobId: job.id }, 'Could not save the pipelined job; its siblings go back in the queue');
+      return null;
+    });
+    if (!updated) {
+      await this.jobs.releaseAbsorbed(taken);
+      return job;
+    }
+    this.logger.info(
+      { jobId: job.id, session: session.id, absorbed: taken.map((t) => t.id), kind: job.kind },
+      'Pipelining waiting siblings in one warm session',
+    );
+    return { ...job, payload };
   }
 
   /** The job a session ran is still marked busy although the session moved on: it crashed (or never reported). */
@@ -810,7 +959,9 @@ export class MarketingRenderService {
       notebook =
         job.kind === ERenderJobKind.Images
           ? buildImageWorkerNotebook(await this.imageNotebookJob(job))
-          : buildWorkerNotebook(await this.notebookJob(job, Math.max(1800, remaining - SESSION_MARGIN_SECONDS)));
+          : job.kind === ERenderJobKind.Voice
+            ? buildVoiceWorkerNotebook(await this.voiceNotebookJob(job))
+            : this.videoNotebook(job, await this.notebookJob(job, Math.max(1800, remaining - SESSION_MARGIN_SECONDS)));
     } catch (err) {
       await this.failJob(job, `Could not start the GPU worker: ${(err as Error).message}`);
       return { pollSeconds: 1 };
@@ -839,7 +990,18 @@ export class MarketingRenderService {
       .filter((cell) => cell.cell_type === 'code')
       .map((cell) => cell.source);
     // A merge-only job needs no GPU model: the worker keeps whatever it has loaded.
-    const pipeline = job.kind === ERenderJobKind.Images ? 'image' : job.payload.clips.length ? 'video' : 'cpu';
+    // The logo clip is animated on the CPU: a logo-only job must not make a warm session drop its loaded models.
+    const gpuClips = job.payload.clips.filter((c) => c.key !== LOGO_CLIP_KEY);
+    const pipeline =
+      job.kind === ERenderJobKind.Images
+        ? 'image'
+        : job.kind === ERenderJobKind.Voice
+          ? 'voice'
+          : gpuClips.length
+            ? job.payload.videoEngine === 'fast'
+              ? 'video-fast'
+              : 'video'
+            : 'cpu';
     return { job: { id: job.id, kind: job.kind, pipeline, cells } };
   }
 
@@ -895,7 +1057,7 @@ export class MarketingRenderService {
           kind: ERenderJobKind.Setup,
           workerId: worker.id,
           status: ERenderJobStatus.Waiting,
-          payload: { clips: [], merge: null },
+          payload: { clips: [] },
           progress: 0,
           attempts: 0,
         });
@@ -939,7 +1101,7 @@ export class MarketingRenderService {
         kind: ERenderJobKind.Setup,
         workerId: account.username,
         status: ERenderJobStatus.Waiting,
-        payload: { clips: [], merge: null, cacheOnly: true },
+        payload: { clips: [], cacheOnly: true },
         progress: 0,
         attempts: 0,
       });
@@ -1073,7 +1235,9 @@ export class MarketingRenderService {
       notebook =
         job.kind === ERenderJobKind.Images
           ? buildImageWorkerNotebook(await this.imageNotebookJob(job))
-          : buildWorkerNotebook(await this.notebookJob(job));
+          : job.kind === ERenderJobKind.Voice
+            ? buildVoiceWorkerNotebook(await this.voiceNotebookJob(job))
+            : this.videoNotebook(job, await this.notebookJob(job));
     } catch (err) {
       // Our side (configuration, storage): no other account would do better.
       await this.failJob(job, `Could not start the GPU worker: ${(err as Error).message}`);
@@ -1084,7 +1248,9 @@ export class MarketingRenderService {
         ? { name: 'byajbazaar-account-setup', title: 'ByajBazaar Account Setup' }
         : job.kind === ERenderJobKind.Images
           ? { name: `byajbazaar-images-${slot}`, title: `ByajBazaar Images ${slot}` }
-          : { name: `byajbazaar-render-${slot}`, title: `ByajBazaar Render ${slot}` };
+          : job.kind === ERenderJobKind.Voice
+            ? { name: `byajbazaar-voice-${slot}`, title: `ByajBazaar Voice ${slot}` }
+            : { name: `byajbazaar-render-${slot}`, title: `ByajBazaar Render ${slot}` };
     let pushed: { ref: string };
     try {
       pushed = await this.pool.pushNotebook(workerId, kernel, notebook);
@@ -1188,13 +1354,14 @@ export class MarketingRenderService {
     if (job.kind === ERenderJobKind.Images) throw new Error('Image jobs require the image notebook');
 
     const campaign = job.campaignId ? await this.campaigns.findById(job.campaignId) : null;
-    // On a continuation, clips finished by an earlier session are skipped (they are merged from the bucket).
+    // On a continuation, clips finished by an earlier session are skipped.
     const done = new Set(job.payload.done ?? []);
     const pending = job.payload.clips.filter((c) => !done.has(c.key));
     const clips: NotebookClip[] = await Promise.all(
       pending.map(async (c) => ({
         key: c.key,
         imageUrl: await this.storage.getUrlAsync(c.imageKey),
+        maskUrl: c.key === LOGO_CLIP_KEY ? undefined : await this.productMaskUrl(c.imageKey),
         prompt: c.prompt,
         negative: VIDEO_NEGATIVE,
         seed: -1,
@@ -1202,39 +1369,21 @@ export class MarketingRenderService {
       })),
     );
 
-    let merge: WorkerNotebookJob['merge'] = null;
-    if (job.payload.merge && !job.payload.mergeDone && campaign) {
-      const rendering = new Set(pending.map((c) => c.key));
-      const sources: Record<string, string> = {};
-      for (const s of await this.scenes.listForCampaign(campaign.id)) {
-        const key = sceneClipKey(s.index);
-        if (!rendering.has(key) && s.videoStatus === EAssetStatus.Ready && s.videoKey) {
-          sources[key] = await this.storage.getUrlAsync(s.videoKey);
-        }
-      }
-      const brand = await this.brands.find(campaign.userId);
-      const logoUrl =
-        !rendering.has(LOGO_CLIP_KEY) && brand?.logoVideoStatus === EAssetStatus.Ready && brand.logoVideoKey
-          ? await this.storage.getUrlAsync(brand.logoVideoKey)
-          : undefined;
-      merge = {
-        order: job.payload.merge.sceneKeys,
-        sources,
-        logoKey: rendering.has(LOGO_CLIP_KEY) ? LOGO_CLIP_KEY : undefined,
-        logoUrl,
-        uploadUrl: await this.storage.generateUploadUrlAsync(job.payload.merge.outputKey, EAttachmentMimeType.VideoMp4),
-      };
-    }
-
     return {
       ...base,
       kind: 'render',
       preset: campaign?.quality === 'hd' ? 'reel_hq' : 'reel_fast',
       clips,
-      merge,
       sessionBudgetSeconds:
         budgetSeconds ?? Math.max(3600, this.config.kaggleSessionHours * 3600 - SESSION_MARGIN_SECONDS),
     };
+  }
+
+  /** The video notebook a CAMPAIGN job asks for: fast (TI2V-5B) or detailed (A14B, also every setup job). */
+  private videoNotebook(job: RenderJob, notebookJob: WorkerNotebookJob): Record<string, unknown> {
+    return notebookJob.kind === 'render' && job.payload.videoEngine === 'fast'
+      ? buildFastReelNotebook(notebookJob)
+      : buildWorkerNotebook(notebookJob);
   }
 
   /**
@@ -1250,6 +1399,35 @@ export class MarketingRenderService {
     const { username, key } = await this.pool.accountCredentials(job.workerId);
     await this.accounts.update(job.workerId, { modelsAttemptAt: new Date() });
     return { dataset, username, key, ...modelCacheContents() };
+  }
+
+  private async voiceNotebookJob(job: RenderJob): Promise<VoiceNotebookJob> {
+    const spec = job.payload.voice;
+    const voiceover = spec ? await this.voiceovers.findById(spec.voiceoverId) : null;
+    if (!spec || !voiceover) throw new Error('The voiceover of this job no longer exists');
+    const name = VOICE_LANGUAGES[voiceover.language as keyof typeof VOICE_LANGUAGES] ?? 'English';
+    return {
+      jobId: job.id,
+      token: signMarketingWorkerToken(job.id),
+      wsUrl: this.config.websocketUrl,
+      apiBaseUrl: this.config.publicApiBaseUrl,
+      voiceoverId: voiceover.id,
+      text: voiceover.text,
+      languageLabel: `${name} (${voiceover.language})`,
+      settings: voiceover.settings,
+      sampleUrl: await this.storage.getUrlAsync(voiceover.sampleKey),
+      uploadUrl: await this.storage.generateUploadUrlAsync(spec.outputKey, EAttachmentMimeType.AudioMpeg),
+    };
+  }
+
+  /** URL of a still's product mask, or undefined for stills made before masks existed (their clips skip the lock). */
+  private async productMaskUrl(imageKey: string): Promise<string | undefined> {
+    const key = productMaskKey(imageKey);
+    try {
+      return (await this.storage.existsAsync(key)) ? await this.storage.getUrlAsync(key) : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private async imageNotebookJob(job: RenderJob): Promise<ImageNotebookJob> {
@@ -1268,15 +1446,26 @@ export class MarketingRenderService {
     const targets = await Promise.all(
       generation.targets
         .filter((target) => !done.has(target.index))
-        .map(async (target) => ({
-          index: target.index,
-          kind: target.kind,
-          prompt: target.prompt,
-          motionPrompt: target.motionPrompt,
-          uploadUrl: await this.storage.generateUploadUrlAsync(target.outputKey, EAttachmentMimeType.ImageJpeg),
-          width: target.width,
-          height: target.height,
-        })),
+        .map(async (target) => {
+          // A restarted job reuses the output key: drop an earlier attempt's product mask first.
+          if (generation.type !== 'logo') await this.removeQuietly(productMaskKey(target.outputKey));
+          return {
+            index: target.index,
+            kind: target.kind,
+            prompt: target.prompt,
+            motionPrompt: target.motionPrompt,
+            uploadUrl: await this.storage.generateUploadUrlAsync(target.outputKey, EAttachmentMimeType.ImageJpeg),
+            maskUploadUrl:
+              generation.type === 'logo'
+                ? undefined
+                : await this.storage.generateUploadUrlAsync(
+                    productMaskKey(target.outputKey),
+                    EAttachmentMimeType.ImagePng,
+                  ),
+            width: target.width,
+            height: target.height,
+          };
+        }),
     );
     if (!targets.length) throw new Error('The image job has no unfinished images');
     return {
@@ -1289,6 +1478,7 @@ export class MarketingRenderService {
       mode: generation.mode ?? 'exact',
       title: generation.title,
       style: generation.style,
+      metal: generation.metal,
       targets,
       hfToken: this.config.huggingFaceToken,
     };
@@ -1301,13 +1491,13 @@ export class MarketingRenderService {
   }
 
   /** Progress from a Kaggle notebook. Returns false when the token is invalid. */
-  async handleWorkerEvent(event: MarketingWorkerEvent): Promise<boolean> {
+  async handleWorkerEvent(event: MarketingWorkerEvent, connectionId?: string): Promise<boolean> {
     if (!event.jobId || !verifyMarketingWorkerToken(event.jobId, event.token)) return false;
     const job = await this.jobs.findById(event.jobId);
     if (!job || !BUSY_RENDER_STATUSES.includes(job.status)) return true; // late or duplicate
 
     if (job.kind === ERenderJobKind.Setup) return this.handleSetupEvent(job, event);
-    if (job.kind === ERenderJobKind.Worker) return this.handleSessionEvent(job, event);
+    if (job.kind === ERenderJobKind.Worker) return this.handleSessionEvent(job, event, connectionId);
 
     if (event.stage === 'sessionExpiring') {
       const progress = Math.max(job.progress ?? 0, Math.min(99, Math.round(Number(event.progress) || 0)));
@@ -1317,6 +1507,7 @@ export class MarketingRenderService {
     }
 
     if (job.kind === ERenderJobKind.Images) return this.handleImageWorkerEvent(job, event);
+    if (job.kind === ERenderJobKind.Voice) return this.handleVoiceEvent(job, event);
 
     if (event.status === 'failed') {
       await this.failJob(job, event.message || 'Rendering failed');
@@ -1324,9 +1515,15 @@ export class MarketingRenderService {
       return true;
     }
 
-    if (event.stage === 'clipDone' && event.clipKey) await this.clipDone(job, event.clipKey);
+    if (event.stage === 'clipDone' && event.clipKey) {
+      // Kept in the logs: the seed re-renders this exact take; notes say what its quality check still saw.
+      this.logger.info(
+        { jobId: job.id, clipKey: event.clipKey, seed: event.seed ?? null, qualityNotes: event.qualityNotes ?? [] },
+        'Clip delivered',
+      );
+      await this.clipDone(job, event.clipKey);
+    }
     if (event.stage === 'clipFailed' && event.clipKey) await this.clipFailed(job, event.clipKey, event.message);
-    if (event.stage === 'mergeDone') await this.mergeDone(job);
 
     if (event.status === 'completed') {
       for (const key of event.failedClips ?? []) await this.clipFailed(job, key, 'Rendering failed');
@@ -1350,6 +1547,50 @@ export class MarketingRenderService {
     });
     await this.reportJobProgress(job, progress, event.message, ECampaignStatus.Rendering);
     return true;
+  }
+
+  private async handleVoiceEvent(job: RenderJob, event: MarketingWorkerEvent): Promise<boolean> {
+    if (event.status === 'failed') {
+      await this.failJob(job, event.message || 'Speech generation failed');
+      await this.scheduler.schedule({ step: 'dispatch' });
+      return true;
+    }
+    if (event.status === 'completed') {
+      await this.voiceDone(job, event.message);
+      await this.scheduler.schedule({ step: 'dispatch' });
+      return true;
+    }
+    const progress = Math.max(job.progress ?? 0, Math.min(99, Math.round(Number(event.progress) || 0)));
+    await this.jobs.update(job.id, {
+      status: ERenderJobStatus.Running,
+      progress,
+      stageMessage: (event.message || job.stageMessage || 'Speaking').slice(0, 250),
+    });
+    await this.reportJobProgress(job, progress, event.message, ECampaignStatus.Rendering);
+    return true;
+  }
+
+  private async voiceDone(job: RenderJob, message?: string): Promise<void> {
+    const spec = job.payload.voice;
+    const voiceover = spec ? await this.voiceovers.findById(spec.voiceoverId) : null;
+    if (!spec || !voiceover || !(await this.storage.existsAsync(spec.outputKey))) {
+      await this.failJob(job, 'The voice worker finished but the speech upload is missing');
+      return;
+    }
+    if (voiceover.audioKey && voiceover.audioKey !== spec.outputKey) await this.removeQuietly(voiceover.audioKey);
+    await this.voiceovers.update(voiceover.id, {
+      audioKey: spec.outputKey,
+      status: EVoiceoverStatus.Ready,
+      error: null,
+    });
+    await this.jobs.update(job.id, {
+      status: ERenderJobStatus.Done,
+      progress: 100,
+      stageMessage: (message || 'Voiceover ready').slice(0, 250),
+      finishedAt: new Date(),
+    });
+    if (job.workerId) await this.accounts.recordOutcome(job.workerId, 'completed');
+    await this.events.voiceover(voiceover.userId, voiceover.id, true);
   }
 
   private async handleImageWorkerEvent(job: RenderJob, event: MarketingWorkerEvent): Promise<boolean> {
@@ -1415,21 +1656,25 @@ export class MarketingRenderService {
       if (!scene) return;
       await this.scenes.update(scene.id, {
         imageKey: target.outputKey,
-        imagePrompt: imagePrompt?.slice(0, 4000) || scene.imagePrompt,
+        // The direction stays as planned: the prompt actually used carries the notebook's metal lock and fix
+        // sentences, which would pile up with every regeneration.
         motionPrompt: motionPrompt?.slice(0, 2000) || scene.motionPrompt,
         imageStatus: EAssetStatus.Ready,
         error: null,
       });
       const campaign = await this.campaigns.findById(job.campaignId);
       if (campaign) await this.events.campaign(campaign, true);
+      if (generation.renderAfter) await this.renderSceneEarly(job.campaignId, index);
     } else if (generation.photoshootId) {
       const shots = await this.photoshootShots.listFor([generation.photoshootId]);
       const shot = shots.find((item) => item.index === index);
       if (shot) {
-        if (shot.imageKey && shot.imageKey !== target.outputKey) await this.removeQuietly(shot.imageKey);
+        if (shot.imageKey && shot.imageKey !== target.outputKey) {
+          await this.removeQuietly(shot.imageKey);
+          await this.removeQuietly(productMaskKey(shot.imageKey));
+        }
         await this.photoshootShots.update(shot.id, {
           imageKey: target.outputKey,
-          prompt: imagePrompt?.slice(0, 4000) || shot.prompt,
           status: EAssetStatus.Ready,
           error: null,
         });
@@ -1516,17 +1761,18 @@ export class MarketingRenderService {
       const scenes = await this.scenes.listForCampaign(job.campaignId);
       const ready = scenes.filter((scene) => scene.imageStatus === EAssetStatus.Ready);
       const someFailed = !success || scenes.some((scene) => scene.imageStatus === EAssetStatus.Failed);
+      const hasVideos = scenes.some((scene) => scene.videoStatus === EAssetStatus.Ready);
       if (ready.length && generation.renderAfter) {
         await this.renderCampaignImages(generation, job.campaignId);
       } else if (!ready.length || someFailed) {
         await this.setCampaign(campaign, {
-          status: campaign.mergedVideoKey ? ECampaignStatus.Partial : ECampaignStatus.Failed,
+          status: hasVideos ? ECampaignStatus.Partial : ECampaignStatus.Failed,
           stageMessage: ready.length ? 'Some images failed — try again' : 'Image generation failed',
           error: ready.length ? 'Some scene images could not be generated' : 'No scene images could be generated',
         });
       } else {
         await this.setCampaign(campaign, {
-          status: campaign.mergedVideoKey ? ECampaignStatus.Partial : ECampaignStatus.Failed,
+          status: hasVideos ? ECampaignStatus.Partial : ECampaignStatus.Failed,
           stageMessage: 'Scene images ready',
           error: null,
         });
@@ -1581,6 +1827,22 @@ export class MarketingRenderService {
     if (queueIndexes.length) await this.queueCampaignRender(campaignId, queueIndexes);
   }
 
+  /**
+   * A scene's image is ready while others still paint: queue its clip now so a free GPU starts on it at once (the
+   * last image job still queues whatever is left). Not while the brand logo is being made — the campaign waits for it.
+   */
+  private async renderSceneEarly(campaignId: string, index: number): Promise<void> {
+    const campaign = await this.campaigns.findById(campaignId);
+    if (!campaign) return;
+    const brand = await this.brands.find(campaign.userId);
+    if (brand?.logoImageStatus === EAssetStatus.Generating) return;
+    try {
+      await this.queueCampaignRender(campaignId, [index]);
+    } catch (err) {
+      this.logger.warn({ err, campaignId, index }, 'Early scene clip could not be queued — it follows the batch');
+    }
+  }
+
   private async continueCampaignsAfterLogo(userId: string): Promise<void> {
     const campaigns = await this.campaigns.listForUser(userId, 30);
     for (const campaign of campaigns) {
@@ -1603,7 +1865,23 @@ export class MarketingRenderService {
     });
   }
 
-  private async handleSessionEvent(session: RenderJob, event: MarketingWorkerEvent): Promise<boolean> {
+  private async handleSessionEvent(
+    session: RenderJob,
+    event: MarketingWorkerEvent,
+    connectionId?: string,
+  ): Promise<boolean> {
+    if (event.stage === 'sessionListening') {
+      // An idle session's WebSocket: dispatch pushes `marketingWake` to it the moment work is queued.
+      if (!connectionId) return true;
+      const fresh = (await this.jobs.findById(session.id)) ?? session;
+      await this.jobs.update(session.id, {
+        payload: {
+          ...fresh.payload,
+          session: { ...(fresh.payload.session ?? { state: 'starting' }), connectionId },
+        },
+      });
+      return true;
+    }
     if (event.status === 'completed' || event.status === 'failed') {
       await this.endSession(session, event.message || 'Stopped', event.status === 'failed');
       await this.scheduler.schedule({ step: 'dispatch' });
@@ -1732,18 +2010,6 @@ export class MarketingRenderService {
       const campaign = await this.campaigns.findById(job.campaignId);
       if (campaign) await this.events.campaign(campaign, true);
     }
-  }
-
-  private async mergeDone(job: RenderJob): Promise<void> {
-    const outputKey = job.payload.merge?.outputKey;
-    if (!outputKey || !job.campaignId || !(await this.storage.existsAsync(outputKey))) return;
-    const campaign = await this.campaigns.findById(job.campaignId);
-    if (!campaign) return;
-    if (campaign.mergedVideoKey && campaign.mergedVideoKey !== outputKey)
-      await this.removeQuietly(campaign.mergedVideoKey);
-    await this.setCampaign(campaign, { mergedVideoKey: outputKey });
-    const fresh = await this.jobs.findById(job.id);
-    if (fresh) await this.jobs.update(job.id, { payload: { ...fresh.payload, mergeDone: true } });
   }
 
   // ---------------------------------------------------------------- failures & campaign state
@@ -1907,42 +2173,21 @@ export class MarketingRenderService {
       await this.finishImageJob(job, false);
       return;
     }
+    if (job.kind === ERenderJobKind.Voice) {
+      const voiceoverId = job.payload.voice?.voiceoverId;
+      const voiceover = voiceoverId ? await this.voiceovers.findById(voiceoverId) : null;
+      if (voiceover) {
+        await this.voiceovers.update(voiceover.id, { status: EVoiceoverStatus.Failed, error: message.slice(0, 500) });
+        await this.events.voiceover(voiceover.userId, voiceover.id, true);
+      }
+      return;
+    }
     for (const clip of job.payload.clips) await this.clipFailed(job, clip.key, message);
     await this.finishVideoJob(job, message);
   }
 
-  /**
-   * After a CAMPAIGN (video) job ended: when it was the campaign's last clip job, queue the merge-only job that joins
-   * all scene videos and the logo (it runs ffmpeg only, no video model); otherwise settle the campaign status.
-   */
+  /** After a CAMPAIGN (video) job ended: settle the campaign once its last clip job is done. */
   private async finishVideoJob(job: RenderJob, error?: string): Promise<void> {
-    if (job.campaignId && job.payload.mergeAfter) {
-      const open = await this.jobs.listOpenFor({ campaignId: job.campaignId, kind: ERenderJobKind.Campaign });
-      const clipsLeft = open.some((other) => other.payload.clips.length > 0);
-      const mergeWaiting = open.some(
-        (other) => !other.payload.clips.length && other.status === ERenderJobStatus.Waiting,
-      );
-      const videos = (await this.scenes.listForCampaign(job.campaignId)).filter(
-        (scene) => scene.videoStatus === EAssetStatus.Ready,
-      );
-      if (!clipsLeft && !mergeWaiting && videos.length) {
-        await this.jobs.create({
-          kind: ERenderJobKind.Campaign,
-          userId: job.userId,
-          campaignId: job.campaignId,
-          status: ERenderJobStatus.Waiting,
-          payload: { clips: [], merge: job.payload.mergeAfter, batchId: job.payload.batchId },
-          progress: 0,
-          attempts: 0,
-        });
-        const campaign = await this.campaigns.findById(job.campaignId);
-        if (campaign) {
-          await this.setCampaign(campaign, { status: ECampaignStatus.Rendering, stageMessage: 'Merging the reel' });
-        }
-        await this.scheduler.schedule({ step: 'dispatch' });
-        return;
-      }
-    }
     await this.settleCampaign(job.campaignId, error);
   }
 
@@ -1999,6 +2244,8 @@ export class MarketingRenderService {
     }
     const photoshootId = job.payload.imageGeneration?.photoshootId;
     if (photoshootId && job.userId) await this.events.photoshootJob(job.userId, photoshootId, snapshot);
+    const voiceoverId = job.payload.voice?.voiceoverId;
+    if (voiceoverId && job.userId) await this.events.voiceover(job.userId, voiceoverId, false, snapshot);
     if (!job.campaignId) return;
     const campaign = await this.campaigns.findById(job.campaignId);
     if (!campaign) return;

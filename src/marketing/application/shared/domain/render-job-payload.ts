@@ -12,6 +12,8 @@ export interface RenderJobPayload {
     style?: string;
     renderAfter?: boolean;
     photoshootId?: string;
+    /** Metal the jeweller gave (gold | silver | rose_gold | platinum): wins over what the analyst reads off the photo. */
+    metal?: string;
     targets: {
       index: number;
       kind: string;
@@ -23,19 +25,23 @@ export interface RenderJobPayload {
     }[];
     doneImages?: number[];
   };
-  /** Merge of all scene videos (rendered here or already stored) ending on the logo clip. */
-  merge?: { sceneKeys: string[]; outputKey: string } | null;
+  /** CAMPAIGN (video) jobs: which notebook renders the clips — detailed (Wan 2.2 A14B, default) or fast (TI2V-5B). */
+  videoEngine?: 'detailed' | 'fast';
+  /** VOICE jobs: the voiceover to speak. */
+  voice?: { voiceoverId: string; outputKey: string };
   /** Clip keys already rendered and stored — skipped when the job continues in a new Kaggle session. */
   done?: string[];
-  /** The merged film was uploaded (no merge needed on continuation). */
-  mergeDone?: boolean;
   /**
    * Jobs queued together (one per scene / shot / clip, so several Kaggle accounts render them in parallel) share it.
    * The UI shows the batch as one notebook status; the last clip of a video batch queues the merge.
    */
   batchId?: string;
-  /** Video clip jobs: the merge to queue once the last clip job of the campaign has finished. */
-  mergeAfter?: { sceneKeys: string[]; outputKey: string } | null;
+  /**
+   * Rendered inside another job (a warm session took this waiting job's clips / images into the one it was starting,
+   * to pipeline them on its two GPUs): that job's id. Such a job is DONE, joins that job's batch and is left out of
+   * the batch status.
+   */
+  mergedInto?: string;
   /** Work job running inside a warm WORKER session: that session's job id. */
   sessionJobId?: string | null;
   /** WORKER jobs: what the warm session is doing. */

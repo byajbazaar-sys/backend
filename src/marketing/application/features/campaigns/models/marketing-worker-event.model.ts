@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
   IsIn,
   IsArray,
   IsBoolean,
@@ -25,6 +26,16 @@ export class MarketingWorkerEventModel {
   @ApiPropertyOptional() @IsOptional() @IsIn(['completed', 'failed']) status?: 'completed' | 'failed';
   @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^(scene-\d|logo)$/) clipKey?: string;
   @ApiPropertyOptional() @IsOptional() @IsString({ each: true }) failedClips?: string[];
+  /** clipDone: seed of the delivered take (63-bit, so a string) — re-renders a clip exactly. */
+  @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^\d{1,20}$/) seed?: string | null;
+  /** clipDone: what the clip's quality check still noticed on the delivered take (empty when clean). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(120, { each: true })
+  qualityNotes?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) gpuInfo?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(16) gpuCount?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() qualityScore?: number;

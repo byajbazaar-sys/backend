@@ -32,4 +32,9 @@ export class ByajBazaarNotifierAdapter implements IMarketingNotifier {
       this.logger.warn({ err, userId, type: payload.type }, 'Failed to push marketing update');
     }
   }
+
+  async notifyConnection(connectionId: string, payload: Record<string, unknown>): Promise<boolean> {
+    if (!process.env.WEBSOCKET_API_ENDPOINT) return false;
+    return this.wsMessage.sendToConnection(connectionId, payload).catch(() => false);
+  }
 }

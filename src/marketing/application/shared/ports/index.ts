@@ -18,3 +18,5 @@ export * from './i-marketing-secret.cipher';
 export * from './i-marketing-settings.repository';
 export * from './i-marketing-worker.invoker';
 export * from './i-render-jobs.repository';
+export * from './i-marketing-voiceovers.repository';
+export * from './i-marketing-text-writer';

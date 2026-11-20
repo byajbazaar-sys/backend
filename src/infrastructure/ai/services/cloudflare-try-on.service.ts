@@ -53,6 +53,9 @@ interface CloudflareRunResponse {
   errors?: { message?: string }[];
 }
 
+/** Workers AI chat + vision model used when no other is configured (CLOUDFLARE_TEXT_MODEL / CLOUDFLARE_VISION_MODEL). */
+const DEFAULT_CHAT_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
 @Injectable()
 export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiService {
   constructor(
@@ -211,33 +214,81 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
     );
   }
 
+  /**
+   * Workers AI chat model (prompt / script writing). Default Gemma 4 26B: the best multilingual model the free plan
+   * runs (Hindi, Hinglish in Devanagari and the other voice languages), fast and cheap; `model` overrides it.
+   */
   async generateText(
     system: string,
     user: string,
-    options: { maxTokens?: number; temperature?: number } = {},
+    options: { maxTokens?: number; temperature?: number; model?: string } = {},
   ): Promise<string> {
-    const modelId = process.env.CLOUDFLARE_TEXT_MODEL?.trim() || '@cf/meta/llama-3.2-3b-instruct';
+    const modelId = options.model?.trim() || process.env.CLOUDFLARE_TEXT_MODEL?.trim() || DEFAULT_CHAT_MODEL;
+    return this.chat(
+      modelId,
+      [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      options,
+    );
+  }
+
+  /**
+   * Image to text: the same multimodal model looks at a photo (resized to at most 768 px) and answers the prompt.
+   * Gemma 4 described the kada stack best of the free-plan vision models (Nov 2026 check: right count, no invented
+   * stones), at a fraction of the cost.
+   */
+  async describeImage(
+    image: Buffer,
+    prompt: string,
+    options: { maxTokens?: number; temperature?: number; model?: string } = {},
+  ): Promise<string> {
+    const modelId = options.model?.trim() || process.env.CLOUDFLARE_VISION_MODEL?.trim() || DEFAULT_CHAT_MODEL;
+    const jpeg = await sharp(image)
+      .rotate()
+      .resize(768, 768, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    return this.chat(
+      modelId,
+      [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${jpeg.toString('base64')}` } },
+          ],
+        },
+      ],
+      { temperature: 0.2, ...options },
+    );
+  }
+
+  /** One chat call with credential rotation; both reply shapes (legacy `response`, OpenAI-style `choices`). */
+  private async chat(
+    modelId: string,
+    messages: { role: string; content: unknown }[],
+    options: { maxTokens?: number; temperature?: number },
+  ): Promise<string> {
+    const body: Record<string, unknown> = {
+      messages,
+      max_tokens: options.maxTokens ?? 900,
+      temperature: options.temperature ?? 0.8,
+    };
+    // Reasoning models think first by default and can spend the whole token budget before answering.
+    if (/gemma-4|qwen3/i.test(modelId)) body.chat_template_kwargs = { enable_thinking: false };
+    if (/gpt-oss/i.test(modelId)) body.reasoning_effort = 'low';
     return this.withCredentialRetries('text', modelId, async (credential) => {
       const response = await axios.post<{
         success?: boolean;
-        result?: { response?: unknown };
+        result?: { response?: unknown; choices?: { message?: { content?: unknown } }[] };
         errors?: { message?: string }[];
-      }>(
-        this.buildRunUrl(credential.accountId, modelId),
-        {
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-          max_tokens: options.maxTokens ?? 900,
-          temperature: options.temperature ?? 0.8,
-        },
-        {
-          headers: { Authorization: `Bearer ${credential.apiToken}`, 'Content-Type': 'application/json' },
-          timeout: 60_000,
-          validateStatus: () => true,
-        },
-      );
+      }>(this.buildRunUrl(credential.accountId, modelId), body, {
+        headers: { Authorization: `Bearer ${credential.apiToken}`, 'Content-Type': 'application/json' },
+        timeout: 60_000,
+        validateStatus: () => true,
+      });
       if (response.status < 200 || response.status >= 300 || response.data?.success === false) {
         const err = new Error(
           response.data?.errors?.[0]?.message || `Workers AI text request failed (${response.status})`,
@@ -245,7 +296,8 @@ export class CloudflareTryOnService implements ITryOnAiService, IProductImageAiS
         (err as Error & { status?: number }).status = response.status;
         throw err;
       }
-      const reply = response.data?.result?.response;
+      const result = response.data?.result;
+      const reply = result?.choices?.[0]?.message?.content ?? result?.response;
       return typeof reply === 'string' ? reply : JSON.stringify(reply ?? '');
     });
   }

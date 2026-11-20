@@ -16,6 +16,7 @@ import {
   MARKETING_QUALITIES,
   MARKETING_STYLES,
   MarketingQuality,
+  MarketingVideoEngine,
   MarketingStyle,
   IMarketingBrandsRepository,
   MARKETING_BRANDS_REPOSITORY,
@@ -35,6 +36,7 @@ import {
   MarketingScheduler,
   MarketingKeys,
   resolveImageMode,
+  productMaskKey,
 } from '../../../shared';
 import { MarketingRenderService, kaggleBatchStatus } from '../../kaggle';
 
@@ -68,6 +70,7 @@ export class MarketingCampaignsService {
       ? (input.quality as MarketingQuality)
       : 'hd';
     const imageMode = resolveImageMode(input.imageMode);
+    const videoEngine: MarketingVideoEngine = input.videoEngine === 'fast' ? 'fast' : 'detailed';
     if (!input.inventoryItemId && !input.image?.base64) {
       throw new BadRequestException('Choose an inventory item or upload a photo.');
     }
@@ -111,6 +114,7 @@ export class MarketingCampaignsService {
       style,
       quality,
       imageMode,
+      videoEngine,
       status: ECampaignStatus.Planning,
       progress: 1,
       stageMessage: 'Queued',
@@ -166,7 +170,7 @@ export class MarketingCampaignsService {
     const keys = [
       campaign.sourceImageKey,
       campaign.mergedVideoKey,
-      ...scenes.flatMap((s) => [s.imageKey, s.videoKey]),
+      ...scenes.flatMap((s) => [s.imageKey, s.imageKey && productMaskKey(s.imageKey), s.videoKey]),
     ].filter((k): k is string => !!k);
     await Promise.all(keys.map((k) => this.storage.removeAsync(k).catch(() => false)));
     await this.campaigns.delete(id); // scenes and render jobs cascade

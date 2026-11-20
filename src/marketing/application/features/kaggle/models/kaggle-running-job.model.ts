@@ -3,7 +3,7 @@ import { Expose } from 'class-transformer';
 export class KaggleRunningJobModel {
   @ApiProperty() @Expose() id: string;
   @ApiProperty({ enum: ['CAMPAIGN', 'IMAGES', 'LOGO', 'SETUP'] }) @Expose() kind: string;
-  @ApiProperty({ enum: ['image', 'video', 'setup'], description: 'Kaggle notebook running the job' })
+  @ApiProperty({ enum: ['image', 'video', 'voice', 'setup'], description: 'Kaggle notebook running the job' })
   @Expose()
   notebook: string;
   @ApiProperty({ description: 'What the job works on' }) @Expose() target: string;

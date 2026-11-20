@@ -8,8 +8,17 @@ export const MarketingKeys = {
   merged: (userId: string, campaignId: string) => `campaigns/${userId}/${campaignId}/merged-${Date.now()}.mp4`,
   logoImage: (userId: string) => `brands/${userId}/logo-${Date.now()}.jpg`,
   logoVideo: (userId: string) => `brands/${userId}/logo-${Date.now()}.mp4`,
+  voiceSample: (userId: string, voiceoverId: string, ext: string) =>
+    `voiceovers/${userId}/${voiceoverId}/sample.${ext}`,
+  voiceAudio: (userId: string, voiceoverId: string) => `voiceovers/${userId}/${voiceoverId}/voice-${Date.now()}.mp3`,
   campaignPrefix: (userId: string, campaignId: string) => `campaigns/${userId}/${campaignId}/`,
 };
+
+/**
+ * Where the product mask of a delivered still lives (PNG next to the image): the image notebook uploads it, the video
+ * notebook locks those real product pixels into every frame of the scene's clip.
+ */
+export const productMaskKey = (imageKey: string): string => `${imageKey.replace(/\.(jpe?g|png|webp)$/i, '')}-mask.png`;
 
 export const sceneClipKey = (index: number) => `scene-${index}`;
 export const LOGO_CLIP_KEY = 'logo';

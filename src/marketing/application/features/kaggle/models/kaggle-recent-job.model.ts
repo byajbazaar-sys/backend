@@ -4,7 +4,7 @@ import { Expose } from 'class-transformer';
 export class KaggleRecentJobModel {
   @ApiProperty() @Expose() id: string;
   @ApiProperty() @Expose() kind: string;
-  @ApiProperty({ enum: ['image', 'video'] }) @Expose() notebook: string;
+  @ApiProperty({ enum: ['image', 'video', 'voice'] }) @Expose() notebook: string;
   @ApiProperty() @Expose() target: string;
   @ApiProperty({ enum: ['DONE', 'FAILED'] }) @Expose() status: string;
   @ApiPropertyOptional() @Expose() account: string | null;

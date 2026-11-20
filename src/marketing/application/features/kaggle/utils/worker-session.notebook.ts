@@ -1,5 +1,5 @@
 import { IMAGE_MODELS, IMAGE_PIP_PACKAGES } from './image-worker.notebook';
-import { IMAGE_COMFY_FILES } from './model-cache';
+import { IMAGE_COMFY_FILES, VOICE_MODEL_FILES } from './model-cache';
 import { WorkerSessionNotebookJob } from './worker-session-notebook-job';
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
@@ -78,7 +78,8 @@ try:
                 continue
             if f["kind"] == "comfy":
                 dst = os.path.join(COMFY_DIR, f["path"])
-                group = "klein" if f["path"] in BOOT_CONFIG["kleinPaths"] else "video"
+                group = ("klein" if f["path"] in BOOT_CONFIG["kleinPaths"]
+                         else "voice" if f["path"] in BOOT_CONFIG["voicePaths"] else "video")
             else:
                 root = "/tmp/bb-hf/" + f["repo"].replace("/", "--")
                 dst = os.path.join(root, f["path"])
@@ -105,7 +106,7 @@ const CELL_BOOT = `
 import threading, shutil
 
 BOOT = {key: threading.Event() for key in ("image_packages", "comfy_requirements", "analyst", "segmenter", "klein",
-                                           "video")}
+                                           "voice", "video")}
 WORKER["boot"] = BOOT
 DISK_RESERVE = 12e9  # left free for outputs, pip and ComfyUI's own files; files that don't fit stay on the mount
 
@@ -144,7 +145,7 @@ def stage(src, dst):
 def boot_staging():
     started, copied, kept = time.time(), 0, 0
     # In the order a job needs them: the analyst plans first, then klein paints; video files last.
-    for group in ("analyst", "segmenter", "klein", "video"):
+    for group in ("analyst", "segmenter", "klein", "voice", "video"):
         try:
             for src, dst, _ in [item for item in LINKED if item[2] == group]:
                 try:
@@ -180,7 +181,7 @@ def free_gpus():
 def release_all():
     """Before switching between image and video work: stop ComfyUI and drop the analyst, freeing both GPUs.
     (Job namespaces are cleared after each job, so this lives here and only touches WORKER.)"""
-    for key in ("comfy_image", "comfy_video"):
+    for key in ("comfy_image", "comfy_video", "comfy_voice"):
         proc = (WORKER.pop(key, None) or {}).get("proc")
         if proc is not None and proc.poll() is None:
             proc.terminate()
@@ -211,6 +212,47 @@ def run_job(job):
         free_gpus()
 
 
+LISTENER = {"ws": None}
+
+
+def wait_for_work(seconds, register):
+    """Idle: sleep on the WebSocket until the backend pushes 'marketingWake' (work was queued), or the poll interval
+    passes. register = the backend does not know this socket yet. Any socket problem: plain sleep, retry next time."""
+    deadline = time.time() + seconds
+    if not SESSION.get("wsUrl"):
+        time.sleep(seconds)
+        return
+    try:
+        import websocket
+        if LISTENER["ws"] is None:
+            url = f"{SESSION['wsUrl']}?workerJob={SESSION['jobId']}&workerToken={SESSION['token']}"
+            LISTENER["ws"] = websocket.create_connection(url, timeout=20)
+            register = True
+        ws = LISTENER["ws"]
+        if register:
+            ws.send(json.dumps({"action": "marketingProgress", "jobId": SESSION["jobId"], "token": SESSION["token"],
+                                "stage": "sessionListening", "progress": 0, "message": "Warm GPU worker listening"}))
+        while time.time() < deadline:
+            ws.settimeout(max(0.5, deadline - time.time()))
+            try:
+                msg = ws.recv()
+            except websocket.WebSocketTimeoutException:
+                return
+            try:
+                if json.loads(msg).get("type") == "marketingWake":
+                    return
+            except Exception:
+                pass  # acks and other messages: keep waiting
+    except Exception as exc:
+        print("wake socket unavailable (polling instead):", exc, flush=True)
+        try:
+            LISTENER["ws"] and LISTENER["ws"].close()
+        except Exception:
+            pass
+        LISTENER["ws"] = None
+        time.sleep(max(0.0, deadline - time.time()))
+
+
 session_event("sessionReady", "Warm GPU worker ready" + (" · models from the cache" if MODELS_CACHED else ""),
               modelsCached=MODELS_CACHED)
 jobs_run, poll_failures, finished, job_error, reason = 0, 0, None, None, "stopped"
@@ -238,10 +280,21 @@ while True:
         break
     job = answer.get("job")
     if not job:
-        time.sleep(answer.get("pollSeconds") or 10)
+        wait_for_work(answer.get("pollSeconds") or 10, register=not answer.get("listening"))
         continue
-    # "cpu" = a merge-only job (ffmpeg): keep whatever models are loaded for the next GPU job.
-    if job["pipeline"] != "cpu":
+    # "cpu" = no GPU model needed (the CPU-animated logo clip): keep whatever models are loaded for the next GPU job.
+    # "voice" = ChatterBox: small, runs beside whatever is loaded (its own ComfyUI on a GPU with room) — it never
+    # makes the session drop its image / video models. Before image or video work, the voice engine makes room.
+    if job["pipeline"] in ("image", "video", "video-fast") and WORKER.get("comfy_voice"):
+        voice = WORKER.pop("comfy_voice", None) or {}
+        if voice.get("proc") is not None and voice["proc"].poll() is None:
+            voice["proc"].terminate()
+            try:
+                voice["proc"].wait(30)
+            except Exception:
+                voice["proc"].kill()
+        free_gpus()
+    if job["pipeline"] not in ("cpu", "voice"):
         if WORKER.get("pipeline") not in (None, job["pipeline"]):
             print(f"Switching the GPUs from {WORKER['pipeline']} to {job['pipeline']} work", flush=True)
             release_all()
@@ -254,6 +307,10 @@ while True:
     print(f"=== job {job['id']} finished in {(time.time() - started) / 60:.1f} min"
           + (f" with an error: {job_error}" if job_error else ""), flush=True)
 
+try:
+    LISTENER["ws"] and LISTENER["ws"].close()
+except Exception:
+    pass
 release_all()
 session_event("completed", f"Warm worker stopped after {jobs_run} job(s): {reason}", status="completed")
 `;
@@ -263,6 +320,7 @@ const BOOT_CONFIG = {
   imagePip: IMAGE_PIP_PACKAGES,
   analyst: IMAGE_MODELS.analyst,
   kleinPaths: IMAGE_COMFY_FILES.map((f) => f.path),
+  voicePaths: VOICE_MODEL_FILES.map((f) => f.path),
 };
 
 /** Python string literal holding a JSON document (JSON escapes are valid Python string escapes). */

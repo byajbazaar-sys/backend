@@ -4,6 +4,8 @@ export interface WorkerSessionNotebookJob {
   jobId: string;
   token: string;
   apiBaseUrl: string;
+  /** WebSocket API: the idle session waits on it for `marketingWake` (falls back to plain polling). */
+  wsUrl?: string;
   /** Seconds the session may run (Kaggle limit minus a margin). */
   sessionSeconds: number;
 }

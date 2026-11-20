@@ -136,8 +136,18 @@ export class MarketingPublishingService {
       const campaign = await this.campaigns.findForUser(input.sourceId, userId);
       if (!campaign) throw new NotFoundException('Campaign not found.');
       if (input.mediaType === 'REEL') {
-        if (!campaign.mergedVideoKey) throw new BadRequestException('This campaign does not have a finished reel yet.');
-        return { assetKey: campaign.mergedVideoKey, title: campaign.title };
+        // A reel is one scene's clip. Campaigns from before clips were the deliverable may still have a merged film.
+        if (input.sourceIndex === undefined) {
+          if (!campaign.mergedVideoKey) throw new BadRequestException('Choose a finished scene video.');
+          return { assetKey: campaign.mergedVideoKey, title: campaign.title };
+        }
+        if (input.sourceIndex < 0 || input.sourceIndex > 4)
+          throw new BadRequestException('Choose a finished scene video.');
+        const clip = await this.scenes.findByIndex(campaign.id, input.sourceIndex);
+        if (!clip?.videoKey || clip.videoStatus !== EAssetStatus.Ready) {
+          throw new BadRequestException('This scene video is not ready to publish.');
+        }
+        return { assetKey: clip.videoKey, title: `${campaign.title} · Video ${clip.index + 1}` };
       }
       if (input.sourceIndex === undefined || input.sourceIndex < 0 || input.sourceIndex > 4) {
         throw new BadRequestException('Choose a finished campaign image.');

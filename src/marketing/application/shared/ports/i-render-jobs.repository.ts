@@ -26,7 +26,20 @@ export interface IRenderJobsRepository {
    * Atomically claims the oldest WAITING work job (IMAGES / CAMPAIGN / LOGO) for a warm session of `workerId`:
    * it becomes STARTING on that account, in the session's slot and kernel, with payload.sessionJobId set.
    */
-  claimNextForSession(session: RenderJob): Promise<RenderJob | null>;
+  /** Oldest waiting job, preferring the kinds of `pipeline` (the models the session already has loaded). */
+  claimNextForSession(session: RenderJob, pipeline?: string | null): Promise<RenderJob | null>;
+  /**
+   * Atomically takes up to `limit` WAITING jobs of `match.kind` — of `match.batchId`, or else of `match.campaignId` —
+   * into `into` (row lock, skip locked): they become DONE with payload.mergedInto = into.id and join its batch.
+   * Returns them; their clips / images are now `into`'s to render.
+   */
+  absorbWaiting(
+    into: RenderJob,
+    match: { kind: ERenderJobKind; batchId?: string; campaignId?: string; videoEngine?: string },
+    limit: number,
+  ): Promise<RenderJob[]>;
+  /** Puts jobs taken by absorbWaiting back in the queue as they were (the take-over could not be saved). */
+  releaseAbsorbed(jobs: RenderJob[]): Promise<void>;
   /** Live warm WORKER sessions (STARTING / RUNNING), oldest first. */
   listSessions(): Promise<RenderJob[]>;
   findStale(statuses: ERenderJobStatus[], olderThan: Date): Promise<RenderJob[]>;
@@ -50,4 +63,6 @@ export interface IRenderJobsRepository {
   listRecentFinished(limit: number): Promise<RenderJob[]>;
   /** Newest IMAGES job of each photoshoot, with every other job of its batch. */
   latestForPhotoshoots(photoshootIds: string[]): Promise<RenderJob[]>;
+  /** The newest VOICE job of each voiceover. */
+  latestForVoiceovers(voiceoverIds: string[]): Promise<RenderJob[]>;
 }

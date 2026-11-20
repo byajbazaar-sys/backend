@@ -52,6 +52,17 @@ export class MarketingEvents {
     });
   }
 
+  /** A voiceover changed (`refresh`) or its voice notebook ticked (`job`, patched in place). */
+  voiceover(userId: string, voiceoverId: string, refresh: boolean, job?: KaggleJobStatusView): Promise<void> {
+    return this.notifier.notifyUser(userId, {
+      type: 'marketingVoiceoverUpdated',
+      voiceover: { id: voiceoverId },
+      ...(job ? { job: customerJob(job) } : {}),
+      refresh,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   brand(userId: string): Promise<void> {
     return this.notifier.notifyUser(userId, { type: 'marketingBrandUpdated', timestamp: new Date().toISOString() });
   }

@@ -8,6 +8,9 @@ export interface MarketingWorkerEvent {
   status?: 'completed' | 'failed';
   clipKey?: string;
   failedClips?: string[];
+  /** clipDone: the seed of the delivered take (a string: 63-bit) and what its quality check still noticed. */
+  seed?: string | null;
+  qualityNotes?: string[];
   gpuInfo?: string;
   gpuCount?: number;
   qualityScore?: number;

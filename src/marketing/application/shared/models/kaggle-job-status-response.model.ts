@@ -5,7 +5,7 @@ import { CustomerErrorText, CustomerStageText, MARKETING_ADMIN_GROUP } from '../
 /** Status of one Kaggle notebook run (image notebook or video notebook). */
 export class KaggleJobStatusResponseModel {
   @Expose() @ApiProperty() id: string;
-  @Expose() @ApiProperty({ enum: ['image', 'video', 'setup'] }) notebook: string;
+  @Expose() @ApiProperty({ enum: ['image', 'video', 'voice', 'setup'] }) notebook: string;
   @Expose() @ApiProperty({ enum: ['WAITING', 'STARTING', 'RUNNING', 'DONE', 'FAILED'] }) status: string;
   @Expose() @ApiProperty() progress: number;
   @Expose() @CustomerStageText() @ApiPropertyOptional() stageMessage: string | null;

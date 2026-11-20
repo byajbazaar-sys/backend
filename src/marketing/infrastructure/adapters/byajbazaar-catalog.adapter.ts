@@ -27,7 +27,21 @@ export class ByajBazaarCatalogAdapter implements IMarketingCatalog {
   async findItem(userId: string, itemId: string): Promise<MarketingCatalogItem | null> {
     const item = await this.itemsRepo.findById(itemId, userId);
     if (!item) return null;
-    return { id: item.id, itemName: item.itemName, imageKey: item.imageUrls?.find(Boolean) };
+    const grams = (v: unknown): number | undefined => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    return {
+      id: item.id,
+      itemName: item.itemName,
+      metalType: item.metalType,
+      purity: item.purity ?? undefined,
+      categoryName: item.categoryName ?? undefined,
+      netWeight: grams(item.netWeight),
+      grossWeight: grams(item.grossWeight),
+      hallmarked: !!item.huid?.trim(),
+      imageKey: item.imageUrls?.find(Boolean),
+    };
   }
 
   async readImage(imageKey: string): Promise<Buffer> {

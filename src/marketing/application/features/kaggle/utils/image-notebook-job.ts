@@ -11,6 +11,8 @@ export interface ImageNotebookJob {
   mode: 'exact' | 'ai';
   title: string;
   style?: string;
+  /** Metal the jeweller gave (gold | silver | rose_gold | platinum); it wins over what the analyst reads. */
+  metal?: string;
   targets: ImageNotebookTarget[];
   /** Hugging Face token for the gated FLUX.2 [klein] 9B (required). */
   hfToken?: string;

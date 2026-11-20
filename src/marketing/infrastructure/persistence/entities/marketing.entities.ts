@@ -22,6 +22,7 @@ export class MarketingCampaignEntity {
   @Column({ type: 'varchar', length: 30 }) style: string;
   @Column({ type: 'varchar', length: 10 }) quality: string;
   @Column({ type: 'varchar', length: 10, default: 'exact' }) imageMode: string;
+  @Column({ type: 'varchar', length: 10, default: 'detailed' }) videoEngine: string;
   @Column({ type: 'varchar', length: 20 }) status: string;
   @Column({ type: 'smallint', default: 0 }) progress: number;
   @Column({ type: 'varchar', length: 255, nullable: true }) stageMessage: string | null;
@@ -57,6 +58,9 @@ export class MarketingBrandEntity {
   @Column({ type: 'varchar', length: 500, nullable: true }) logoVideoKey: string | null;
   @Column({ type: 'varchar', length: 20 }) logoVideoStatus: string;
   @Column({ type: 'text', nullable: true }) error: string | null;
+  @Column({ type: 'varchar', length: 160, nullable: true }) spokenName: string | null;
+  @Column({ type: 'varchar', length: 255, nullable: true }) spokenNameFor: string | null;
+  @Column({ type: 'boolean', default: false }) spokenNameByUser: boolean;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 
@@ -197,6 +201,23 @@ export class MarketingSettingEntity {
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 
+@Entity('marketing_voiceovers')
+@Index('IDX_marketing_voiceovers_user', ['userId', 'createdAt'])
+export class MarketingVoiceoverEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column({ type: 'uuid' }) userId: string;
+  @Column({ type: 'varchar', length: 255 }) title: string;
+  @Column({ type: 'text' }) text: string;
+  @Column({ type: 'varchar', length: 8 }) language: string;
+  @Column({ type: 'jsonb' }) settings: Record<string, unknown>;
+  @Column({ type: 'varchar', length: 500 }) sampleKey: string;
+  @Column({ type: 'varchar', length: 500, nullable: true }) audioKey: string | null;
+  @Column({ type: 'varchar', length: 20 }) status: string;
+  @Column({ type: 'text', nullable: true }) error: string | null;
+  @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
+  @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
 export const MARKETING_ENTITY_CLASSES = [
   MarketingCampaignEntity,
   MarketingSceneEntity,
@@ -209,4 +230,5 @@ export const MARKETING_ENTITY_CLASSES = [
   MarketingPhotoshootShotEntity,
   MarketingScheduledPostEntity,
   MarketingSettingEntity,
+  MarketingVoiceoverEntity,
 ];

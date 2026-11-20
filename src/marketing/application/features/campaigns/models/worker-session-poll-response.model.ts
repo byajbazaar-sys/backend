@@ -5,6 +5,8 @@ export class WorkerSessionPollResponseModel {
   @ApiPropertyOptional() stop?: boolean;
   @ApiPropertyOptional() reason?: string;
   @ApiPropertyOptional() pollSeconds?: number;
-  @ApiPropertyOptional({ description: 'id, kind, pipeline (image | video | cpu) and the notebook code cells to run' })
-  job?: { id: string; kind: string; pipeline: 'image' | 'video' | 'cpu'; cells: string[] };
+  @ApiPropertyOptional({ description: 'The backend knows the idle session’s WebSocket (false: register it again)' })
+  listening?: boolean;
+  @ApiPropertyOptional({ description: 'id, kind, pipeline (image | video | video-fast | cpu | voice) and the notebook code cells' })
+  job?: { id: string; kind: string; pipeline: 'image' | 'video' | 'video-fast' | 'cpu' | 'voice'; cells: string[] };
 }

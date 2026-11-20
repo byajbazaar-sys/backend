@@ -11,6 +11,8 @@
 4. [Image modes: Exact product vs Full AI scene](#4-image-modes-exact-product-vs-full-ai-scene)
 5. [The image notebook](#5-the-image-notebook)
 6. [The video notebook](#6-the-video-notebook)
+   - [6a. The voice notebook](#6a-the-voice-notebook-voiceovers)
+   - [6b. The fast video notebook](#6b-the-fast-video-notebook-fast-render)
 7. [Warm workers](#7-warm-workers)
 8. [The model cache dataset](#8-the-model-cache-dataset)
 9. [Progress, status screens and admin](#9-progress-status-screens-and-admin)
@@ -26,10 +28,10 @@
 
 A jeweller uploads **one product photo** (for example a bangle). ByajBazaar then makes:
 
-- **Campaign images** — 4 advertising scenes (a model wearing it, on velvet, in a gift box…).
+- **Campaign images** — 5 advertising scenes (a model wearing it, on velvet, in a gift box…).
 - **Photoshoots** — a set of product shots.
 - **Logo images** — a brand backdrop with the shop name.
-- **A reel** — each image becomes a 5-second video clip, merged into one Instagram Reel (1080×1920).
+- **Reels** — each scene image becomes its own 5-second video clip (1080×1920), publishable as an Instagram Reel.
 
 The AI models are too big for our AWS Lambdas, so the heavy work runs on **free Kaggle GPU notebooks**
 (each Kaggle account gives a session with **2 × NVIDIA T4** GPUs and ~30 GPU hours per week). Our backend writes a
@@ -95,10 +97,11 @@ Example: a user creates a campaign with 4 scenes.
    - The best image is uploaded straight to the marketing bucket.
 6. **Progress flows back** after every step (`imageAnalysis`, `imageGeneration`, `imageDone`, …). The backend updates
    the campaign and pushes it to the browser, so the user sees "Painting image 2/4" and "Image 2/4: quality 9/10".
-7. **The last image job finishes** (`completed`; earlier ones just update their scene). If the user asked for a video,
-   **one `CAMPAIGN` job per clip** is queued (4 scenes, plus the logo clip if the brand has none yet). They also run
-   in parallel, with Wan 2.2. When the **last clip job** finishes, `finishVideoJob` queues one **merge-only** job
-   (ffmpeg, no video model) that joins the clips into the reel.
+7. **Each scene's clip is queued the moment its image is ready** (`renderSceneEarly`, when the user asked for video):
+   one `CAMPAIGN` job per clip, so a free GPU starts on scene 1's video while scenes 2–5 are still painting. The last
+   image job queues whatever is left (and the logo clip if the brand has none yet). Each clip is a deliverable:
+   **there is no merge step** any more (it cost a whole extra GPU-session hand-off and a re-encode of every clip). A
+   reel is published from one scene clip; campaigns made earlier keep their merged film.
    The user sees one combined status per notebook ("2/4 done · Painting image…", average progress) —
    `kaggleBatchStatus` in `kaggle-rules.ts`.
 8. **The worker stays warm.** It keeps the models loaded and asks for more work. With nothing to do it stops after
@@ -110,8 +113,8 @@ Users choose per campaign or photoshoot. Stored as `image_mode` (`exact` | `ai`,
 
 | Mode | UI label | What happens | Best for |
 | --- | --- | --- | --- |
-| `exact` | **Exact product** (recommended) | The real jewellery is cut out; AI paints only the scene around it; the **original product pixels** are pasted back. The design, stones and metal colour can't change. | Almost everything. |
-| `ai` | **Full AI scene** | FLUX.2 [klein] redraws the whole photo using the product photo as a reference. More natural light and interaction, but small details can drift. The judge marks any visible change down hard. | Lifestyle shots where a natural look matters more than exact detail. |
+| `exact` | **Exact product** (recommended) | Surface shots (velvet, plinth, box on a table): the real jewellery is cut out, AI paints only the scene around it and the **original product pixels** are pasted back — they can't change. On-body shots (worn, held in hands, presented in a box, a campaign scene with a model): a flat photo can't be worn, so klein draws the piece in place and the **real pixels are restored on top** wherever the drawing matches (see "Generate, then restore"). | Almost everything. |
+| `ai` | **Full AI scene** | Every shot is drawn by FLUX.2 [klein] from the clean cut-out, then the real pixels are restored on top the same way. More natural light and interaction. | Lifestyle sets. |
 
 Logo jobs ignore the mode.
 
@@ -132,61 +135,77 @@ The mobile app does not send the mode yet, so it always gets `exact`.
 
 ### Models
 
-| Role | Model | Runs on |
-| --- | --- | --- |
-| Painter (both modes + logo backdrops) | **FLUX.2 [klein] 9B** distilled, fp8 weights (9.4 GB), fp16 maths on the T4 | ComfyUI, GPU 0 |
-| klein text encoder / VAE | `qwen_3_8b_fp8mixed` (8.7 GB) / `flux2-vae` | ComfyUI, GPU 0 |
-| Planner + judge | **Qwen3-VL-8B-Instruct**, 4-bit | GPU 1 |
-| Cut-out | **BiRefNet** | GPU 0, before ComfyUI starts |
+| Role | Model | Runs on | Licence |
+| --- | --- | --- | --- |
+| Painter (both paths + logo backdrops) | **FLUX.2 [klein] 9B** distilled, fp8 weights (9.4 GB), fp16 maths on the T4 | ComfyUI, GPU 0 | FLUX Non-Commercial (see warning) |
+| klein text encoder / VAE | `qwen_3_8b_fp8mixed` (8.7 GB) / `flux2-vae` | ComfyUI, GPU 0 | Apache-2.0 |
+| Planner + judge | **Qwen3-VL-8B-Instruct**, 4-bit | GPU 1 | Apache-2.0 |
+| Cut-out | **BiRefNet_HR** at 2048 px, aspect kept | GPU 0, before klein loads | MIT |
+| Product restore | SIFT + MAGSAC homography + detail transfer (OpenCV) | CPU | Apache-2.0 / BSD |
 
-There are **no lighter fallback models** (no klein 4B, no Qwen3-VL 4B, no RealVisXL): every image is made by the
-models above, or the job fails with a clear error.
+There are **no lighter fallback models**: every image is made by the models above, or the job fails with a clear
+error.
 
-> **Licence warning.** FLUX.2 [klein] 9B is **gated** on Hugging Face and under the **FLUX Non-Commercial License**.
-> To use it, set `MARKETING_HF_TOKEN` to a read token of a Hugging Face account that has accepted the licence on
-> the model page, and get a commercial licence from Black Forest Labs for business use. **The token is required:**
-> without it every image job fails at once with "MARKETING_HF_TOKEN is not set" (earlier versions silently used 4B).
+> **Licence warning.** FLUX.2 [klein] 9B is **gated** on Hugging Face and under the **FLUX Non-Commercial License**
+> (verified on the model card, Nov 2026). Serving it to paying jewellers needs a commercial licence from Black Forest
+> Labs (their "Builder" self-hosted tier covers klein; read its "no external API endpoint" clause). FLUX.2 [klein]
+> **4B** is Apache-2.0 and runs the same graph; it is the licence-safe switch if no BFL licence is bought — with the
+> restore step it loses less, since the jewellery's pixels come from the photo either way. Set `MARKETING_HF_TOKEN`
+> to a read token of an account that accepted the 9B licence; without it every image job fails at once.
 
-Why not Qwen-Image-Edit? ComfyUI only runs it in bf16/fp32. The T4 has no bf16, and fp32 for a 20B model is far
-too slow and doesn't fit. klein runs in fp16 on a T4.
+Why not Qwen-Image-Edit-2509/2511, FireRed-Image-Edit, FLUX 3 Image Klein or LTX-2? ComfyUI runs those classes only in
+bf16/fp32. A T4 has no bf16, so they fall back to fp32 (about 3.5x slower on Turing) and the 20B ones don't fit;
+nunchaku's INT4 Qwen kernels crash on sm_75. klein's ComfyUI class runs in fp16, which the T4 does well.
 
 ### The notebook's cells, in order
 
 | # | Cell | What it does |
 | --- | --- | --- |
-| 1 | setup | Installs packages (a warm worker installed them at boot), opens the progress reporter, downloads the product photo, picks the mode. |
-| 2 | engine | ComfyUI/klein helpers. Starts in the **background**, while the analyst works: the klein downloads (each to `<file>.part`, renamed when complete) **and**, at the same time, ComfyUI's pip install. |
-| 3 | analyst | One short Qwen3-VL answer with only what the mode needs: `product_box`, `metal`, `colours` + per shot `placement` and a product-aware `scene` (Exact), or `ai_prompt` (AI). Motion prompts and product descriptions come from the backend planner. Logos skip it. |
-| 4 | cutout | Exact mode: BiRefNet cuts the jewellery out **inside the box** (so hands and props stay out). AI mode: saves the box crop as the reference. |
-| 5 | generate | Paints every shot, judges the tries, uploads the best one. |
+| 1 | setup | Installs packages (a warm worker installed them at boot), opens the progress reporter, downloads the product photo, picks the mode, reads the jeweller's metal (`JOB.metal`). |
+| 2 | restore | The shared CPU helpers (`product-restore.notebook.ts`): `product_features`, `match_product`, `restore_product`, `refine_foreground`, `metal_tone`. |
+| 3 | engine | ComfyUI/klein helpers; klein downloads + ComfyUI's pip install in the background. Then a **GPU-0 thread** cuts the photo out with BiRefNet_HR and loads klein (a tiny warm-up render) **while the analyst works on GPU 1**. |
+| 4 | analyst | One Qwen3-VL answer: `product_box`, `metal`, `colours` + per shot either `placement` + `scene` (paste shots) or `ai_prompt` (redraw shots). The JSON template uses placeholders, never example values the model could copy. A metal given by the jeweller wins over what it reads. Logos skip it. |
+| 5 | cutout | Keeps the mask parts inside the analyst's box (hands and props dropped; the opening of a kada is never filled), cleans the edge colours (no halo), builds the SIFT features, and saves the cut-out on a soft neutral backdrop as klein's reference. |
+| 6 | generate | Paints every shot, restores the real product, judges, uploads the still **and its product mask** (`<image>-mask.png`). |
 
 ### How one shot is painted
 
-**Exact mode** (`klein_paint`):
+Every shot takes one of two paths (`path_for`):
 
-1. Place the cut-out where the analyst said, on a plain grey canvas.
-2. Give klein that canvas twice: as a **reference** (so it "sees" the product) and as the **starting image with a
-   mask** (white = paint, black = keep), so the product area cannot move.
-3. Prompt: "replace the grey placeholder with *<scene>*; the jewellery stays where it is, shown once".
-4. Add a soft contact shadow and paste the **original product pixels** back on top.
+**Paste** (exact mode, surface shots — `paste_shot`):
 
-**AI mode** (`ai_shot`): klein's standard image-edit graph — reference = product crop, prompt = `ai_prompt` with a
-**metal lock** in front (`fit_metal`): "The jewellery is silver with pink and blue enamel; keep it exactly silver —
-NOT gold…". For a silver/platinum piece it also rewrites "gold"/"golden" wording in the prompt (warm golden light is
-what pushed silver pieces to gold).
+1. Place the cut-out where the analyst said, on a plain grey canvas (never larger than 1.5x its photographed pixels).
+2. Give klein that canvas twice: as a **reference** and as the **starting image with a mask** (white = paint,
+   black = keep), so the product area cannot move.
+3. Upscale the painted scene to the deliverable size (long side 1920) and paste the **source-resolution cut-out**
+   on top with a soft contact shadow.
+
+**Redraw** (ai mode, and every on-body shot — `redraw_shot`): klein draws the whole photo from the clean cut-out
+with the **metal lock** in front of the prompt (`fit_metal`: "The jewellery is silver with pink and blue enamel; keep
+it exactly silver — NOT gold…"; gold wording is rewritten for white metals). Then **generate, then restore**:
+
+1. `match_product` finds the drawn piece: SIFT features of the real cut-out matched in the drawing, a MAGSAC
+   homography, and sanity checks (enough consistent matches, convex placement, limited distortion).
+2. `restore_product` rebuilds it from the real photo: fine detail (bells, enamel edges, engraving) and colour from the
+   photo, only the soft large-scale light from the drawing, and a small white-balance shift at most.
+3. A local agreement map keeps the drawn pixels wherever the two disagree — fingers in front of the piece, the back
+   of a bangle hidden by the wrist — so nothing is pasted over a hand.
+4. If less than 45% of the piece agrees (a very different pose), the drawing stays and the judge decides; the metal
+   is still measured in CIELAB on the matched area.
+
+Tested on the real silver kada: a take tinted gold (b* 34) comes back silver (b* ~11, photo 8) with a finger kept in
+front; a piece the video model rotated is correctly refused.
 
 **Keeping the metal right** (this used to turn silver jewellery gold):
 
-1. The backend never guesses the metal. `normalizeMetal` returns `unknown` when neither the form, the inventory item
-   nor the item name says it (it used to default to gold), and the prompt then says "the exact metal colour seen in
-   the reference photo". For silver/platinum the scene light is neutral instead of "warm golden".
-2. The analyst reads the metal from the photo, and the photo wins over the direction.
-3. The judge names the metal it sees in each try; a silver piece that came out gold scores at most 2.
+1. The backend never guesses the metal (`normalizeMetal` returns `unknown`); a photoshoot's known metal is sent as
+   `JOB.metal` and wins.
+2. The analyst reads the metal from the photo; the prompt carries the metal lock.
+3. The restore puts the photo's colour back; the judge's metal answer and the CIELAB measurement cap a changed metal
+   at 2/10.
 
 **Worn shots** describe the piece physically on the body ("her hand passes through it and it rests on the wrist
-bone… not held, not floating"); the judge reports `worn`, and a piece held or floating beside the body scores at
-most 4. In Exact mode the original pixels are pasted, so a worn shot can still look stuck-on; use AI mode for sets
-with a model.
+bone… not held, not floating"); the judge reports `worn`, and a piece held or floating scores at most 4.
 
 **Logo** (`klein_logo`): klein paints a backdrop with an emblem, then the shop name is **typeset with a real font**
 (never AI-drawn), so it is always spelled correctly.
@@ -197,23 +216,45 @@ overflow) restarts ComfyUI once with a full-precision text encoder.
 ### How the two GPUs share the work
 
 ```
-GPU 0 (klein paints)     try 1 ─────────────── (only if try 1 < 8) try 2 with "Avoid this mistake: <issue>"
-GPU 1 (Qwen3-VL judges)          judge 1                                    judge 2
+GPU 0   BiRefNet_HR cut-out ── klein warm-up ── try 1 ──────────── (only if try 1 < 8) try 2
+GPU 1   Qwen3-VL plans the shots ─────────────────── judge 1 ───────────────────────── judge 2
+CPU     photo download · restore + CIELAB check of each try · JPEG / mask upload
 ```
 
-- **At most 2 tries per shot** (1 if the session only has one GPU — then there is no judge). It used to be up to 4;
-  most of that time was spent on tries nobody saw.
-- Why judge at all with the best model? Every try is a random sample: even 9B sometimes gets a hand, the scale or
-  the metal wrong. The judge catches that before it reaches the user.
-- Try 1 is judged first; a score of **8 or more** is kept straight away. Otherwise try 2 is painted with the judge's
-  complaint added to the prompt, so it fixes that specific mistake instead of rolling the dice again.
-- The judge is strict (0–10): product shown once, natural size and placement, no halo or cut-out look, matching
-  shadow, correct hands and faces, looks like a real camera photo, no text. In AI mode any visible change to the
-  product caps the score at 4; a changed metal at 2; a worn shot that isn't worn at 4.
+- While the analyst plans on GPU 1, GPU 0 cuts the piece out and loads klein, so the first try starts right after.
+- **At most 2 tries per shot** (1 without a second GPU — then there is no judge). Try 1 is judged first; **8 or
+  more** is kept straight away. Otherwise try 2 is painted with the judge's **positive** fix ("Show the silver kada
+  resting on velvet…" — negations in the prompt do nothing at cfg 1).
+- The judge sees the reference cut-out, the take, and a **close-up of the located piece**. Hard limits its overall
+  number can't override: changed metal (measured or read) → 2; extra jewellery → 3; worn piece held/floating → 4;
+  a redraw whose piece can't be found in it → 6. A judge that fails twice gives 5 (so a second try is made).
 - If both tries are within 1 point, Qwen3-VL compares them side by side. Only the best try is uploaded.
 
-We don't run a second painter on GPU 1 because Kaggle gives ~30 GB of RAM: two copies of klein plus Qwen3-VL would
-run out of memory.
+We don't run a second klein 9B on GPU 1: two copies of 9B + its 8B text encoder don't fit Kaggle's ~29 GB of RAM
+(two klein 4B would).
+
+**Cut-out reuse (warm sessions).** Each scene of a campaign is its own image job on the same product photo. The
+session keeps the cut-out of the last 4 photos, keyed by a hash of the photo's bytes.
+
+- On the next job with that photo it skips BiRefNet. In a warm session BiRefNet first has to unload klein from
+  GPU 0, so this also saves the klein reload.
+- The closer second pass is reused when the analyst's box is about the same (IoU ≥ 0.85); otherwise only that pass
+  runs again.
+- The output is unchanged: the same photo gives the same mask.
+
+**Several shots per job are pipelined.** A warm session takes the batch's other waiting shots into the job it starts
+(up to 4), unless other idle or booting sessions would take them.
+
+- In the job, GPU 0 paints the next shot, or a second take, while GPU 1 judges the last.
+- Every shot keeps exactly its own takes, judging and fix-guided second take; second takes go before new shots.
+- A painter thread that dies, or an engine that never starts, fails the shots instead of hanging the job.
+- In the 3-shot test, painting and judging overlapped, and only the weak shot got a second take.
+
+**Robustness**:
+
+- The photo download and the image / mask uploads retry with backoff; an expired URL fails at once.
+- A crashed ComfyUI is restarted once and the same render tried again; ComfyUI is polled every 0.5 s (was 2 s).
+- Painted PNGs are deleted after reading, so a 12-hour warm session doesn't fill the disk.
 
 ### When klein fails
 
@@ -222,36 +263,222 @@ retried by the watchdog when the session died). If one try fails after the engin
 
 ### How long it takes
 
-About 1–3 minutes per try with 9B, so one scene takes ~2–6 minutes. Scenes run in parallel on different accounts, so
-a 4-scene campaign takes about as long as one scene **when 4 accounts are free** (otherwise scenes queue for the next
-free worker). A brand-new session adds model loading (a few minutes from the model cache, longer when downloading); a
-warm worker starts the next job at once.
+About 1–3 minutes per try with 9B (estimate from earlier runs; measure the logged timings), the restore adds 1–3 s
+of CPU, so one scene takes ~2–6 minutes. Scenes run in parallel on different accounts. A warm worker starts the next
+job at once; a new session's first job no longer waits for klein to load after the analyst.
 
 ## 6. The video notebook
 
-Wan 2.2 TI2V-5B (in ComfyUI) turns each image into a ~5-second clip; ffmpeg merges the clips into a
-1080×1920, 30 fps H.264 reel with smooth transitions.
+**Wan 2.2 I2V A14B** (Apache-2.0) turns each scene still into a ~5-second, 1080×1920, 30 fps H.264 clip — each one
+a reel of its own. (It replaced Wan 2.2 TI2V-5B, whose 16x-compressing VAE melted
+bells and enamel and whose clips drifted — see `videos test/`.)
 
-| Preset | Render size | Frames | Steps |
-| --- | --- | --- | --- |
-| `reel_hq` | 704×1280 (Wan 2.2's native portrait size) | 121 at 24 fps | 30 |
-| `reel_fast` | 480×832 | 121 at 24 fps | 20 |
+| Part | Setting |
+| --- | --- |
+| Model | two 14B experts as GGUF **Q5_K_M** (10.8 GB each): high-noise lays out the motion, low-noise the detail |
+| Speed-up | **LightX2V 4-step I2V distill LoRAs** (Apache-2.0) on both experts, strength 1.0 |
+| Sampler | euler / simple, shift 5, **CFG 1** — half the steps on each expert (`KSamplerAdvanced` ×2) |
+| VAE / text | **Wan 2.1 VAE** (A14B needs it; the 2.2 VAE is for 5B only) / umT5-XXL fp8 |
+| Frames | 81 at 16 fps (Wan's native rate) → RIFE ×2 on the GPU → 30 fps |
+| Presets | `reel_fast` 480×832, 6 steps · `reel_hq` 544×960, 8 steps |
 
-Clips are upscaled to 1080×1920 afterwards, so `reel_fast` is softer but cheaper.
+**One expert per GPU.** With ComfyUI-MultiGPU, the high-noise expert stays on GPU 0 and the low-noise expert on GPU 1,
+so the two 14B models never swap. Without that node pack both share GPU 0 and ComfyUI swaps them (slower, same
+result).
 
-Setup overlaps: ComfyUI's pip install runs in the background while the Wan files download (in a warm worker it was
-already done at boot). The video prompt and negative prompt lock the metal and enamel colours ("silver turning gold"
-is in the negative), since a clip starts from the scene image and must not drift away from it.
+**Keyframes, not prompts, move the camera.** Each clip is a *first-last-frame* render (`WanFirstLastFrameToVideo`):
+both keyframes are crops of the jeweller's still, so the clip starts **and ends** on the real piece and can't drift
+far in between. The motion text only picks the move: push-in (full frame → 1.15x crop on the piece), sideways dolly,
+tilt or crane. A model scene uses a gentle 1.08x push-in and "the model holds still".
 
-**Out-of-memory protection** (this used to crash with "KSampler: Allocation on device 0 would exceed allowed memory"):
+**The real product in every frame** (`lock_product`, CPU): the scene still's product mask (uploaded by the image
+notebook) gives the real piece; in each frame it is found by feature matching (the planned camera path fills gaps),
+and `restore_product` rebuilds it from the still's pixels where the frame agrees. Tested on the old drifting clip:
+62 of 79 frames locked in 35 s on 4 CPUs, the original bells and enamel back in place. Older stills without a mask
+skip the lock.
 
-- Frames are decoded in tiles (`VAEDecodeTiled`), not all at once.
-- ComfyUI keeps 1 GB of GPU memory in reserve.
-- If a clip still runs out of memory, `render_clip_safely()` retries smaller: 704×1280 → 608×1088 → 544×960 → 480×832.
-- With two GPUs, both T4s work on every step (`C2CSequenceParallel`).
+Where the piece can't be rebuilt in a frame (hidden, too far off), the rebuild fades out and back in over 4 frames
+around it (`LOCK_RAMP`), so the piece never snaps between the photo's pixels and the generated ones.
 
-Long jobs hand over before Kaggle's 12-hour session limit: finished clips are kept and the job continues in a new
-session.
+**Quality gate** (`clip_qa`, every scene take, before encoding): it rejects
+
+- broken frames (black, blown out or blank: fp16 NaNs) and too few frames;
+- a sudden jump: one frame change far above the clip's own motion, i.e. a cut or a morph;
+- brightness flicker;
+- a real piece matched in under 40 % of the frames, meaning it drifted, melted or was covered.
+
+A take with any of these is rendered **once more with a new seed**, if the session has time for it, and the better
+take is delivered. Broken frames in both takes fail the clip. The delivered seed and anything the gate still saw go
+in the `clipDone` event (logged as "Clip delivered"); the seed re-renders that exact take. The thresholds are in
+`QA_*` at the top of the render cell.
+
+**After rendering**: frames upscaled to 1080×1920 (lanczos), product locked, gate passed, then **one** lossy encode
+(x264 CRF 16, preset slow, High profile 4.2, AAC 48 kHz, faststart):
+
+- **BT.709 conversion, tagged in the file.** Untagged files are decoded with the wrong matrix on phones and
+  Instagram, and gold shifts hue. A flat gold patch survives the round trip within 2 levels.
+- Scene clips also get a 5-frame **deflicker**, which smooths brightness steps from the tiled VAE decode, and a
+  light luma-only **CAS sharpen** of the 2× upscale (needs ffmpeg ≥ 4.3; skipped on older builds).
+- `validate_render` checks size, fps, duration and bitrate, then decodes the whole file: a truncated or corrupt
+  clip is never uploaded.
+
+**Robustness**:
+
+- Image downloads retry with backoff, and the clip upload retries 5 times; an expired URL (4xx) fails at once.
+- A ComfyUI crash restarts the engine (port 8188 only — the voice engine on 8190 is left alone) and renders the
+  clip once more.
+- ComfyUI's input keyframes and output PNGs are always removed, even when a take fails.
+
+**Clips are pipelined over both GPUs and the CPU** (`run()` in the run cell):
+
+- **Two ComfyUIs, one Wan expert each.** ComfyUI on port 8188 sees only GPU 0 and runs the high-noise half of the
+  steps; ComfyUI on 8189 sees only GPU 1 and runs the low-noise half, the VAE decode and RIFE.
+- **Exact hand-over.** Two tiny nodes (`bb_handoff.py`, written at install) pass the conditioning and latent between
+  them unchanged; a local round trip was bit-identical. It is the same graph, cut where the experts hand over.
+- **Overlap.** GPU 0 starts clip N+1 while GPU 1 finishes clip N. Meanwhile the CPU locks the product into the clip
+  before, runs the quality gate and encodes it, on 3 threads (one vCPU is left for the ComfyUIs).
+- **Gains.** With 3 clips the sampling is roughly 1.4–1.8× faster than one clip after another. A single clip takes
+  the same time as before.
+- **Recovery.** Out of GPU memory → the next smaller size; a crashed ComfyUI → restarted once; a failed take → a new
+  take, queued ahead of new clips. Every clip ends with exactly one done / failed / deferred event.
+- **Session time.** A new clip only starts if it can finish inside the Kaggle session; the rest hand over.
+- **Fallback.** If the second ComfyUI can't start (one GPU, under 8 GB of free RAM, or a start error), the session
+  uses the old single ComfyUI with ComfyUI-MultiGPU for the rest of its life.
+- **CPU work runs side by side.** Loading frames, finding the piece in each frame (SIFT, one detector per thread) and
+  rebuilding it: 82 s → 41 s on the 79-frame test clip on an 8-core machine. Expect less on Kaggle's 4 vCPUs.
+
+**Several clips per job.** A warm session that starts a job also takes the campaign's other waiting clips (same
+render engine, up to 3 clips in all) — but never the ones another idle or booting session would take, so free
+accounts still render in parallel. Each taken job becomes DONE with `payload.mergedInto` and joins the job's batch;
+the batch status leaves it out. Image jobs work the same way (see §5).
+
+**C2C Multi-GPU Split is not used for the detailed render:**
+
+- It refuses GGUF loaders (its docs: "use a core loader"), and the A14B experts must be GGUF to fit a T4.
+- It would need a full copy of the active expert on each GPU, swapping both 10.8 GB experts on both cards every clip.
+
+The fast render (§6b) uses it.
+
+**Not used: GAN upscalers** (Real-ESRGAN etc.). They work frame by frame and invent texture differently in every
+frame, which flickers on video; the product region is rebuilt from the real 1080×1920 still anyway.
+
+The logo clip is animated on the CPU (fade, slow zoom, light sweep over the gold lettering) — no video
+model, so the typeset name stays spelled exactly.
+
+**Prompting at CFG 1**: a negative prompt has no effect, so the positive prompt describes only the camera and light,
+never hands or people ("no hands" brings hands in). `safeMotion()` still turns any motion that rotates or handles
+the piece into a camera move.
+
+**Out-of-memory protection**: tiled VAE decode, 0.8 GB VRAM reserve, and `render_clip_safely()` steps down
+544×960 → 480×832 → 448×784 → 416×736. Long jobs hand over before Kaggle's 12-hour limit (first-clip estimate 25 min
+fast / 40 min HD, then the measured average).
+
+Timing (estimate, not yet measured on Kaggle): ~13 min per 480p clip was reported for A14B + LightX2V on one T4 at
+6 steps; one expert per T4 removes the swapping. Check the "Rendering scene N · step x/y" timestamps on the first run.
+
+## 6a. The voice notebook (voiceovers)
+
+**What it is:** the Marketing page's **Voice studio** tab turns text into speech in the voice of an uploaded sample
+(6+ seconds of clear speech), in 23 languages, with **ChatterBox Multilingual** (Resemble AI, MIT) — the same
+`FL_ChatterboxMultilingualTTS` node (ComfyUI_Fill-ChatterBox) as the ComfyUI workflow: `LoadAudio` →
+`FL Chatterbox Multilingual TTS` → `Save Audio`, with the same settings (exaggeration, cfg_weight, temperature,
+repetition_penalty, min_p, top_p, seed).
+
+**Flow:** `POST /api/v1/marketing/voiceovers` (text, language, the sample as base64 or `sampleFromId` to reuse an
+earlier voice, optional settings) stores the sample in the marketing bucket (`voiceovers/<user>/<id>/`) and queues a
+`VOICE` render job. Like every job it waits for a free warm worker (`pipeline: 'voice'`); progress arrives as
+`marketingVoiceoverUpdated` on the user's WebSocket, and the MP3 when it is done. `POST …/:id/regenerate` makes a
+new take (new seed unless one is given), `DELETE …/:id` removes it.
+
+**The notebook** (`voice-worker.notebook.ts`, a separate notebook):
+
+1. Starts its own ComfyUI on **port 8190** with ComfyUI_Fill-ChatterBox, on whichever T4 has ~5 GB free — normally
+   GPU 1 beside the image analyst — so a warm session never drops klein / Qwen3-VL / Wan for a voiceover. It stays
+   up (model loaded) between voice jobs; the session stops it before image or video work needs the memory.
+2. Converts the sample to a mono WAV (at most 60 s), splits the text into sentence groups of ≤ 280 characters (the
+   model drifts on long inputs), and runs one ComfyUI prompt with one TTS node per part (`keep_model_loaded`).
+3. Joins the parts with 0.3 s pauses, loudness-normalises them (−16 LUFS) and uploads a 192 kbps MP3.
+
+**Models:** the six ChatterBox files (`ResembleAI/chatterbox`: `ve.pt`, `t3_mtl23ls_v2.safetensors`, `s3gen.pt`,
+`grapheme_mtl_merged_expanded_v1.json`, `conds.pt`, `Cangjie5_TC.json`) are part of every account's model cache
+(`VOICE_MODEL_FILES`, staged in the session's `voice` group) at `ComfyUI/models/chatterbox/chatterbox_multilingual/`,
+where the node looks — nothing downloads at run time on a cached account.
+
+**Ad scripts from inventory ("Write an ad"):** `POST /api/v1/marketing/voiceovers/script` with an
+`inventoryItemId` and a `style` — `en`, `hi` (Hindi) or `hinglish` (Hindi with everyday English words, written in
+Devanagari: "पेश है एक ख़ूबसूरत गोल्ड रिंग, जिसका वेट है सिर्फ़ एक ग्राम।") — returns a short ad (10–15 s) and the voice
+language to speak it in (`en` / `hi`). `buildAdScript()` (`voiceovers/utils/ad-script.ts`) fills hand-written
+phrase banks at random (hook, product line, purity, hallmark, a benefit, call to action), so every call reads
+differently, but it only ever states the item's real facts: the piece (from its name / category), metal, purity
+(22K / 916 → "बाईस कैरेट", 925 → sterling silver), net (else gross) weight, BIS hallmark (an HUID is set) and the shop
+name. Hindi gender and plural agreement is handled (सोने **की** अंगूठी, सोने **के** झुमके, **पेश हैं**), and numbers are
+written as words for the Hindi voice ("डेढ़ ग्राम", "साढ़े चार ग्राम", "दो पॉइंट तीन ग्राम"). Prices are never mentioned
+(rates change).
+
+**Written by a text model, checked by code.** The script is first written by **Gemma 4 26B** on Workers AI
+(fallback Llama 3.3 70B; `MARKETING_SCRIPT_MODEL`, through the Cloudflare account pool with its rotation and quota cooldowns): the prompt lists
+the facts in the exact words to say (numbers already as Hindi words) plus a random angle and tone, so every version is
+new. `checkAdScript()` then rejects any reply that breaks a rule — Latin letters or digits in Hindi / Hinglish, the weight,
+karat or shop name missing or changed, a karat / hallmark / stone the item doesn't have, any price, offer, discount or
+delivery word, a stutter ("आकर आकर"), or the wrong length. One retry, then the template writer — the button always works;
+the response says `source: 'ai' | 'template'`. Live check (Nov 2026, synthetic 1 g 22K ring): 9/9 replies passed.
+
+**Which Cloudflare models, and why (Nov 2026, free plan).** Benchmarked on our own prompts: Gemma 4 26B wrote 10/10
+valid Hindi / Hinglish / English ad scripts (~2 s) and described the kada photo most accurately (several bangles,
+engraved pattern, charms, beads, enamel — no invented stones) for ~5 neurons a call; Llama 3.3 70B also wrote 5/5 but
+costs ~7x more per output token; Qwen 3.8 27B made spelling mistakes in Hindi and miscounted the bangles; Llama 4 Scout
+wrote "BIS" in Latin letters; Mistral Small invented stones. GLM-5.3, Kimi K2.6 and DeepSeek V4 need Workers Paid.
+Reasoning models (Gemma 4, Qwen 3) are called with thinking off (`chat_template_kwargs.enable_thinking = false`), or
+they spend the whole token budget thinking. **Image to text:** the item's photo is described once per photo (cached)
+and the notes ("intricate floral engravings, small hanging beads") go into the script prompt, so the ad describes that
+very piece; words about stones are dropped unless the item is a diamond piece.
+
+**Narration speed.** `settings.speed` (0.7–1.4, default 1) is applied by the voice notebook after ChatterBox speaks
+(ffmpeg `atempo` — the pitch, i.e. the voice, stays the same; pauses scale with it). In the Voice studio the slider sets
+it for new voiceovers; on a finished one the speed chips change playback at once (browser `playbackRate`, pitch kept)
+and **Apply** saves it as a new take with the same seed and settings, so only the speed changes.
+
+**Shop name pronunciation.** For Hindi and Hinglish the shop name is spoken from its Devanagari spelling: the model
+transliterates it once ("Shree Ganesh Jewellers" → "श्री गणेश ज्वेलर्स") and it is stored on the brand
+(`marketing_brands.spoken_name`, migration `1700000000012`; redone if the business name changes). The owner can correct it
+in the Voice studio (`PUT /api/v1/marketing/voiceovers/shop-name`); their spelling is never replaced.
+
+Database: `marketing_voiceovers` (migration `1700000000011`).
+
+## 6b. The fast video notebook (fast render)
+
+When a campaign is created, the user chooses **Video render: Slow & detailed** (default, §6) or **Fast video**.
+
+- **Where it's stored.** `marketing_campaigns.video_engine` = `detailed` | `fast` (migration 13). Each clip job
+  copies it into `payload.videoEngine`.
+- **Which notebook.** `fast` jobs get `buildFastReelNotebook` (`fast-reel-worker.notebook.ts`) and the warm-session
+  pipeline `video-fast`. Switching between `video` and `video-fast` frees the GPUs, like image ↔ video.
+
+| Part | Setting |
+| --- | --- |
+| Model | **Wan 2.2 TI2V-5B** fp16 (Apache-2.0) + Wan 2.2 VAE + the same umT5-XXL |
+| Both GPUs | **C2C Multi-GPU Split** (Code2Collapse node pack): a full model copy per T4; CFG's two halves (and the tokens) of every step run side by side |
+| Sampler | uni_pc / simple, 20 steps (Standard) or 30 (HD), CFG 4.5, shift 6 — the settings it ran with in production before A14B |
+| Frames | 121 at 24 fps (5 s), **kept at 24 fps** (no interpolated or repeated frames) |
+| Sizes | Standard 480×832 · HD 704×1280, OOM ladder 704→608→544→480 wide |
+
+**What stays the same:**
+
+- The scene still is the start frame.
+- The real product is locked into every frame on the CPU, without a camera plan: every SIFT match is trusted, and
+  gaps borrow a neighbour only 1–2 frames away. Test: 89/121 frames locked.
+- Same quality gate (one new take), BT.709 encode, validation, upload, pipelining with the CPU, retries and
+  hand-over.
+
+**What's looser:** TI2V-5B has no end frame, so the camera moves by prompt only. Its motion and fine detail are less
+faithful than A14B's; the product lock rebuilds the real piece where it can.
+
+**When C2C fails** (it refuses the hardware, or a node error), the session goes on with one GPU (`WORKER["c2c_off"]`)
+and the clip renders again. Its speed-up on T4s is still unmeasured. On paper it's up to ~2×, because the CFG halves
+need no data exchange. Check the "step x/y" timestamps on the first fast runs.
+
+**Model cache:** TI2V-5B (10 GB) and its VAE (1.4 GB) joined the per-account dataset, so its slug changed and every
+account rebuilds its cache once.
 
 ## 7. Warm workers
 
@@ -275,7 +502,16 @@ A **warm worker** is one long Kaggle session that does this once and then runs j
 
    A job that needs a step that hasn't finished waits for it ("Copying the image analyst to the local disk"); the
    Kaggle log shows `Boot: … installed in …s` and `Boot: N model files copied to the local disk in …s`.
-3. **Ask for work.** Every 10 s it calls `POST /api/v1/public/marketing/worker/next` (this is also its heartbeat).
+3. **Ask for work.** It calls `POST /api/v1/public/marketing/worker/next` (also its heartbeat). When there is nothing
+   to do it **waits on the WebSocket** for up to 10 s instead of sleeping: the session registers its socket
+   (`sessionListening`), and every dispatch first pushes `marketingWake` to idle sessions (`wakeIdleSessions`), so a
+   new job is picked up within about a second. The answer's `listening: false` tells it to register again; without a
+   socket it simply polls.
+   **Pipeline-aware claiming:** `claimNextForSession` prefers jobs for the models the session already has loaded
+   (image sessions take image jobs first, video sessions clip jobs), so a session doesn't drop klein + Qwen3-VL to
+   load Wan (or the reverse) while matching work is waiting.
+   **Progress never blocks the GPUs:** both notebooks' reporters send from a background thread (in order); a final
+   event waits until everything before it was delivered.
 4. **Run a job.** The answer contains the job's notebook code. The worker runs it in-process. A `WORKER` dictionary
    survives between jobs and keeps the loaded Qwen3-VL, the running ComfyUI and the installed packages — so the
    second image job skips installing, downloading and loading.
@@ -319,7 +555,8 @@ Always-on is not possible: 4 accounts × 30 GPU hours/week = 120 hours, but one 
 ### Why
 
 Kaggle wipes `/tmp` when a session ends, so models downloaded in one session are gone in the next. Instead, the
-**account setup** notebook saves all models (~55 GB with 9B) as a **private Kaggle dataset** on each account. Warm
+**account setup** notebook saves all models (~68 GB: klein 9B, Qwen3-VL, BiRefNet_HR, the two Wan A14B experts and
+their LoRAs) as a **private Kaggle dataset** on each account. Warm
 workers **mount** it (instant, no download).
 
 ### How it works, step by step
@@ -438,6 +675,13 @@ Do the same with `buildWorkerNotebook` (video / setup) and `buildWorkerSessionNo
    (about an hour of GPU time each) — wait for **models cached**.
 5. Run one photoshoot, then a second one right after: the second should start without "Installing…" / "Loading the
    image analyst" (warm worker).
+6. Pipelining and fast render (this release):
+   - Migration `1700000000013` adds `video_engine`.
+   - The model cache slug changed (TI2V-5B added), so every account rebuilds its cache once.
+   - On the first campaign with 3+ scenes, the session log should show "Pipelining waiting siblings" and the video
+     engine "one Wan expert per GPU, clips overlap".
+   - On the first **Fast video** campaign, check whether C2C ran or fell back ("rendering on one GPU") and note the
+     step timing.
 
 ## 13. Troubleshooting
 
@@ -450,6 +694,8 @@ Do the same with `buildWorkerNotebook` (video / setup) and `buildWorkerSessionNo
 | `ComfyUI has no <Node> node` | ComfyUI is cloned fresh each session; rerun. If it persists, the node was renamed upstream. |
 | `<Node> has no input [...]` | ComfyUI changed a node's inputs; update `klein_workflow()`. |
 | `FLUX.2 [klein] produced a blank image` | fp16 overflow even after the restart; rerun (new seed). |
+| `Scene N failed the quality check: …` | Both takes had broken (black / blank) frames — usually fp16 overflow on that still. Rerun the scene; if it repeats, regenerate the scene image. |
+| "Quality check on scene N: … — rendering a new take" | Normal: the first take had a jump, flicker or a drifting piece; the clip takes about twice as long. |
 | Video still runs out of memory at 480×832 | Something else holds GPU memory; check the account's GPU info on the admin card. |
 | Card never shows "models cached" | Read the setup job message (`model cache not built: …`): Kaggle dataset storage limit, or the `kaggle` CLI couldn't log in with the account key. |
 | Two warm workers idle | Normal for up to 5 minutes; only one is kept warm. |

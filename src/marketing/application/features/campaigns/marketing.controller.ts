@@ -41,7 +41,7 @@ export class MarketingController {
 
   @Post('campaigns')
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Start a campaign: 5 scene images + 5 videos (5 s) + a merged film ending on the logo' })
+  @ApiOperation({ summary: 'Start a campaign: 5 scene images + 5 videos (5 s each, every clip a reel)' })
   async create(@Identity() identity: IIdentity, @Body() body: CreateCampaignRequestModel) {
     return out(MarketingCampaignResponseModel, await this.campaigns.create(identity.userId, body), identity);
   }
@@ -64,7 +64,7 @@ export class MarketingController {
 
   @Post('campaigns/:id/scenes/:index/regenerate')
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Regenerate a scene image (then its video) or only its video; the film is re-merged' })
+  @ApiOperation({ summary: 'Regenerate a scene image (then its video) or only its video' })
   async regenerateScene(
     @Identity() identity: IIdentity,
     @Param('id', new ParseUUIDPipe()) id: string,

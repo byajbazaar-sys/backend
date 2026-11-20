@@ -35,6 +35,17 @@ export interface IProductImageAiService {
   /** Text-to-image with the same model (no reference image), e.g. a logo. */
   generateImageFromText(prompt: string, size?: { width: number; height: number }): Promise<GeneratedAiImage>;
 
-  /** Cheap Workers AI text model (prompt writing). Returns the reply text. */
-  generateText(system: string, user: string, options?: { maxTokens?: number; temperature?: number }): Promise<string>;
+  /** Workers AI chat model (prompt / script writing); `model` overrides the default one. Returns the reply text. */
+  generateText(
+    system: string,
+    user: string,
+    options?: { maxTokens?: number; temperature?: number; model?: string },
+  ): Promise<string>;
+
+  /** Image to text: a multimodal Workers AI model answers `prompt` about the photo. Returns the reply text. */
+  describeImage(
+    image: Buffer,
+    prompt: string,
+    options?: { maxTokens?: number; temperature?: number; model?: string },
+  ): Promise<string>;
 }

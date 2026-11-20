@@ -167,7 +167,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
         break;
       case 'marketingProgress': {
         // From a Kaggle render notebook; authorised by its per-job token, not a user session.
-        const accepted = await app.get(MarketingRenderService).handleWorkerEvent(body);
+        const accepted = await app.get(MarketingRenderService).handleWorkerEvent(body, connectionId);
         if (!accepted) throw new Error('Unauthorized: invalid worker token');
         result = { type: 'marketingProgressAck', jobId: body.jobId };
         break;

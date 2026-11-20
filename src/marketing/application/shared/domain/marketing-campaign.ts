@@ -12,6 +12,8 @@ export interface MarketingCampaign {
   quality: string;
   /** 'exact' (cut-out product, new background) or 'ai' (full AI scene). */
   imageMode: string;
+  /** 'detailed' (Wan 2.2 A14B) or 'fast' (Wan 2.2 TI2V-5B) video render. */
+  videoEngine: string;
   status: ECampaignStatus;
   progress: number;
   stageMessage?: string | null;

@@ -22,3 +22,5 @@ export * from './render-clip-spec';
 export * from './render-job-payload';
 export * from './render-job';
 export * from './worker-session-payload';
+export * from './voiceover-settings';
+export * from './voiceover';
