@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { loadAppSettings } from '@shared-libs';
 
 import { AppModule } from '../app.module';
 import { WEBSOCKET_HANDLER_SERVICE, IWebSocketHandlerService } from '../application';
@@ -7,6 +8,7 @@ let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
 export async function getWebSocketApp() {
   if (cachedApp) return cachedApp;
+  await loadAppSettings(); // settings from SSM (the Lambda env is capped at 4 KB)
   cachedApp = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
   });

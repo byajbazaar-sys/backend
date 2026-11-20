@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { loadAppSettings } from '@shared-libs';
 import { Context, Handler } from 'aws-lambda';
 
 import { AppModule } from '../app.module';
@@ -8,6 +9,7 @@ let cachedApp: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
 async function bootstrap() {
   if (cachedApp) return cachedApp;
+  await loadAppSettings(); // settings from SSM (the Lambda env is capped at 4 KB)
   cachedApp = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
   });

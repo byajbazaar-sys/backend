@@ -18,50 +18,13 @@ custom:
     dev: .env.dev
   dotenv:
     path: ${self:custom.dotenvPathByStage.${sls:stage}}
-    # DB_* vars come from .env.{stage} (Neon / external Postgres).
-    # Large secrets stay out of Lambda env (4 KB limit); loaded at runtime from SSM instead.
-    exclude:
-      - GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
-      # Marketing / Kaggle settings go to the SSM parameter below instead (serverless/marketing-config.js).
-      - MARKETING_CREDENTIALS_SECRET
-      # Instagram marketing settings are included by the MARKETING_ prefix in marketing-config.js.
-      - MARKETING_INSTAGRAM_APP_ID
-      - MARKETING_INSTAGRAM_APP_SECRET
-      - MARKETING_INSTAGRAM_CONFIG_ID
-      - MARKETING_INSTAGRAM_WEBHOOK_VERIFY_TOKEN
-      - MARKETING_INSTAGRAM_REDIRECT_URI
-      - MARKETING_INSTAGRAM_RETURN_URL
-      - MARKETING_INSTAGRAM_GRAPH_API_VERSION
-      # No longer read: Kaggle accounts are managed in the admin screen (kaggle_credentials). Never ship these keys.
-      - KAGGLE_WORKERS
-      - KAGGLE_WORKER_CONCURRENCY
-      - KAGGLE_SESSION_HOURS
-      - KAGGLE_MACHINE_SHAPE
-      - MARKETING_WORKER_SECRET
-      - MARKETING_API_BASE_URL
-      - MARKETING_INLINE
-      - MARKETING_DB_HOST
-      - MARKETING_DB_PORT
-      - MARKETING_DB_NAME
-      - MARKETING_DB_USER
-      - MARKETING_DB_PASS
-      - MARKETING_S3_AWS_ACCESS_KEY_ID
-      - MARKETING_S3_AWS_SECRET_ACCESS_KEY
-      - MARKETING_S3_BUCKET_NAME
-      - MARKETING_S3_BUCKET_REGION
-      - MARKETING_S3_ENDPOINT
-      - MARKETING_QSTASH_URL
-      - MARKETING_QSTASH_TOKEN
-      - MARKETING_QSTASH_CURRENT_SIGNING_KEY
-      - MARKETING_QSTASH_NEXT_SIGNING_KEY
-      - CLOUDFLARE_TEXT_MODEL
-      # Logs database settings go to their own SSM parameter (serverless/logs-config.js).
-      - LOGS_DB_HOST
-      - LOGS_DB_PORT
-      - LOGS_DB_NAME
-      - LOGS_DB_USER
-      - LOGS_DB_PASS
-      - LOGS_DB_CONNECT_TIMEOUT_MS
+    # Nothing from .env.{stage} goes into the Lambda environment (AWS caps it at 4 KB; a deploy failed at 4190 bytes).
+    # The settings go to SSM parameters instead and are loaded on cold start:
+    #   app-config/1..3  every other key   (serverless/app-config.js → libs/aws/app-settings.loader.ts)
+    #   marketing-config MARKETING_* / KAGGLE_* (serverless/marketing-config.js)
+    #   logs-config      LOGS_DB_*          (serverless/logs-config.js)
+    # A new setting needs no change here: add it to .env.{stage} and redeploy.
+    include: []
   serverless-offline:
     httpPort: 3003
     lambdaPort: 3002
@@ -75,6 +38,32 @@ functions: ${file(serverless/functions.yml)}
 
 resources:
   Resources:
+    # Every other app setting from .env.${sls:stage}, in up to 3 JSON chunks of 4 KB (serverless/app-config.js), read by
+    # every Lambda on cold start before Nest starts (libs/aws/app-settings.loader.ts). An empty chunk is "{}".
+    AppConfigParameter1:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /byajbazaar/${sls:stage}/app-config/1
+        Type: String
+        Tier: Standard
+        Description: App settings (JSON, part 1) - generated from .env.${sls:stage} on deploy
+        Value: ${file(./serverless/app-config.js):part1}
+    AppConfigParameter2:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /byajbazaar/${sls:stage}/app-config/2
+        Type: String
+        Tier: Standard
+        Description: App settings (JSON, part 2) - generated from .env.${sls:stage} on deploy
+        Value: ${file(./serverless/app-config.js):part2}
+    AppConfigParameter3:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /byajbazaar/${sls:stage}/app-config/3
+        Type: String
+        Tier: Standard
+        Description: App settings (JSON, part 3) - generated from .env.${sls:stage} on deploy
+        Value: ${file(./serverless/app-config.js):part3}
     # Marketing / Kaggle settings, read by every Lambda on cold start (keeps them out of the 4 KB Lambda env).
     MarketingConfigParameter:
       Type: AWS::SSM::Parameter
@@ -93,6 +82,45 @@ resources:
         Tier: Standard
         Description: Logs database settings (JSON) - generated from .env.${sls:stage} on deploy
         Value: ${file(./serverless/logs-config.js)}
+
+  # Every function waits for the settings parameters, so no cold start ever runs without them during a deploy.
+  extensions:
+    RunPostDeployLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    ApiLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    UpdateDuesCronLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    CloseExpiredLoansCronLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    RelayLogsCronLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsConnectLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsDisconnectLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsCreateSessionLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsJoinSessionLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsBarcodeScannedLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsCartUpdatedLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsHeartbeatLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsLeaveSessionLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsMarketingProgressLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    WsDefaultLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    JewelleryTryOnLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    MarketingWorkerLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+    MarketingPublisherLambdaFunction:
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
 
 package:
   patterns:

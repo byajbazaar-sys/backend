@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { GlobalResponseInterceptor } from '@shared-libs';
+import { GlobalResponseInterceptor, loadAppSettings } from '@shared-libs';
 import * as serverlessExpress from '@vendia/serverless-express';
 import { Context, Handler } from 'aws-lambda';
 import { parse } from 'qs';
@@ -19,6 +19,7 @@ async function bootstrap(): Promise<Handler> {
   }
 
   try {
+    await loadAppSettings(); // settings from SSM (the Lambda env is capped at 4 KB)
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
       logger: ['error', 'warn', 'log'],
       rawBody: true,

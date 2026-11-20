@@ -124,20 +124,43 @@ DB_USER=neondb_owner
 DB_PASS=your-neon-password
 ```
 
-## Environment Variables
+## Environment Variables (SSM Parameter Store)
 
-Environment variables are defined in the main `serverless.yml` under `provider.environment`. For sensitive values, use:
+AWS caps a Lambda's environment at **4 KB**. A production deploy once failed at 4190 bytes, so application settings
+are **not** Lambda environment variables any more.
 
-- **AWS Systems Manager Parameter Store**: `${ssm:/path/to/parameter}`
-- **AWS Secrets Manager**: `${ssm:/path/to/secret~true}`
+**Where settings live:**
 
-Example:
+| Where | What | Built by |
+| --- | --- | --- |
+| Lambda env (`serverless/providers.yml`) | only `NODE_ENV`, `NO_COLOR`, `AWS_NODEJS_CONNECTION_REUSE_ENABLED`, `TRY_ON_LAMBDA_NAME`, `GOOGLE_PLAY_SERVICE_ACCOUNT_SSM_PATH` (~220 bytes) | — |
+| SSM `/byajbazaar/<stage>/app-config/1..3` | every other key of `.env.<stage>` (DB, S3, tokens, Cloudflare, Redis, Google, Meta, Razorpay, …) | `serverless/app-config.js` |
+| SSM `/byajbazaar/<stage>/marketing-config` | `MARKETING_*`, `KAGGLE_*` | `serverless/marketing-config.js` |
+| SSM `/byajbazaar/<stage>/logs-config` | `LOGS_DB_*` | `serverless/logs-config.js` |
+| SSM `/byajbazaar/<stage>/google-play-service-account-json` | the Google Play key file | set by hand |
 
-```yaml
-environment:
-  DB_HOST: ${env:DB_HOST}
-  JWT_SECRET: ${ssm:/crowdsay/${self:provider.stage}/jwt/secret~true}
-```
+**How it works:**
+
+- `serverless-dotenv-plugin` runs with `include: []`, so it injects nothing into the Lambda env.
+- On deploy, `app-config.js` reads `.env.<stage>` itself (never the deploying shell's environment) and packs the
+  values into up to 3 JSON chunks of 4 KB (standard tier, free). Unused chunks hold `{}`.
+- It also adds the defaults `providers.yml` used to give, and fails the deploy with a clear message if the
+  settings ever outgrow 3 chunks.
+- On cold start every handler calls `loadAppSettings()` (`libs/aws/app-settings.loader.ts`) before `NestFactory`.
+  It reads all chunks in one `ssm:GetParameters` call and copies them into `process.env`; values already in the
+  environment win.
+- If SSM can't be read on Lambda, the cold start fails loudly instead of running without a database.
+- Under `serverless-offline` it loads `.env.<stage>` from disk instead.
+
+**What this means for you:**
+
+- **To add a setting**, add it to `.env.<stage>` and redeploy; nothing else changes.
+- **If the settings outgrow 3 chunks** (about 12 KB), the deploy says so: add `AppConfigParameter4` in
+  `serverless.yml` and raise `PARTS` in both `app-config.js` and the loader.
+- **Code must read `process.env` lazily** (in functions, config factories, `useFactory`), never at module top level
+  or in decorator arguments, which are evaluated before the settings are loaded.
+- **Security:** the parameters are `String` type, because CloudFormation can't create `SecureString`. That is the
+  same exposure the Lambda env had. Access is limited by IAM to `/byajbazaar/*`.
 
 ## Best Practices
 

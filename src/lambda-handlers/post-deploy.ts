@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { loadAppSettings } from '@shared-libs';
 import { Context, Handler } from 'aws-lambda';
 import { DataSource } from 'typeorm';
 
@@ -13,6 +14,7 @@ export const handler: Handler = async (_event: unknown, context: Context) => {
   let app: Awaited<ReturnType<typeof NestFactory.createApplicationContext>>;
 
   try {
+    await loadAppSettings(); // settings from SSM (the Lambda env is capped at 4 KB)
     app = await NestFactory.createApplicationContext(AppModule, {
       logger: ['error', 'warn', 'log'],
     });
