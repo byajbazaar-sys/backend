@@ -64,20 +64,43 @@ export function describePiece(input: {
   const match = PIECES.find((p) => p.words.test(text));
   // The form's metal wins; otherwise the item name may say it ("silver kada").
   const metal = normalizeMetal(input.metal) === 'unknown' ? normalizeMetal(text) : normalizeMetal(input.metal);
-  const detail = [input.name?.trim(), input.purity?.trim()].filter(Boolean).join(', ').slice(0, 120);
+  const noun = match?.noun ?? 'jewellery piece';
+  // The prompt reads "this silver chain (<detail>)": a name that only repeats the noun and metal ("chain chain") adds
+  // nothing, and a bare purity number ("70") means nothing to the image model — only a karat ("22K") says the tone.
+  const name = uniqueWords(input.name ?? '');
+  const known = new Set(`${noun} ${METAL_WORDS[metal]?.word ?? ''}`.toLowerCase().split(/[\s()]+/));
+  const telling = name
+    .toLowerCase()
+    .split(/\s+/)
+    .some((word) => word && !known.has(word));
+  const purity = /\d\s*(k|kt|karat|carat)\b/i.test(input.purity ?? '') ? input.purity.trim() : '';
+  const detail = [telling ? name : '', purity].filter(Boolean).join(', ').slice(0, 120);
   return {
-    noun: match?.noun ?? 'jewellery piece',
+    noun,
     wornOn: match?.wornOn ?? 'hand',
     metal,
     detail: detail || undefined,
   };
 }
 
+/** "chain chain" → "chain", "ring Gents Ring" → "Gents Ring": the piece type + item name often repeat a word; the
+ * last copy is kept, so the item's own name reads as written. */
+function uniqueWords(text: string): string {
+  const seen = new Set<string>();
+  return text
+    .trim()
+    .split(/\s+/)
+    .reverse()
+    .filter((word) => word && !seen.has(word.toLowerCase()) && seen.add(word.toLowerCase()))
+    .reverse()
+    .join(' ');
+}
+
 const SETTINGS: Record<PhotoshootSetting, { place: string; surface: string }> = {
   showroom: {
     place:
       'an upscale Indian jewellery showroom with glass display counters and warm golden lights softly blurred behind',
-    surface: 'rich black velvet',
+    surface: 'spotless smooth black velvet',
   },
   studio: {
     place: 'a clean premium photo studio with a soft beige seamless backdrop and gentle softbox lighting',
@@ -85,11 +108,11 @@ const SETTINGS: Record<PhotoshootSetting, { place: string; surface: string }> = 
   },
   wedding: {
     place: 'a decorated Indian wedding venue with marigold garlands, fairy lights and warm bokeh',
-    surface: 'deep maroon velvet with scattered rose petals',
+    surface: 'spotless deep maroon velvet with scattered rose petals',
   },
   festive: {
     place: 'a festive Diwali setting with glowing diyas, a rangoli and warm golden bokeh',
-    surface: 'deep red velvet lit by a soft diya glow',
+    surface: 'spotless deep red velvet lit by a soft diya glow',
   },
 };
 

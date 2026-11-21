@@ -215,7 +215,11 @@ def restore_product(target_rgb, product_rgb, product_alpha, H, min_coverage=0.45
     colour_jump = np.hypot(ca, cb) > 16
     if trust:
         keep = np.ones_like(keep)
-        disagree = colour_jump | (shade < 0.45) | (shade > 2.2)
+        # A colour jump where the fine detail still lines up is the frame's colour drifting (green kundan stones gone
+        # blue for a second), not something in front of the piece: it is restored. A finger or hand over the piece
+        # breaks the detail too, so it still keeps its own pixels — as does a flat area, where detail cannot tell.
+        drifted = (texture > 0) & (ncc > 0.3)
+        disagree = (colour_jump & ~drifted) | (shade < 0.45) | (shade > 2.2)
     else:
         disagree = (((texture > 0) & (ncc < 0.1)) | ((energy_g > 0.8) & (energy_s < 0.25)) | colour_jump
                     | (shade < 0.45) | (shade > 2.2))

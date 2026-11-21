@@ -183,6 +183,10 @@ Every shot takes one of two paths (`path_for`):
 3. Upscale the painted scene to the deliverable size (long side 1920) and paste the **source-resolution cut-out**
    on top with a soft contact shadow.
 
+A piece the product photo **cuts off** (a long chain photographed in part, running off the bottom edge) is pasted so
+it runs off the same edge of the frame (`cut_sides` on the cut-out mask; the layer's cut side sits on the frame's
+edge). Pasted whole, its flat-cut ends looked like a broken chain on the velvet.
+
 The analyst also says how the photo shows the piece (`view`): **flat** (laid flat and seen from above, or hanging
 and seen face-on — necklaces, chains, tikkas, payals, coins) or **angled** (rings, bangles, kadas). A flat piece's
 paste scenes become a **flat lay seen from directly above** (`flat_lay`), unless the scene already puts it on a bust
@@ -211,6 +215,11 @@ front; a piece the video model rotated is correctly refused.
 2. The analyst reads the metal from the photo; the prompt carries the metal lock.
 3. The restore puts the photo's colour back; the judge's metal answer and the CIELAB measurement cap a changed metal
    at 2/10.
+4. The jeweller's title wins over a misread photo when they disagree on the family: "Gold Chain Bracelet with Agate"
+   read as silver (an antique, brownish gold) is locked as gold (`title_metal`). Same family ("Silver Coin" read as
+   oxidised silver) keeps the analyst's finer word.
+5. **Oxidised** pieces get their own lock ("a dark, blackened antique silver finish… NOT bright polished silver"):
+   "white-grey" made klein polish them bright. A redrawn take the judge reads as plain silver scores at most 5.
 
 **Worn shots** describe the piece physically on the body ("her hand passes through it and it rests on the wrist
 bone… not held, not floating"); the judge reports `worn`, and a piece held or floating scores at most 4.
@@ -240,7 +249,15 @@ catalogue maps (checked on all 119 names in the gold and silver lists):
 | forehead / hair | maang tikka, borla, matha patti; passa, jhoomar, hair pins, juda | close / three-quarter portrait |
 | ankle / toe | payal, anklets, ghungroo; bichiya / toe rings | close-up of the feet |
 | waist | kamarband, waist belt | chest to knees |
-| held | coins | cupped hands, close-up |
+| held | coins | cupped hands, close-up (wearing words — "worn by", "as a pendant" — become holding ones) |
+
+**Photoshoot shots are staged by kind** (`shot_staging`): *worn* is on the body as in the table; *hands* is only the
+two gloved hands holding it (nobody wears it); *present* is the model holding it out in the open box (wearing no copy
+of it). The analyst's brief, the sentence every take is painted with, and the judge all follow it: a hands or present
+take where the piece is also worn scores at most 3, a worn take where it is held scores at most 4. Treating hands and
+present shots as worn had painted the chain on the neck *and* in the gloves or box, and capped every correct take. A
+photoshoot's model is the jeweller's choice (`wearer` from the man / woman option), never the analyst's guess, and
+every model shot says the rest of the body is bare (no added earrings, rings or bangles).
 
 Rules on top: **kids' / baby** pieces never get a child model — their model scene becomes a soft product shot (baby
 blanket, wooden toy); **couple** pieces show a man's and a woman's hands together (no single-wearer or gender
@@ -249,7 +266,10 @@ payal, borla, passa, chooda…) and otherwise from the analyst. The judge report
 (`worn_on`) and how many pieces of the kind it sees (`pieces`, against the photo's own count — a pair of payals
 stays two): a ring hung on a necklace, or a second drawn copy of the piece, caps the take at 3. When the long
 question reads the place wrongly (an armlet high on the arm read as "wrist"), one short yes / no question
-(`confirm`) decides before the take is capped.
+(`confirm`) decides before the take is capped — only for such near misses (`CONFUSABLE`: upper arm / wrist, a matha
+patti set / waist, toe / ankle…); a nose ring drawn as a necklace stays capped. Every paste take also gets the copy
+finder's look (not only those the judge flags): plainer extra rings klein painted beside toe rings had passed the
+judge.
 
 ### How the two GPUs share the work
 
@@ -450,6 +470,20 @@ product-only clips in `videos test/` (old start-frame renders: hands pushing, li
 melts) these two checks plus the lock rate agree with a human 20/20; they catch hands *through what they do to the
 piece*, which the off-the-shelf hand / person detectors (MediaPipe palm, YuNet face, MediaPipe person) did not on
 generated close-ups.
+
+**Colour.** The fast engine sometimes drifts the white balance for a second (a brass thali turning silver, green
+kundan stones going blue). `steady_colour` pulls each frame's mean a*/b* back towards the still's wherever it strays
+by more than 6 units — clean clips stray up to ~5.5 on their own (smoothed over 9 frames, lightness untouched); and in tracked frames the product lock now
+restores a colour jump where the piece's fine detail still lines up — that is drift, not a finger in front of it.
+What is left is measured: `piece_colour_shift` warps each frame's piece back onto the still's and counts the share
+whose colour left it (a*/b* difference over 18), held for 6 frames. Over 12 % fails the take ("the piece's colours
+change"); the drifting tikka clip read 38 %, six clean clips 0–1 %.
+
+**When every take lost the piece** (it moved on its own, vanished, or was matched in too few frames — a fast-engine
+tilt that left the payals out of frame, a hand that covered them), the clip is not delivered as rendered: it becomes a
+**camera move over the approved still** (`still_motion`: an eased push-in to 108 % towards the piece), with the real
+product locked in, glints, grade and grain as usual. Its quality note says so. On the test still the piece locks in
+81/81 frames and the gate reads it clean.
 
 Small worn pieces (a ring on a hand, ~60 px wide in the frame) have too few features to match frame by frame:
 `track_piece` follows them with ECC alignment of the still's own pixels around the piece, seeded by the camera path,

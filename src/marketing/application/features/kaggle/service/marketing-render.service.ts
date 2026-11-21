@@ -364,6 +364,8 @@ export class MarketingRenderService {
             style: `${shoot.setting}; ${shoot.model}; ${shoot.outfit}`,
             photoshootId: shoot.id,
             metal: KNOWN_METALS.has(shoot.piece?.metal ?? '') ? shoot.piece.metal : undefined,
+            // The jeweller picked the model: the notebook must not swap it for the analyst's guess of the wearer.
+            wearer: shoot.model === 'man' ? 'male' : 'female',
             targets: [target],
           },
         },

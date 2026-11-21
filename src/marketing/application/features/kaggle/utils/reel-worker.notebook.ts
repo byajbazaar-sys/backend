@@ -970,6 +970,42 @@ def steady_exposure(frames):
     return out
 
 
+def steady_colour(frames, still):
+    """The fast engine sometimes drifts the white balance for a second: a brass thali turned silver and green kundan
+    stones blue mid-clip. Each frame's mean colour (CIELAB a* and b*, lightness untouched) is pulled back towards the
+    still's wherever it strays by more than 6 units (a camera move that frames more of the piece shifts it a little),
+    smoothed over a few frames so the correction itself cannot flicker. Clips that hold their colour are left alone."""
+    n = len(frames)
+    if n < 12:
+        return frames
+
+    def chroma(img):
+        small = cv2.resize(img, (68, 120), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
+        lab = cv2.cvtColor(small, cv2.COLOR_RGB2LAB)
+        return float(lab[..., 1].mean()), float(lab[..., 2].mean())
+
+    ref = np.array(chroma(np.asarray(still.convert("RGB"))))
+    drift = np.array([chroma(f) for f in frames]) - ref
+    # Clean clips stray up to ~5.5 units on their own (a light sweep, a push-in that frames more gold): left alone.
+    excess = np.clip(np.sign(drift) * np.maximum(np.abs(drift) - 6.0, 0.0), -18.0, 18.0)
+    if np.abs(excess).max() < 1.0:
+        return frames
+    k = 4
+    padded = np.pad(excess, ((k, k), (0, 0)), mode="edge")
+    smooth = np.stack([np.convolve(padded[:, c], np.ones(2 * k + 1) / (2 * k + 1), mode="valid") for c in range(2)], 1)
+    out = []
+    for f, (da, db) in zip(frames, smooth):
+        if abs(da) < 0.5 and abs(db) < 0.5:
+            out.append(f)
+            continue
+        lab = cv2.cvtColor(f.astype(np.float32) / 255.0, cv2.COLOR_RGB2LAB)
+        lab[..., 1] -= da
+        lab[..., 2] -= db
+        out.append((np.clip(cv2.cvtColor(lab, cv2.COLOR_LAB2RGB), 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8))
+    print(f"colour steadied: drift up to {np.abs(drift).max():.1f} a*/b* units from the still", flush=True)
+    return out
+
+
 def lock_product(frames, still, mask, rects=None, info=None):
     """The real product, back in every frame: features of the piece in the still are matched in each frame (the camera
     path from the keyframes is the fallback), then restore_product() rebuilds the piece from the still's pixels where
@@ -1365,6 +1401,41 @@ def piece_drift(frames, info, rects=None):
     return held
 
 
+PIECE_COLOUR_SHIFT = 0.12  # share of the locked piece whose colour left the still's, held for PIECE_DRIFT_FRAMES
+
+
+def piece_colour_shift(frames, info):
+    """How much of the locked piece changed colour against the still (each frame warped back onto the still's piece by
+    its tracked homography; CIELAB a*/b* difference over 18), held for PIECE_DRIFT_FRAMES frames in a row. A fast
+    render turned green kundan stones blue for two seconds (0.38); clean clips read 0.00-0.01."""
+    hs = (info or {}).get("hs")
+    if not hs or info.get("src_rgb") is None:
+        return 0.0
+    src, a = info["src_rgb"], info["src_alpha"]
+    ch, cw = a.shape
+    small = (max(8, int(cw / max(1.0, cw / 96.0))), max(8, int(ch / max(1.0, cw / 96.0))))
+    ref = cv2.cvtColor(cv2.resize(src, small, interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0,
+                       cv2.COLOR_RGB2LAB)
+    w = cv2.resize(a, small, interpolation=cv2.INTER_AREA) > 0.6
+    if w.sum() < 20:
+        return 0.0
+    shares = np.full(len(frames), np.nan)
+    for i, (f, h) in enumerate(zip(frames, hs)):
+        if h is None:
+            continue
+        back = cv2.warpPerspective(f, np.linalg.inv(h), (cw, ch), flags=cv2.INTER_AREA)
+        lab = cv2.cvtColor(cv2.resize(back, small, interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0,
+                           cv2.COLOR_RGB2LAB)
+        dab = cv2.GaussianBlur(np.hypot(lab[..., 1] - ref[..., 1], lab[..., 2] - ref[..., 2]), (0, 0), 1.0)
+        shares[i] = float((dab[w] > 18).mean())
+    held = 0.0
+    for i in range(len(shares) - PIECE_DRIFT_FRAMES + 1):
+        window = shares[i:i + PIECE_DRIFT_FRAMES]
+        if not np.isnan(window).any():
+            held = max(held, float(window.min()))
+    return held
+
+
 def longest_gap(flags):
     """Longest run of False in a list of per-frame flags."""
     best = run = 0
@@ -1375,7 +1446,7 @@ def longest_gap(flags):
 
 
 def clip_qa(frames, expected, locked=None, drift=None, drift_limit=PIECE_DRIFT_MAX, gap=None,
-            gap_limit=PIECE_GAP_FRAMES):
+            gap_limit=PIECE_GAP_FRAMES, colour_shift=None):
     """What is visibly wrong with a take, as (score, problems); 0 = clean, lower is better. Broken frames (black, blown
     out or blank: fp16 NaNs) are fatal (score >= 1000). A sudden jump (one frame change far above the clip's own
     motion: a cut or a morph), brightness flicker, and a real piece found in too few frames (it drifted, melted or
@@ -1408,7 +1479,34 @@ def clip_qa(frames, expected, locked=None, drift=None, drift_limit=PIECE_DRIFT_M
     if gap is not None and locked and gap >= gap_limit:
         problems.append(f"the piece is hidden or gone for {gap} frames in a row")
         score += 8
+    if colour_shift is not None and colour_shift > PIECE_COLOUR_SHIFT:
+        problems.append(f"the piece's colours change ({colour_shift:.0%} of it)")
+        score += 10
     return score, problems
+
+
+# What a take is rejected for when the piece itself was lost: it slid away, left the frame or was covered.
+PIECE_LOST = ("moves on its own", "hidden or gone", "matched in only", "colours change")
+
+
+def still_motion(still, mask, count):
+    """A camera-only clip from the approved still: a slow, eased push-in to 108 % towards the piece. Delivered when
+    every rendered take lost the piece (a fast-engine tilt that left the payals out of frame, a hand that covered
+    them) — the jeweller's own still, moving smoothly, beats a clip whose piece slides away or disappears."""
+    img = np.asarray(still.convert("RGB"))
+    h, w = img.shape[:2]
+    cx, cy = w / 2, h / 2
+    if mask is not None:
+        ys, xs = np.where(np.asarray(mask) > 128)
+        if len(xs):
+            cx, cy = float(xs.mean()), float(ys.mean())
+    frames = []
+    for i in range(count):
+        t = i / max(1, count - 1)
+        z = 1.0 + 0.08 * t * t * (3 - 2 * t)  # eased in and out
+        m = np.float32([[z, 0, (1 - z) * cx], [0, z, (1 - z) * cy]])
+        frames.append(cv2.warpAffine(img, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT))
+    return frames
 
 
 def with_retries(what, fn, attempts=4):
@@ -1639,7 +1737,8 @@ def stage_cpu(work, progress):
         if len(frames) < 20:
             raise RuntimeError(f"Only {len(frames)} frames were produced for {work.key}")
         frames = steady_exposure(frames)
-        prep, locked, drift, gap = work.prep, None, None, None
+        frames = steady_colour(frames, work.prep["still"])
+        prep, locked, drift, gap, shift = work.prep, None, None, None, None
         if prep["mask"] is not None:
             progress(work, 0.8, f"Locking the real product into {work.label}", True)
             t_lock = time.time()
@@ -1649,12 +1748,13 @@ def stage_cpu(work, progress):
                   flush=True)
             drift = piece_drift(frames, lock_info, prep["lock_rects"])
             gap = longest_gap(lock_info.get("restored") or []) if lock_info.get("hs") else None
+            shift = piece_colour_shift(frames, lock_info)
             frames = add_glints(frames, lock_info)  # real glints on the locked piece's own highlights
             del lock_info
         # A worn piece may move a little with the model (a breath, a hand settling); a piece on a surface may not.
         relaxed = 2.5 if prep.get("with_model") else 1.0
         score, problems = clip_qa(frames, work.p["frames"], locked, drift, PIECE_DRIFT_MAX * relaxed, gap,
-                                  int(PIECE_GAP_FRAMES * relaxed))
+                                  int(PIECE_GAP_FRAMES * relaxed), shift)
         print(f"{work.label} take {work.attempt + 1} (seed {work.seed}): quality score {score:.1f}",
               "; ".join(problems) or "clean", flush=True)
         if work.best is None or score < work.best["score"]:
@@ -1672,11 +1772,21 @@ def stage_cpu(work, progress):
         if best["score"] >= 1000:
             raise RuntimeError(f"{work.label.capitalize()} failed the quality check: " + ", ".join(best["problems"]))
         frames, locked = best.pop("frames"), best["locked"]
+        notes, seed = best["problems"], best["seed"]
+        if best["score"] > 0 and any(k in note for note in notes for k in PIECE_LOST):
+            print(f"{work.label}: every take lost the piece ({'; '.join(notes)}) — delivering a camera move over the "
+                  "approved still instead", flush=True)
+            frames = still_motion(prep["still"], prep["mask"], len(frames))
+            if prep["mask"] is not None:
+                lock_info = {}
+                frames, locked = lock_product(frames, prep["still"], prep["mask"], None, lock_info)
+                frames = add_glints(frames, lock_info)
+                del lock_info
+            notes, seed = ["every rendered take lost the piece: this clip moves the camera over the still"], None
         progress(work, 0.9, f"Encoding {work.label}" +
                  (f" · real product in {locked}/{len(frames)} frames" if locked is not None else ""), True)
         encode_frames(grade_frames(frames), best["fps"], reel, polish=True)
         del frames
-        notes, seed = best["problems"], best["seed"]
     # A mostly dark animated logo compresses to a few hundred KB; a scene clip that small means a broken render.
     validate_render(reel, OUT_W, OUT_H, OUT_FPS, min_duration=4.5, min_bytes=30_000 if work.key == "logo" else 500_000)
     upload_clip(reel, work.spec["uploadUrl"])
