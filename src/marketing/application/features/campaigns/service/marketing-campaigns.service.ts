@@ -76,11 +76,11 @@ export class MarketingCampaignsService {
     if (!input.inventoryItemId && !input.image?.base64) {
       throw new BadRequestException('Choose an inventory item or upload a photo.');
     }
-    if ((await this.campaigns.countActiveForUser(userId)) >= MAX_ACTIVE_PER_USER) {
-      throw new BadRequestException(
-        `You can have ${MAX_ACTIVE_PER_USER} campaigns in progress at a time. Try again when one finishes.`,
-      );
-    }
+    // if ((await this.campaigns.countActiveForUser(userId)) >= MAX_ACTIVE_PER_USER) {
+    //   throw new BadRequestException(
+    //     `You can have ${MAX_ACTIVE_PER_USER} campaigns in progress at a time. Try again when one finishes.`,
+    //   );
+    // }
 
     // Resolve the input image first, so nothing is created for a bad input.
     let image: { data: Buffer; ext: string };
