@@ -14,5 +14,7 @@ export interface MarketingBrand {
   spokenNameFor?: string | null;
   /** Typed in by the owner: never replaced by the model. */
   spokenNameByUser?: boolean;
+  /** Put the shop logo (profile logo, else the generated one) on the top-left of exported photos. Default on. */
+  logoOverlay?: boolean;
   updatedAt?: Date;
 }

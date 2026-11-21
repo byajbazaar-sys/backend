@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { FindOptionsWhere, In, LessThan, Not, ObjectLiteral, Repository } from 'typeorm';
+import { Brackets, FindOptionsWhere, In, LessThan, Not, ObjectLiteral, Repository } from 'typeorm';
 
 import {
   KaggleAccountEntity,
@@ -59,6 +59,19 @@ function optionalString(row: Record<string, unknown>, key: string): string | nul
   if (value === null || value === undefined) return null;
   if (typeof value !== 'string') throw new Error(`Scheduled-post row has an invalid ${key}`);
   return value;
+}
+
+/** A jsonb column as returned by the pg driver (already parsed; a string only if it was stored as text). */
+function jsonValue<T>(value: unknown): T | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return null;
+    }
+  }
+  return value as T;
 }
 
 function dateValue(value: unknown, key: string): Date {
@@ -202,15 +215,28 @@ export class MarketingScheduledPostsRepository implements IMarketingScheduledPos
     sourceId: string,
     sourceIndex?: number,
   ): Promise<boolean> {
-    return (await this.repo()).exists({
-      where: {
-        userId,
-        sourceType,
-        sourceId,
-        ...(sourceIndex === undefined ? {} : { sourceIndex }),
-        status: In(['SCHEDULED', 'PUBLISHING']),
-      },
-    });
+    // The media may be the post itself or one of a carousel's items.
+    const match = JSON.stringify([{ sourceType, sourceId, ...(sourceIndex === undefined ? {} : { sourceIndex }) }]);
+    const count = await (
+      await this.repo()
+    )
+      .createQueryBuilder('post')
+      .where('post.userId = :userId', { userId })
+      .andWhere('post.status IN (:...open)', { open: ['SCHEDULED', 'PUBLISHING'] })
+      .andWhere(
+        new Brackets((where) => {
+          where
+            .where(
+              `post.sourceType = :sourceType AND post.sourceId = :sourceId${
+                sourceIndex === undefined ? '' : ' AND post.sourceIndex = :sourceIndex'
+              }`,
+              { sourceType, sourceId, sourceIndex },
+            )
+            .orWhere('post.items @> CAST(:match AS jsonb)', { match });
+        }),
+      )
+      .getCount();
+    return count > 0;
   }
 
   async claimDue(now: Date, limit: number): Promise<MarketingScheduledPost[]> {
@@ -243,11 +269,14 @@ export class MarketingScheduledPostsRepository implements IMarketingScheduledPos
         sourceIndex: row.source_index === null || row.source_index === undefined ? null : Number(row.source_index),
         sourceTitle: requiredString(row, 'source_title'),
         assetKey: requiredString(row, 'asset_key'),
+        items: jsonValue<MarketingScheduledPost['items']>(row.items),
+        options: jsonValue<MarketingScheduledPost['options']>(row.options),
         caption: requiredString(row, 'caption'),
         scheduledAt: dateValue(row.scheduled_at, 'scheduled_at'),
         status: requiredString(row, 'status') as MarketingScheduledPost['status'],
         instagramMediaId: optionalString(row, 'instagram_media_id'),
         error: optionalString(row, 'error'),
+        warning: optionalString(row, 'warning'),
         publishedAt:
           row.published_at !== null && row.published_at !== undefined
             ? dateValue(row.published_at, 'published_at')

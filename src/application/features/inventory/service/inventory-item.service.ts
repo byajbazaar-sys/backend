@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
+import { createHash, randomUUID } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { IInventoryCategoriesRepository, INVENTORY_CATEGORIES_REPOSITORY } from './i-inventory-categories.repository';
@@ -37,6 +38,9 @@ import { InventoryItemsFilterOptions } from '../options';
 import { BARCODE_SERVICE, IBarcodeService } from './i-barcode.service';
 import { deriveBusinessSkuPrefix } from '../utils';
 
+/** Photos per inventory item (the first is the cover: catalog tile, labels, try-on). */
+export const MAX_ITEM_IMAGES = 8;
+
 @Injectable()
 export class InventoryItemService implements IInventoryItemService {
   constructor(
@@ -53,6 +57,15 @@ export class InventoryItemService implements IInventoryItemService {
 
   private isStorageKey(value: string): boolean {
     return !!value && !value.startsWith('http');
+  }
+
+  /**
+   * Stable, non-secret id for one of an item's photos: the file name of its storage key (unique inside the item's
+   * folder), or a short hash for photos stored as external URLs.
+   */
+  private imageIdOf(ref: string): string {
+    if (this.isStorageKey(ref)) return ref.slice(ref.lastIndexOf('/') + 1);
+    return `u-${createHash('sha1').update(ref).digest('hex').slice(0, 12)}`;
   }
 
   /** S3 write may store `.jpg` while DB has `.jpeg` (or vice versa). */
@@ -79,9 +92,11 @@ export class InventoryItemService implements IInventoryItemService {
   }
 
   private async enrichItem(item: InventoryItem): Promise<InventoryItem> {
+    const refs = (item.imageUrls ?? []).filter(Boolean);
     return {
       ...item,
-      imageUrls: await this.resolveImageUrls(item.imageUrls),
+      imageUrls: await this.resolveImageUrls(refs),
+      imageIds: refs.map((ref) => this.imageIdOf(ref)),
     };
   }
 
@@ -219,6 +234,10 @@ export class InventoryItemService implements IInventoryItemService {
     return this.enrichItem(updated);
   }
 
+  /**
+   * Single-photo upload (older clients, the mobile app): replaces — or with `removeImage`, removes — the cover photo
+   * (the first one). Other photos stay.
+   */
   async uploadImage(
     id: string,
     userId: string,
@@ -228,26 +247,88 @@ export class InventoryItemService implements IInventoryItemService {
   ): Promise<InventoryItem> {
     const existing = await this.itemsRepo.findById(id, userId);
     if (!existing) throw new NotFoundException('Inventory item not found');
-
-    const currentKey = existing.imageUrls?.[0];
+    const refs = (existing.imageUrls ?? []).filter(Boolean);
+    const [cover, ...rest] = refs;
 
     if (removeImage) {
-      if (currentKey && this.isStorageKey(currentKey)) {
-        try {
-          await this.fileStorage.removeAsync(currentKey);
-        } catch (err) {
-          this.logger.warn({ err, key: currentKey }, 'Failed to delete inventory image');
-        }
-      }
-      const updated = await this.itemsRepo.update(id, { imageUrls: [] }, userId);
-      await this.invalidateInventoryReportsCache(userId);
-      return this.enrichItem(updated);
+      if (cover) await this.removeStoredImage(cover);
+      return this.saveImages(id, userId, rest);
     }
 
+    const storageKey = await this.storeImage(id, userId, file, storeAsUploaded);
+    if (cover) await this.removeStoredImage(cover);
+    this.logger.info({ itemId: id, storageKey }, 'Inventory cover image uploaded');
+    return this.saveImages(id, userId, [storageKey, ...rest]);
+  }
+
+  /** Adds one photo after the others (or first, as the cover). */
+  async addImage(
+    id: string,
+    userId: string,
+    file: Express.Multer.File | undefined,
+    options: { storeAsUploaded?: boolean; asCover?: boolean },
+  ): Promise<InventoryItem> {
+    const existing = await this.itemsRepo.findById(id, userId);
+    if (!existing) throw new NotFoundException('Inventory item not found');
+    const refs = (existing.imageUrls ?? []).filter(Boolean);
+    if (refs.length >= MAX_ITEM_IMAGES) {
+      throw new BadRequestException(`An item can have at most ${MAX_ITEM_IMAGES} photos.`);
+    }
+    const storageKey = await this.storeImage(id, userId, file, options.storeAsUploaded);
+    // Re-read: another photo may have been added while this one was processed.
+    const latest = ((await this.itemsRepo.findById(id, userId))?.imageUrls ?? refs).filter(Boolean);
+    const next = options.asCover ? [storageKey, ...latest] : [...latest, storageKey];
+    this.logger.info({ itemId: id, storageKey, count: next.length }, 'Inventory image added');
+    return this.saveImages(id, userId, next.slice(0, MAX_ITEM_IMAGES));
+  }
+
+  /** Removes one photo by its id. */
+  async removeImageById(id: string, userId: string, imageId: string): Promise<InventoryItem> {
+    const existing = await this.itemsRepo.findById(id, userId);
+    if (!existing) throw new NotFoundException('Inventory item not found');
+    const refs = (existing.imageUrls ?? []).filter(Boolean);
+    const target = refs.find((ref) => this.imageIdOf(ref) === imageId);
+    if (!target) throw new NotFoundException('Photo not found');
+    await this.removeStoredImage(target);
+    return this.saveImages(
+      id,
+      userId,
+      refs.filter((ref) => ref !== target),
+    );
+  }
+
+  /** New photo order (all of the item's photo ids); the first becomes the cover. */
+  async reorderImages(id: string, userId: string, imageIds: string[]): Promise<InventoryItem> {
+    const existing = await this.itemsRepo.findById(id, userId);
+    if (!existing) throw new NotFoundException('Inventory item not found');
+    const refs = (existing.imageUrls ?? []).filter(Boolean);
+    const byId = new Map(refs.map((ref) => [this.imageIdOf(ref), ref]));
+    const ordered = [...new Set(imageIds)].map((imageId) => byId.get(imageId)).filter((ref): ref is string => !!ref);
+    if (ordered.length !== refs.length) {
+      throw new BadRequestException('The photo list changed — reload the item and try again.');
+    }
+    return this.saveImages(id, userId, ordered);
+  }
+
+  private async saveImages(id: string, userId: string, refs: string[]): Promise<InventoryItem> {
+    const updated = await this.itemsRepo.update(id, { imageUrls: refs }, userId);
+    await this.invalidateInventoryReportsCache(userId);
+    return this.enrichItem(updated);
+  }
+
+  /**
+   * Normalizes and stores one photo under its own key. Without `storeAsUploaded` the AI makes the transparent try-on
+   * cutout first (the clear-background version's white preview backdrop becomes transparent).
+   */
+  private async storeImage(
+    id: string,
+    userId: string,
+    file: Express.Multer.File | undefined,
+    storeAsUploaded?: boolean,
+  ): Promise<string> {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Image file is required');
     }
-
     const normalized = await normalizeImageBufferForStorageOrThrow(file.buffer, file.mimetype, file.originalname);
 
     let bufferToStore = normalized.buffer;
@@ -267,26 +348,20 @@ export class InventoryItemService implements IInventoryItemService {
       } catch (err) {
         this.logger.warn({ err, itemId: id }, 'Inventory AI background removal failed; storing original image');
       }
-    } else {
-      this.logger.info({ itemId: id }, 'Inventory image stored as uploaded (client-selected variant)');
     }
 
-    const proposedKey = `inventory/${userId}/${id}/image.${fileExtension}`;
-
-    if (currentKey && this.isStorageKey(currentKey)) {
-      try {
-        await this.fileStorage.removeAsync(currentKey);
-      } catch (err) {
-        this.logger.warn({ err, key: currentKey }, 'Failed to delete old inventory image');
-      }
-    }
-
+    const proposedKey = `inventory/${userId}/${id}/photo-${randomUUID()}.${fileExtension}`;
     // Persist the key S3 actually wrote (extension may differ from proposed).
-    const storageKey = await this.fileStorage.writeAsync(proposedKey, bufferToStore, mimetype);
-    const updated = await this.itemsRepo.update(id, { imageUrls: [storageKey] }, userId);
-    this.logger.info({ itemId: id, storageKey }, 'Inventory image uploaded');
-    await this.invalidateInventoryReportsCache(userId);
-    return this.enrichItem(updated);
+    return this.fileStorage.writeAsync(proposedKey, bufferToStore, mimetype);
+  }
+
+  private async removeStoredImage(ref: string): Promise<void> {
+    if (!this.isStorageKey(ref)) return;
+    try {
+      await this.fileStorage.removeAsync(ref);
+    } catch (err) {
+      this.logger.warn({ err, key: ref }, 'Failed to delete inventory image');
+    }
   }
 
   async previewAiImage(file: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel> {
@@ -299,11 +374,17 @@ export class InventoryItemService implements IInventoryItemService {
     return this.buildAiPreview(originalBase64, mimeType);
   }
 
-  async previewAiImageForItem(id: string, userId: string): Promise<InventoryImageAiPreviewResponseModel> {
+  /** AI clear-background version of a stored photo (`imageId`, else the cover), without saving it. */
+  async previewAiImageForItem(
+    id: string,
+    userId: string,
+    imageId?: string,
+  ): Promise<InventoryImageAiPreviewResponseModel> {
     const existing = await this.itemsRepo.findById(id, userId);
     if (!existing) throw new NotFoundException('Inventory item not found');
 
-    const key = existing.imageUrls?.[0];
+    const refs = (existing.imageUrls ?? []).filter(Boolean);
+    const key = imageId ? refs.find((ref) => this.imageIdOf(ref) === imageId) : refs[0];
     if (!key || !this.isStorageKey(key)) {
       throw new BadRequestException('Inventory item has no stored image to regenerate');
     }
@@ -371,14 +452,7 @@ export class InventoryItemService implements IInventoryItemService {
   async delete(id: string, userId: string): Promise<void> {
     const existing = await this.itemsRepo.findById(id, userId);
     if (!existing) throw new NotFoundException('Inventory item not found');
-    const key = existing.imageUrls?.[0];
-    if (key && this.isStorageKey(key)) {
-      try {
-        await this.fileStorage.removeAsync(key);
-      } catch (err) {
-        this.logger.warn({ err, key }, 'Failed to delete inventory image on item delete');
-      }
-    }
+    for (const ref of (existing.imageUrls ?? []).filter(Boolean)) await this.removeStoredImage(ref);
     await this.itemsRepo.delete(id, userId);
     await this.invalidateInventoryReportsCache(userId);
   }

@@ -83,6 +83,8 @@ export class InventoryItem {
 
   @Expose()
   imageUrls?: string[];
+  /** One id per photo (same order as imageUrls), for removing / reordering a single photo. Not stored. */
+  imageIds?: string[];
 
   @Expose()
   location?: string;

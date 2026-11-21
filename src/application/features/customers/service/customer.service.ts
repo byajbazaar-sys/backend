@@ -69,61 +69,32 @@ export class CustomerService implements ICustomerService {
     try {
       this.logger.info({ createdBy: body.createdBy }, 'Creating new customer');
       const newId = uuidv4();
-      let profilePhotoBuffer: Buffer | undefined;
-      if (body.profilePhoto) {
-        const normalized = await normalizeImageBufferForStorageOrThrow(
-          body.profilePhoto.buffer,
-          body.profilePhoto.mimetype,
-          body.profilePhoto.originalname,
-        );
-        profilePhotoBuffer = normalized.buffer;
-        const proposedRef = `customers/profiles/${newId}.${normalized.fileExtension}`;
-        body.profilePhotoRef = await this.customersFileStorage.writeAsync(
-          proposedRef,
-          normalized.buffer,
-          normalized.mimetype,
-        );
-      }
+      // The face embedding is the slowest step: start it as soon as the photo is read, so it runs while the files
+      // are stored and the customer is saved. Only the quick vector write waits for the customer's id.
+      const profile = body.profilePhoto ? await this.normalizeUpload(body.profilePhoto) : null;
+      const embedding: Promise<number[] | null> = profile
+        ? this.startFaceEmbedding(profile.buffer)
+        : Promise.resolve(null);
 
-      if (body.aadharCard) {
-        const normalized = await normalizeImageBufferForStorageOrThrow(
-          body.aadharCard.buffer,
-          body.aadharCard.mimetype,
-          body.aadharCard.originalname,
-        );
-        const proposedRef = `customers/documents/aadhar/${newId}.${normalized.fileExtension}`;
-        body.aadhaarCardRef = await this.customersFileStorage.writeAsync(
-          proposedRef,
-          normalized.buffer,
-          normalized.mimetype,
-        );
-      }
-
-      if (body.panCard) {
-        const normalized = await normalizeImageBufferForStorageOrThrow(
-          body.panCard.buffer,
-          body.panCard.mimetype,
-          body.panCard.originalname,
-        );
-        const proposedRef = `customers/documents/pan/${newId}.${normalized.fileExtension}`;
-        body.panCardRef = await this.customersFileStorage.writeAsync(
-          proposedRef,
-          normalized.buffer,
-          normalized.mimetype,
-        );
-      }
+      // The three files are independent: store them at the same time.
+      const [profileRef, aadhaarRef, panRef] = await Promise.all([
+        profile ? this.storeNormalized(profile, `customers/profiles/${newId}`) : null,
+        body.aadharCard ? this.storeUpload(body.aadharCard, `customers/documents/aadhar/${newId}`) : null,
+        body.panCard ? this.storeUpload(body.panCard, `customers/documents/pan/${newId}`) : null,
+      ]);
+      if (profileRef) body.profilePhotoRef = profileRef;
+      if (aadhaarRef) body.aadhaarCardRef = aadhaarRef;
+      if (panRef) body.panCardRef = panRef;
 
       const createdCustomer = await this.customersRepo.create(body);
       this.logger.info({ customerId: createdCustomer.id }, 'Customer created successfully');
-      await this.invalidateLoanStatsCache(body.createdBy);
-      await this.invalidateCustomersCache(body.createdBy);
-      if (createdCustomer.profilePhotoRef) {
-        try {
-          await this.faceSearchService.indexCustomer(body.createdBy, createdCustomer.id, profilePhotoBuffer);
-        } catch (err) {
-          this.logger.warn({ customerId: createdCustomer.id, err }, 'Face index after create failed');
-        }
-      }
+      await Promise.all([
+        this.invalidateLoanStatsCache(body.createdBy),
+        this.invalidateCustomersCache(body.createdBy),
+        createdCustomer.profilePhotoRef
+          ? this.indexFace(body.createdBy, createdCustomer.id, profile?.buffer, embedding, 'create')
+          : null,
+      ]);
       return this.enrichCustomerSignedUrls(createdCustomer);
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof ConflictException) {
@@ -131,6 +102,59 @@ export class CustomerService implements ICustomerService {
       }
       this.logger.error({ err, createdBy: body.createdBy }, 'Error creating customer');
       throw err;
+    }
+  }
+
+  private normalizeUpload(file: Express.Multer.File) {
+    return normalizeImageBufferForStorageOrThrow(file.buffer, file.mimetype, file.originalname);
+  }
+
+  private storeNormalized(
+    normalized: Awaited<ReturnType<typeof normalizeImageBufferForStorageOrThrow>>,
+    refWithoutExtension: string,
+  ): Promise<string> {
+    return this.customersFileStorage.writeAsync(
+      `${refWithoutExtension}.${normalized.fileExtension}`,
+      normalized.buffer,
+      normalized.mimetype,
+    );
+  }
+
+  private async storeUpload(file: Express.Multer.File, refWithoutExtension: string): Promise<string> {
+    return this.storeNormalized(await this.normalizeUpload(file), refWithoutExtension);
+  }
+
+  /** Never rejects: a failed embedding only means indexing falls back to computing it again. */
+  private startFaceEmbedding(buffer: Buffer): Promise<number[] | null> {
+    return this.faceSearchService.embedForIndex(buffer).catch((err: unknown) => {
+      this.logger.warn({ err }, 'Face embedding failed; indexing will retry it');
+      return null;
+    });
+  }
+
+  /** Face search is best effort: a failure is logged, never fails the save. */
+  private async indexFace(
+    userId: string,
+    customerId: string,
+    buffer: Buffer | undefined,
+    embedding: Promise<number[] | null>,
+    after: 'create' | 'update',
+  ): Promise<void> {
+    try {
+      const vector = await embedding;
+      await this.faceSearchService.indexCustomer(userId, customerId, buffer, vector ?? undefined);
+    } catch (err) {
+      this.logger.warn({ customerId, err }, `Face index after ${after} failed`);
+    }
+  }
+
+  /** Deletes a stored file; a failure is logged (the record is still updated). */
+  private async removeStored(ref: string | null | undefined, customerId: string, what: string): Promise<void> {
+    if (!ref) return;
+    try {
+      await this.customersFileStorage.removeAsync(ref);
+    } catch (err) {
+      this.logger.warn({ err, customerId }, `Failed to delete ${what} from storage`);
     }
   }
 
@@ -203,92 +227,39 @@ export class CustomerService implements ICustomerService {
         throw new BadRequestException('Cannot remove PAN card and upload a new one in the same request');
       }
 
-      if (body.removeAadharCard) {
-        if (existingCustomer.aadhaarCardRef) {
-          try {
-            await this.customersFileStorage.removeAsync(existingCustomer.aadhaarCardRef);
-          } catch (err) {
-            this.logger.warn({ err, customerId: id }, 'Failed to delete Aadhaar card from storage');
-          }
-        }
-        body.aadhaarCardRef = null;
-      }
+      // Start the face embedding early (see create), then handle the three files at the same time. Within each
+      // file the old copy is removed before the new one is written: both can have the same key.
+      const profile = body.profilePhoto ? await this.normalizeUpload(body.profilePhoto) : null;
+      const embedding: Promise<number[] | null> = profile
+        ? this.startFaceEmbedding(profile.buffer)
+        : Promise.resolve(null);
+      const profilePhotoBuffer = profile?.buffer;
 
-      if (body.removePanCard) {
-        if (existingCustomer.panCardRef) {
-          try {
-            await this.customersFileStorage.removeAsync(existingCustomer.panCardRef);
-          } catch (err) {
-            this.logger.warn({ err, customerId: id }, 'Failed to delete PAN card from storage');
+      await Promise.all([
+        (async () => {
+          if (!profile) return;
+          await this.removeStored(existingCustomer.profilePhotoRef, id, 'old profile photo');
+          body.profilePhotoRef = await this.storeNormalized(profile, `customers/profiles/${id}`);
+        })(),
+        (async () => {
+          if (body.removeAadharCard) {
+            await this.removeStored(existingCustomer.aadhaarCardRef, id, 'Aadhaar card');
+            body.aadhaarCardRef = null;
+          } else if (body.aadharCard) {
+            await this.removeStored(existingCustomer.aadhaarCardRef, id, 'old aadhaar card');
+            body.aadhaarCardRef = await this.storeUpload(body.aadharCard, `customers/documents/aadhar/${id}`);
           }
-        }
-        body.panCardRef = null;
-      }
-
-      let profilePhotoBuffer: Buffer | undefined;
-      if (body.profilePhoto) {
-        if (existingCustomer.profilePhotoRef) {
-          try {
-            await this.customersFileStorage.removeAsync(existingCustomer.profilePhotoRef);
-          } catch (err) {
-            this.logger.warn({ err, customerId: id }, 'Failed to delete old profile photo');
+        })(),
+        (async () => {
+          if (body.removePanCard) {
+            await this.removeStored(existingCustomer.panCardRef, id, 'PAN card');
+            body.panCardRef = null;
+          } else if (body.panCard) {
+            await this.removeStored(existingCustomer.panCardRef, id, 'old pan card');
+            body.panCardRef = await this.storeUpload(body.panCard, `customers/documents/pan/${id}`);
           }
-        }
-        const normalized = await normalizeImageBufferForStorageOrThrow(
-          body.profilePhoto.buffer,
-          body.profilePhoto.mimetype,
-          body.profilePhoto.originalname,
-        );
-        profilePhotoBuffer = normalized.buffer;
-        const proposedRef = `customers/profiles/${id}.${normalized.fileExtension}`;
-        body.profilePhotoRef = await this.customersFileStorage.writeAsync(
-          proposedRef,
-          normalized.buffer,
-          normalized.mimetype,
-        );
-      }
-
-      if (body.aadharCard) {
-        if (existingCustomer.aadhaarCardRef) {
-          try {
-            await this.customersFileStorage.removeAsync(existingCustomer.aadhaarCardRef);
-          } catch (err) {
-            this.logger.warn({ err, customerId: id }, 'Failed to delete old aadhaar card');
-          }
-        }
-        const normalized = await normalizeImageBufferForStorageOrThrow(
-          body.aadharCard.buffer,
-          body.aadharCard.mimetype,
-          body.aadharCard.originalname,
-        );
-        const proposedRef = `customers/documents/aadhar/${id}.${normalized.fileExtension}`;
-        body.aadhaarCardRef = await this.customersFileStorage.writeAsync(
-          proposedRef,
-          normalized.buffer,
-          normalized.mimetype,
-        );
-      }
-
-      if (body.panCard) {
-        if (existingCustomer.panCardRef) {
-          try {
-            await this.customersFileStorage.removeAsync(existingCustomer.panCardRef);
-          } catch (err) {
-            this.logger.warn({ err, customerId: id }, 'Failed to delete old pan card');
-          }
-        }
-        const normalized = await normalizeImageBufferForStorageOrThrow(
-          body.panCard.buffer,
-          body.panCard.mimetype,
-          body.panCard.originalname,
-        );
-        const proposedRef = `customers/documents/pan/${id}.${normalized.fileExtension}`;
-        body.panCardRef = await this.customersFileStorage.writeAsync(
-          proposedRef,
-          normalized.buffer,
-          normalized.mimetype,
-        );
-      }
+        })(),
+      ]);
 
       const { profilePhoto, aadharCard, panCard, removeAadharCard, removePanCard, ...dataToUpdate } = body;
       const updatedCustomer = await this.customersRepo.update(id, { ...dataToUpdate } as Customer, body.createdBy);
@@ -297,14 +268,12 @@ export class CustomerService implements ICustomerService {
       }
 
       this.logger.info({ customerId: id }, 'Customer updated successfully');
-      await this.invalidateCustomersCache(body.createdBy);
-      if (body.profilePhoto && updatedCustomer.profilePhotoRef) {
-        try {
-          await this.faceSearchService.indexCustomer(body.createdBy, id, profilePhotoBuffer);
-        } catch (err) {
-          this.logger.warn({ customerId: id, err }, 'Face index after update failed');
-        }
-      }
+      await Promise.all([
+        this.invalidateCustomersCache(body.createdBy),
+        body.profilePhoto && updatedCustomer.profilePhotoRef
+          ? this.indexFace(body.createdBy, id, profilePhotoBuffer, embedding, 'update')
+          : null,
+      ]);
       return this.enrichCustomerSignedUrls(updatedCustomer);
     } catch (err) {
       if (

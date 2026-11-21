@@ -4,7 +4,7 @@ export type JewelleryWearer = 'male' | 'female';
 const MALE = /\b(gents?|gent'?s|men'?s?|male|boys?|groom|sherwani)\b/i;
 // Words that only women's pieces carry in Indian jewellery, besides the plain ones.
 const FEMALE =
-  /\b(ladies|lady|women'?s?|female|girls?|bridal|bride|mangalsutra|mangal ?sutra|nath|nose ?(?:ring|pin)|maang ?tikka|tikka|jhumk\w*|payal|anklets?|toe ?rings?|bichhiya|kamarbandh|choker|nosepin)\b/i;
+  /\b(ladies|lady|women'?s?|female|girls?|bridal|bride|mangalsutra|mangal ?sutra|nath|nathni|nose ?(?:ring|pin|stud)s?|maang ?tikka|tikka|jhumk\w*|chandbali|payal|pajeb|anklets?|toe ?rings?|bich+h?iya|kamar ?bandh?|choker|nosepin|borla|rakhdi|passa|jhoomar|matha ?patti|ha+th ?phool|chooda|chura)\b/i;
 
 export function jewelleryWearer(...texts: (string | null | undefined)[]): JewelleryWearer | undefined {
   const text = texts.filter(Boolean).join(' ');

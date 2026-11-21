@@ -175,11 +175,18 @@ Every shot takes one of two paths (`path_for`):
 
 **Paste** (exact mode, surface shots — `paste_shot`):
 
-1. Place the cut-out where the analyst said, on a plain grey canvas (never larger than 1.5x its photographed pixels).
+1. Place the cut-out where the analyst said, on a plain grey canvas (never larger than 1.5x its photographed pixels),
+   with a soft shadow just under it, and tell klein the piece rests on the surface right beneath it. Without the
+   shadow a ring left in mid-air got a plinth painted lower down — with a second ring of klein's own on it.
 2. Give klein that canvas twice: as a **reference** and as the **starting image with a mask** (white = paint,
    black = keep), so the product area cannot move.
 3. Upscale the painted scene to the deliverable size (long side 1920) and paste the **source-resolution cut-out**
    on top with a soft contact shadow.
+
+The analyst also says how the photo shows the piece (`view`): **flat** (laid flat and seen from above, or hanging
+and seen face-on — necklaces, chains, tikkas, payals, coins) or **angled** (rings, bangles, kadas). A flat piece's
+paste scenes become a **flat lay seen from directly above** (`flat_lay`), unless the scene already puts it on a bust
+or a stand: a face-on necklace pasted onto a thali seen at an angle stood up on it like a sculpture.
 
 **Redraw** (ai mode, and every on-body shot — `redraw_shot`): klein draws the whole photo from the clean cut-out
 with the **metal lock** in front of the prompt (`fit_metal`: "The jewellery is silver with pink and blue enamel; keep
@@ -214,6 +221,36 @@ bone… not held, not floating"); the judge reports `worn`, and a piece held or 
 klein settings: 4 steps, euler, cfg 1.0 (what the distilled model is trained for). A blank/black image (an fp16
 overflow) restarts ComfyUI once with a full-precision text encoder.
 
+### Jewellery categories (who wears it, where, and how the model shot is framed)
+
+The model scene of a campaign is staged from the piece's kind, read from the jeweller's title (else the analyst's
+name for the piece): the head noun wins ("Gold Nose Ring" is a nose piece, "Silver ghungroo bangles set" a wrist
+piece), "set" only counts when nothing else matches, and "… with …" clauses are ignored. Every category of the
+catalogue maps (checked on all 119 names in the gold and silver lists):
+
+| Worn on | Kinds (examples) | Model shot |
+| --- | --- | --- |
+| finger | rings, bands, solitaire, cocktail, engagement, couple rings | close-up of the hand, ring large |
+| wrist | bangles, kada, chooda, bracelets, cuffs | forearm across the body at chest height |
+| upper arm | bajuband, armlet, vanki | waist-up, arm relaxed |
+| hand | hathphool / hand harness | close-up of the hand |
+| neck | necklaces, chains, pendants, lockets, haar, choker, mangalsutra, sets | chest-up |
+| ear | studs, tops, jhumka, bali, hoops, drops, chandbali, ear cuffs, ear chains | three-quarter portrait |
+| nose | nose pins, nose rings, nath (chain to the hair) | close portrait |
+| forehead / hair | maang tikka, borla, matha patti; passa, jhoomar, hair pins, juda | close / three-quarter portrait |
+| ankle / toe | payal, anklets, ghungroo; bichiya / toe rings | close-up of the feet |
+| waist | kamarband, waist belt | chest to knees |
+| held | coins | cupped hands, close-up |
+
+Rules on top: **kids' / baby** pieces never get a child model — their model scene becomes a soft product shot (baby
+blanket, wooden toy); **couple** pieces show a man's and a woman's hands together (no single-wearer or gender
+check); the wearer's gender comes from the title when it says so (gents / men's; ladies, bridal, mangalsutra, nath,
+payal, borla, passa, chooda…) and otherwise from the analyst. The judge reports where the piece is worn
+(`worn_on`) and how many pieces of the kind it sees (`pieces`, against the photo's own count — a pair of payals
+stays two): a ring hung on a necklace, or a second drawn copy of the piece, caps the take at 3. When the long
+question reads the place wrongly (an armlet high on the arm read as "wrist"), one short yes / no question
+(`confirm`) decides before the take is capped.
+
 ### How the two GPUs share the work
 
 ```
@@ -223,12 +260,26 @@ CPU     photo download · restore + CIELAB check of each try · JPEG / mask uplo
 ```
 
 - While the analyst plans on GPU 1, GPU 0 cuts the piece out and loads klein, so the first try starts right after.
-- **At most 2 tries per shot** (1 without a second GPU — then there is no judge). Try 1 is judged first; **8 or
-  more** is kept straight away. Otherwise try 2 is painted with the judge's **positive** fix ("Show the silver kada
-  resting on velvet…" — negations in the prompt do nothing at cfg 1).
+- **2 tries per shot** (1 without a second GPU — then there is no judge), and a **third** when neither scored above
+  4 (a clear failure: a duplicate, the wrong body part, a different piece). Try 1 is judged first; **8 or more** is
+  kept straight away. Otherwise try 2 is painted with the judge's **positive** fix ("Show the silver kada resting on
+  velvet…" — negations in the prompt do nothing at cfg 1).
+- **A copy painted beside the real piece is painted out, not repainted.** When a paste take is good (the judge's
+  own score 6+) and capped only for a duplicate or extra jewellery, the judge lists a box for every copy it sees;
+  the boxes away from the placed piece are repainted by klein as plain scene (`clean_copies`), every other pixel —
+  the real product above all — stays as it was, and that cleaned take is judged as the next try. A fresh take
+  tended to paint the copy again (three tries in a row on one ring scene).
+- **A campaign model scene that never kept the real piece is shown on its display.** When every model take of an
+  exact-mode campaign scored 4 or less (klein drew a different design, or put it on the wrong body part), the scene
+  is re-staged as the real cut-out on the display the piece is shown on (bust, ring cone, bangle stand, coin tray…)
+  in the campaign's mood, and judged with takes of its own. A model wearing a different piece is no advert for the
+  jeweller's. `imageDone` then carries `scenePrompt` (the re-staged scene) and a product `motionPrompt`; the backend
+  stores them on the scene, so its clip prompt no longer asks for a model. Kids' pieces (model scene re-staged
+  before painting) report the same way.
 - The judge sees the reference cut-out, the take, and a **close-up of the located piece**. Hard limits its overall
   number can't override: changed metal (measured or read) → 2; extra jewellery → 3; worn piece held/floating → 4;
-  a redraw whose piece can't be found in it → 6. A judge that fails twice gives 5 (so a second try is made).
+  a redraw whose piece can't be found in it → 6. A judge that fails twice gives 5 (so a second try is made). An
+  answer cut off at its token limit keeps every field it wrote in full (`parse_json`) instead of failing.
 - If both tries are within 1 point, Qwen3-VL compares them side by side. Only the best try is uploaded.
 
 We don't run a second klein 9B on GPU 1: two copies of 9B + its 8B text encoder don't fit Kaggle's ~29 GB of RAM
@@ -794,7 +845,7 @@ Do the same with `buildWorkerNotebook` (video / setup) and `buildWorkerSessionNo
 | **Dispatch** | The step that matches waiting jobs to Kaggle capacity (starts warm workers). |
 | **Slot** | One concurrent Kaggle session on an account (the account's "parallel renders" setting). |
 | **Warm worker** | A long Kaggle session (`WORKER` job) that keeps models loaded and pulls jobs. |
-| **Take / try** | One attempt at painting a shot (at most 2); the judge keeps the better one. |
+| **Take / try** | One attempt at painting a shot (2, a third after two clear failures); the judge keeps the best. |
 | **ComfyUI** | The open-source engine that runs klein and Wan graphs inside the notebook. |
 | **klein** | FLUX.2 [klein] 9B, the image model (needs `MARKETING_HF_TOKEN`). |
 | **Batch** | Jobs queued together (one per scene, shot or clip) that run in parallel and show as one status. |

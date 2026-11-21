@@ -18,3 +18,4 @@ export * from './bulk-update-catalog-visibility-response.model';
 export * from './inventory-item-entity-update-input.model';
 export * from './inventory-sort-field';
 export * from './list-inventory-items-query.model';
+export * from './reorder-inventory-images-request.model';

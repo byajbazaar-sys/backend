@@ -8,6 +8,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import type { InstagramPostOptions, MarketingScheduledPostItem } from '../../../application/shared/domain';
+
 /** user_id columns refer to ByajBazaar users in the main database — there are no cross-database foreign keys. */
 
 @Entity('marketing_campaigns')
@@ -61,6 +63,7 @@ export class MarketingBrandEntity {
   @Column({ type: 'varchar', length: 160, nullable: true }) spokenName: string | null;
   @Column({ type: 'varchar', length: 255, nullable: true }) spokenNameFor: string | null;
   @Column({ type: 'boolean', default: false }) spokenNameByUser: boolean;
+  @Column({ type: 'boolean', default: true }) logoOverlay: boolean;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
 }
 
@@ -186,11 +189,14 @@ export class MarketingScheduledPostEntity {
   @Column({ type: 'smallint', nullable: true }) sourceIndex: number | null;
   @Column({ type: 'varchar', length: 255 }) sourceTitle: string;
   @Column({ type: 'varchar', length: 500 }) assetKey: string;
+  @Column({ type: 'jsonb', nullable: true }) items: MarketingScheduledPostItem[] | null;
+  @Column({ type: 'jsonb', nullable: true }) options: InstagramPostOptions | null;
   @Column({ type: 'text' }) caption: string;
   @Column({ type: 'timestamptz' }) scheduledAt: Date;
   @Column({ type: 'varchar', length: 20, default: 'SCHEDULED' }) status: string;
   @Column({ type: 'varchar', length: 64, nullable: true }) instagramMediaId: string | null;
   @Column({ type: 'text', nullable: true }) error: string | null;
+  @Column({ type: 'text', nullable: true }) warning: string | null;
   @Column({ type: 'timestamptz', nullable: true }) publishedAt: Date | null;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;

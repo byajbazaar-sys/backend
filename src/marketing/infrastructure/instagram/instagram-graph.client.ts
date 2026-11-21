@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import axios from 'axios';
 
-import { InstagramProfile, InstagramTokenInfo, IInstagramGraphClient } from '../../application';
+import {
+  InstagramPlace,
+  InstagramPostOptions,
+  InstagramProfile,
+  InstagramTokenInfo,
+  IInstagramGraphClient,
+} from '../../application';
 import { MarketingConfig } from '../../marketing.config';
 
 /**
@@ -20,6 +26,21 @@ function asString(value: unknown): string | undefined {
   if (typeof value === 'string') return value || undefined;
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return undefined;
+}
+
+/** A photo tag: Instagram needs a position; untagged spots default to the centre. */
+function positionedTag(tag: { username: string; x?: number; y?: number }): { username: string; x: number; y: number } {
+  const clamp = (n: number | undefined) => Math.min(1, Math.max(0, n ?? 0.5));
+  return { username: tag.username, x: clamp(tag.x), y: clamp(tag.y) };
+}
+
+/** Location and collaborators — set on the post itself (single photo, reel or carousel parent). */
+function sharedPostParams(options: InstagramPostOptions): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (options.locationId?.trim()) params.location_id = options.locationId.trim();
+  const collaborators = (options.collaborators ?? []).filter(Boolean).slice(0, 3);
+  if (collaborators.length) params.collaborators = JSON.stringify(collaborators);
+  return params;
 }
 
 /** Instagram Unified Login + Instagram content publishing over graph.facebook.com (axios). */
@@ -113,18 +134,99 @@ export class InstagramGraphClient implements IInstagramGraphClient {
     mediaType: 'IMAGE' | 'REEL';
     mediaUrl: string;
     caption: string;
+    options?: InstagramPostOptions | null;
+    carouselItem?: boolean;
   }): Promise<string> {
-    const params: Record<string, string> = {
+    const options = input.options ?? {};
+    const params: Record<string, string> = { access_token: input.accessToken };
+    const tags = (options.userTags ?? []).filter((tag) => tag.username);
+
+    if (input.carouselItem) {
+      // Carousel children carry only the media (and photo tags); caption, location and collaborators go on the parent.
+      params.is_carousel_item = 'true';
+      if (input.mediaType === 'IMAGE') {
+        params.image_url = input.mediaUrl;
+        if (tags.length) params.user_tags = JSON.stringify(tags.map(positionedTag));
+      } else {
+        params.media_type = 'VIDEO';
+        params.video_url = input.mediaUrl;
+      }
+    } else if (input.mediaType === 'IMAGE') {
+      params.image_url = input.mediaUrl;
+      params.caption = input.caption;
+      if (tags.length) params.user_tags = JSON.stringify(tags.map(positionedTag));
+      if (options.altText?.trim()) params.alt_text = options.altText.trim();
+      Object.assign(params, sharedPostParams(options));
+    } else {
+      params.media_type = 'REELS';
+      params.video_url = input.mediaUrl;
+      params.caption = input.caption;
+      params.share_to_feed = options.shareToFeed === false ? 'false' : 'true';
+      if (tags.length) params.user_tags = JSON.stringify(tags.map((tag) => ({ username: tag.username })));
+      if (options.audioName?.trim()) params.audio_name = options.audioName.trim();
+      if (options.thumbOffsetMs !== undefined && options.thumbOffsetMs >= 0) {
+        params.thumb_offset = String(Math.round(options.thumbOffsetMs));
+      }
+      Object.assign(params, sharedPostParams(options));
+    }
+
+    return this.createContainer(input.instagramUserId, params);
+  }
+
+  async createCarouselContainer(input: {
+    accessToken: string;
+    instagramUserId: string;
+    children: string[];
+    caption: string;
+    options?: InstagramPostOptions | null;
+  }): Promise<string> {
+    return this.createContainer(input.instagramUserId, {
       access_token: input.accessToken,
+      media_type: 'CAROUSEL',
+      children: input.children.join(','),
       caption: input.caption,
-      ...(input.mediaType === 'IMAGE'
-        ? { image_url: input.mediaUrl }
-        : { media_type: 'REELS', video_url: input.mediaUrl, share_to_feed: 'true' }),
-    };
-    const created = await axios.post(`${this.graphUrl}/${input.instagramUserId}/media`, null, {
-      params,
-      timeout: 30_000,
+      ...sharedPostParams(input.options ?? {}),
     });
+  }
+
+  async setCommentsEnabled(accessToken: string, mediaId: string, enabled: boolean): Promise<void> {
+    await axios.post(`${this.graphUrl}/${mediaId}`, null, {
+      params: { comment_enabled: enabled ? 'true' : 'false', access_token: accessToken },
+      timeout: 20_000,
+    });
+  }
+
+  async createComment(accessToken: string, mediaId: string, message: string): Promise<void> {
+    await axios.post(`${this.graphUrl}/${mediaId}/comments`, null, {
+      params: { message, access_token: accessToken },
+      timeout: 20_000,
+    });
+  }
+
+  async searchPlaces(accessToken: string, query: string): Promise<InstagramPlace[]> {
+    const response = await axios.get(`${this.graphUrl}/pages/search`, {
+      params: { q: query, fields: 'id,name,location{street,city,state,country}', access_token: accessToken },
+      timeout: 15_000,
+    });
+    const data = asRecord(response.data).data;
+    return (
+      (Array.isArray(data) ? data : [])
+        .map((item) => {
+          const record = asRecord(item);
+          const location = asRecord(record.location);
+          const address = [location.street, location.city, location.state, location.country]
+            .map(asString)
+            .filter(Boolean)
+            .join(', ');
+          return { id: asString(record.id), name: asString(record.name), address: address || undefined };
+        })
+        // Only Pages with an address can be used as a location.
+        .filter((place): place is InstagramPlace & { address: string } => !!place.id && !!place.name && !!place.address)
+    );
+  }
+
+  private async createContainer(instagramUserId: string, params: Record<string, string>): Promise<string> {
+    const created = await axios.post(`${this.graphUrl}/${instagramUserId}/media`, null, { params, timeout: 30_000 });
     const containerId = asString(asRecord(created.data).id);
     if (!containerId) throw new Error('Instagram did not return a media container ID.');
     return containerId;

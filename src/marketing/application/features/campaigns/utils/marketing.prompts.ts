@@ -56,7 +56,7 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'the model holds still, warm light shifts softly, very slow camera push-in',
     },
     {
-      scene: 'against a wall of glowing paper lanterns at dusk, warm and celebratory',
+      scene: 'resting on a carved stone ledge before a wall of glowing paper lanterns at dusk, warm and celebratory',
       motion: 'smooth crane down to the piece, lanterns swaying slightly',
     },
   ],
@@ -114,7 +114,8 @@ export function buildPromptWriterSystem(): string {
     `Reply with ONLY a JSON array of exactly ${CAMPAIGN_SCENES} objects, each {"scene": string, "motion": string}. ` +
     '"scene" describes where and how the jewellery is staged (setting, props, background, lighting) in under 30 words; ' +
     'do not alter the jewellery. Exactly one scene must feature one adult male or female model, chosen to suit the product, ' +
-    'wearing and showcasing it naturally with the jewellery prominent and unobscured; all other scenes have no people or hands. ' +
+    'wearing and showcasing it naturally with the jewellery prominent and unobscured; all other scenes have no people or hands ' +
+    'and rest the jewellery on a real surface (a plinth, tray, fabric, stone or wood), never floating in the air. ' +
     'Do not add text or logos. "motion" is one slow camera movement (push-in, sideways dolly, tilt or crane) in under 20 ' +
     'words, plus at most gentle ambient movement (light, smoke, petals, fabric). The jewellery itself stays still: never ' +
     'rotate, spin, orbit, lift or handle it; for the model scene the model holds still (a soft breath, a blink). ' +

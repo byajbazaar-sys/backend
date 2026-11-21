@@ -38,6 +38,7 @@ import {
   resolveImageMode,
   productMaskKey,
 } from '../../../shared';
+import { MarketingBrandingService } from '../../branding/marketing-branding.service';
 import { MarketingRenderService, kaggleBatchStatus } from '../../kaggle';
 
 const MAX_ACTIVE_PER_USER = 2;
@@ -57,6 +58,7 @@ export class MarketingCampaignsService {
     private readonly render: MarketingRenderService,
     private readonly scheduler: MarketingScheduler,
     private readonly events: MarketingEvents,
+    private readonly branding: MarketingBrandingService,
     @InjectPinoLogger(MarketingCampaignsService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -228,6 +230,13 @@ export class MarketingCampaignsService {
     return this.brandView(brand);
   }
 
+  /** The owner's brand-kit switches (logo on exported photos). */
+  async updateBrandSettings(userId: string, settings: { logoOverlay: boolean }): Promise<BrandView> {
+    await this.brand(userId);
+    await this.brands.upsert({ userId, logoOverlay: settings.logoOverlay });
+    return this.brand(userId);
+  }
+
   async regenerateBrand(userId: string, target: 'image' | 'video' | 'both'): Promise<BrandView> {
     const brand = await this.brand(userId);
     if (target !== 'image' && (await this.jobs.findOpenFor({ userId, kind: ERenderJobKind.Logo }))) {
@@ -291,11 +300,22 @@ export class MarketingCampaignsService {
   }
 
   private async brandView(brand: MarketingBrand): Promise<BrandView> {
-    const [logoImageUrl, logoVideoUrl] = await Promise.all([
+    const [logoImageUrl, logoVideoUrl, overlay, preview] = await Promise.all([
       brand.logoImageStatus === EAssetStatus.Ready ? this.url(brand.logoImageKey) : undefined,
       brand.logoVideoStatus === EAssetStatus.Ready ? this.url(brand.logoVideoKey) : undefined,
+      this.branding.logoView(brand.userId).catch(() => null),
+      this.branding.preview(brand.userId).catch(() => null),
     ]);
-    return { ...brand, logoImageUrl, logoVideoUrl };
+    return {
+      ...brand,
+      logoImageUrl,
+      logoVideoUrl,
+      logoOverlay: brand.logoOverlay !== false,
+      overlayLogoUrl: overlay?.url,
+      overlayLogoSource: overlay?.source,
+      overlayLogoPreview: preview?.dataUrl,
+      overlayLogoCard: preview?.card,
+    };
   }
 
   capacity(): ReturnType<MarketingRenderService['capacity']> {

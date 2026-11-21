@@ -139,7 +139,12 @@ export class FaceSearchService implements IFaceSearchService {
     return plainToInstance(FaceSearchResponseModel, { matches }, { excludeExtraneousValues: true });
   }
 
-  async indexCustomer(userId: string, customerId: string, imageBuffer?: Buffer): Promise<void> {
+  async embedForIndex(imageBuffer: Buffer): Promise<number[] | null> {
+    if (!this.options.isConfigured) return null;
+    return this.insightFace.extractEmbedding(imageBuffer, 'index');
+  }
+
+  async indexCustomer(userId: string, customerId: string, imageBuffer?: Buffer, vector?: number[]): Promise<void> {
     if (!this.options.isConfigured) {
       this.logger.debug({ customerId, userId }, 'Face search not configured; skipping index');
       return;
@@ -149,7 +154,7 @@ export class FaceSearchService implements IFaceSearchService {
       await this.removeCustomer(userId, customerId);
       return;
     }
-    await this.indexCustomerRecord(userId, customer, imageBuffer);
+    await this.indexCustomerRecord(userId, customer, imageBuffer, vector);
   }
 
   async removeCustomer(userId: string, customerId: string): Promise<void> {
@@ -161,13 +166,22 @@ export class FaceSearchService implements IFaceSearchService {
     }
   }
 
-  private async indexCustomerRecord(userId: string, customer: Customer, imageBuffer?: Buffer): Promise<void> {
+  private async indexCustomerRecord(
+    userId: string,
+    customer: Customer,
+    imageBuffer?: Buffer,
+    precomputed?: number[],
+  ): Promise<void> {
     if (!customer.profilePhotoRef) {
       throw new BadRequestException('Customer has no profile photo');
     }
 
-    const buffer = imageBuffer ?? (await this.fileStorage.readAsync(customer.profilePhotoRef));
-    const vector = await this.insightFace.extractEmbedding(buffer, 'index');
+    const vector =
+      precomputed ??
+      (await this.insightFace.extractEmbedding(
+        imageBuffer ?? (await this.fileStorage.readAsync(customer.profilePhotoRef)),
+        'index',
+      ));
     await this.qdrant.upsertFace(customer.id, vector, {
       userId,
       customerId: customer.id,

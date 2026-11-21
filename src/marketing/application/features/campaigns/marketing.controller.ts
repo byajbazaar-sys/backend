@@ -8,6 +8,7 @@ import {
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -26,6 +27,7 @@ import {
 } from './models';
 import { MarketingCampaignsService } from './service';
 import { MARKETING_ADMIN_GROUP } from '../../shared/utils/customer-text';
+import { UpdateBrandSettingsRequestModel } from '../branding/models/branded-image-query.model';
 /** Admins also get the raw render details (pipeline wording, render account, notebook); customers get neutral text. */
 const groupsFor = (identity?: IIdentity): string[] =>
   identity?.userType === EUserType.Admin ? [MARKETING_ADMIN_GROUP] : [];
@@ -82,6 +84,12 @@ export class MarketingController {
   @ApiOperation({ summary: 'Brand kit: logo image + 5 s logo video (reused at the end of every film)' })
   async brand(@Identity() identity: IIdentity) {
     return out(MarketingBrandResponseModel, await this.campaigns.brand(identity.userId));
+  }
+
+  @Patch('brand')
+  @ApiOperation({ summary: 'Brand kit settings: shop logo on exported photos' })
+  async updateBrand(@Identity() identity: IIdentity, @Body() body: UpdateBrandSettingsRequestModel) {
+    return out(MarketingBrandResponseModel, await this.campaigns.updateBrandSettings(identity.userId, body));
   }
 
   @Post('brand/regenerate')

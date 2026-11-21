@@ -47,6 +47,8 @@ export class MarketingWorkerEventModel {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(4) imageIndex?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4000) imagePrompt?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) motionPrompt?: string;
+  /** imageDone: the scene as the still was finally staged, when the worker re-staged a model scene as a product shot. */
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) scenePrompt?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()

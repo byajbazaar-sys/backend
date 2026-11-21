@@ -1648,7 +1648,7 @@ export class MarketingRenderService {
 
   private async handleImageWorkerEvent(job: RenderJob, event: MarketingWorkerEvent): Promise<boolean> {
     if (event.stage === 'imageDone' && typeof event.imageIndex === 'number') {
-      await this.imageDone(job, event.imageIndex, event.imagePrompt, event.motionPrompt);
+      await this.imageDone(job, event.imageIndex, event.motionPrompt, event.scenePrompt);
     } else if (event.stage === 'imageFailed' && typeof event.imageIndex === 'number') {
       this.logger.warn(
         { jobId: job.id, account: job.workerId, imageIndex: event.imageIndex, reason: event.message },
@@ -1697,7 +1697,7 @@ export class MarketingRenderService {
     return true;
   }
 
-  private async imageDone(job: RenderJob, index: number, imagePrompt?: string, motionPrompt?: string): Promise<void> {
+  private async imageDone(job: RenderJob, index: number, motionPrompt?: string, scenePrompt?: string): Promise<void> {
     const generation = job.payload.imageGeneration;
     const target = generation?.targets.find((item) => item.index === index);
     if (!generation || !target || !(await this.storage.existsAsync(target.outputKey))) {
@@ -1709,8 +1709,10 @@ export class MarketingRenderService {
       if (!scene) return;
       await this.scenes.update(scene.id, {
         imageKey: target.outputKey,
-        // The direction stays as planned: the prompt actually used carries the notebook's metal lock and fix
-        // sentences, which would pile up with every regeneration.
+        // The direction stays as planned (the prompt actually used carries the notebook's metal lock and fix
+        // sentences, which would pile up with every regeneration) — unless the worker re-staged a model scene as a
+        // product shot: the clip prompt is built from it and must not ask for a model the still does not have.
+        ...(scenePrompt ? { imagePrompt: scenePrompt.slice(0, 2000) } : {}),
         motionPrompt: motionPrompt?.slice(0, 2000) || scene.motionPrompt,
         imageStatus: EAssetStatus.Ready,
         error: null,

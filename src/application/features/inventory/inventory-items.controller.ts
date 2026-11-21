@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseGuards,
@@ -31,6 +32,7 @@ import {
   UpdateInventoryItemRequestModel,
   BulkDeleteInventoryItemsRequestModel,
   BulkDeleteInventoryItemsResponseModel,
+  ReorderInventoryImagesRequestModel,
 } from './models';
 import { INVENTORY_ITEM_SERVICE, IInventoryItemService } from './service';
 
@@ -120,8 +122,9 @@ export class InventoryItemsController {
   async previewAiImageForItem(
     @Param('id') id: string,
     @Identity() identity: IIdentity,
+    @Query('imageId') imageId?: string,
   ): Promise<InventoryImageAiPreviewResponseModel> {
-    const result = await this.itemService.previewAiImageForItem(id, identity.userId);
+    const result = await this.itemService.previewAiImageForItem(id, identity.userId, imageId || undefined);
     return plainToInstance(InventoryImageAiPreviewResponseModel, result, {
       excludeExtraneousValues: true,
     });
@@ -171,6 +174,46 @@ export class InventoryItemsController {
       removeImage === 'true' || removeImage === '1',
       storeAsUploaded === 'true' || storeAsUploaded === '1',
     );
+    return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
+  }
+
+  @Post(':id/images')
+  @ApiOperation({ summary: 'Add a photo to an inventory item (up to 8; the first is the cover)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('image', INVENTORY_IMAGE_UPLOAD))
+  async addImage(
+    @Param('id') id: string,
+    @UploadedFile() image: Express.Multer.File,
+    @Body('storeAsUploaded') storeAsUploaded: string,
+    @Body('asCover') asCover: string,
+    @Identity() identity: IIdentity,
+  ): Promise<InventoryItemResponseModel> {
+    const item = await this.itemService.addImage(id, identity.userId, image, {
+      storeAsUploaded: storeAsUploaded === 'true' || storeAsUploaded === '1',
+      asCover: asCover === 'true' || asCover === '1',
+    });
+    return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
+  }
+
+  @Delete(':id/images/:imageId')
+  @ApiOperation({ summary: 'Remove one photo of an inventory item' })
+  async removeImage(
+    @Param('id') id: string,
+    @Param('imageId') imageId: string,
+    @Identity() identity: IIdentity,
+  ): Promise<InventoryItemResponseModel> {
+    const item = await this.itemService.removeImageById(id, identity.userId, imageId);
+    return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
+  }
+
+  @Put(':id/images/order')
+  @ApiOperation({ summary: 'Reorder the photos of an inventory item (the first becomes the cover)' })
+  async reorderImages(
+    @Param('id') id: string,
+    @Body() body: ReorderInventoryImagesRequestModel,
+    @Identity() identity: IIdentity,
+  ): Promise<InventoryItemResponseModel> {
+    const item = await this.itemService.reorderImages(id, identity.userId, body.imageIds);
     return plainToInstance(InventoryItemResponseModel, item, { excludeExtraneousValues: true });
   }
 

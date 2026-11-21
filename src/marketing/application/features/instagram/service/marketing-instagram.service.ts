@@ -6,15 +6,20 @@ import { MarketingConfig } from '../../../../marketing.config';
 import {
   IInstagramGraphClient,
   INSTAGRAM_GRAPH_CLIENT,
+  InstagramPlace,
+  InstagramPostOptions,
   IMarketingInstagramRepository,
   MARKETING_INSTAGRAM_REPOSITORY,
   IMarketingSecretCipher,
   MARKETING_SECRET_CIPHER,
 } from '../../../shared';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-/** How long a reel may take to process on Instagram before publishing gives up. */
-const REEL_PROCESSING_TIMEOUT_MS = 210_000;
-const REEL_STATUS_POLL_MS = 5_000;
+/**
+ * How long Instagram may take to process a post's videos (one reel, or every video of a carousel together) before
+ * publishing gives up — inside the publisher Lambda's 300 s.
+ */
+const PROCESSING_TIMEOUT_MS = 230_000;
+const STATUS_POLL_MS = 5_000;
 
 type InstagramOAuthOutcome = 'connected' | 'cancelled' | 'failed';
 
@@ -76,34 +81,115 @@ export class MarketingInstagramService {
     await this.connections.deleteConnection(userId);
   }
 
-  async publishMedia(userId: string, mediaType: 'IMAGE' | 'REEL', mediaUrl: string, caption: string): Promise<string> {
+  /**
+   * Publishes one photo, one reel, or a carousel of 2–10 photos / videos, then applies the after-publish options
+   * (comments off, first comment). Those two never fail the post: what did not go through comes back in `warnings`.
+   */
+  async publishPost(
+    userId: string,
+    post: {
+      mediaType: 'IMAGE' | 'REEL' | 'CAROUSEL';
+      items: { mediaType: 'IMAGE' | 'REEL'; url: string }[];
+      caption: string;
+      options?: InstagramPostOptions | null;
+    },
+  ): Promise<{ mediaId: string; warnings: string[] }> {
+    const { accessToken, instagramUserId } = await this.publishingAccount(userId);
+    const deadline = Date.now() + PROCESSING_TIMEOUT_MS;
+    let containerId: string;
+
+    if (post.mediaType === 'CAROUSEL') {
+      const children: string[] = [];
+      for (const item of post.items) {
+        const child = await this.instagram.createMediaContainer({
+          accessToken,
+          instagramUserId,
+          mediaType: item.mediaType,
+          mediaUrl: item.url,
+          caption: '',
+          options: post.options,
+          carouselItem: true,
+        });
+        if (item.mediaType === 'REEL') await this.waitUntilProcessed(accessToken, child, deadline);
+        children.push(child);
+      }
+      containerId = await this.instagram.createCarouselContainer({
+        accessToken,
+        instagramUserId,
+        children,
+        caption: post.caption,
+        options: post.options,
+      });
+      await this.waitUntilProcessed(accessToken, containerId, deadline);
+    } else {
+      const item = post.items[0];
+      if (!item) throw new Error('Nothing to publish.');
+      containerId = await this.instagram.createMediaContainer({
+        accessToken,
+        instagramUserId,
+        mediaType: item.mediaType,
+        mediaUrl: item.url,
+        caption: post.caption,
+        options: post.options,
+      });
+      if (item.mediaType === 'REEL') await this.waitUntilProcessed(accessToken, containerId, deadline);
+    }
+
+    const mediaId = await this.instagram.publishContainer(accessToken, instagramUserId, containerId);
+
+    const warnings: string[] = [];
+    if (post.options?.commentsDisabled) {
+      try {
+        await this.instagram.setCommentsEnabled(accessToken, mediaId, false);
+      } catch (err) {
+        this.logger.warn({ userId, mediaId, err: describeError(err) }, 'Could not turn off comments');
+        warnings.push('Comments could not be turned off — change it in the Instagram app.');
+      }
+    }
+    const firstComment = post.options?.firstComment?.trim();
+    if (firstComment && !post.options?.commentsDisabled) {
+      try {
+        await this.instagram.createComment(accessToken, mediaId, firstComment);
+      } catch (err) {
+        this.logger.warn({ userId, mediaId, err: describeError(err) }, 'Could not add the first comment');
+        warnings.push('The first comment could not be added.');
+      }
+    }
+    return { mediaId, warnings };
+  }
+
+  /** Places to tag; `available: false` when the Meta app may not search Pages (then a place ID is typed in). */
+  async searchPlaces(userId: string, query: string): Promise<{ available: boolean; places: InstagramPlace[] }> {
+    const { accessToken } = await this.publishingAccount(userId);
+    try {
+      return { available: true, places: (await this.instagram.searchPlaces(accessToken, query)).slice(0, 15) };
+    } catch (err) {
+      this.logger.info({ userId, err: describeError(err) }, 'Instagram place search is not available');
+      return { available: false, places: [] };
+    }
+  }
+
+  private async publishingAccount(userId: string): Promise<{ accessToken: string; instagramUserId: string }> {
     const connection = await this.connections.findConnection(userId);
     if (!connection || isExpired(connection.tokenExpiresAt)) {
       throw new ConflictException('Reconnect your Instagram account to publish scheduled posts.');
     }
-    const accessToken = this.cipher.decrypt(connection.accessTokenEncrypted);
-    const containerId = await this.instagram.createMediaContainer({
-      accessToken,
+    return {
+      accessToken: this.cipher.decrypt(connection.accessTokenEncrypted),
       instagramUserId: connection.instagramUserId,
-      mediaType,
-      mediaUrl,
-      caption,
-    });
+    };
+  }
 
-    if (mediaType === 'REEL') {
-      const deadline = Date.now() + REEL_PROCESSING_TIMEOUT_MS;
-      while (true) {
-        const statusCode = await this.instagram.containerStatus(accessToken, containerId);
-        if (statusCode === 'FINISHED') break;
-        if (statusCode === 'ERROR' || statusCode === 'EXPIRED') {
-          throw new Error(`Instagram media processing ended with status ${statusCode}.`);
-        }
-        if (Date.now() >= deadline) throw new Error('Instagram media processing timed out.');
-        await new Promise((resolve) => setTimeout(resolve, REEL_STATUS_POLL_MS));
+  private async waitUntilProcessed(accessToken: string, containerId: string, deadline: number): Promise<void> {
+    while (true) {
+      const statusCode = await this.instagram.containerStatus(accessToken, containerId);
+      if (statusCode === 'FINISHED') return;
+      if (statusCode === 'ERROR' || statusCode === 'EXPIRED') {
+        throw new Error(`Instagram media processing ended with status ${statusCode}.`);
       }
+      if (Date.now() >= deadline) throw new Error('Instagram media processing timed out.');
+      await new Promise((resolve) => setTimeout(resolve, STATUS_POLL_MS));
     }
-
-    return this.instagram.publishContainer(accessToken, connection.instagramUserId, containerId);
   }
 
   async finishConnection(

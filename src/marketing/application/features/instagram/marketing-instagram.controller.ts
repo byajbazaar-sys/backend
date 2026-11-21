@@ -8,20 +8,23 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Identity, IIdentity, RolesGuard, UserAuthGuard } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 
 import {
+  InstagramCaptionRequestModel,
+  InstagramPlacesQueryModel,
   MarketingInstagramConnectResponseModel,
   MarketingInstagramConnectionResponseModel,
   MarketingScheduledPostResponseModel,
   ScheduleMarketingPostRequestModel,
 } from './models';
-import { MarketingInstagramService, MarketingPublishingService } from './service';
+import { CaptionView, MarketingCaptionService, MarketingInstagramService, MarketingPublishingService } from './service';
 
 @ApiTags('marketing')
 @ApiBearerAuth('user')
@@ -31,6 +34,7 @@ export class MarketingInstagramController {
   constructor(
     private readonly instagram: MarketingInstagramService,
     private readonly publishing: MarketingPublishingService,
+    private readonly captions: MarketingCaptionService,
   ) {}
 
   @Get()
@@ -73,6 +77,23 @@ export class MarketingInstagramController {
     return plainToInstance(MarketingScheduledPostResponseModel, await this.publishing.schedule(identity.userId, body), {
       excludeExtraneousValues: true,
     });
+  }
+
+  @Post('caption')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({
+    summary:
+      'Write an Instagram caption with hashtags for library photos / videos (shop, location, pieces, special day)',
+  })
+  async caption(@Identity() identity: IIdentity, @Body() body: InstagramCaptionRequestModel): Promise<CaptionView> {
+    return this.captions.write(identity.userId, body);
+  }
+
+  @Get('places')
+  @ApiOperation({ summary: 'Search places to tag as the post location' })
+  async places(@Identity() identity: IIdentity, @Query() query: InstagramPlacesQueryModel) {
+    return this.publishing.searchPlaces(identity.userId, query.q);
   }
 
   @Delete('posts/:id')

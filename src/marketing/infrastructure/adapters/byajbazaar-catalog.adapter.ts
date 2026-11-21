@@ -24,6 +24,23 @@ export class ByajBazaarCatalogAdapter implements IMarketingCatalog {
     return (await this.usersRepo.findById(userId))?.businessName ?? null;
   }
 
+  async shopLogoRef(userId: string): Promise<string | null> {
+    return (await this.usersRepo.findById(userId))?.shopLogoRef?.trim() || null;
+  }
+
+  async imageUrl(ref: string): Promise<string | null> {
+    if (/^https?:\/\//.test(ref)) return ref;
+    return (await this.fileStorage.getUrlAsync(ref)) ?? null;
+  }
+
+  async businessProfile(
+    userId: string,
+  ): Promise<{ name: string | null; address: string | null; state: string | null }> {
+    const user = await this.usersRepo.findById(userId);
+    const text = (value?: string | null) => value?.trim() || null;
+    return { name: text(user?.businessName), address: text(user?.address), state: text(user?.state) };
+  }
+
   async findItem(userId: string, itemId: string): Promise<MarketingCatalogItem | null> {
     const item = await this.itemsRepo.findById(itemId, userId);
     if (!item) return null;

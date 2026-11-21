@@ -4,3 +4,4 @@ export * from './kaggle';
 export * from './photoshoots';
 export * from './queue';
 export * from './voiceovers';
+export * from './branding';

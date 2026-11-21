@@ -3,9 +3,11 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import sharp from 'sharp';
 
 import { MarketingInstagramService } from './marketing-instagram.service';
-import { ScheduleMarketingPostInput } from './schedule-marketing-post-input';
+import { ScheduleMarketingPostInput, ScheduleMarketingPostItemInput } from './schedule-marketing-post-input';
 import {
+  InstagramPostOptions,
   MarketingScheduledPost,
+  MarketingScheduledPostItem,
   EAssetStatus,
   IMarketingCampaignsRepository,
   MARKETING_CAMPAIGNS_REPOSITORY,
@@ -20,6 +22,57 @@ import {
   IMarketingScheduledPostsRepository,
   MARKETING_SCHEDULED_POSTS_REPOSITORY,
 } from '../../../shared';
+import { MarketingBrandingService } from '../../branding/marketing-branding.service';
+
+/** Instagram's own caption limits (posts over them are rejected at publish time). */
+const MAX_HASHTAGS = 30;
+const MAX_MENTIONS = 20;
+
+function checkCaptionLimits(caption: string): void {
+  const hashtags = caption.match(/#[\p{L}\p{N}_]+/gu)?.length ?? 0;
+  if (hashtags > MAX_HASHTAGS) {
+    throw new BadRequestException(`Instagram allows at most ${MAX_HASHTAGS} hashtags (this caption has ${hashtags}).`);
+  }
+  const mentions = caption.match(/@[A-Za-z0-9._]+/g)?.length ?? 0;
+  if (mentions > MAX_MENTIONS) {
+    throw new BadRequestException(`Instagram allows at most ${MAX_MENTIONS} @mentions in a caption.`);
+  }
+}
+
+const username = (value: string) => value.trim().replace(/^@/, '').toLowerCase();
+
+/** Keeps only the options that apply to this kind of post, trimmed; null when nothing is set. */
+function cleanOptions(
+  options: InstagramPostOptions | undefined,
+  mediaType: MarketingScheduledPost['mediaType'],
+): InstagramPostOptions | null {
+  if (!options) return null;
+  const text = (value?: string) => value?.trim() || undefined;
+  const collaborators = [...new Set((options.collaborators ?? []).map(username).filter(Boolean))].slice(0, 3);
+  const userTags = (options.userTags ?? [])
+    .map((tag) => ({ ...tag, username: username(tag.username) }))
+    .filter((tag, i, all) => tag.username && all.findIndex((t) => t.username === tag.username) === i)
+    .slice(0, 20);
+  const reel = mediaType === 'REEL';
+  const cleaned: InstagramPostOptions = {
+    // Only photos carry the logo (reels are videos).
+    logoOverlay: mediaType !== 'REEL' && typeof options.logoOverlay === 'boolean' ? options.logoOverlay : undefined,
+    locationId: text(options.locationId),
+    locationName: options.locationId ? text(options.locationName) : undefined,
+    collaborators: collaborators.length ? collaborators : undefined,
+    userTags: userTags.length ? userTags : undefined,
+    altText: mediaType === 'IMAGE' ? text(options.altText) : undefined,
+    commentsDisabled: options.commentsDisabled || undefined,
+    // No first comment on a post with comments turned off.
+    firstComment: options.commentsDisabled ? undefined : text(options.firstComment),
+    shareToFeed: reel && options.shareToFeed === false ? false : undefined,
+    audioName: reel ? text(options.audioName) : undefined,
+    thumbOffsetMs: reel && options.thumbOffsetMs !== undefined ? options.thumbOffsetMs : undefined,
+  };
+  if (cleaned.firstComment) checkCaptionLimits(cleaned.firstComment);
+  const set = Object.fromEntries(Object.entries(cleaned).filter(([, v]) => v !== undefined)) as InstagramPostOptions;
+  return Object.keys(set).length ? set : null;
+}
 
 @Injectable()
 export class MarketingPublishingService {
@@ -31,6 +84,7 @@ export class MarketingPublishingService {
     @Inject(MARKETING_PHOTOSHOOT_SHOTS_REPOSITORY) private readonly shots: IMarketingPhotoshootShotsRepository,
     @Inject(MARKETING_FILE_STORAGE) private readonly storage: IMarketingFileStorage,
     private readonly instagram: MarketingInstagramService,
+    private readonly branding: MarketingBrandingService,
     @InjectPinoLogger(MarketingPublishingService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -43,30 +97,65 @@ export class MarketingPublishingService {
     if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
       throw new BadRequestException('Choose a time in the future.');
     }
+    const caption = input.caption.trim();
+    checkCaptionLimits(caption);
     if (!(await this.instagram.status(userId)).connected) {
       throw new ConflictException('Connect your Instagram account before scheduling a post.');
     }
 
-    const source = await this.resolveSource(userId, input);
-    if (!(await this.storage.existsAsync(source.assetKey))) {
-      throw new BadRequestException('The selected media is no longer available.');
+    const requested = input.items?.length ? input.items : [input];
+    if (requested.length > 10) throw new BadRequestException('A carousel can have at most 10 photos or videos.');
+    const keys = requested.map(
+      (item) => `${item.sourceType}:${item.sourceId}:${item.mediaType}:${item.sourceIndex ?? ''}`,
+    );
+    if (new Set(keys).size !== keys.length) {
+      throw new BadRequestException('The same photo or video is in the carousel twice.');
     }
 
+    const items: MarketingScheduledPostItem[] = [];
+    for (const item of requested) {
+      const source = await this.resolveSource(userId, item);
+      if (!(await this.storage.existsAsync(source.assetKey))) {
+        throw new BadRequestException(`"${source.title}" is no longer available.`);
+      }
+      items.push({
+        sourceType: item.sourceType,
+        sourceId: item.sourceId,
+        sourceIndex: item.sourceIndex ?? null,
+        mediaType: item.mediaType,
+        assetKey: source.assetKey,
+        title: source.title,
+      });
+    }
+
+    const first = items[0];
+    const carousel = items.length > 1;
+    const mediaType: MarketingScheduledPost['mediaType'] = carousel ? 'CAROUSEL' : first.mediaType;
     return this.posts.create({
       userId,
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      sourceIndex: input.sourceIndex ?? null,
-      sourceTitle: source.title,
-      assetKey: source.assetKey,
-      mediaType: input.mediaType,
-      caption: input.caption.trim(),
+      sourceType: first.sourceType,
+      sourceId: first.sourceId,
+      sourceIndex: first.sourceIndex,
+      sourceTitle: (carousel ? `${first.title} +${items.length - 1}` : first.title).slice(0, 255),
+      assetKey: first.assetKey,
+      items: carousel ? items : null,
+      options: cleanOptions(input.options, mediaType),
+      mediaType,
+      caption,
       scheduledAt,
       status: 'SCHEDULED',
       instagramMediaId: null,
       error: null,
+      warning: null,
       publishedAt: null,
     });
+  }
+
+  /** Places to tag on a post (Instagram location). */
+  async searchPlaces(userId: string, query: string) {
+    const q = query.trim();
+    if (q.length < 2) return { available: true, places: [] };
+    return this.instagram.searchPlaces(userId, q.slice(0, 80));
   }
 
   async cancel(userId: string, id: string): Promise<void> {
@@ -83,26 +172,48 @@ export class MarketingPublishingService {
     let published = 0;
     let failed = 0;
     for (const post of due) {
-      let uploadKey: string | null = null;
+      const uploadKeys: string[] = [];
       try {
-        if (post.mediaType === 'IMAGE') {
-          const normalized = await sharp(await this.storage.readAsync(post.assetKey))
-            .resize(1080, 1350, { fit: 'cover', position: 'centre' })
-            .jpeg({ quality: 90 })
-            .toBuffer();
-          uploadKey = await this.storage.writeAsync(
-            `instagram/${post.userId}/scheduled-${post.id}.jpg`,
-            normalized,
-            'image/jpeg',
-          );
+        const items = post.items?.length
+          ? post.items
+          : [
+              {
+                mediaType: post.mediaType === 'REEL' ? ('REEL' as const) : ('IMAGE' as const),
+                assetKey: post.assetKey,
+              },
+            ];
+        const urls: { mediaType: 'IMAGE' | 'REEL'; url: string }[] = [];
+        for (const [index, item] of items.entries()) {
+          let key = item.assetKey;
+          if (item.mediaType === 'IMAGE') {
+            // Instagram feed photos (and every carousel card) at 4:5, 1080 × 1350.
+            const cropped = await sharp(await this.storage.readAsync(item.assetKey))
+              .resize(1080, 1350, { fit: 'cover', position: 'centre' })
+              .jpeg({ quality: 90 })
+              .toBuffer();
+            // The logo goes on after the 4:5 crop, so it always sits in the visible top-left corner.
+            const { image: normalized } = await this.branding.apply(post.userId, cropped, post.options?.logoOverlay);
+            key = await this.storage.writeAsync(
+              `instagram/${post.userId}/scheduled-${post.id}-${index}.jpg`,
+              normalized,
+              'image/jpeg',
+            );
+            uploadKeys.push(key);
+          }
+          urls.push({ mediaType: item.mediaType, url: await this.storage.getUrlAsync(key) });
         }
-        const mediaUrl = await this.storage.getUrlAsync(uploadKey ?? post.assetKey);
-        const mediaId = await this.instagram.publishMedia(post.userId, post.mediaType, mediaUrl, post.caption);
+        const { mediaId, warnings } = await this.instagram.publishPost(post.userId, {
+          mediaType: post.mediaType,
+          items: urls,
+          caption: post.caption,
+          options: post.options,
+        });
         await this.posts.update(post.id, {
           status: 'PUBLISHED',
           instagramMediaId: mediaId,
           publishedAt: new Date(),
           error: null,
+          warning: warnings.length ? warnings.join(' ') : null,
         });
         published += 1;
       } catch (error) {
@@ -111,7 +222,7 @@ export class MarketingPublishingService {
         this.logger.error({ postId: post.id, userId: post.userId, err: message }, 'Instagram scheduled post failed');
         failed += 1;
       } finally {
-        if (uploadKey) {
+        for (const uploadKey of uploadKeys) {
           try {
             if (!(await this.storage.removeAsync(uploadKey))) {
               this.logger.warn({ postId: post.id, uploadKey }, 'Could not remove temporary Instagram image');
@@ -128,9 +239,10 @@ export class MarketingPublishingService {
     return { claimed: due.length, published, failed };
   }
 
-  private async resolveSource(
+  /** The stored file behind a library photo / video, after checking it belongs to the user and is finished. */
+  async resolveSource(
     userId: string,
-    input: ScheduleMarketingPostInput,
+    input: ScheduleMarketingPostItemInput,
   ): Promise<{ assetKey: string; title: string }> {
     if (input.sourceType === 'campaign') {
       const campaign = await this.campaigns.findForUser(input.sourceId, userId);

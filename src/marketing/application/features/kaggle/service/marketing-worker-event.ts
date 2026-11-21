@@ -20,5 +20,7 @@ export interface MarketingWorkerEvent {
   imageIndex?: number;
   imagePrompt?: string;
   motionPrompt?: string;
+  /** imageDone: the re-staged scene (a model scene shown as a product shot — kids' pieces, or no take kept the design). */
+  scenePrompt?: string;
   failedImages?: number[];
 }

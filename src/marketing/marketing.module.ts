@@ -11,6 +11,9 @@ import {
   MarketingInstagramWebhookController,
   MarketingInstagramService,
   MarketingPublishingService,
+  MarketingCaptionService,
+  MarketingBrandingService,
+  MarketingMediaController,
   MarketingAdminController,
   KaggleCredentialsAdminService,
   KaggleHealthService,
@@ -106,6 +109,7 @@ import { MarketingConfig } from './marketing.config';
     MarketingController,
     MarketingWorkerEventsController,
     MarketingQueueController,
+    MarketingMediaController,
   ],
   providers: [
     {
@@ -174,6 +178,8 @@ import { MarketingConfig } from './marketing.config';
     MarketingVoiceoverService,
     MarketingInstagramService,
     MarketingPublishingService,
+    MarketingCaptionService,
+    MarketingBrandingService,
     MarketingCampaignsService,
     KaggleCredentialsAdminService,
     MarketingQueueConsumer,

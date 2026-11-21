@@ -283,9 +283,21 @@ def ask_vlm(image_paths, text, max_new_tokens=900):
 
 def parse_json(answer):
     start, end = answer.find("{"), answer.rfind("}")
-    if start < 0 or end <= start:
-        raise ValueError("no JSON object in the answer: " + answer[:200])
-    return json.loads(answer[start:end + 1])
+    if start >= 0 and end > start:
+        try:
+            return json.loads(answer[start:end + 1])
+        except ValueError:
+            pass
+    if start >= 0:
+        # An answer cut off at the token limit (a long "issues" text): keep every field that was written in full.
+        body = answer[start:]
+        cut = body.rfind(",")
+        while cut > 0:
+            try:
+                return json.loads(body[:cut] + "}")
+            except ValueError:
+                cut = body.rfind(",", 0, cut)
+    raise ValueError("no JSON object in the answer: " + answer[:200])
 
 
 def words(text, limit):
@@ -337,6 +349,11 @@ PLAN_COMMON = (
     "metal = the metal colour you SEE in the photo, one of: silver, oxidised silver, yellow gold, rose gold, white "
     "gold, platinum, two-tone — trust the photo over the shot direction (a grey-white shiny metal is silver). "
     "colours = at most 8 words naming any enamel, meenakari or stone colours you see, or 'none'. "
+    "pieces = how many separate jewellery items the photo shows (a pair of earrings or payals = 2, one ring = 1, a set "
+    "of four bangles = 4). "
+    "view = how the photo shows the piece: flat (laid flat and seen from above, or hanging straight and seen face-on, "
+    "as necklaces, chains, pendants, tikkas, payals and coins usually are) or angled (standing or resting, seen from "
+    "the side at an angle, as rings, bangles and kadas usually are). "
     "product_box = a tight box around ONLY the jewellery (no hands, fingers, boxes or props) as [x1, y1, x2, y2] in "
     "0-1000 coordinates of the image width and height. "
     "wearer = who the piece is made for, judged from its design: male (a broad or flat-topped signet ring, a gents "
@@ -353,8 +370,8 @@ PLAN_EXACT = PLAN_COMMON + (
     "shot direction in at most 40 words describing ONLY the surroundings (surface, props, background, light) as a "
     "product close-up with no person or body part, calling it 'the jewellery' and never describing its design or "
     "adding other jewellery. "
-    'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", '
-    '"wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
+    'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", "pieces": <number>, '
+    '"view": "<flat or angled>", "wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
     '"placement": {"x": <0-1>, "y": <0-1>, "scale": <0.2-0.8>}, "scene": "<surroundings only>"}]}')
 PLAN_AI = PLAN_COMMON + (
     "For each shot: ai_prompt = 50 to 90 words for an image-editing model that receives this photo as image 1, "
@@ -365,15 +382,15 @@ PLAN_AI = PLAN_COMMON + (
     "(a bangle or kada encircles the wrist with the hand through it, a necklace lies on the collarbones, earrings hang "
     "from the earlobes, a ring wraps the finger), touching the skin at its real-life size — never held up beside the "
     "face, floating, or looking pasted on. "
-    'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", '
-    '"wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
+    'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", "pieces": <number>, '
+    '"view": "<flat or angled>", "wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
     '"ai_prompt": "<50-90 words>"}]}')
 # Mixed job (exact mode with an on-body shot): paste shots get placement + scene, redraw shots an ai_prompt.
 PLAN_BOTH = PLAN_AI.split("JSON only:")[0] + (
     "Shots marked path=paste instead get placement (centre x, y from 0 to 1 and width as a fraction of the frame, "
     "0.2 to 0.8) and scene (at most 40 words, surroundings only). "
-    'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", '
-    '"wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
+    'JSON only: {"product": "<2-5 words>", "metal": "<the metal you see>", "colours": "<colours or none>", "pieces": <number>, '
+    '"view": "<flat or angled>", "wearer": "<male, female or any>", "product_box": [<x1>, <y1>, <x2>, <y2>], "shots": [{"index": <shot index>, '
     '"ai_prompt": "<redraw shots>", '
     '"placement": {"x": <0-1>, "y": <0-1>, "scale": <0.2-0.8>}, "scene": "<paste shots>"}]}')
 
@@ -400,35 +417,85 @@ def shot_people(target):
 
 
 PRODUCT_NAME = ""  # what the analyst calls the piece ("gold signet ring")
+PIECES = None  # how many separate items the product photo shows (a pair of earrings = 2)
+VIEW = None  # how the product photo shows the piece: "flat" (from above / face-on) or "angled"
 # Where each kind of piece is worn and how the model shot is framed for it (a ring drawn as a pendant was the most
-# common model-scene failure). Matched on the title and the analyst's name for the piece; first match wins.
+# common model-scene failure). Matched on the jeweller's title (else the analyst's name for the piece): the head noun
+# wins (the match ending last; "nose ring" over "ring"), "set" only when nothing else matches.
 WEAR_ON = [
-    ("neck", r"mangal ?sutra", "around the neck, lying on the collarbones", "framed from the chest up"),
-    ("nose", r"\\bnose|\\bnath\\b|nosepin", "in the nose", "a close portrait"),
-    ("toe", r"toe ?ring|bichh?iya", "on the toe", "a close-up of the feet"),
-    ("ear", r"ear ?ring|jhumk|\\bstuds?\\b|\\bbali\\b|hoops?\\b|ear ?cuff",
+    ("neck", r"mangal ?sutra", "around the neck, its chain and pendant lying on the collarbones", "framed from the chest up"),
+    ("hand", r"ha+th ?phool|hand ?harness|\\bpanja\\b",
+     "on the back of the hand, its chains linked to a ring on the finger and around the wrist",
+     "a close-up of the hand resting gracefully"),
+    ("nose", r"\\bnath\\b|\\bnathni\\b", "in the nose, its chain swept up to the hair", "a close bridal portrait"),
+    ("nose", r"nose ?(?:rings?|pins?|studs?)|\\bnose\\b|nosepin|\\blaung\\b", "in the nose",
+     "a close portrait, the nose in sharp focus"),
+    ("toe", r"toe ?rings?|bich+h?iya", "on the second toe", "a close-up of the feet"),
+    ("ear", r"ear ?cuffs?", "on the outer rim of the ear", "a close profile of the ear with the hair tucked back"),
+    ("ear", r"ear ?chains?|kan ?chain|\\bsahara\\b", "hanging from the earlobe, its chain swept up into the hair",
+     "a three-quarter portrait"),
+    ("ear", r"ear ?rings?|jhumk\\w*|chandbali|\\bstuds?\\b|\\btops\\b|\\bbali\\b|hoops?\\b|danglers?|\\bdrops?\\b",
      "hanging from the earlobes", "a three-quarter portrait with the hair tucked behind the ear"),
-    ("finger", r"\\brings?\\b|\\bband\\b|anguthi",
+    ("upper arm", r"armlets?|baju ?band|\\bvanki\\b",
+     "clasped high on the upper arm around the biceps, near the shoulder (an armlet, not a bracelet)",
+     "a sleeveless blouse, the upper arm in the centre of the frame, the wrists bare"),
+    ("forehead", r"borla|rakhdi|maang ?tikka|\\btikka\\b", "at the centre of the forehead, hanging from the hair parting",
+     "a close portrait"),
+    ("forehead", r"matha ?patti", "on the head, its chains along the hairline across the forehead",
+     "a close portrait of the face and hair"),
+    ("hair", r"\\bpassa\\b|jhoomar|jhumar", "on the side of the head, pinned into the hair above the ear",
+     "a three-quarter portrait"),
+    ("hair", r"hair ?pins?|\\bjuda\\b|hair ?accessor\\w*|hair ?clips?|paranda", "in the hair bun",
+     "seen from behind or the side, the bun in focus"),
+    ("finger", r"\\brings?\\b|\\bbands?\\b|anguthi|solitaire",
      "on the ring finger, the band wrapped around the finger",
      "a close-up of the hand near the face or resting on the other hand, the ring large and sharp in the frame"),
-    ("wrist", r"bangle|\\bkada\\b|kangan|bracelet|\\bcuff",
+    ("wrist", r"bangles?|\\bkadas?\\b|kangan|chooda|\\bchura\\b|bracelets?|\\bcuffs?\\b",
      "around the wrist, the hand passing through it",
      "the forearm across the body at chest height, the piece facing the camera"),
-    ("ankle", r"anklet|payal|pajeb", "around the ankle", "a close-up of the feet"),
-    ("forehead", r"tikka|matha ?patti", "on the forehead along the hair parting", "a close portrait"),
-    ("waist", r"kamar ?bandh|waist ?chain|belt", "around the waist", "framed from the chest to the knees"),
-    ("neck", r"necklace|pendant|\\bchain|\\bhaar\\b|choker|locket|\\bmala\\b|\\bset\\b",
+    ("ankle", r"anklets?|payal|pajeb|ghungroo|jhanjhar", "around the ankle", "a close-up of the feet"),
+    ("waist", r"kamar ?bandh?|waist|\\bbelt\\b|kardhani", "around the waist", "framed from the chest to the knees"),
+    ("held", r"\\bcoins?\\b|\\bbiscuits?\\b|\\bbars?\\b", "in both cupped palms",
+     "a close-up of only the two cupped hands and wrists, no face or neck in the frame, the coin large and sharp"),
+    ("neck", r"necklaces?|pendants?|\\bchains?\\b|\\bhaar\\b|choker|lockets?|\\bmala\\b|\\bhasli\\b|\\bkanthi\\b",
      "around the neck, lying on the collarbones", "framed from the chest up"),
 ]
+WEAR_ON_WEAK = ("neck", r"\\bsets?\\b", "the necklace around the neck and any earrings at the ears",
+                "a portrait from the chest up")
+# What the judge may answer for each body part (a tikka hangs from the hair, a hathphool covers hand and finger...).
+WORN_ON_OK = {"hand": {"hand", "finger", "wrist"}, "forehead": {"forehead", "hair"}, "hair": {"hair", "forehead", "ear"},
+              "toe": {"toe", "ankle", "foot"}, "ankle": {"ankle", "toe", "foot"}, "upper arm": {"upper arm", "arm"},
+              "held": {"held", "hand", "none"}}
+KIDS = re.compile(r"\\b(kids?|baby|babies|child|children|infants?|newborn|toddlers?)\\b", re.I)
+COUPLE = re.compile(r"\\bcouples?\\b|his (?:and|&) hers", re.I)
+
+
+def placement_for_text(text):
+    text = str(text or "").lower().split(" with ")[0]
+    best = None
+    for order, (part, pattern, where, framing) in enumerate(WEAR_ON):
+        for m in re.finditer(pattern, text):
+            key = (m.end(), m.end() - m.start(), -order)
+            if best is None or key > best[0]:
+                best = (key, (part, where, framing))
+    if best:
+        return best[1]
+    if re.search(WEAR_ON_WEAK[1], text):
+        return WEAR_ON_WEAK[0], WEAR_ON_WEAK[2], WEAR_ON_WEAK[3]
+    return None
 
 
 def wear_placement():
     """(body part, where, framing) for this piece, or None when its kind is not known."""
-    text = f"{JOB.get('title') or ''} {PRODUCT_NAME}".lower()
-    for part, pattern, where, framing in WEAR_ON:
-        if re.search(pattern, text):
-            return part, where, framing
-    return None
+    return placement_for_text(JOB.get("title")) or placement_for_text(PRODUCT_NAME)
+
+
+def is_kids():
+    return bool(KIDS.search(str(JOB.get("title") or "")))
+
+
+def is_couple():
+    return bool(COUPLE.search(str(JOB.get("title") or "")))
 
 
 def people_rule(target):
@@ -436,12 +503,46 @@ def people_rule(target):
     if shot_people(target) == "none":
         return (" Product close-up: the jewellery alone, large in the frame on its surface, nothing in the photo but "
                 "the setting and props — no person, no hand, no fingers, no body part.")
-    who = f"The one model is {ADULT[WEARER]}" if WEARER else "Exactly one adult model"
     placement = wear_placement()
+    if is_couple():
+        where, framing = (placement[1], placement[2]) if placement else ("", "a close-up")
+        return (f" A couple's hands together — a man's and a woman's — each wearing one of the pair {where}; "
+                f"{framing}. No other person in the photo.")
+    who = f"The one model is {ADULT[WEARER]}" if WEARER else "Exactly one adult model"
     if placement:
         part, where, framing = placement
-        return f" {who}, wearing the jewellery {where}; {framing}. No other person in the photo."
+        verb = "holding it" if part == "held" else "wearing the jewellery"
+        return f" {who}, {verb} {where}; {framing}. No other person in the photo."
     return f" {who}; no other person in the photo."
+
+
+DISPLAY = {"finger": "a velvet ring cone", "toe": "a small velvet tray", "ear": "a velvet earring stand",
+           "nose": "a small velvet tray", "forehead": "a velvet tray", "hair": "a velvet tray",
+           "wrist": "a velvet bangle stand", "upper arm": "a velvet bangle stand", "hand": "a velvet tray",
+           "ankle": "a velvet tray", "waist": "a velvet tray", "held": "a velvet coin tray"}
+
+
+def with_display(text):
+    """A bust (neck display) in a product shot of a ring, earring, bangle, payal or coin becomes the display that
+    piece is shown on."""
+    placement = wear_placement()
+    if not placement or placement[0] == "neck":
+        return text
+    display = DISPLAY.get(placement[0], "a velvet tray")
+    return re.sub(r"(?i)\\b(?:a |the )?(?:black )?(?:velvet )?(?:jewell?ery )?bust\\b", display, text)
+
+
+UPRIGHT_DISPLAY = re.compile(r"\\b(bust|stand|cone|hooks?|hang\\w*|draped|easel)\\b", re.I)
+TOP_DOWN = re.compile(r"\\b(from (directly )?above|top[- ]down|overhead|flat[- ]lay)\\b", re.I)
+
+
+def flat_lay(text):
+    """A piece photographed face-on (a necklace, tikka or coin) and pasted onto a surface seen at an angle stood up on
+    it like a sculpture: its scene becomes a flat lay seen from directly above, so the two angles agree. On a bust or
+    a stand it is shown face-on already."""
+    if UPRIGHT_DISPLAY.search(text) or TOP_DOWN.search(text):
+        return text
+    return text.rstrip(". ") + ", photographed from directly above as a flat lay, the jewellery lying flat on the surface"
 
 
 def with_wearer(text):
@@ -467,7 +568,28 @@ def path_for(target):
     return "paste"
 
 
+# Children are never generated: for kids' jewellery the model scene becomes a gentle product shot instead.
+KIDS_SCENE = "on a soft pastel baby blanket beside a small wooden toy, gentle window light, a sweet and tender mood"
+if is_kids():
+    for _t in JOB["targets"]:
+        if _t.get("kind") == "scene" and WITH_PERSON.search(str(_t.get("prompt") or "")):
+            _t["prompt"], _t["restaged"] = KIDS_SCENE, True
 PATHS = {int(t["index"]): path_for(t) for t in JOB["targets"]}
+# The camera move of a re-staged scene's clip (the backend's motion for a model scene asks the model to hold still).
+PRODUCT_MOTION = "very slow camera push-in, soft light gliding across the still metal"
+DISPLAY_MOOD = {"festive": "warm festive bokeh and a few marigold petals around it",
+                "luxury": "under a single dramatic spotlight, deep shadows",
+                "studio": "a soft grey gradient backdrop and a thin rim light",
+                "minimal": "soft daylight on pale linen, calm and airy"}
+
+
+def display_scene():
+    """A campaign's model scene re-staged as a product shot: the piece on the display it is shown on, in the
+    campaign's mood (when no take of the model shot kept the real design or its place on the body)."""
+    placement = wear_placement()
+    where = ("a velvet jewellery bust" if placement and placement[0] == "neck" else
+             DISPLAY.get(placement[0], "a velvet tray") if placement else "a velvet tray")
+    return f"resting on {where}, {DISPLAY_MOOD.get(JOB.get('style'), DISPLAY_MOOD['studio'])}"
 
 METAL = None  # the metal the analyst sees in the photo ("silver", "yellow gold", ...)
 COLOURS = None  # the enamel / stone colours it sees
@@ -510,7 +632,7 @@ def parse_box(raw):
     x1, x2 = sorted((max(0.0, min(1000.0, x1)), max(0.0, min(1000.0, x2))))
     y1, y2 = sorted((max(0.0, min(1000.0, y1)), max(0.0, min(1000.0, y2))))
     area = (x2 - x1) * (y2 - y1) / 1e6
-    if not 0.004 < area < 0.97:
+    if not 0.0003 < area < 0.97:  # a nose pin or stud on a face is ~0.05 % of the photo
         return None
     w, h = source.size
     return (int(x1 / 1000 * w), int(y1 / 1000 * h), int(x2 / 1000 * w), int(y2 / 1000 * h))
@@ -545,13 +667,16 @@ def plan_shots():
               "direction": words(t["prompt"], 80)} for t in JOB["targets"]]
     kinds = set(PATHS.values())
     plan_text = PLAN_AI if kinds == {"redraw"} else PLAN_EXACT if kinds == {"paste"} else PLAN_BOTH
-    request = (plan_text + " Style: " + str(JOB.get("style") or "premium jewellery advertising") + ". Shots: " +
+    named = str(JOB.get("title") or "").strip()
+    focus = (f"The jeweller sells this piece as: '{named}'. product_box must frame exactly that piece — not figurines, "
+             "boxes, stands, other jewellery or people around it. ") if named else ""
+    request = (focus + plan_text + " Style: " + str(JOB.get("style") or "premium jewellery advertising") + ". Shots: " +
                json.dumps(brief, ensure_ascii=False))
     # Room for the answer only: ~110 tokens per paste shot, ~190 per redraw shot.
     budget = 160 + sum(190 if p == "redraw" else 110 for p in PATHS.values())
     plans = {int(t["index"]): fallback_plan(t) for t in JOB["targets"]}
     report.send("imageAnalysis", 10, "Studying the product photo", force=True)
-    global PRODUCT_BOX, METAL, COLOURS, WEARER, PRODUCT_NAME
+    global PRODUCT_BOX, METAL, COLOURS, WEARER, PRODUCT_NAME, PIECES, VIEW
     by_index = {int(t["index"]): t for t in JOB["targets"]}
     for attempt in range(2):
         try:
@@ -561,12 +686,18 @@ def plan_shots():
             METAL = KNOWN_METAL or seen or METAL
             COLOURS = words(result.get("colours"), 10).strip("<>") or COLOURS
             seen_wearer = str(result.get("wearer") or "").lower().strip("<> ")
-            if not JOB.get("wearer") and seen_wearer in ("male", "female"):
+            if not JOB.get("wearer") and seen_wearer in ("male", "female") and not is_couple():
                 WEARER = seen_wearer
             PRODUCT_NAME = words(result.get("product"), 6).strip("<>").lower() or PRODUCT_NAME
+            try:
+                PIECES = max(1, min(12, int(float(result.get("pieces")))))
+            except (TypeError, ValueError):
+                pass
+            seen_view = str(result.get("view") or "").lower().strip("<> ")
+            VIEW = seen_view if seen_view in ("flat", "angled") else VIEW
             print("Product:", result.get("product"), "| metal:", METAL, f"(analyst saw: {seen or '-'})",
                   "| colours:", COLOURS, "| wearer:", WEARER or "any", f"(analyst: {seen_wearer or '-'})",
-                  "| box:", PRODUCT_BOX, flush=True)
+                  "| view:", VIEW or "-", "| box:", PRODUCT_BOX, flush=True)
             got = 0
             for shot in result.get("shots", []):
                 idx = int(shot.get("index", -1))
@@ -591,6 +722,10 @@ def plan_shots():
         request += " Return strictly valid JSON, no commentary."
     for idx, target in by_index.items():  # who may be in each shot, made certain whatever the analyst wrote
         plan, fallback = plans[idx], fallback_plan(target)
+        if shot_people(target) == "none":  # display props that suit the piece (a bust only holds neck pieces)
+            for key in ("ai_prompt", "scene_prompt"):
+                if plan.get(key):
+                    plan[key] = with_display(plan[key])
         if shot_people(target) == "none":
             for key in ("ai_prompt", "scene_prompt"):
                 if plan.get(key) and BODY.search(plan[key]):
@@ -604,6 +739,8 @@ def plan_shots():
         for key in ("ai_prompt", "scene_prompt"):
             if plan.get(key):
                 plan[key] = with_wearer(plan[key])
+        if PATHS[idx] == "paste" and VIEW == "flat" and plan.get("scene_prompt"):
+            plan["scene_prompt"] = flat_lay(plan["scene_prompt"])
         if plan.get("ai_prompt"):
             plan["ai_prompt"] += people_rule(target)
     if not JUDGE:
@@ -676,6 +813,11 @@ try:
             print(f"Product mask covers {coverage * 100:.1f}% of the photo", flush=True)
             if not 0.0008 < coverage < 0.9:
                 raise ValueError(f"mask coverage {coverage:.3f} out of range")
+            kind = wear_placement()
+            small = kind and kind[0] in ("finger", "toe", "ear", "nose", "forehead", "hair", "held")
+            if small and not PRODUCT_BOX and coverage > 0.3:
+                # A nose pin on a face, a ring on a hand: without the analyst's box BiRefNet keeps the face or hand.
+                raise ValueError(f"the cut-out covers {coverage:.0%} of the photo — the person, not the small piece")
             ys, xs = np.where(solid)
             pad = int(max(source.size) * 0.015)
             box = (int(max(0, xs.min() - pad)), int(max(0, ys.min() - pad)),
@@ -1217,8 +1359,10 @@ def composite(generated, layer, kind):
 
 
 def judge_reference():
-    """The product photo as the judge sees it: at most 1024 px (a full-size phone photo is thousands of image tokens)."""
-    path = os.path.join(OUT_DIR, "judge-reference.jpg")
+    """The product photo as the judge sees it: at most 1024 px (a full-size phone photo is thousands of image tokens).
+    Named per job: a warm session shares OUT_DIR, and a cached reference of the last job judged the next one against
+    the wrong product."""
+    path = os.path.join(OUT_DIR, f"judge-reference-{JOB.get('jobId') or id(JOB)}.jpg")
     if not os.path.exists(path):
         save_view(Image.open(REFERENCE_PATH or source_path).convert("RGB"), path)
     return path
@@ -1233,9 +1377,9 @@ def save_view(image, path, long_side=1024, box=None):
 
 
 JUDGE_ANSWER = ('Answer with JSON only: {"score": <0-10>, "metal": "<metal colour of the jewellery in image 2>", '
-                '"worn": <true, false or null>, "extra_jewellery": <true or false>, "copies": <number>, '
-                '"people": "<none, man or woman>", "worn_on": "<finger, wrist, neck, ear, ankle, nose, forehead, toe, '
-                'waist, held or none>", "piece_box": [<x1>, <y1>, <x2>, <y2>], '
+                '"worn": <true, false or null>, "extra_jewellery": <true or false>, "pieces": <number>, '
+                '"people": "<none, man, woman or both>", "worn_on": "<finger, wrist, upper arm, neck, ear, ankle, toe, '
+                'nose, forehead, hair, hand, waist, held or none>", "piece_box": [<x1>, <y1>, <x2>, <y2>], '
                 '"issues": "<what is wrong, short>", "fix": "<one sentence describing how the photo should look '
                 'instead, in positive words>"}')
 
@@ -1243,7 +1387,8 @@ JUDGE_ANSWER = ('Answer with JSON only: {"score": <0-10>, "metal": "<metal colou
 def ask_judge(images, text):
     for attempt in range(2):
         try:
-            return parse_json(ask_vlm(images, text, max_new_tokens=260))
+            # Room for every field: the answer often comes pretty-printed, and 260 tokens cut it off mid "issues".
+            return parse_json(ask_vlm(images, text, max_new_tokens=480))
         except Exception:
             traceback.print_exc()
     return None
@@ -1279,9 +1424,10 @@ def judge(candidate, target, plan, info, idx, attempt):
             "neck, in the ear, on the finger), touching the skin; false if it is held, floating or beside the body; "
             "null if no person is in the photo. people = none if no person and no body part (no hand, finger, wrist, "
             "face) is visible anywhere in image 2, otherwise man or woman for the person you see. worn_on = where on "
-            "the body the jewellery from image 1 is worn in image 2 (held = in a hand, none = no person). copies = how "
-            "many separate copies of the product from image 1 you can see in image 2 — count every one, also smaller "
-            "or differently angled ones (a matching set counts as one; 0 if it is missing). piece_box = a tight box around ONLY the jewellery in image 2 (not the "
+            "the body the jewellery from image 1 is worn in image 2 (held = in a hand, none = no person). pieces = how "
+            "many separate jewellery items of the kind in image 1 you can see in image 2 — count each ring, earring, "
+            "bangle, anklet, chain or pendant separately, also smaller or differently angled ones (0 if none). "
+            "piece_box = a tight box around ONLY the jewellery in image 2 (not the "
             "hand or finger) as [x1, y1, x2, y2] in 0-1000 coordinates of image 2's width and height. " + JUDGE_ANSWER)
     result = ask_judge(images, text)
     if result is None:
@@ -1290,61 +1436,100 @@ def judge(candidate, target, plan, info, idx, attempt):
     # so the video holds this drawn piece steady instead of letting it melt from frame to frame.
     info["drawn_box"] = box_in(result.get("piece_box"), candidate.size)
     score = clamp(result.get("score"), 0, 10, 5.0)
+    info["raw_score"] = score
+    caps = []  # which hard limits capped this take: a take capped only for a copy is cleaned instead of repainted
+    info["caps"] = caps
     issues = [str(result.get("issues", ""))[:200]]
     fix = str(result.get("fix", ""))[:240]
     seen = str(result.get("metal", "")).lower()
     if info.get("metal_changed"):
         score = min(score, 2.0)
+        caps.append("metal")
         issues.insert(0, "the metal colour changed from the photo (measured)")
     elif (info.get("coverage", 1.0 if info.get("path") == "paste" else 0.0) < 0.92 and METAL
           and WHITE_METAL.search(METAL) and "gold" in seen and "white gold" not in seen):
         score = min(score, 2.0)
+        caps.append("metal")
         issues.insert(0, f"the {METAL} jewellery was turned into {seen}")
         fix = f"The jewellery is {METAL}: cool white-grey metal exactly as in the product photo. " + fix
     if result.get("extra_jewellery") is True:
         score = min(score, 3.0)
+        caps.append("extra")
         issues.insert(0, "extra jewellery was added")
+    # Pieces of this kind against the product photo's own count: a pair of payals stays a pair, a ring is one.
     try:
-        copies = int(float(result.get("copies")))
+        seen_pieces = int(float(result.get("pieces")))
     except (TypeError, ValueError):
-        copies = 1
-    if copies == 0:
+        seen_pieces = None
+    expected = PIECES or 1
+    if seen_pieces == 0:
         score = min(score, 2.0)
+        caps.append("missing")
         issues.insert(0, "the product is missing from the photo")
-    elif copies >= 2 and not info.get("duplicate"):
+    elif seen_pieces is not None and seen_pieces > expected and not info.get("duplicate"):
         info["duplicate"] = True
-        issues.insert(0, f"the piece appears {copies} times")
+        issues.insert(0, f"the piece appears {seen_pieces} times (the photo shows {expected})")
     if info.get("duplicate"):
         score = min(score, 3.0)
+        caps.append("duplicate")
         if not any("appears" in i and "times" in i for i in issues):
             issues.insert(0, "the piece appears twice (measured)")
-        fix = "The jewellery appears exactly once in the photo, a single piece, no second copy anywhere. " + fix
+        fix = ("The jewellery appears exactly once in the photo, no second copy anywhere. " if expected == 1 else
+               f"Exactly the {expected} pieces of the product photo, no extra copy anywhere. ") + fix
     # Who is in the photo: product-only shots have nobody, the model shot has the piece's own wearer.
     seen_people = str(result.get("people", "")).lower().strip("<> ")
     if shot_people(target) == "none" and seen_people in ("man", "woman", "person", "yes", "both"):
         score = min(score, 3.0)
+        caps.append("people")
         issues.insert(0, "a person or hand appears in a product-only shot")
         fix = ("The jewellery alone on its surface as a product close-up, with no person, hand or fingers anywhere in "
                "the photo. " + fix)
-    elif shot_people(target) == "model" and WEARER and seen_people in ("man", "woman"):
+    elif shot_people(target) == "model" and WEARER and not is_couple() and seen_people in ("man", "woman"):
         want = "man" if WEARER == "male" else "woman"
         if seen_people != want:
             score = min(score, 3.0)
+            caps.append("people")
             issues.insert(0, f"the model must be a {want} for this {WEARER} piece")
             fix = f"Worn by {ADULT[WEARER]}. " + fix
     placement = wear_placement() if shot_people(target) == "model" else None
     worn_on = str(result.get("worn_on", "")).lower().strip("<> ")
-    if placement and worn_on and worn_on not in (placement[0], "none") and not worn_on.startswith(placement[0]):
+    accepted = WORN_ON_OK.get(placement[0], set()) | {placement[0]} if placement else set()
+    misplaced = bool(placement and worn_on and worn_on != "none" and worn_on not in accepted
+                     and not worn_on.startswith(placement[0]))
+    if misplaced:
+        # The long scoring question misreads unusual places (an armlet high on the arm read as "wrist", a matha patti
+        # set with a waist piece read as "waist"): one short yes / no question decides.
+        name = PRODUCT_NAME or "jewellery"
+        check = confirm(images[1], f"Is the {name} in this photo worn {placement[1].split(' (')[0]}?")
+        if check is True:
+            print(f"placement confirmed on a second look ({worn_on} was a misreading)", flush=True)
+            misplaced = False
+    if misplaced:
         score = min(score, 3.0)
+        caps.append("placement")
         issues.insert(0, f"the {PRODUCT_NAME or 'piece'} is worn on the {worn_on}, not {placement[1].split(',')[0]}")
-        fix = f"The model wears it {placement[1]}; {placement[2]}. " + fix
+        verb = "holds it" if placement[0] == "held" else "wears it"
+        fix = f"The model {verb} {placement[1]}; {placement[2]}. " + fix
     if worn and result.get("worn") is False:
         score = min(score, 4.0)
+        caps.append("worn")
         issues.insert(0, "the jewellery is held or floating instead of being worn on the body")
     if info.get("path") == "redraw" and info.get("match_attempted") and not info.get("located") and not worn:
         score = min(score, 6.0)
+        caps.append("match")
         issues.insert(0, "the drawn piece does not match the product photo closely")
     return score, "; ".join(i for i in issues if i), fix
+
+
+def confirm(image_path, question):
+    """A yes / no question about one image: True, False, or None when the judge could not answer."""
+    try:
+        answer = parse_json(ask_vlm([image_path], question + ' Answer with JSON only: {"answer": true} or '
+                                    '{"answer": false}', max_new_tokens=20))
+        value = answer.get("answer")
+        return value if isinstance(value, bool) else str(value).lower() in ("true", "yes")
+    except Exception:
+        return None
 
 
 def prefer_second(first, second, plan):
@@ -1449,11 +1634,18 @@ def paste_shot(target, plan, seed, fix=""):
         place["scale"] = min(place["scale"], PRODUCT.width * 1.5 / fw)
     small_layer, paint = layout(gen_w, gen_h, place)
     canvas = Image.new("RGBA", (gen_w, gen_h), PLACEHOLDER + (255,))
+    # A soft shadow just under the piece: klein then paints the surface right beneath it. Without one a ring left in
+    # mid-air got a plinth painted lower down, with a second ring of klein's own on it.
+    ground = Image.new("L", (gen_w, gen_h), 0)
+    ground.paste(small_layer.getchannel("A"), (0, max(3, int(gen_h * 0.01))))
+    ground = ground.filter(ImageFilter.GaussianBlur(max(4, gen_w * 0.018))).point(lambda v: int(v * 0.5))
+    canvas.paste((74, 72, 68, 255), None, ground)
     canvas.alpha_composite(small_layer)
     canvas = canvas.convert("RGB")
     prompt = ("Replace the plain grey placeholder around the jewellery in image 1 with a photorealistic scene: " +
               plan["scene_prompt"] + ". The jewellery stays exactly where it is, at the same size, unchanged and shown "
-              "only once; no other jewellery." + people_rule(target) + " " + QUALITY + "." + (" " + fix if fix else ""))
+              "only once; no other jewellery. It rests directly on the surface right beneath it, touching it, with a "
+              "soft contact shadow." + people_rule(target) + " " + QUALITY + "." + (" " + fix if fix else ""))
     scene = klein(prompt, seed, gen_w, gen_h, reference=canvas, canvas=canvas, mask=paint)
     scene = scene.resize((fw, fh), Image.Resampling.LANCZOS)
     layer, _ = layout(fw, fh, place)
@@ -1531,6 +1723,74 @@ def second_copy(image, info):
     if H is not None:
         print(f"second copy of the piece found ({stats.get('inliers')} inliers)", flush=True)
     return H is not None
+
+
+def overlap(box, other):
+    """Share of box's area that lies inside other."""
+    w = min(box[2], other[2]) - max(box[0], other[0])
+    h = min(box[3], other[3]) - max(box[1], other[1])
+    area = max(1, (box[2] - box[0]) * (box[3] - box[1]))
+    return max(0, w) * max(0, h) / area
+
+
+def copy_boxes(image_path, info, size):
+    """Pixel boxes of the extra copies klein painted beside the placed real piece of a paste take ([] when the judge
+    cannot tell them apart from it)."""
+    placed = info.get("box")
+    if not placed:
+        return []
+    text = (f"List every {PRODUCT_NAME or 'jewellery piece'} you can see in this photo — each separate one, also smaller "
+            "or partly hidden ones — as boxes [x1, y1, x2, y2] in 0-1000 coordinates of the image width and height. "
+            'Answer with JSON only: {"boxes": [[x1, y1, x2, y2], ...]}')
+    try:
+        # The judge's 1024 px view (fewer image tokens on its GPU); the boxes are relative, so they map back as is.
+        view = save_view(Image.open(image_path).convert("RGB"), os.path.join(OUT_DIR, "copies-view.jpg"))
+        answer = parse_json(ask_vlm([view], text, max_new_tokens=200))
+    except Exception:
+        traceback.print_exc()
+        return []
+    boxes = []
+    for raw in (answer.get("boxes") or [])[:6]:
+        box = box_in(raw, size, max_area=0.2)
+        # The placed piece itself (a loose box around it, or one that swallows it) is never painted over.
+        if box and overlap(box, placed) < 0.3 and overlap(placed, box) < 0.5:
+            boxes.append(box)
+    return boxes
+
+
+def clean_copies(target, plan, seed, clean):
+    """The take with its extra copies painted out: klein repaints only their boxes (the scene continues there), and
+    every other pixel — the placed real product above all — stays exactly as it was. None when nothing is left to
+    paint once the product is kept out of the boxes."""
+    base = Image.open(clean["path"]).convert("RGB")
+    fw, fh = base.size
+    hole = np.zeros((fh, fw), np.uint8)
+    for x1, y1, x2, y2 in clean["boxes"]:
+        px, py = int((x2 - x1) * 0.25) + 8, int((y2 - y1) * 0.25) + 8
+        hole[max(0, y1 - py):y2 + py, max(0, x1 - px):x2 + px] = 255
+    if clean.get("mask") is not None:
+        keep = cv2.dilate((np.clip(clean["mask"], 0, 1) > 0.05).astype(np.uint8), np.ones((15, 15), np.uint8))
+        hole[keep > 0] = 0
+    if (hole > 0).sum() < 400:
+        return None
+    gen_w, gen_h = snap16(int(target["width"])), snap16(int(target["height"]))
+    small = base.resize((gen_w, gen_h), Image.Resampling.LANCZOS)
+    prompt = ("In the masked areas of image 1, continue its scene — " + plan["scene_prompt"] + " — showing only the "
+              "surface and background there, with no jewellery in them; the rest of the photo stays exactly as it is. "
+              + QUALITY + ".")
+    painted = klein(prompt, seed, gen_w, gen_h, reference=small, canvas=small,
+                    mask=Image.fromarray(hole).resize((gen_w, gen_h), Image.Resampling.BILINEAR))
+    painted = painted.resize((fw, fh), Image.Resampling.LANCZOS)
+    soft = Image.fromarray(hole).filter(ImageFilter.GaussianBlur(5))
+    if clean.get("mask") is not None:  # the blur must not bleed onto the product either
+        soft = Image.fromarray(np.where(keep > 0, 0, np.asarray(soft)).astype(np.uint8))
+    out = Image.composite(painted, base, soft)
+    info = {k: v for k, v in clean["info"].items() if k not in ("caps", "raw_score", "drawn_box")}
+    info.update(cleaned=True, duplicate=False)
+    info["duplicate"] = second_copy(out, info)
+    print(f"painted out {len(clean['boxes'])} extra cop{'y' if len(clean['boxes']) == 1 else 'ies'} of the piece",
+          flush=True)
+    return out, clean["prompt"], clean["mask"], info
 
 
 def make_shot(target, plan, seed, fix=""):
@@ -1653,15 +1913,20 @@ try:
                 return
             _, _, n, attempt, fix = item
             shot = shots[n]
-            report.send("imageGeneration", step(shot, 0.05 + 0.5 * attempt), f"Painting {shot['label']}" +
-                        (" · second take: " + fix[:120] if attempt else ""), force=True, imageIndex=shot["idx"])
+            clean = shot.pop("clean", None)
+            note = (" · painting out the extra copy" if clean else
+                    " · on its display" if shot.get("restaged_at") == attempt else
+                    " · second take: " + fix[:120] if attempt else "")
+            report.send("imageGeneration", step(shot, 0.05 + 0.5 * attempt), f"Painting {shot['label']}" + note,
+                        force=True, imageIndex=shot["idx"])
             try:
-                image, used_prompt, mask, info = make_shot(shot["target"], shot["plan"], random.randrange(2**31 - 1),
-                                                           fix)
+                made = clean_copies(shot["target"], shot["plan"], random.randrange(2**31 - 1), clean) if clean else None
+                image, used_prompt, mask, info = made or make_shot(shot["target"], shot["plan"],
+                                                                   random.randrange(2**31 - 1), fix)
                 path = os.path.join(OUT_DIR, f"image-{shot['idx']}-{attempt}.jpg")
                 image.save(path, "JPEG", quality=95, subsampling=0, optimize=True)
                 judged.put((n, attempt, {"image": image, "path": path, "prompt": used_prompt, "mask": mask,
-                                         "info": info}, None))
+                                         "info": info, "target": shot["target"], "plan": shot["plan"]}, None))
             except BaseException as exc:  # whatever happens, the judge hears about this take
                 traceback.print_exc()
                 try:
@@ -1686,14 +1951,18 @@ try:
                     takes[0], takes[1], shot["plan"]):
                 takes[0], takes[1] = takes[1], takes[0]
             best = takes[0]
+            # A re-staged scene tells the backend how the still was staged: its clip must not ask for a model.
+            staged = best.get("target") or shot["target"]
+            restaged = {"scenePrompt": staged["prompt"], "motionPrompt": PRODUCT_MOTION} if staged.get("restaged") else {}
             if JUDGE:
                 restored = " · real product restored" if best["info"].get("restored") else ""
+                shown = " · shown on its display" if staged.get("restaged") and not is_kids() else ""
                 report.send("imageReview", step(shot, 0.97), f"{label.capitalize()}: " + (
                     f"kept take {best['take']} of {len(takes)} ({best['score']:.0f}/10)" if len(takes) > 1 else
-                    f"quality {best['score']:.0f}/10") + restored, force=True, imageIndex=idx)
+                    f"quality {best['score']:.0f}/10") + restored + shown, force=True, imageIndex=idx)
             upload_best(shot["target"], best)
             report.send("imageDone", step(shot, 1.0), f"{label.capitalize()} ready", force=True, imageIndex=idx,
-                        imagePrompt=str(best["prompt"])[:4000], qualityScore=best["score"])
+                        imagePrompt=str(best["prompt"])[:4000], qualityScore=best["score"], **restaged)
         except Exception as exc:
             traceback.print_exc()
             failures.append(idx)
@@ -1704,6 +1973,24 @@ try:
                 pass
             report.send("imageFailed", step(shot, 1.0), f"Image {idx} failed: {type(exc).__name__}: {exc}",
                         force=True, imageIndex=idx)
+
+    def can_restage(shot):
+        """A campaign's model scene none of whose takes kept the real design (or its place on the body): a model
+        wearing a different piece is no advert for the jeweller's own, so the scene shows the real cut-out on its
+        display instead."""
+        return (JUDGE and JOB["type"] == "campaign" and MODE == "exact" and PRODUCT is not None
+                and PRODUCT_MODE == "cutout" and shot_people(shot["target"]) == "model"
+                and not shot["target"].get("restaged") and max(t["score"] for t in shot["takes"]) <= 4)
+
+    def restage(shot, attempt):
+        target = dict(shot["target"], prompt=display_scene(), restaged=True)
+        plan = fallback_plan(target)
+        if VIEW == "flat":
+            plan["scene_prompt"] = flat_lay(plan["scene_prompt"])
+        shot["target"], shot["plan"], shot["restaged_at"] = target, plan, attempt
+        PATHS[shot["idx"]] = "paste"
+        print(f"{shot['label']}: no model take kept the real piece — shown on its display instead: "
+              f"{plan['scene_prompt']}", flush=True)
 
     try:
         while not all(s["done"] for s in shots):  # GPU 1: the judge, in the order takes were painted
@@ -1730,17 +2017,34 @@ try:
             if JUDGE:
                 report.send("imageReview", step(shot, 0.45 + 0.5 * attempt), f"Checking {shot['label']}", force=True,
                             imageIndex=shot["idx"])
-            verdict = judge(take["image"], shot["target"], shot["plan"], take["info"], shot["idx"], attempt)
+            verdict = judge(take["image"], take["target"], take["plan"], take["info"], shot["idx"], attempt)
             score = verdict[0] if verdict else 5.0
             shot["takes"].append({"path": take["path"], "prompt": take["prompt"], "take": attempt + 1, "score": score,
-                                  "mask": take["mask"], "info": take["info"]})
-            del take
+                                  "mask": take["mask"], "info": take["info"], "target": take["target"]})
             if verdict:
                 print(f"{shot['label']} take {attempt + 1}: score {score:.1f} — {verdict[1]}", flush=True)
-            if not verdict or score >= GOOD_ENOUGH or attempt + 1 >= TAKES:
+            # Two clear failures (a duplicate, the wrong body part, a different piece) earn one more take.
+            limit = TAKES + (1 if JUDGE and max(t["score"] for t in shot["takes"]) <= 4 else 0)
+            if shot.get("restaged_at") is not None:
+                limit = shot["restaged_at"] + TAKES  # the display shot gets takes of its own
+            out_of_takes = not verdict or score >= GOOD_ENOUGH or attempt + 1 >= limit
+            if out_of_takes and verdict and score < GOOD_ENOUGH and can_restage(shot):
+                restage(shot, attempt + 1)
+                paint_queue.put((0, next(order), n, attempt + 1, ""))
+            elif out_of_takes:
                 finish(shot)  # publishable (or nothing to judge with, or out of takes)
             else:
+                # A good paste take spoilt only by a copy klein painted beside the real piece: the next take paints
+                # that copy out of this one (a fresh take tends to paint the copy again).
+                info = take["info"]
+                if (info.get("path") == "paste" and not info.get("cleaned") and info.get("raw_score", 0) >= 6
+                        and info.get("caps") and set(info["caps"]) <= {"duplicate", "extra"}):
+                    boxes = copy_boxes(take["path"], info, take["image"].size)
+                    if boxes:
+                        shot["clean"] = {"path": take["path"], "boxes": boxes, "mask": take["mask"], "info": info,
+                                         "prompt": take["prompt"]}
                 paint_queue.put((0, next(order), n, attempt + 1, verdict[2] or ""))
+            del take
     finally:
         paint_queue.put((-1, -1, None, 0, ""))  # stop the painter after its current take
 

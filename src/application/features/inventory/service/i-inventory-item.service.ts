@@ -33,5 +33,13 @@ export interface IInventoryItemService {
     storeAsUploaded?: boolean,
   ): Promise<InventoryItem>;
   previewAiImage(file: Express.Multer.File): Promise<InventoryImageAiPreviewResponseModel>;
-  previewAiImageForItem(id: string, userId: string): Promise<InventoryImageAiPreviewResponseModel>;
+  previewAiImageForItem(id: string, userId: string, imageId?: string): Promise<InventoryImageAiPreviewResponseModel>;
+  addImage(
+    id: string,
+    userId: string,
+    file: Express.Multer.File | undefined,
+    options: { storeAsUploaded?: boolean; asCover?: boolean },
+  ): Promise<InventoryItem>;
+  removeImageById(id: string, userId: string, imageId: string): Promise<InventoryItem>;
+  reorderImages(id: string, userId: string, imageIds: string[]): Promise<InventoryItem>;
 }

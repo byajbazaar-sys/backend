@@ -101,8 +101,12 @@ export class InventoryItemResponseModel {
   status: EInventoryItemStatus;
 
   @Expose()
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ type: [String], description: 'Photos in order; the first is the cover' })
   imageUrls?: string[];
+
+  @Expose()
+  @ApiPropertyOptional({ type: [String], description: 'One id per photo (same order as imageUrls)' })
+  imageIds?: string[];
 
   @Expose()
   @ApiPropertyOptional()
