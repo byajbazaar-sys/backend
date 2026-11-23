@@ -153,6 +153,12 @@ jewelleryTryOn:
   timeout: 900
   memorySize: 2048
 
+inboxWorker:
+  handler: dist/src/lambda-handlers/inbox-worker.handler
+  description: 'Customer chat: the assistant answers a WhatsApp / Instagram message or alerts the owner (async from webhooks)'
+  timeout: 120
+  memorySize: 1024
+
 marketingWorker:
   handler: dist/src/lambda-handlers/marketing-worker.handler
   description: 'Experimental marketing videos: Cloudflare still + Kaggle GPU dispatch (async)'

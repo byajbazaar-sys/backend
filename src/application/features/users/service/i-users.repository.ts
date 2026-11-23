@@ -11,6 +11,8 @@ export interface IUsersRepository {
   findByVerifiedPhone(phoneNumber: string): Promise<User>;
   findByResetPasswordToken(token: string): Promise<User>;
   findById(id: string): Promise<User>;
+  /** Extra shops owned by this person (oldest first). */
+  listByOwner(ownerUserId: string): Promise<User[]>;
   findByGoogleId(googleId: string): Promise<User>;
   findByCatalogSlug(catalogSlug: string): Promise<User>;
   existsCatalogSlug(catalogSlug: string, excludeUserId?: string): Promise<boolean>;

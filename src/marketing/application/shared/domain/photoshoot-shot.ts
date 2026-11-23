@@ -2,7 +2,7 @@ export interface PhotoshootShot {
   id: string;
   photoshootId: string;
   index: number;
-  /** present | closeup | hands | worn */
+  /** box | closeup | display | flatlay (present | hands | worn: photoshoots from before, made jewellery-only on regenerate) */
   kind: string;
   prompt: string;
   imageKey: string | null;

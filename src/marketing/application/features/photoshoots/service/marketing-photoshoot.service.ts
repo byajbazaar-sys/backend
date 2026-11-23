@@ -35,7 +35,7 @@ import {
   productMaskKey,
 } from '../../../shared';
 import { MarketingRenderService, kaggleBatchStatus } from '../../kaggle';
-import { buildShotPrompt, describePiece, PHOTOSHOOT_SHOT_KINDS } from '../utils';
+import { buildShotPrompt, describePiece, PHOTOSHOOT_SHOT_KINDS, productShotKind } from '../utils';
 import { CreatePhotoshootInput } from './create-photoshoot-input';
 import { PhotoshootView } from './photoshoot-view';
 
@@ -84,6 +84,7 @@ export class MarketingPhotoshootService {
       );
     }
     const setting = pick<PhotoshootSetting>(input.setting, PHOTOSHOOT_SETTINGS, 'showroom');
+    // Still stored (older apps send them), but no shot shows a model: marketing photos show the jewellery only.
     const model = pick<PhotoshootModel>(input.model, PHOTOSHOOT_MODELS, 'woman');
     const outfit = pick<PhotoshootOutfit>(input.outfit, PHOTOSHOOT_OUTFITS, 'kurta');
     const imageMode = resolveImageMode(input.imageMode);
@@ -150,7 +151,7 @@ export class MarketingPhotoshootService {
         photoshootId: shoot.id,
         index,
         kind,
-        prompt: buildShotPrompt(kind, piece, { setting, model, outfit }),
+        prompt: buildShotPrompt(kind, piece, { setting }),
         imageKey: null,
         status: EAssetStatus.Pending,
       })),
@@ -235,6 +236,15 @@ export class MarketingPhotoshootService {
     const todo = all.filter((s) =>
       typeof onlyIndex === 'number' ? s.index === onlyIndex : !is(s.status, EAssetStatus.Ready),
     );
+    // Marketing shows the jewellery only: a shot from before that (a model presenting it, gloved hands, worn) is made
+    // again as the jewellery-only shot in its place, with a fresh brief.
+    for (const shot of todo) {
+      const kind = productShotKind(shot.kind);
+      if (kind !== shot.kind) {
+        const prompt = buildShotPrompt(kind, shoot.piece, { setting: shoot.setting as PhotoshootSetting });
+        await this.shots.update(shot.id, { kind, prompt });
+      }
+    }
     try {
       await this.render.queuePhotoshootImages(shoot.id, onlyIndex);
     } catch (err) {

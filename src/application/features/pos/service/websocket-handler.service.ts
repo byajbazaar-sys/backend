@@ -19,6 +19,7 @@ import {
   INVENTORY_ITEMS_REPOSITORY,
   InventoryItem,
 } from '../../inventory';
+import { ShopAccessService } from '../../shops/service/shop-access.service';
 import { WebSocketConnectResult } from '../domain';
 import { EDeviceType } from '../enums';
 
@@ -35,6 +36,7 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     private readonly jwtService: JwtService,
     protected readonly options: UsersAuthOptions,
     @InjectPinoLogger(WebSocketHandlerService.name) private readonly logger: PinoLogger,
+    private readonly shopAccess: ShopAccessService,
   ) {}
 
   private verifyUserToken(token: string): IIdentity {
@@ -74,17 +76,37 @@ export class WebSocketHandlerService implements IWebSocketHandlerService {
     connectionId: string,
     token: string,
     deviceType: EDeviceType = EDeviceType.Desktop,
+    shopId?: string,
   ): Promise<WebSocketConnectResult> {
     try {
       const resolvedDevice = deviceType === EDeviceType.Mobile ? EDeviceType.Mobile : EDeviceType.Desktop;
-      const userId =
+      const actorUserId =
         resolvedDevice === EDeviceType.Mobile
           ? this.verifyPosSessionConnectToken(token).userId
           : this.verifyUserToken(token).userId;
 
+      // Working in another shop (invited member / extra shop): listen to that shop's events, if allowed.
+      let userId = actorUserId;
+      let shopPermissions: Record<string, string> | null = null;
+      const requestedShop = shopId?.trim();
+      if (resolvedDevice === EDeviceType.Desktop && requestedShop && requestedShop !== actorUserId) {
+        const access = await this.shopAccess.accessFor(actorUserId, requestedShop);
+        if (!access) {
+          this.logger.warn(
+            { connectionId, actorUserId, shopId: requestedShop },
+            'WebSocket connect: no access to shop',
+          );
+          return { statusCode: 403 };
+        }
+        userId = requestedShop;
+        shopPermissions = access.isOwner ? null : access.permissions;
+      }
+
       await this.connectionsRepo.create({
         connectionId,
         userId,
+        actorUserId,
+        shopPermissions,
         deviceType: resolvedDevice,
       });
       this.logger.info({ connectionId, userId, deviceType: resolvedDevice }, 'WebSocket connected');

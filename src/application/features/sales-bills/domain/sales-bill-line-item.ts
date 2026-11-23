@@ -53,6 +53,9 @@ export class SalesBillLineItem {
   quantityPricingMode?: string;
 
   @Expose()
+  ratePerGram?: number | null;
+
+  @Expose()
   lineTotal: number;
 
   @Expose()

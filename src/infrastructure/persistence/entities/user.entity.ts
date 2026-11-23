@@ -104,6 +104,10 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   shopLogoRef: string;
 
+  /** Set on extra shops an owner adds: the person who owns this shop (their own account is their first shop). */
+  @Column({ type: 'uuid', nullable: true })
+  ownerUserId: string | null;
+
   @Column({ type: 'varchar', length: 20, nullable: true })
   alternatePhoneNumber: string;
 

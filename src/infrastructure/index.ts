@@ -12,4 +12,5 @@ export * from './startmessaging';
 export * from './aws-lambda';
 export * from './app-integrity';
 export * from './websocket';
+export * from './push';
 export * from './infrastructure.module';

@@ -6,6 +6,7 @@ import { CloudflareAccountsAdminController, CloudflareAccountsAdminService } fro
 import { CustomersController } from './customers';
 import { DepositsController } from './deposits';
 import { EventsController, AdminEventsController } from './events';
+import { InboxController } from './inbox';
 import {
   InventoryCategoriesController,
   InventoryItemsController,
@@ -17,12 +18,13 @@ import { ItemsController } from './items';
 import { LabelDesignerSettingsController, LabelDesignerSettingsService } from './label-designer';
 import { LoansController } from './loans';
 import { MetalRatesController } from './metal-rates';
-import { NotificationsController } from './notifications';
+import { NotificationsController, PushDevicesController } from './notifications';
 import { OrdersController } from './orders';
 import { PaymentsController, AdminPaymentsController, CouponAdminService } from './payments';
 import { PosSessionsController, PosSessionPublicController, PosSessionLeaveController } from './pos';
 import { PublicCatalogController } from './public-catalog';
 import { SalesBillsController } from './sales-bills';
+import { PublicInvitesController, ShopAccessService, ShopsController, ShopsService } from './shops';
 import { SupportController } from './support';
 import { TransactionsController } from './transactions';
 import { TryOnController } from './try-on';
@@ -62,8 +64,12 @@ export const Controllers = [
   PublicCatalogController,
   WhatsAppController,
   WhatsAppWebhookController,
+  InboxController,
+  PushDevicesController,
   VerificationController,
   CloudflareAccountsAdminController,
+  ShopsController,
+  PublicInvitesController,
 ];
 
 export const Services = [
@@ -73,4 +79,6 @@ export const Services = [
   VerificationService,
   CouponAdminService,
   CloudflareAccountsAdminService,
+  ShopAccessService,
+  ShopsService,
 ];

@@ -57,12 +57,14 @@ import {
   VOICE_LANGUAGES,
   sceneClipKey,
   sceneIndexFromClipKey,
+  MarketingStyle,
 } from '../../../shared';
 import {
   buildLogoImagePrompt,
   buildSceneVideoPrompt,
   jewelleryWearer,
   LOGO_VIDEO_PROMPT,
+  productOnlyScene,
   VIDEO_NEGATIVE,
 } from '../../campaigns';
 import {
@@ -278,6 +280,18 @@ export class MarketingRenderService {
       }
     }
     if (!targets.length) return null;
+    // Marketing shows the jewellery only: a scene planned with a model (campaigns from before that) is made as the
+    // jewellery-only scene of its style in its place, and the scene keeps that direction from now on.
+    for (const [i, scene] of targets.entries()) {
+      const product = productOnlyScene(
+        { scene: scene.imagePrompt, motion: scene.motionPrompt },
+        campaign.style as MarketingStyle,
+        scene.index,
+      );
+      if (product.scene === scene.imagePrompt && product.motion === scene.motionPrompt) continue;
+      const patch = { imagePrompt: product.scene, motionPrompt: product.motion };
+      targets[i] = (await this.scenes.update(scene.id, patch)) ?? { ...scene, ...patch };
+    }
 
     const batchId = randomUUID();
     let first: RenderJob | null = null;
@@ -364,8 +378,6 @@ export class MarketingRenderService {
             style: `${shoot.setting}; ${shoot.model}; ${shoot.outfit}`,
             photoshootId: shoot.id,
             metal: KNOWN_METALS.has(shoot.piece?.metal ?? '') ? shoot.piece.metal : undefined,
-            // The jeweller picked the model: the notebook must not swap it for the analyst's guess of the wearer.
-            wearer: shoot.model === 'man' ? 'male' : 'female',
             targets: [target],
           },
         },

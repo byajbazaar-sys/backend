@@ -28,6 +28,8 @@ import {
   LOANS_REPOSITORY,
   NOTIFICATIONS_REPOSITORY,
   SUPPORT_REQUESTS_REPOSITORY,
+  SHOP_MEMBERSHIPS_REPOSITORY,
+  SHOP_INVITES_REPOSITORY,
   TRANSACTIONS_REPOSITORY,
   USERS_FILE_STORAGE,
   USERS_REPOSITORY,
@@ -57,6 +59,11 @@ import {
   ORDERS_REPOSITORY,
   WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
   WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
+  INBOX_SETTINGS_REPOSITORY,
+  INBOX_CONVERSATIONS_REPOSITORY,
+  INBOX_MESSAGES_REPOSITORY,
+  PUSH_DEVICES_REPOSITORY,
+  PUSH_NOTIFICATION_SERVICE,
   META_GRAPH_CLIENT,
   RazorpayOptions,
   MetaWhatsAppOptions,
@@ -90,6 +97,8 @@ import {
   LoansRepository,
   NotificationsRepository,
   SupportRequestsRepository,
+  ShopMembershipsRepository,
+  ShopInvitesRepository,
   TransactionsRepository,
   TransactionLogsRepository,
   UsersRepository,
@@ -119,10 +128,15 @@ import {
   WhatsAppBusinessConnectionsRepository,
   WhatsAppConversationWindowsRepository,
   WhatsAppMessagesRepository,
+  InboxSettingsRepository,
+  InboxConversationsRepository,
+  InboxMessagesRepository,
+  PushDevicesRepository,
   generateDataSourceOptions,
   ENTITIES,
   SEEDS,
 } from './persistence';
+import { ExpoPushNotificationService } from './push';
 import { RedisOptions, RedisService, RedisCacheService } from './redis';
 import { FileStorageMock, UsersFileStorage } from './s3';
 import { WebSocketMessageService } from './websocket';
@@ -189,6 +203,14 @@ import { WebSocketMessageService } from './websocket';
     {
       provide: SUPPORT_REQUESTS_REPOSITORY,
       useClass: SupportRequestsRepository,
+    },
+    {
+      provide: SHOP_MEMBERSHIPS_REPOSITORY,
+      useClass: ShopMembershipsRepository,
+    },
+    {
+      provide: SHOP_INVITES_REPOSITORY,
+      useClass: ShopInvitesRepository,
     },
     {
       provide: INVENTORY_CATEGORIES_REPOSITORY,
@@ -284,6 +306,11 @@ import { WebSocketMessageService } from './websocket';
       provide: WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
       useClass: WhatsAppConversationWindowsRepository,
     },
+    { provide: INBOX_SETTINGS_REPOSITORY, useClass: InboxSettingsRepository },
+    { provide: INBOX_CONVERSATIONS_REPOSITORY, useClass: InboxConversationsRepository },
+    { provide: INBOX_MESSAGES_REPOSITORY, useClass: InboxMessagesRepository },
+    { provide: PUSH_DEVICES_REPOSITORY, useClass: PushDevicesRepository },
+    { provide: PUSH_NOTIFICATION_SERVICE, useClass: ExpoPushNotificationService },
     // Main-database whatsapp_messages; WHATSAPP_MESSAGES_REPOSITORY is provided by LogsModule (src/logs).
     WhatsAppMessagesRepository,
     {
@@ -461,6 +488,8 @@ import { WebSocketMessageService } from './websocket';
     DUES_REPOSITORY,
     NOTIFICATIONS_REPOSITORY,
     SUPPORT_REQUESTS_REPOSITORY,
+    SHOP_MEMBERSHIPS_REPOSITORY,
+    SHOP_INVITES_REPOSITORY,
     INVENTORY_CATEGORIES_REPOSITORY,
     INVENTORY_ITEMS_REPOSITORY,
     POS_SESSIONS_REPOSITORY,
@@ -486,6 +515,11 @@ import { WebSocketMessageService } from './websocket';
     WHATSAPP_BUSINESS_CONNECTIONS_REPOSITORY,
     WHATSAPP_CONVERSATION_WINDOWS_REPOSITORY,
     WhatsAppMessagesRepository,
+    INBOX_SETTINGS_REPOSITORY,
+    INBOX_CONVERSATIONS_REPOSITORY,
+    INBOX_MESSAGES_REPOSITORY,
+    PUSH_DEVICES_REPOSITORY,
+    PUSH_NOTIFICATION_SERVICE,
     LABEL_DESIGNER_SETTINGS_REPOSITORY,
     META_GRAPH_CLIENT,
     COUPON_REDEMPTIONS_REPOSITORY,

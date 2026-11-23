@@ -55,8 +55,13 @@ export class SubscriptionAccessChecker implements ISubscriptionAccessChecker {
     );
   }
 
-  /** Epoch ms until which the user may use the app; 0 when they need to pay. */
-  private async accessUntil(userId: string): Promise<number> {
+  /**
+   * Epoch ms until which the shop may use the app; 0 when it needs a plan. Extra shops an owner added run on the
+   * owner's plan (and trial).
+   */
+  private async accessUntil(shopId: string): Promise<number> {
+    const shop = await this.usersRepo.findById(shopId);
+    const userId = shop?.ownerUserId ?? shopId;
     const latest = await this.subscriptionsRepo.findLatestByUserId(userId);
     if (subscriptionGrantsAccess(latest)) {
       const end = latest.currentEnd ? new Date(latest.currentEnd).getTime() : 0;

@@ -409,9 +409,15 @@ OTHER_GENDER = {"male": re.compile(r"\\b(wom[ae]n'?s?|female|lady|ladies|girl|br
                 "female": re.compile(r"\\b(m[ae]n'?s?|male|gentleman|boy|groom|he|his|him)\\b", re.I)}
 
 
+# Marketing shows the jewellery only — no model, no hands — unless a job explicitly allows people (none does now).
+PEOPLE = bool(JOB.get("allowPeople"))
+
+
 def shot_people(target):
     """model: the shot may show one adult model (on-body photoshoot kinds, or a campaign scene that names one);
-    none: the jewellery alone, a product close-up — no person or body part."""
+    none: the jewellery alone, a product close-up — no person or body part. Always none while PEOPLE is off."""
+    if not PEOPLE:
+        return "none"
     if target["kind"] in ON_BODY_KINDS:
         return "model"
     if target["kind"] == "scene" and WITH_PERSON.search(str(target.get("prompt") or "")):
@@ -605,9 +611,7 @@ def path_for(target):
     on top wherever the drawing matches the photo."""
     if JOB["type"] == "logo":
         return "logo"
-    if MODE == "ai" or target["kind"] in ON_BODY_KINDS:
-        return "redraw"
-    if target["kind"] == "scene" and WITH_PERSON.search(str(target.get("prompt") or "")):
+    if MODE == "ai" or shot_people(target) == "model":
         return "redraw"
     return "paste"
 
@@ -798,6 +802,12 @@ def plan_shots():
                     print(f"shot {idx}: the analyst put a person in a product-only shot; using the shot direction",
                           flush=True)
                     plan[key] = fallback.get(key, plan[key])
+                    if BODY.search(plan[key]):  # the direction itself shows a person: the piece on its display
+                        print(f"shot {idx}: the shot direction shows a person; the piece on its display instead",
+                              flush=True)
+                        plan[key] = display_scene() + (
+                            ". Keep the exact jewellery from image 1 identical: same design, stones, metal colour and "
+                            "proportions. Photorealistic advertising photograph." if key == "ai_prompt" else "")
         elif WEARER and plan.get("ai_prompt") and OTHER_GENDER[WEARER].search(plan["ai_prompt"]):
             print(f"shot {idx}: the analyst wrote the wrong gender for a {WEARER} piece; using the shot direction",
                   flush=True)

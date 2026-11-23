@@ -29,8 +29,10 @@
 
 A jeweller uploads **one product photo** (for example a bangle). ByajBazaar then makes:
 
-- **Campaign images** — 5 advertising scenes (a model wearing it, on velvet, in a gift box…).
-- **Photoshoots** — a set of product shots.
+- **Campaign images** — 5 advertising scenes (on velvet, on a bust or stand, in a gift box…).
+- **Photoshoots** — 4 catalogue photos: in a gift box, a close-up, on its display, a flat lay.
+
+**Everything shows the jewellery only — no model, no hands** (see "Jewellery only" below).
 - **Logo images** — a brand backdrop with the shop name.
 - **Reels** — each scene image becomes its own 5-second video clip (1080×1920), publishable as an Instagram Reel.
 
@@ -230,7 +232,29 @@ bone… not held, not floating"); the judge reports `worn`, and a piece held or 
 klein settings: 4 steps, euler, cfg 1.0 (what the distilled model is trained for). A blank/black image (an fp16
 overflow) restarts ComfyUI once with a full-precision text encoder.
 
-### Jewellery categories (who wears it, where, and how the model shot is framed)
+### Jewellery only (no models, no hands)
+
+Marketing photos and reels show the jewellery alone, everywhere:
+
+- **Campaigns**: the five scenes of each style are product scenes (the old model scene became a bust, a stand or a
+  display shelf in the same mood). The scene writer's instructions and its filter allow no person or body part
+  (`hasPeople`).
+- **Photoshoots**: the shots are `box` (open gift box on the setting's counter), `closeup` (macro on its surface),
+  `display` (on the display the piece is sold on — bust, earring stand, ring cone, bangle stand or tray) and
+  `flatlay` (from above with a few props). The model and outfit options are no longer asked for; the API still
+  accepts them from older apps and ignores them.
+- **Older work**: a campaign scene planned with a model, or a photoshoot's model / gloved-hands / worn shot, is made
+  as the jewellery-only shot in its place when it is regenerated (`productOnlyScene`, `productShotKind`; the new
+  direction is saved). Existing images stay as they are until then.
+- **The image notebook enforces it** (`PEOPLE`, off unless a job sends `allowPeople`, which none does): every shot
+  is product-only, exact mode pastes the real cut-out into every shot, an analyst plan that names a person falls back
+  to the direction, and a direction that still names one becomes the piece on its display. The judge caps any take
+  with a person or hand at 3.
+
+The model-shot rules below (categories, staging, wearer, re-staging) are kept for jobs that would allow people; with
+`PEOPLE` off they never run.
+
+### Jewellery categories (who wears it, where, and how the model shot is framed — only with `allowPeople`)
 
 The model scene of a campaign is staged from the piece's kind, read from the jeweller's title (else the analyst's
 name for the piece): the head noun wins ("Gold Nose Ring" is a nose piece, "Silver ghungroo bangles set" a wrist
@@ -251,7 +275,7 @@ catalogue maps (checked on all 119 names in the gold and silver lists):
 | waist | kamarband, waist belt | chest to knees |
 | held | coins | cupped hands, close-up (wearing words — "worn by", "as a pendant" — become holding ones) |
 
-**Photoshoot shots are staged by kind** (`shot_staging`): *worn* is on the body as in the table; *hands* is only the
+**Photoshoot shots with people (old kinds, only with `allowPeople`) are staged by kind** (`shot_staging`): *worn* is on the body as in the table; *hands* is only the
 two gloved hands holding it (nobody wears it); *present* is the model holding it out in the open box (wearing no copy
 of it). The analyst's brief, the sentence every take is painted with, and the judge all follow it: a hands or present
 take where the piece is also worn scores at most 3, a worn take where it is held scores at most 4. Treating hands and

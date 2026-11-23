@@ -75,6 +75,16 @@ import {
 const DEFAULT_CGST_RATE = 1.5;
 const DEFAULT_SGST_RATE = 1.5;
 
+interface BillTotals {
+  cgstRate: number;
+  sgstRate: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  taxAmount: number;
+  roundOff: number;
+  grandTotal: number;
+}
+
 @Injectable()
 export class SalesBillService implements ISalesBillService {
   constructor(
@@ -184,7 +194,7 @@ export class SalesBillService implements ISalesBillService {
     return `${prefix}-${year}-${String(month).padStart(2, '0')}-${String(seq).padStart(4, '0')}`;
   }
 
-  private computeInformalTotals(subtotal: number, discount: number) {
+  private computeInformalTotals(subtotal: number, discount: number): BillTotals {
     const taxable = Math.max(0, subtotal - discount);
     const grandTotal = Math.round(taxable);
     return {
@@ -274,7 +284,7 @@ export class SalesBillService implements ISalesBillService {
     return deductions;
   }
 
-  private computeGstTotals(subtotal: number, discount: number) {
+  private computeGstTotals(subtotal: number, discount: number): BillTotals {
     const taxable = Math.max(0, subtotal - discount);
     const cgstRate = DEFAULT_CGST_RATE;
     const sgstRate = DEFAULT_SGST_RATE;
@@ -320,11 +330,18 @@ export class SalesBillService implements ISalesBillService {
   private resolveBillLineWeights(
     item: CreateSalesBillRequestModel['items'][number],
   ): Pick<SalesBillLineItem, 'grossWeight' | 'netWeight' | 'lessWeight'> {
-    const gross = item.grossWeight != null ? Number(item.grossWeight) : undefined;
-    const net = item.netWeight != null ? Number(item.netWeight) : undefined;
-    let less = item.lessWeight != null ? Number(item.lessWeight) : undefined;
+    const gross = item.grossWeight !== undefined && item.grossWeight !== null ? Number(item.grossWeight) : undefined;
+    const net = item.netWeight !== undefined && item.netWeight !== null ? Number(item.netWeight) : undefined;
+    let less = item.lessWeight !== undefined && item.lessWeight !== null ? Number(item.lessWeight) : undefined;
 
-    if (less == null && gross != null && net != null && gross >= net) {
+    if (
+      (less === undefined || less === null) &&
+      gross !== undefined &&
+      gross !== null &&
+      net !== undefined &&
+      net !== null &&
+      gross >= net
+    ) {
       less = Math.round((gross - net) * 1000) / 1000;
     }
 
@@ -337,8 +354,9 @@ export class SalesBillService implements ISalesBillService {
     userId: string,
   ): Promise<Pick<SalesBillLineItem, 'purchaseRatePerGram' | 'purchaseCost' | 'profitAmount'>> {
     let purchaseRatePerGram: number;
-    const netWeight = item.netWeight != null ? Number(item.netWeight) : undefined;
-    const makingCharges = item.makingCharges != null ? Number(item.makingCharges) : 0;
+    const netWeight = item.netWeight !== undefined && item.netWeight !== null ? Number(item.netWeight) : undefined;
+    const makingCharges =
+      item.makingCharges !== undefined && item.makingCharges !== null ? Number(item.makingCharges) : 0;
     let purchasePrice: number;
 
     if (item.inventoryItemId) {
@@ -389,6 +407,7 @@ export class SalesBillService implements ISalesBillService {
         sellingPrice: item.sellingPrice,
         quantity: item.quantity,
         quantityPricingMode: item.quantityPricingMode,
+        ratePerGram: item.ratePerGram,
         lineTotal,
         purchaseRatePerGram: purchase.purchaseRatePerGram,
         purchaseCost: purchase.purchaseCost,
@@ -437,11 +456,11 @@ export class SalesBillService implements ISalesBillService {
       metalRates: data.metalRates,
       grandTotal: totals.grandTotal,
       amountReceived:
-        data.amountReceived != null && Number(data.amountReceived) >= 0
+        data.amountReceived !== undefined && data.amountReceived !== null && Number(data.amountReceived) >= 0
           ? Math.round(Number(data.amountReceived) * 100) / 100
           : undefined,
       depositApplied:
-        data.depositApplied != null && Number(data.depositApplied) > 0
+        data.depositApplied !== undefined && data.depositApplied !== null && Number(data.depositApplied) > 0
           ? Math.round(Number(data.depositApplied) * 100) / 100
           : 0,
       totalPurchaseCost: Math.round(totalPurchaseCost * 100) / 100,
@@ -657,7 +676,8 @@ export class SalesBillService implements ISalesBillService {
       return sum + computeBillLineTotal(price, qty, qtyMode);
     }, 0);
 
-    const discount = data.discount != null ? Number(data.discount) : Number(bill.discount ?? 0);
+    const discount =
+      data.discount !== undefined && data.discount !== null ? Number(data.discount) : Number(bill.discount ?? 0);
     if (discount > subtotal) {
       throw new BadRequestException('Discount cannot exceed subtotal');
     }

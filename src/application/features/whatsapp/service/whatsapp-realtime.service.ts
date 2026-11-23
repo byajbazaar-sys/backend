@@ -40,7 +40,7 @@ export class WhatsAppRealtimeService implements IWhatsAppRealtimeService {
       return;
     }
 
-    const connections = await this.connectionsRepo.findActiveByUserId(userId);
+    const connections = await this.connectionsRepo.findActiveByUserId(userId, 'whatsapp');
     if (!connections.length) {
       return;
     }

@@ -21,7 +21,7 @@ export interface IPaymentsService {
     body: CreateSubscriptionRequestModel,
     userProfile: SubscriptionUserProfileData,
   ): Promise<CreateSubscriptionResponseModel>;
-  getStatus(userId: string): Promise<SubscriptionStatusResponseModel>;
+  getStatus(shopOrUserId: string, actorUserId?: string): Promise<SubscriptionStatusResponseModel>;
   cancel(userId: string, body: CancelSubscriptionRequestModel): Promise<SubscriptionStatusResponseModel>;
   resume(userId: string): Promise<SubscriptionStatusResponseModel>;
   applyCoupon(userId: string, body: ApplyCouponRequestModel): Promise<ApplyCouponResponseModel>;

@@ -81,7 +81,8 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Get current subscription status' })
   @ApiOkResponse({ type: SubscriptionStatusResponseModel })
   async getStatus(@Identity() identity: IIdentity): Promise<SubscriptionStatusResponseModel> {
-    return this.paymentsService.getStatus(identity.userId);
+    // The plan of the shop being worked in (an extra shop / invited member: the owner's plan).
+    return this.paymentsService.getStatus(identity.userId, identity.actorUserId ?? identity.userId);
   }
 
   @Post('subscription/cancel')

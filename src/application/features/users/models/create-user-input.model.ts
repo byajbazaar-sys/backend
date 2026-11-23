@@ -23,6 +23,10 @@ export interface CreateUserInput {
   profilePhotoFileName?: string;
   profilePhotoContentType?: string;
   businessName?: string;
+  address?: string;
+  state?: string;
+  /** Extra shop accounts: the owner's account id. */
+  ownerUserId?: string | null;
   catalogSlug?: string;
   catalogEnabled?: boolean;
   createdAt?: Date;

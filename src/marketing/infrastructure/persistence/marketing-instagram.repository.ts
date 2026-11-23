@@ -33,6 +33,9 @@ export class MarketingInstagramRepository implements IMarketingInstagramReposito
     await repository.upsert(
       {
         ...connection,
+        // A (re)connected account gets its messaging Page looked up again (it may be another account or Page).
+        messagingPageId: connection.messagingPageId ?? null,
+        messagingTokenEncrypted: connection.messagingTokenEncrypted ?? null,
         oauthStateHash: null,
         oauthStateExpiresAt: null,
       },
@@ -41,7 +44,24 @@ export class MarketingInstagramRepository implements IMarketingInstagramReposito
   }
 
   async findConnection(userId: string): Promise<MarketingInstagramConnection | null> {
-    const connection = await (await this.db.repository(MarketingInstagramConnectionEntity)).findOneBy({ userId });
+    return this.toConnection(
+      await (await this.db.repository(MarketingInstagramConnectionEntity)).findOneBy({ userId }),
+    );
+  }
+
+  async findByInstagramUserId(instagramUserId: string): Promise<MarketingInstagramConnection | null> {
+    return this.toConnection(
+      await (await this.db.repository(MarketingInstagramConnectionEntity)).findOneBy({ instagramUserId }),
+    );
+  }
+
+  async saveMessaging(userId: string, pageId: string | null, tokenEncrypted: string | null): Promise<void> {
+    await (
+      await this.db.repository(MarketingInstagramConnectionEntity)
+    ).update({ userId }, { messagingPageId: pageId, messagingTokenEncrypted: tokenEncrypted });
+  }
+
+  private toConnection(connection: MarketingInstagramConnectionEntity | null): MarketingInstagramConnection | null {
     if (
       !connection?.instagramUserId ||
       !connection.username ||
@@ -57,6 +77,8 @@ export class MarketingInstagramRepository implements IMarketingInstagramReposito
       accessTokenEncrypted: connection.accessTokenEncrypted,
       tokenExpiresAt: connection.tokenExpiresAt,
       connectedAt: connection.connectedAt,
+      messagingPageId: connection.messagingPageId,
+      messagingTokenEncrypted: connection.messagingTokenEncrypted,
     };
   }
 

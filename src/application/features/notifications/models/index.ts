@@ -6,3 +6,5 @@ export * from './get-notification-params.model';
 export * from './notifications-paged-response.model';
 export * from './notification-delivery-patch.model';
 export * from './notification-entity-update-input.model';
+export * from './register-push-device-request.model';
+export * from './remove-push-device-request.model';

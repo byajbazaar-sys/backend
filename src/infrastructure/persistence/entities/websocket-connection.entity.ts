@@ -22,6 +22,14 @@ export class WebSocketConnectionEntity {
   @Column({ type: 'enum', enum: EDeviceType, enumName: 'e_device_type_enum' })
   deviceType: EDeviceType;
 
+  /** The signed-in person; userId is the shop this connection receives events for. */
+  @Column({ type: 'uuid', nullable: true })
+  actorUserId: string | null;
+
+  /** Invited members: their access when connecting (events of areas they can't see are not sent). */
+  @Column({ type: 'jsonb', nullable: true })
+  shopPermissions: Record<string, string> | null;
+
   @CreateDateColumn()
   connectedAt: Date;
 

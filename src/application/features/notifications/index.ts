@@ -4,3 +4,4 @@ export * from './options';
 export * from './models';
 export * from './service';
 export * from './notifications.controller';
+export * from './push-devices.controller';

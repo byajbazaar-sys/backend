@@ -14,6 +14,7 @@ export interface CreateSalesBillLineEntityInput {
   sellingPrice: number;
   quantity: number;
   quantityPricingMode?: string;
+  ratePerGram?: number | null;
   lineTotal: number;
   purchaseRatePerGram?: number;
   purchaseCost?: number;

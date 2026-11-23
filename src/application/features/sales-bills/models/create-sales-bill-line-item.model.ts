@@ -77,4 +77,10 @@ export class CreateSalesBillLineItemModel {
   @IsOptional()
   @IsEnum(EQuantityPricingMode)
   quantityPricingMode?: EQuantityPricingMode;
+
+  @ApiPropertyOptional({ nullable: true, description: 'Per-gram metal rate used for this bill line' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  ratePerGram?: number | null;
 }

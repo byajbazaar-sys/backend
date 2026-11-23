@@ -4,7 +4,13 @@ import { EDeviceType } from '../enums';
 export const WEBSOCKET_HANDLER_SERVICE = 'WEBSOCKET_HANDLER_SERVICE';
 
 export interface IWebSocketHandlerService {
-  handleConnect(connectionId: string, token: string, deviceType?: EDeviceType): Promise<WebSocketConnectResult>;
+  /** `shopId`: the shop the person works in (invited member / extra shop); its events are delivered here. */
+  handleConnect(
+    connectionId: string,
+    token: string,
+    deviceType?: EDeviceType,
+    shopId?: string,
+  ): Promise<WebSocketConnectResult>;
   handleDisconnect(connectionId: string): Promise<void>;
   handleCreateSession(
     connectionId: string,

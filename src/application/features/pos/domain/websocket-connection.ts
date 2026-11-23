@@ -18,6 +18,14 @@ export class WebSocketConnection {
   @Expose()
   deviceType: EDeviceType;
 
+  /** The signed-in person (userId is the shop the connection listens to). */
+  @Expose()
+  actorUserId?: string | null;
+
+  /** Invited members: their access in the shop when they connected (null = owner, everything). */
+  @Expose()
+  shopPermissions?: Record<string, string> | null;
+
   @Expose()
   connectedAt?: Date;
 

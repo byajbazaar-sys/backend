@@ -9,6 +9,9 @@ import { DepositAccountEntity } from './deposit-account.entity';
 import { DepositReceiptEntity } from './deposit-receipt.entity';
 import { DepositTransactionEntity } from './deposit-transaction.entity';
 import { DueEntity } from './due.entity';
+import { InboxConversationEntity } from './inbox-conversation.entity';
+import { InboxMessageEntity } from './inbox-message.entity';
+import { InboxSettingsEntity } from './inbox-settings.entity';
 import { InventoryCategoryEntity } from './inventory-category.entity';
 import { InventoryItemEntity } from './inventory-item.entity';
 import { ItemEntity } from './item.entity';
@@ -26,11 +29,14 @@ import { PaymentOrderEntity } from './payment-order.entity';
 import { PaymentEntity } from './payment.entity';
 import { PlanEntity } from './plan.entity';
 import { PosSessionEntity } from './pos-session.entity';
+import { PushDeviceEntity } from './push-device.entity';
 import { RefundEntity } from './refund.entity';
 import { SalesBillItemEntity } from './sales-bill-item.entity';
 import { SalesBillEntity } from './sales-bill.entity';
 import { SeedEntity } from './seed.entity';
 import { SubscriptionEntity } from './subscription.entity';
+import { ShopInviteEntity } from './shop-invite.entity';
+import { ShopMembershipEntity } from './shop-membership.entity';
 import { SupportRequestEntity } from './support-request.entity';
 import { TransactionLogEntity } from './transaction-log.entity';
 import { TransactionEntity } from './transaction.entity';
@@ -53,6 +59,8 @@ export const ENTITIES = [
   NotificationEntity,
   SeedEntity,
   SupportRequestEntity,
+  ShopMembershipEntity,
+  ShopInviteEntity,
   InventoryCategoryEntity,
   InventoryItemEntity,
   PosSessionEntity,
@@ -85,4 +93,8 @@ export const ENTITIES = [
   WhatsAppBusinessConnectionEntity,
   WhatsAppConversationWindowEntity,
   WhatsAppMessageEntity,
+  InboxSettingsEntity,
+  InboxConversationEntity,
+  InboxMessageEntity,
+  PushDeviceEntity,
 ];

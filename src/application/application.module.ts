@@ -93,6 +93,14 @@ import {
   WebSocketHandlerService,
   WhatsAppOrderNotificationService,
   WHATSAPP_ORDER_NOTIFICATION_SERVICE,
+  INBOX_CHANNEL_REGISTRY,
+  InboxChannelRegistry,
+  INBOX_SERVICE,
+  InboxService,
+  InboxKnowledgeService,
+  InboxBotService,
+  InboxNotifierService,
+  WhatsAppInboxChannel,
 } from './features';
 
 @Global()
@@ -268,6 +276,12 @@ import {
       provide: WHATSAPP_ORDER_NOTIFICATION_SERVICE,
       useClass: WhatsAppOrderNotificationService,
     },
+    { provide: INBOX_CHANNEL_REGISTRY, useClass: InboxChannelRegistry },
+    { provide: INBOX_SERVICE, useClass: InboxService },
+    InboxKnowledgeService,
+    InboxBotService,
+    InboxNotifierService,
+    WhatsAppInboxChannel,
   ],
   exports: [
     PassportModule,
@@ -281,6 +295,8 @@ import {
     TRY_ON_SERVICE,
     SUBSCRIPTION_ACCESS_CHECKER,
     WHATSAPP_DUE_REMINDER_SERVICE,
+    INBOX_SERVICE,
+    INBOX_CHANNEL_REGISTRY,
   ],
 })
 export class ApplicationModule {}

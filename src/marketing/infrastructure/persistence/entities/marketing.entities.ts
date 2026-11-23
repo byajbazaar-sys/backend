@@ -115,6 +115,8 @@ export class MarketingInstagramConnectionEntity {
   @Column({ type: 'text', nullable: true }) accessTokenEncrypted: string | null;
   @Column({ type: 'timestamptz', nullable: true }) tokenExpiresAt: Date | null;
   @Column({ type: 'timestamptz', nullable: true }) connectedAt: Date | null;
+  @Column({ type: 'varchar', length: 64, nullable: true }) messagingPageId: string | null;
+  @Column({ type: 'text', nullable: true }) messagingTokenEncrypted: string | null;
   @Column({ type: 'varchar', length: 64, nullable: true }) oauthStateHash: string | null;
   @Column({ type: 'timestamptz', nullable: true }) oauthStateExpiresAt: Date | null;
   @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;

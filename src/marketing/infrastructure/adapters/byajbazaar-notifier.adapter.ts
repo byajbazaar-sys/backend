@@ -21,7 +21,7 @@ export class ByajBazaarNotifierAdapter implements IMarketingNotifier {
   async notifyUser(userId: string, payload: Record<string, unknown>): Promise<void> {
     if (!process.env.WEBSOCKET_API_ENDPOINT) return;
     try {
-      const connections = await this.connectionsRepo.findActiveByUserId(userId);
+      const connections = await this.connectionsRepo.findActiveByUserId(userId, 'marketing');
       await Promise.all(
         connections.map(async (c) => {
           const delivered = await this.wsMessage.sendToConnection(c.connectionId, payload).catch(() => false);

@@ -25,6 +25,11 @@ export class UsersRepository implements IUsersRepository {
     return plainToInstance(User, created, { excludeExtraneousValues: true });
   }
 
+  async listByOwner(ownerUserId: string): Promise<User[]> {
+    const rows = await this.userRepo.find({ where: { ownerUserId }, order: { createdAt: 'ASC' } });
+    return rows.map((row) => plainToInstance(User, row, { excludeExtraneousValues: true }));
+  }
+
   async findByEmail(email: string): Promise<User> {
     const user = await this.userRepo.findOne({ where: { email } });
     if (!user) return null;

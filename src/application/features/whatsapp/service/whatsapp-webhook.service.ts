@@ -17,6 +17,8 @@ import {
   WhatsAppWebhookMessageStatus,
   WhatsAppWebhookPayload,
   WhatsAppBusinessConnection,
+  WhatsAppWebhookContact,
+  WhatsAppWebhookInboundMessage,
 } from '../domain';
 import { parseWhatsAppMessageDeliveryStatus } from '../enums';
 import {
@@ -25,6 +27,8 @@ import {
 } from './i-whatsapp-conversation-windows.repository';
 import { IWhatsAppRealtimeService, WHATSAPP_REALTIME_SERVICE } from './i-whatsapp-realtime.service';
 import { IWhatsAppWebhookService } from './i-whatsapp-webhook.service';
+import { EInboxChannel } from '../../inbox/enums';
+import { IInboxService, INBOX_SERVICE } from '../../inbox/service/i-inbox.service';
 import { META_WHATSAPP_REENGAGEMENT_ERROR_CODE, parseWhatsAppWebhookUnixTimestamp } from '../utils';
 
 @Injectable()
@@ -39,6 +43,7 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
     private readonly messagesRepo: IWhatsAppMessagesRepository,
     @Inject(WHATSAPP_REALTIME_SERVICE)
     private readonly whatsappRealtime: IWhatsAppRealtimeService,
+    @Inject(INBOX_SERVICE) private readonly inbox: IInboxService,
     @InjectPinoLogger(WhatsAppWebhookService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -121,8 +126,35 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
             },
             'WhatsApp inbound message recorded for customer service window',
           );
+          await this.toInbox(connection.userId, message, value.contacts ?? [], inboundAt);
         }
       }
+    }
+  }
+
+  /** The customer's message into the business's inbox (the assistant answers it there when it is switched on). */
+  private async toInbox(
+    userId: string,
+    message: WhatsAppWebhookInboundMessage,
+    contacts: WhatsAppWebhookContact[],
+    receivedAt: Date,
+  ): Promise<void> {
+    const content = inboxContent(message);
+    if (!content || !message.id) return;
+    try {
+      await this.inbox.receive({
+        userId,
+        channel: EInboxChannel.WhatsApp,
+        externalUserId: message.from.replace(/\D/g, ''),
+        customerName: contacts.find((contact) => contact.waId === message.from)?.profile?.name ?? null,
+        text: content.text,
+        isText: content.isText,
+        externalMessageId: message.id,
+        receivedAt,
+      });
+    } catch (err) {
+      // The inbox must never make Meta retry the whole webhook (statuses and windows are already recorded).
+      this.logger.error({ err, userId, messageId: message.id }, 'WhatsApp message could not reach the inbox');
     }
   }
 
@@ -302,5 +334,35 @@ export class WhatsAppWebhookService implements IWhatsAppWebhookService {
     if (!payload.entry?.length) {
       this.logger.info({ operation: 'whatsappWebhook', object: payload.object }, 'WhatsApp webhook payload received');
     }
+  }
+}
+
+/** Text the assistant can read, or a short placeholder for media; null for reactions and system notices. */
+function inboxContent(message: WhatsAppWebhookInboundMessage): { text: string; isText: boolean } | null {
+  switch (message.type) {
+    case 'text':
+      return message.text?.body?.trim() ? { text: message.text.body, isText: true } : null;
+    case 'button':
+      return message.button?.text?.trim() ? { text: message.button.text, isText: true } : null;
+    case 'interactive': {
+      const title = message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title;
+      return title?.trim() ? { text: title, isText: true } : null;
+    }
+    case 'image':
+      return { text: '📷 Photo', isText: false };
+    case 'audio':
+      return { text: '🎤 Voice message', isText: false };
+    case 'video':
+      return { text: '🎬 Video', isText: false };
+    case 'document':
+      return { text: '📄 Document', isText: false };
+    case 'sticker':
+      return { text: 'Sticker', isText: false };
+    case 'location':
+      return { text: '📍 Location', isText: false };
+    case 'contacts':
+      return { text: '👤 Contact card', isText: false };
+    default:
+      return null; // reaction, system, unsupported
   }
 }

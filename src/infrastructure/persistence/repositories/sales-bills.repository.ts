@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { getPaginationValues, Paged, toPaged } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 
 import {
   ISalesBillsRepository,
@@ -12,6 +12,7 @@ import {
   SalesBillsFilterOptions,
   SalesAnalyticsFilterOptions,
   ESalesBillSortField,
+  ESalesBillSortOrder,
   EInventoryItemStatus,
   InventoryStockDeduction,
   BillLineUpdate,
@@ -24,6 +25,46 @@ import {
   IInventoryItemSalesRepository,
 } from '../../../application';
 import { InventoryItemEntity, SalesBillItemEntity, SalesBillEntity } from '../entities';
+
+interface SalesBillSummaryRaw {
+  billCount: string;
+  revenue: string;
+  totalPurchaseCost: string;
+  totalProfit: string;
+}
+
+interface DailySalesRaw {
+  date: string;
+  billCount: string;
+  revenue: string;
+}
+
+interface PaymentModeSalesRaw {
+  paymentMode: string;
+  count: string;
+  revenue: string;
+}
+
+interface DocumentTypeSalesRaw {
+  documentType: string;
+  count: string;
+  revenue: string;
+}
+
+interface TopItemSalesRaw {
+  sku: string;
+  itemName: string;
+  metalType: string | null;
+  quantity: string;
+  revenue: string;
+}
+
+interface MetalTypeSalesRaw {
+  metalType: string;
+  quantity: string;
+  revenue: string;
+  netWeight: string;
+}
 
 @Injectable()
 export class SalesBillsRepository implements ISalesBillsRepository, IInventoryItemSalesRepository {
@@ -38,7 +79,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
     return plainToInstance(SalesBill, entity, { excludeExtraneousValues: true });
   }
 
-  private buildQuery(filter: SalesBillsExportFilterOptions) {
+  private buildQuery(filter: SalesBillsExportFilterOptions): SelectQueryBuilder<SalesBillEntity> {
     const qb = this.billsRepo
       .createQueryBuilder('bill')
       .leftJoinAndSelect('bill.items', 'items')
@@ -70,7 +111,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
     }
 
     const sortColumn = filter.sortField === ESalesBillSortField.GrandTotal ? 'bill.grandTotal' : 'bill.createdAt';
-    const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const sortOrder = filter.sortOrder === ESalesBillSortOrder.Asc ? 'ASC' : 'DESC';
     qb.orderBy(sortColumn, sortOrder);
 
     return qb;
@@ -128,6 +169,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
       sellingPrice: item.sellingPrice,
       quantity: item.quantity,
       quantityPricingMode: item.quantityPricingMode,
+      ratePerGram: item.ratePerGram,
       lineTotal: item.lineTotal,
       purchaseRatePerGram: item.purchaseRatePerGram,
       purchaseCost: item.purchaseCost,
@@ -233,11 +275,17 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
           const line = lineMap.get(update.id);
           if (!line) throw new Error(`Line item ${update.id} not found on bill`);
 
-          if (update.itemName != null) line.itemName = update.itemName;
-          if (update.sellingPrice != null) line.sellingPrice = update.sellingPrice;
-          if (update.makingCharges != null) line.makingCharges = update.makingCharges;
-          if (update.quantity != null) line.quantity = update.quantity;
-          if (update.quantityPricingMode != null) line.quantityPricingMode = update.quantityPricingMode;
+          if (update.itemName !== undefined && update.itemName !== null) line.itemName = update.itemName;
+          if (update.sellingPrice !== undefined && update.sellingPrice !== null) {
+            line.sellingPrice = update.sellingPrice;
+          }
+          if (update.makingCharges !== undefined && update.makingCharges !== null) {
+            line.makingCharges = update.makingCharges;
+          }
+          if (update.quantity !== undefined && update.quantity !== null) line.quantity = update.quantity;
+          if (update.quantityPricingMode !== undefined && update.quantityPricingMode !== null) {
+            line.quantityPricingMode = update.quantityPricingMode;
+          }
           if (typeof update.sku === 'string') line.sku = update.sku.trim();
           // Optional text fields: an empty string clears the value.
           if (update.hsnCode !== undefined) line.hsnCode = update.hsnCode?.trim() || null;
@@ -250,8 +298,12 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
           const qty = Number(line.quantity) || 1;
           const price = Number(line.sellingPrice) || 0;
           line.lineTotal = update.lineTotal ?? computeBillLineTotal(price, qty, line.quantityPricingMode);
-          if (update.purchaseCost != null) line.purchaseCost = update.purchaseCost;
-          if (update.profitAmount != null) line.profitAmount = update.profitAmount;
+          if (update.purchaseCost !== undefined && update.purchaseCost !== null) {
+            line.purchaseCost = update.purchaseCost;
+          }
+          if (update.profitAmount !== undefined && update.profitAmount !== null) {
+            line.profitAmount = update.profitAmount;
+          }
           await itemsRepo.save(line);
         }
       }
@@ -312,7 +364,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
       .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
       .addSelect('COALESCE(SUM(bill.totalPurchaseCost), 0)', 'totalPurchaseCost')
       .addSelect('COALESCE(SUM(bill.totalProfit), 0)', 'totalProfit')
-      .getRawOne();
+      .getRawOne<SalesBillSummaryRaw>();
 
     const billCount = parseInt(summary?.billCount ?? '0', 10);
     const revenue = parseFloat(summary?.revenue ?? '0');
@@ -327,7 +379,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
       .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
       .groupBy("TO_CHAR(bill.issuedAt AT TIME ZONE 'UTC', 'YYYY-MM-DD')")
       .orderBy('date', 'ASC')
-      .getRawMany();
+      .getRawMany<DailySalesRaw>();
 
     const paymentRows = await billQb
       .clone()
@@ -335,7 +387,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
       .addSelect('COUNT(bill.id)', 'count')
       .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
       .groupBy('bill.paymentMode')
-      .getRawMany();
+      .getRawMany<PaymentModeSalesRaw>();
 
     const documentTypeRows = await billQb
       .clone()
@@ -343,7 +395,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
       .addSelect('COUNT(bill.id)', 'count')
       .addSelect('COALESCE(SUM(bill.grandTotal), 0)', 'revenue')
       .groupBy('bill.documentType')
-      .getRawMany();
+      .getRawMany<DocumentTypeSalesRaw>();
 
     const itemQb = this.itemsRepo
       .createQueryBuilder('item')
@@ -369,7 +421,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
       .addGroupBy('item.metalType')
       .orderBy('revenue', 'DESC')
       .limit(10)
-      .getRawMany();
+      .getRawMany<TopItemSalesRaw>();
 
     const metalRows = await itemQb
       .clone()
@@ -379,7 +431,7 @@ export class SalesBillsRepository implements ISalesBillsRepository, IInventoryIt
       .addSelect('COALESCE(SUM(item.netWeight), 0)', 'netWeight')
       .groupBy('item.metalType')
       .orderBy('revenue', 'DESC')
-      .getRawMany();
+      .getRawMany<MetalTypeSalesRaw>();
 
     return {
       billCount,

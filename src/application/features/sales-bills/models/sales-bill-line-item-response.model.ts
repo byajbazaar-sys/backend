@@ -67,6 +67,10 @@ export class SalesBillLineItemResponseModel {
   quantityPricingMode?: string;
 
   @Expose()
+  @ApiPropertyOptional({ nullable: true })
+  ratePerGram?: number | null;
+
+  @Expose()
   @ApiProperty()
   lineTotal: number;
 

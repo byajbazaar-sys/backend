@@ -10,8 +10,9 @@ const STYLE_BRIEF: Record<MarketingStyle, string> = {
 };
 
 /**
- * Hand-written scenes per style, used when the text model is unavailable or returns something unusable. Every product
- * scene rests the piece on a surface: "floating" or "turntable" stagings made the video model spin the piece.
+ * Hand-written scenes per style (the campaign's five scenes). Marketing shows the jewellery only — no model, no hands —
+ * and every scene rests the piece on a surface or display: "floating" or "turntable" stagings made the video model
+ * spin the piece.
  */
 const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
   studio: [
@@ -24,9 +25,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'gentle push-in towards the piece, reflections shimmering',
     },
     {
-      scene:
-        'worn by one adult male or female model chosen to suit the piece, against a pastel peach studio backdrop with soft shadows',
-      motion: 'the model holds still with a soft breath, very slow camera push-in towards the jewellery',
+      scene: 'on a velvet jewellery bust against a pastel peach studio backdrop with soft shadows',
+      motion: 'very slow camera push-in towards the jewellery, soft highlights gliding across the metal',
     },
     {
       scene: 'on a round display plinth with a deep blue backdrop and crisp edge lighting',
@@ -51,9 +51,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'slow dolly across, smoke drifting softly',
     },
     {
-      scene:
-        'worn by one adult male or female model chosen to suit the piece, with jasmine and warm festive lights softly out of focus',
-      motion: 'the model holds still, warm light shifts softly, very slow camera push-in',
+      scene: 'on a velvet jewellery bust among fresh jasmine flowers, warm festive lights softly out of focus',
+      motion: 'warm light shifts softly across the metal, very slow camera push-in',
     },
     {
       scene: 'resting on a carved stone ledge before a wall of glowing paper lanterns at dusk, warm and celebratory',
@@ -70,9 +69,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'gentle push-in as the light sweeps across the stones',
     },
     {
-      scene:
-        'worn by one adult male or female model chosen to suit the piece, against a dark boutique backdrop with a soft spotlight',
-      motion: 'the model holds still with a soft breath, slow camera push-in, the jewellery sharp',
+      scene: 'on a smoked-glass display shelf in a dark boutique, a soft spotlight from above',
+      motion: 'slow camera push-in, the jewellery sharp, glints travelling across the metal',
     },
     {
       scene: 'on a dark glossy stone beside still water reflecting golden light, mysterious and rich',
@@ -93,9 +91,8 @@ const FALLBACK: Record<MarketingStyle, ScenePrompt[]> = {
       motion: 'slow sideways camera dolly, a soft breeze moving the pampas',
     },
     {
-      scene:
-        'worn by one adult male or female model chosen to suit the piece, in soft window light against a clean neutral background',
-      motion: 'the model holds still with a soft breath, very slow camera push-in',
+      scene: 'on a pale linen jewellery bust in soft window light against a clean neutral background',
+      motion: 'very slow camera push-in, daylight shifting softly',
     },
     {
       scene: 'on a beige ceramic dish beside a sprig of eucalyptus, clean composition',
@@ -113,12 +110,12 @@ export function buildPromptWriterSystem(): string {
     'You write shot lists for short vertical jewellery advertisement videos (Instagram Reels). ' +
     `Reply with ONLY a JSON array of exactly ${CAMPAIGN_SCENES} objects, each {"scene": string, "motion": string}. ` +
     '"scene" describes where and how the jewellery is staged (setting, props, background, lighting) in under 30 words; ' +
-    'do not alter the jewellery. Exactly one scene must feature one adult male or female model, chosen to suit the product, ' +
-    'wearing and showcasing it naturally with the jewellery prominent and unobscured; all other scenes have no people or hands ' +
-    'and rest the jewellery on a real surface (a plinth, tray, fabric, stone or wood), never floating in the air. ' +
+    'do not alter the jewellery. No scene shows a person, model, face, hand or any body part: every scene shows the ' +
+    'jewellery alone, resting on a real surface or display (a plinth, bust, stand, tray, open box, fabric, stone or ' +
+    'wood), never worn and never floating in the air. ' +
     'Do not add text or logos. "motion" is one slow camera movement (push-in, sideways dolly, tilt or crane) in under 20 ' +
     'words, plus at most gentle ambient movement (light, smoke, petals, fabric). The jewellery itself stays still: never ' +
-    'rotate, spin, orbit, lift or handle it; for the model scene the model holds still (a soft breath, a blink). ' +
+    'rotate, spin, orbit, lift or handle it. ' +
     `Make all ${CAMPAIGN_SCENES} scenes clearly different from each other.`
   );
 }
@@ -144,7 +141,7 @@ export function parseScenePrompts(reply: string, style: MarketingStyle): { scene
   const clean = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
   const fromModel = (Array.isArray(parsed) ? parsed : [])
     .map((p) => ({ scene: clean((p as ScenePrompt)?.scene, 300), motion: clean((p as ScenePrompt)?.motion, 240) }))
-    .filter((p) => p.scene.length >= 12 && p.motion.length >= 6)
+    .filter((p) => p.scene.length >= 12 && p.motion.length >= 6 && !hasPeople(`${p.scene} ${p.motion}`))
     .slice(0, CAMPAIGN_SCENES);
   const scenes = [...fromModel, ...FALLBACK[style].slice(fromModel.length)].slice(0, CAMPAIGN_SCENES);
   return { scenes, fromModel: fromModel.length };
@@ -154,16 +151,28 @@ export function fallbackScene(style: MarketingStyle, index: number): ScenePrompt
   return FALLBACK[style][index % FALLBACK[style].length];
 }
 
+/** A person or body part in a scene direction (marketing shows the jewellery only). "Hand-carved" is no hand. */
+const PEOPLE_IN_SCENE =
+  /\b(models?|person|people|wom[ae]n|m[ae]n|lady|ladies|bride|groom|girls?|boys?|couple|wearing|worn|wears|hands|fingers?|wrists?|palms?|faces?)\b/i;
+
+export function hasPeople(text: string | null | undefined): boolean {
+  return PEOPLE_IN_SCENE.test(text ?? '');
+}
+
+/**
+ * The scene a campaign renders at this position: its own, or — when it shows a person (campaigns planned before
+ * marketing became jewellery-only had one model scene) — the jewellery-only scene of its style in its place.
+ */
+export function productOnlyScene(scene: ScenePrompt, style: MarketingStyle, index: number): ScenePrompt {
+  return hasPeople(`${scene.scene} ${scene.motion}`) ? fallbackScene(style, index) : scene;
+}
+
 /** Image-to-image prompt: restage the exact product. */
 export function buildSceneImagePrompt(scene: string, title: string): string {
-  const includesModel = /\b(model|person|woman|man|female|male)\b/i.test(scene);
-  const people = includesModel
-    ? 'Show only the one adult model described in the scene, physically wearing the jewellery on the body (touching the skin, at its real-life size, not held up or floating), with natural anatomy and a pose that never covers it.'
-    : 'No people or hands.';
-  // The image is animated afterwards: a small piece gets few pixels at video resolution and its detail melts.
-  const framing = includesModel
-    ? 'The jewellery clearly visible and prominent,'
-    : 'Product centred, fully visible and filling most of the frame,';
+  // Marketing shows the jewellery only. The image is animated afterwards: a small piece gets few pixels at video
+  // resolution and its detail melts, so it fills most of the frame.
+  const people = 'No people or hands.';
+  const framing = 'Product centred, fully visible and filling most of the frame,';
   return (
     `Professional vertical product photograph for a jewellery advertisement. Place the exact jewellery piece from the ` +
     `reference image (${title}) ${scene}. Keep the jewellery identical: same design, shape, metal colour (silver stays ` +

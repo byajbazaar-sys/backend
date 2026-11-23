@@ -249,4 +249,109 @@ export class InstagramGraphClient implements IInstagramGraphClient {
     if (!mediaId) throw new Error('Instagram did not return a published media ID.');
     return mediaId;
   }
+
+  // ---------------------------------------------------------------- Instagram DMs (customer inbox)
+
+  async findMessagingPage(
+    accessToken: string,
+    instagramUserId: string,
+  ): Promise<{ pageId: string; pageToken: string } | null> {
+    // A user token lists its Pages under /me/accounts; a business integration system user token under
+    // /me/assigned_pages. The Page whose Instagram account is this one carries the DMs.
+    for (const edge of ['me/accounts', 'me/assigned_pages']) {
+      let pages: unknown[] = [];
+      try {
+        const response = await axios.get(`${this.graphUrl}/${edge}`, {
+          params: {
+            fields: 'id,name,access_token,instagram_business_account{id}',
+            limit: 100,
+            access_token: accessToken,
+          },
+          timeout: 15_000,
+        });
+        const data = asRecord(response.data).data;
+        pages = Array.isArray(data) ? data : [];
+      } catch {
+        continue;
+      }
+      for (const item of pages) {
+        const page = asRecord(item);
+        const pageId = asString(page.id);
+        if (!pageId || asString(asRecord(page.instagram_business_account).id) !== instagramUserId) continue;
+        let pageToken = asString(page.access_token);
+        if (!pageToken) {
+          const response = await axios.get(`${this.graphUrl}/${pageId}`, {
+            params: { fields: 'access_token', access_token: accessToken },
+            timeout: 15_000,
+          });
+          pageToken = asString(asRecord(response.data).access_token);
+        }
+        if (pageToken) return { pageId, pageToken };
+      }
+    }
+    return null;
+  }
+
+  async subscribeMessaging(pageId: string, pageToken: string): Promise<void> {
+    try {
+      await axios.post(`${this.graphUrl}/${pageId}/subscribed_apps`, null, {
+        params: { subscribed_fields: 'messages,messaging_postbacks', access_token: pageToken },
+        timeout: 15_000,
+      });
+    } catch (err) {
+      throw metaError(err, 'Instagram messages could not be subscribed');
+    }
+  }
+
+  async sendDirectMessage(
+    pageToken: string,
+    recipientId: string,
+    text: string,
+    humanAgent = false,
+  ): Promise<string | null> {
+    try {
+      const response = await axios.post(
+        `${this.graphUrl}/me/messages`,
+        {
+          recipient: { id: recipientId },
+          message: { text },
+          messaging_type: humanAgent ? 'MESSAGE_TAG' : 'RESPONSE',
+          ...(humanAgent ? { tag: 'HUMAN_AGENT' } : {}),
+        },
+        { params: { access_token: pageToken }, timeout: 20_000 },
+      );
+      return asString(asRecord(response.data).message_id) ?? null;
+    } catch (err) {
+      throw metaError(err, 'Instagram did not send the message');
+    }
+  }
+
+  async getMessagingProfile(
+    pageToken: string,
+    instagramScopedId: string,
+  ): Promise<{ name?: string; username?: string } | null> {
+    try {
+      const response = await axios.get(`${this.graphUrl}/${instagramScopedId}`, {
+        params: { fields: 'name,username', access_token: pageToken },
+        timeout: 10_000,
+      });
+      const data = asRecord(response.data);
+      return { name: asString(data.name), username: asString(data.username) };
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Meta's own error text (and code, so callers can tell a closed messaging window) instead of axios's status line. */
+function metaError(err: unknown, fallback: string): Error & { code?: number; subcode?: number } {
+  const meta = asRecord(asRecord(asRecord((err as { response?: unknown })?.response).data).error);
+  const message = asString(meta.error_user_msg) ?? asString(meta.message);
+  const error = new Error(message ? `${fallback}: ${message}` : fallback) as Error & {
+    code?: number;
+    subcode?: number;
+  };
+  error.code = typeof meta.code === 'number' ? meta.code : undefined;
+  error.subcode = typeof meta.error_subcode === 'number' ? meta.error_subcode : undefined;
+  return error;
 }

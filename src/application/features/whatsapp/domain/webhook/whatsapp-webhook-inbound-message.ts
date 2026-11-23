@@ -18,4 +18,12 @@ export class WhatsAppWebhookInboundMessage {
   @Expose()
   @Type(() => WhatsAppWebhookMessageText)
   text?: WhatsAppWebhookMessageText;
+
+  /** A tap on a template's quick-reply button. */
+  @Expose()
+  button?: { text?: string; payload?: string };
+
+  /** A tap on an interactive message's reply button or list row. */
+  @Expose()
+  interactive?: { type?: string; button_reply?: { title?: string }; list_reply?: { title?: string } };
 }

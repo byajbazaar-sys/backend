@@ -87,7 +87,7 @@ export class TryOnService implements ITryOnService {
     if (!process.env.WEBSOCKET_API_ENDPOINT) return;
 
     try {
-      const connections = await this.connectionsRepo.findActiveByUserId(record.userId);
+      const connections = await this.connectionsRepo.findActiveByUserId(record.userId, 'marketing');
       await Promise.all(
         connections.map(async (connection) => {
           try {

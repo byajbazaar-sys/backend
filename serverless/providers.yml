@@ -16,7 +16,26 @@ environment:
   TRY_ON_LAMBDA_NAME: ${self:service}-${sls:stage}-jewelleryTryOn
   GOOGLE_PLAY_SERVICE_ACCOUNT_SSM_PATH: /byajbazaar/${sls:stage}/google-play-service-account-json
 httpApi:
-  cors: true
+  # Same as `cors: true` (Serverless defaults), plus X-Shop-Id: the shop a signed-in person works in.
+  cors:
+    allowedOrigins:
+      - '*'
+    allowedHeaders:
+      - Content-Type
+      - X-Amz-Date
+      - Authorization
+      - X-Api-Key
+      - X-Amz-Security-Token
+      - X-Amz-User-Agent
+      - X-Amzn-Trace-Id
+      - X-Shop-Id
+    allowedMethods:
+      - OPTIONS
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
 websocket:
   useProviderTags: true
   # Route by message body.action is handled via named routes + wsDefault ($default) in functions.yml.

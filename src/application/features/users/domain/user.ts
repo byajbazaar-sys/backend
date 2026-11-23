@@ -103,6 +103,10 @@ export class User {
   @Expose()
   public shopLogoRef?: string;
 
+  /** Extra shops only: the owner's own account id. Null for a person's own account (their first shop). */
+  @Expose()
+  public ownerUserId?: string | null;
+
   @Expose()
   @Type(() => Buffer)
   public shopLogo?: Buffer;

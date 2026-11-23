@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import mjml2html from 'mjml';
 
-import { EmailVerificationTemplateData, ForgotPasswordTemplateData } from '../domain';
+import { EmailVerificationTemplateData, ForgotPasswordTemplateData, ShopInviteTemplateData } from '../domain';
 import { IEmailTemplateService } from './i-email-template.service';
-import { EMAIL_VERIFICATION_TEMPLATE, FORGOT_PASSWORD_TEMPLATE } from '../utils';
+import { EMAIL_VERIFICATION_TEMPLATE, FORGOT_PASSWORD_TEMPLATE, SHOP_INVITE_TEMPLATE } from '../utils';
 
 function escapeHtml(value: string): string {
   return String(value ?? '')
@@ -34,6 +34,19 @@ export class EmailTemplateService implements IEmailTemplateService {
       year: data.year ?? new Date().getFullYear(),
     });
     return html;
+  }
+
+  renderShopInvite(data: ShopInviteTemplateData): string {
+    return this.compileTemplate(SHOP_INVITE_TEMPLATE, {
+      shopName: escapeHtml(data.shopName),
+      inviterName: escapeHtml(data.inviterName),
+      roleLabel: escapeHtml(data.roleLabel),
+      email: escapeHtml(data.email),
+      inviteUrl: data.inviteUrl,
+      expiresDays: data.expiresDays,
+      appName: data.appName ?? 'ByajBazaar',
+      year: data.year ?? new Date().getFullYear(),
+    });
   }
 
   private compileTemplate(mjmlContent: string, variables: Record<string, string | number>): string {

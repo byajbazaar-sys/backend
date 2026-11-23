@@ -17,14 +17,20 @@ import { ApiHeader, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import * as crypto from 'crypto';
 import { Request, Response } from 'express';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
+import { MarketingInstagramMessagingService } from './service/marketing-instagram-messaging.service';
 import { MarketingConfig } from '../../../marketing.config';
 
 @ApiTags('webhooks')
 @UseGuards(ThrottlerGuard)
 @Controller('webhooks/instagram')
 export class MarketingInstagramWebhookController {
-  constructor(private readonly config: MarketingConfig) {}
+  constructor(
+    private readonly config: MarketingConfig,
+    private readonly messaging: MarketingInstagramMessagingService,
+    @InjectPinoLogger(MarketingInstagramWebhookController.name) private readonly logger: PinoLogger,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Meta Instagram webhook verification challenge' })
@@ -57,14 +63,14 @@ export class MarketingInstagramWebhookController {
 
   @Post()
   @Throttle({ default: { limit: 120, ttl: 60000 } })
-  @ApiOperation({ summary: 'Meta Instagram webhook receiver' })
+  @ApiOperation({ summary: 'Meta Instagram webhook receiver (customer DMs go to the inbox)' })
   @ApiHeader({ name: 'x-hub-signature-256', required: false })
   @HttpCode(HttpStatus.OK)
-  receive(
+  async receive(
     @Req() request: Request & { rawBody?: Buffer },
     @Headers('x-hub-signature-256') signature: string | undefined,
     @Body() body: unknown,
-  ): { received: true } {
+  ): Promise<{ received: true }> {
     const rawBody = request.rawBody?.toString('utf8') || (typeof body === 'string' ? body : JSON.stringify(body ?? {}));
     const appSecret = this.config.instagram.appSecret;
 
@@ -89,6 +95,12 @@ export class MarketingInstagramWebhookController {
       throw new UnauthorizedException('Invalid webhook signature');
     }
 
+    // Always 200 once the signature is good: Meta retries failed deliveries and turns off webhooks that keep failing.
+    try {
+      await this.messaging.handleWebhook(JSON.parse(rawBody));
+    } catch (err) {
+      this.logger.error({ err }, 'Instagram webhook could not be handled');
+    }
     return { received: true };
   }
 }

@@ -69,6 +69,9 @@ export class SalesBillItemEntity {
   @Column({ name: 'quantity_pricing_mode', type: 'varchar', length: 16, default: 'MULTIPLY' })
   quantityPricingMode: string;
 
+  @Column({ name: 'rate_per_gram', type: 'numeric', precision: 12, scale: 2, nullable: true })
+  ratePerGram: number | null;
+
   @Column({ type: 'numeric', precision: 14, scale: 2, default: 0 })
   lineTotal: number;
 }

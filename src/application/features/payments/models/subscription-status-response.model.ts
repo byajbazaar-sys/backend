@@ -9,6 +9,10 @@ export class SubscriptionStatusResponseModel {
   hasActiveSubscription: boolean;
 
   @Expose()
+  @ApiPropertyOptional({ description: "The shop runs on someone else's plan (invited member): only the owner can pay" })
+  managedByOwner?: boolean;
+
+  @Expose()
   @ApiProperty({ description: 'Whether the user can use the app (trial running or a paid plan)' })
   hasAppAccess: boolean;
 

@@ -10,6 +10,7 @@ import {
   MarketingInstagramController,
   MarketingInstagramWebhookController,
   MarketingInstagramService,
+  MarketingInstagramMessagingService,
   MarketingPublishingService,
   MarketingCaptionService,
   MarketingBrandingService,
@@ -40,6 +41,7 @@ import {
   MARKETING_BRANDS_REPOSITORY,
   MARKETING_CATALOG,
   MARKETING_FILE_STORAGE,
+  MARKETING_INBOX,
   MARKETING_INSTAGRAM_REPOSITORY,
   MARKETING_NOTIFIER,
   MARKETING_QUEUE,
@@ -57,6 +59,7 @@ import {
 import {
   ByajBazaarActivityLogAdapter,
   ByajBazaarCatalogAdapter,
+  ByajBazaarInboxAdapter,
   ByajBazaarNotifierAdapter,
   ByajBazaarTextWriterAdapter,
   LambdaMarketingWorkerInvoker,
@@ -92,7 +95,8 @@ import { MarketingConfig } from './marketing.config';
  * Marketing (experimental) — a self-contained bounded context:
  *  - own database (MARKETING_DB_*, own migrations table), own S3 bucket (MARKETING_S3_*), own queue (QStash);
  *  - depends on ByajBazaar only through the ports in application/shared/ports, implemented by infrastructure/adapters
- *    (inventory + business name, WebSocket push) — the only files that import ByajBazaar code.
+ *    (inventory + business name, WebSocket push, customer inbox for Instagram DMs) — the only files that import
+ *    ByajBazaar code.
  *
  * Flow: input image → [queue: plan] 5 prompts (cheap text model) + 5 scene images (image-to-image) + brand logo
  * → [queue: dispatch] Kaggle notebook renders 5 × 5 s clips (+ logo clip once) and merges them, ending on the logo
@@ -169,6 +173,7 @@ import { MarketingConfig } from './marketing.config';
     { provide: MARKETING_CATALOG, useClass: ByajBazaarCatalogAdapter },
     { provide: MARKETING_NOTIFIER, useClass: ByajBazaarNotifierAdapter },
     { provide: MARKETING_TEXT_WRITER, useClass: ByajBazaarTextWriterAdapter },
+    { provide: MARKETING_INBOX, useClass: ByajBazaarInboxAdapter },
     MarketingEvents,
     MarketingScheduler,
     KaggleHealthService,
@@ -177,6 +182,7 @@ import { MarketingConfig } from './marketing.config';
     MarketingPhotoshootService,
     MarketingVoiceoverService,
     MarketingInstagramService,
+    MarketingInstagramMessagingService,
     MarketingPublishingService,
     MarketingCaptionService,
     MarketingBrandingService,

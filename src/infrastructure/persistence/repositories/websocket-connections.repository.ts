@@ -25,12 +25,14 @@ export class WebSocketConnectionsRepository implements IWebSocketConnectionsRepo
     return plainToInstance(WebSocketConnection, entity, { excludeExtraneousValues: true });
   }
 
-  async findActiveByUserId(userId: string): Promise<WebSocketConnection[]> {
+  async findActiveByUserId(userId: string, area?: string): Promise<WebSocketConnection[]> {
     const rows = await this.repo.find({
       where: { userId, disconnectedAt: IsNull() },
       order: { connectedAt: 'DESC' },
     });
-    return rows.map((entity) => plainToInstance(WebSocketConnection, entity, { excludeExtraneousValues: true }));
+    return rows
+      .filter((entity) => !area || !entity.shopPermissions || (entity.shopPermissions[area] ?? 'none') !== 'none')
+      .map((entity) => plainToInstance(WebSocketConnection, entity, { excludeExtraneousValues: true }));
   }
 
   async findActiveBySessionAndDevice(sessionId: string, deviceType: EDeviceType): Promise<WebSocketConnection> {

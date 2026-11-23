@@ -1,6 +1,6 @@
 import { PhotoshootPromptOptions } from './photoshoot-prompt-options';
-import { PhotoshootShotKind } from './photoshoot-shot-kind';
-import { PhotoshootPiece, PhotoshootOutfit, PhotoshootSetting } from '../../../shared';
+import { PhotoshootShotKind, productShotKind } from './photoshoot-shot-kind';
+import { PhotoshootPiece, PhotoshootSetting } from '../../../shared';
 
 /** Keyword → piece. Order matters ("earring" before "ring", "pendant set" before "pendant"). */
 const PIECES: { words: RegExp; noun: string; wornOn: string }[] = [
@@ -96,34 +96,59 @@ function uniqueWords(text: string): string {
     .join(' ');
 }
 
-const SETTINGS: Record<PhotoshootSetting, { place: string; surface: string }> = {
+/** Where the set is shot: background, the surface a piece lies on, what a box / display stands on, flat-lay props. */
+const SETTINGS: Record<
+  PhotoshootSetting,
+  { place: string; surface: string; counter: string; props: string; box: string }
+> = {
   showroom: {
     place:
-      'an upscale Indian jewellery showroom with glass display counters and warm golden lights softly blurred behind',
+      'an upscale Indian jewellery showroom with empty glass display counters and warm golden lights softly blurred behind',
     surface: 'spotless smooth black velvet',
+    counter: 'a polished glass display counter',
+    props: 'a few loose pearls and a folded silk ribbon',
+    box: 'black velvet',
   },
   studio: {
     place: 'a clean premium photo studio with a soft beige seamless backdrop and gentle softbox lighting',
     surface: 'smooth ivory silk',
+    counter: 'a matte ivory plinth',
+    props: "a sprig of baby's breath and a soft silk fold",
+    box: 'ivory velvet',
   },
   wedding: {
     place: 'a decorated Indian wedding venue with marigold garlands, fairy lights and warm bokeh',
     surface: 'spotless deep maroon velvet with scattered rose petals',
+    counter: 'a carved wooden table draped in maroon silk',
+    props: 'rose petals and a few marigold flowers',
+    box: 'deep maroon velvet',
   },
   festive: {
     place: 'a festive Diwali setting with glowing diyas, a rangoli and warm golden bokeh',
     surface: 'spotless deep red velvet lit by a soft diya glow',
+    counter: 'a polished brass tray',
+    props: 'marigold petals and a small lit diya',
+    box: 'red velvet',
   },
 };
 
-const OUTFITS: Record<PhotoshootOutfit, string> = {
-  kurta: 'in an elegant pastel kurta',
-  saree: 'in a graceful silk saree',
-  lehenga: 'in a rich embroidered bridal lehenga with a dupatta',
-  western: 'in a chic minimal western dress',
+/** The display each kind of piece is sold on (a bust only holds neck pieces). */
+const DISPLAYS: Record<string, string> = {
+  neck: 'a velvet jewellery bust',
+  ears: 'a velvet earring stand',
+  finger: 'a velvet ring cone',
+  wrist: 'a velvet bangle stand',
+  ankle: 'a low velvet display tray',
+  forehead: 'a velvet display tray',
+  nose: 'a small velvet display tray',
 };
 
-/** Prompt for one shot of the set. */
+/** Marketing shows the jewellery only: no model, no hands. */
+const ONLY_JEWELLERY =
+  'Only the jewellery from the product photo and its own display are in the photo: no other jewellery in the ' +
+  'background or around it, no people, no mannequins, no hands, no body parts.';
+
+/** Prompt for one shot of the set (an old model, hands or worn shot is made as the jewellery-only shot in its place). */
 export function buildShotPrompt(
   kind: PhotoshootShotKind,
   piece: PhotoshootPiece,
@@ -132,62 +157,39 @@ export function buildShotPrompt(
   const metal = METAL_WORDS[piece.metal] ?? METAL_WORDS.unknown;
   const base = SETTINGS[options.setting] ?? SETTINGS.showroom;
   const setting = WHITE_METALS.has(piece.metal)
-    ? { place: neutralLight(base.place), surface: neutralLight(base.surface) }
+    ? { ...base, place: neutralLight(base.place), surface: neutralLight(base.surface) }
     : base;
-  const man = options.model === 'man';
-  const person = man
-    ? 'a young Indian man in an elegant kurta'
-    : `a young Indian woman ${OUTFITS[options.outfit] ?? OUTFITS.kurta}`;
-  const their = man ? 'his' : 'her';
   const it = `this ${metal.word ? `${metal.word} ` : ''}${piece.noun}${piece.detail ? ` (${piece.detail})` : ''}`;
   const keep =
     `Keep the ${piece.noun} exactly as in the reference photo: ${metal.keep}, the same design, motifs, stones, ` +
-    'enamel colours and proportions, nothing added or removed, real-life size. Photorealistic, natural skin, real ' +
-    'camera photo, sharp focus on the jewellery, no text, no watermark, no logo.';
+    'enamel colours and proportions, nothing added or removed, real-life size. Photorealistic, real camera photo, ' +
+    'sharp focus on the jewellery, no text, no watermark, no logo.';
 
-  switch (kind) {
-    case 'present':
+  switch (productShotKind(kind)) {
+    case 'box':
       return (
-        `Professional jewellery advertisement photo. ${cap(person)}, smiling warmly, stands in ${setting.place} and ` +
-        `presents ${it} to the camera, nestled in an open black velvet jewellery box held in both hands close to ${their} chest; framed from the waist up so the piece is large and clearly readable, filling the box at its real size. ${keep}`
+        `Luxury jewellery product photo of ${it} nestled in an open ${setting.box} jewellery box lined with satin, ` +
+        `the box standing on ${setting.counter} in ${setting.place}, softly out of focus behind; the piece large and ` +
+        `clearly readable, filling the box at its real size. ${ONLY_JEWELLERY} ${keep}`
+      );
+    case 'display':
+      return (
+        `Elegant jewellery display photo of ${it} on ${DISPLAYS[piece.wornOn] ?? 'a velvet display tray'}, set on ` +
+        `${setting.counter} in ${setting.place}, the background softly out of focus; the piece centred, large and ` +
+        `clearly readable at its real size. ${ONLY_JEWELLERY} ${keep}`
+      );
+    case 'flatlay':
+      return (
+        `Styled flat lay photographed from directly above: ${it} lying flat on ${setting.surface} with ` +
+        `${setting.props} arranged around it, soft even light, a clean premium composition with the piece at the ` +
+        `centre. ${ONLY_JEWELLERY} ${keep}`
       );
     case 'closeup':
+    default:
       return (
         `Luxury macro close-up product photo of ${it} resting on ${setting.surface}, soft dramatic lighting, crisp ` +
-        `sparkle, shallow depth of field, high-end catalogue shot. ${keep}`
+        `sparkle, shallow depth of field, high-end catalogue shot. ${ONLY_JEWELLERY} ${keep}`
       );
-    case 'hands':
-      return (
-        `Close-up photo of hands in white cotton jeweller gloves carefully holding ${it} between the fingertips, ` +
-        `the gloves gripping it naturally, over a glass display counter, ${setting.place.replace(/^an? /, 'the ')} out of focus behind. ${keep}`
-      );
-    case 'worn':
-    default:
-      return `${wornShot(piece.wornOn, person, their, it, setting.place)} ${keep}`;
-  }
-}
-
-/** Worn shots: the piece is ON the body (touching skin, real scale), never held up beside the face or floating. */
-function wornShot(wornOn: string, person: string, their: string, it: string, place: string): string {
-  const real =
-    'It is physically worn, resting on the skin with natural contact and a soft shadow, at its real size relative to the body — not held, not floating, not pasted on.';
-  switch (wornOn) {
-    case 'neck':
-      return `Editorial jewellery photo: ${person} wearing ${it} around ${their} neck, lying on ${their} collarbones, portrait from the chest up so the piece is the hero, in ${place}, natural confident smile. ${real}`;
-    case 'ears':
-      return `Editorial jewellery photo: ${person} wearing ${it} hanging from ${their} earlobes, hair tucked behind the ear, three-quarter portrait so the earrings are clearly visible, in ${place}. ${real}`;
-    case 'finger':
-      return `Close-up jewellery photo of ${person.replace(/^a /, 'the hand of a ')} wearing ${it} on the ring finger, the band wrapped around the finger, hand resting elegantly on ${their} other hand, in ${place}, soft focus background. ${real}`;
-    case 'wrist':
-      return `Lifestyle jewellery photo: ${person} wearing ${it} around ${their} wrist — ${their} hand passes through it and it rests on the wrist bone — forearm resting gracefully across ${their} body at chest height so the piece faces the camera, framed from the waist up with ${their} face in the shot, in ${place}, natural smile. ${real}`;
-    case 'ankle':
-      return `Close-up jewellery photo of the feet of ${person} wearing ${it} around both ankles, graceful pose on a polished floor, in ${place}. ${real}`;
-    case 'forehead':
-      return `Bridal jewellery portrait: ${person} wearing ${it} on ${their} forehead along the hair parting, close portrait, in ${place}. ${real}`;
-    case 'nose':
-      return `Close bridal portrait: ${person} wearing ${it} in ${their} nose, soft smile, the piece in sharp focus, in ${place}. ${real}`;
-    default:
-      return `Lifestyle jewellery photo: ${person} wearing ${it} where it is meant to be worn, the piece clearly visible, in ${place}, natural smile. ${real}`;
   }
 }
 
@@ -195,5 +197,3 @@ function wornShot(wornOn: string, person: string, their: string, it: string, pla
 function neutralLight(text: string): string {
   return text.replace(/warm golden (lights?|bokeh)/g, 'soft neutral $1').replace(/golden/g, 'soft');
 }
-
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

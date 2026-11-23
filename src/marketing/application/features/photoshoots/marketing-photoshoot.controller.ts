@@ -35,7 +35,9 @@ export class MarketingPhotoshootController {
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'AI photoshoot: one product photo → 4 ad photos (model, close-up, hands, worn)' })
+  @ApiOperation({
+    summary: 'AI photoshoot: one product photo → 4 jewellery-only photos (gift box, close-up, display, flat lay)',
+  })
   async create(@Identity() identity: IIdentity, @Body() body: CreatePhotoshootRequestModel) {
     return out(await this.photoshoots.create(identity.userId, body), identity);
   }

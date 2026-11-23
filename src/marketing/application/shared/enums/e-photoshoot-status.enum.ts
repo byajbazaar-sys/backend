@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------- AI photoshoots
 
-/** A photoshoot = one product photo → a set of ad photos (on a model, close-up, hands, worn). */
+/** A photoshoot = one product photo → 4 jewellery-only photos (gift box, close-up, on display, flat lay). */
 export enum EPhotoshootStatus {
   Generating = 'GENERATING',
   Ready = 'READY',

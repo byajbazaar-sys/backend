@@ -46,12 +46,22 @@ export class CreatePhotoshootRequestModel {
   @IsIn(PHOTOSHOOT_SETTINGS)
   setting?: string;
 
-  @ApiPropertyOptional({ enum: PHOTOSHOOT_MODELS, default: 'woman' })
+  @ApiPropertyOptional({
+    enum: PHOTOSHOOT_MODELS,
+    default: 'woman',
+    deprecated: true,
+    description: 'No longer used: marketing photos show the jewellery only (accepted for older apps)',
+  })
   @IsOptional()
   @IsIn(PHOTOSHOOT_MODELS)
   model?: string;
 
-  @ApiPropertyOptional({ enum: PHOTOSHOOT_OUTFITS, default: 'kurta' })
+  @ApiPropertyOptional({
+    enum: PHOTOSHOOT_OUTFITS,
+    default: 'kurta',
+    deprecated: true,
+    description: 'No longer used: marketing photos show the jewellery only (accepted for older apps)',
+  })
   @IsOptional()
   @IsIn(PHOTOSHOOT_OUTFITS)
   outfit?: string;

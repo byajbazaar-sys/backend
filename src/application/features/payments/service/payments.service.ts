@@ -261,7 +261,14 @@ export class PaymentsService implements IPaymentsService {
     );
   }
 
-  async getStatus(userId: string): Promise<SubscriptionStatusResponseModel> {
+  /**
+   * Plan / trial status. `userId` may be an extra shop: its plan is the owner's. `actorUserId` (the signed-in person)
+   * tells whether they manage that plan themselves.
+   */
+  async getStatus(shopOrUserId: string, actorUserId?: string): Promise<SubscriptionStatusResponseModel> {
+    const shop = await this.usersRepo.findById(shopOrUserId);
+    const userId = shop?.ownerUserId ?? shopOrUserId;
+    const managedByOwner = !!actorUserId && actorUserId !== userId;
     let latest = await this.subscriptionsRepo.findLatestByUserId(userId);
     if (latest?.providerSubscriptionId) {
       latest = await this.syncSubscriptionFromRazorpay(latest);
@@ -283,6 +290,7 @@ export class PaymentsService implements IPaymentsService {
       SubscriptionStatusResponseModel,
       {
         hasActiveSubscription: !!active,
+        managedByOwner,
         hasAppAccess: active || onTrial || isAdmin,
         // Ads were removed from the apps; kept false so older app versions never show them.
         showAds: false,

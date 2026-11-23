@@ -52,4 +52,24 @@ export interface IInstagramGraphClient {
   containerStatus(accessToken: string, containerId: string): Promise<string | undefined>;
   /** Publishes a processed container; returns the published media ID. */
   publishContainer(accessToken: string, instagramUserId: string, containerId: string): Promise<string>;
+
+  // ---------------------------------------------------------------- Instagram DMs (customer inbox)
+
+  /** The Facebook Page linked to an Instagram professional account, with its Page token (DMs go through it). */
+  findMessagingPage(
+    accessToken: string,
+    instagramUserId: string,
+  ): Promise<{ pageId: string; pageToken: string } | null>;
+  /** Subscribes the Page to the app's message webhooks (Instagram DMs then reach /webhooks/instagram). */
+  subscribeMessaging(pageId: string, pageToken: string): Promise<void>;
+  /**
+   * Sends a DM and returns Meta's message ID. `humanAgent` uses Meta's HUMAN_AGENT tag: a person's reply up to
+   * 7 days after the customer's last message (outside the normal 24 hours).
+   */
+  sendDirectMessage(pageToken: string, recipientId: string, text: string, humanAgent?: boolean): Promise<string | null>;
+  /** The customer's Instagram name and username, when Meta allows it (null otherwise). */
+  getMessagingProfile(
+    pageToken: string,
+    instagramScopedId: string,
+  ): Promise<{ name?: string; username?: string } | null>;
 }

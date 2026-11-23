@@ -40,7 +40,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context)
 
   try {
     const wsHandler = await getWebSocketHandler();
-    const result = await wsHandler.handleConnect(connectionId, token, deviceType);
+    const result = await wsHandler.handleConnect(connectionId, token, deviceType, evt.queryStringParameters?.shopId);
 
     console.log(
       '[WS:connect] Result',
