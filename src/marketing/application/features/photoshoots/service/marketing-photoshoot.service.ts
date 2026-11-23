@@ -162,7 +162,8 @@ export class MarketingPhotoshootService {
   }
 
   async list(userId: string): Promise<PhotoshootView[]> {
-    const list = await this.shoots.listForUser(userId, LIST_LIMIT);
+    const listed = await this.shoots.listForUser(userId, LIST_LIMIT);
+    const list = await Promise.all(listed.map((shoot) => this.reconcileFinishedPhotoshoot(shoot)));
     const [shots, jobs] = await Promise.all([
       this.shots.listFor(list.map((s) => s.id)),
       this.jobs.latestForPhotoshoots(list.map((s) => s.id)),
@@ -179,12 +180,37 @@ export class MarketingPhotoshootService {
   }
 
   async get(userId: string, id: string): Promise<PhotoshootView> {
-    const shoot = await this.owned(userId, id);
+    const shoot = await this.reconcileFinishedPhotoshoot(await this.owned(userId, id));
     const [shots, jobs] = await Promise.all([
       this.shots.listFor([shoot.id]),
       this.jobs.latestForPhotoshoots([shoot.id]),
     ]);
     return this.view(shoot, shots, jobs);
+  }
+
+  private async reconcileFinishedPhotoshoot(shoot: Photoshoot): Promise<Photoshoot> {
+    if (!is(shoot.status, EPhotoshootStatus.Generating)) return shoot;
+    const shots = await this.shots.listFor([shoot.id]);
+    if (
+      shots.length === 0 ||
+      shots.some((shot) => !is(shot.status, EAssetStatus.Ready) && !is(shot.status, EAssetStatus.Failed))
+    ) {
+      return shoot;
+    }
+
+    const ready = shots.filter((shot) => is(shot.status, EAssetStatus.Ready)).length;
+    const status =
+      ready === shots.length
+        ? EPhotoshootStatus.Ready
+        : ready > 0
+          ? EPhotoshootStatus.Partial
+          : EPhotoshootStatus.Failed;
+    const updated = await this.shoots.update(shoot.id, {
+      status,
+      error: status === EPhotoshootStatus.Ready ? null : (shots.find((shot) => shot.error)?.error ?? null),
+    });
+    if (updated) await this.notify(updated);
+    return updated ?? shoot;
   }
 
   async remove(userId: string, id: string): Promise<void> {

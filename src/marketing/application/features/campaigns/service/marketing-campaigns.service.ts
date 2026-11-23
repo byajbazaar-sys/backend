@@ -141,7 +141,8 @@ export class MarketingCampaignsService {
   }
 
   async list(userId: string): Promise<CampaignView[]> {
-    const campaigns = await this.campaigns.listForUser(userId, 30);
+    const listed = await this.campaigns.listForUser(userId, 30);
+    const campaigns = await Promise.all(listed.map((campaign) => this.reconcileFinishedCampaign(campaign)));
     const jobs = await this.jobs.latestForCampaigns(campaigns.map((c) => c.id));
     return Promise.all(
       campaigns.map((c) =>
@@ -155,8 +156,43 @@ export class MarketingCampaignsService {
   }
 
   async get(userId: string, id: string): Promise<CampaignView> {
-    const campaign = await this.owned(userId, id);
+    const campaign = await this.reconcileFinishedCampaign(await this.owned(userId, id));
     return this.view(campaign, true, await this.jobs.latestForCampaigns([campaign.id]));
+  }
+
+  private async reconcileFinishedCampaign(campaign: MarketingCampaign): Promise<MarketingCampaign> {
+    if (
+      campaign.status !== ECampaignStatus.Planning &&
+      campaign.status !== ECampaignStatus.WaitingGpu &&
+      campaign.status !== ECampaignStatus.Rendering
+    ) {
+      return campaign;
+    }
+
+    const scenes = await this.scenes.listForCampaign(campaign.id);
+    if (
+      scenes.length === 0 ||
+      scenes.some((scene) => scene.videoStatus !== EAssetStatus.Ready && scene.videoStatus !== EAssetStatus.Failed)
+    ) {
+      return campaign;
+    }
+
+    const ready = scenes.filter((scene) => scene.videoStatus === EAssetStatus.Ready).length;
+    const status =
+      ready === scenes.length
+        ? ECampaignStatus.Completed
+        : ready > 0
+          ? ECampaignStatus.Partial
+          : ECampaignStatus.Failed;
+    const updated = await this.campaigns.update(campaign.id, {
+      status,
+      progress: ready > 0 ? 100 : campaign.progress,
+      stageMessage: status === ECampaignStatus.Completed ? 'Ready' : `${ready}/${scenes.length} videos ready`,
+      error: status === ECampaignStatus.Completed ? null : campaign.error,
+      completedAt: new Date(),
+    });
+    if (updated) await this.events.campaign(updated, true);
+    return updated ?? campaign;
   }
 
   async remove(userId: string, id: string): Promise<void> {
