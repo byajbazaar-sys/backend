@@ -48,6 +48,16 @@ export class WebSocketConnectionsRepository implements IWebSocketConnectionsRepo
     await this.repo.update({ connectionId }, { disconnectedAt: new Date() });
   }
 
+  async updateShopAccess(
+    shopId: string,
+    actorUserId: string,
+    permissions: Record<string, string> | null,
+  ): Promise<void> {
+    const where = { userId: shopId, actorUserId, disconnectedAt: IsNull() };
+    if (permissions) await this.repo.update(where, { shopPermissions: permissions });
+    else await this.repo.update(where, { disconnectedAt: new Date() });
+  }
+
   async updateSessionId(connectionId: string, sessionId: string): Promise<void> {
     await this.repo.update({ connectionId }, { sessionId });
   }

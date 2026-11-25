@@ -5,6 +5,9 @@ import { Repository } from 'typeorm';
 import { IShopMembershipsRepository, ShopMembership } from '../../../application';
 import { ShopMembershipEntity } from '../entities';
 
+/** Postgres unique_violation. */
+const UNIQUE_VIOLATION = '23505';
+
 const toDomain = (e: ShopMembershipEntity): ShopMembership => ({
   id: e.id,
   shopId: e.shopId,
@@ -39,7 +42,21 @@ export class ShopMembershipsRepository implements IShopMembershipsRepository {
     return (await this.repo.find({ where: { memberUserId }, order: { createdAt: 'ASC' } })).map(toDomain);
   }
 
+  /**
+   * Creates or re-activates. Two accepts for the same person and shop can race (double tap, two tabs): the unique
+   * (shop_id, member_user_id) index makes the second insert fail, so it is retried once as an update.
+   */
   async upsert(membership: Omit<ShopMembership, 'id'>): Promise<ShopMembership> {
+    try {
+      return await this.save(membership);
+    } catch (err) {
+      const e = err as { code?: string; driverError?: { code?: string } };
+      if ((e?.code ?? e?.driverError?.code) !== UNIQUE_VIOLATION) throw err;
+      return this.save(membership);
+    }
+  }
+
+  private async save(membership: Omit<ShopMembership, 'id'>): Promise<ShopMembership> {
     const existing = await this.repo.findOne({
       where: { shopId: membership.shopId, memberUserId: membership.memberUserId },
     });
@@ -67,5 +84,9 @@ export class ShopMembershipsRepository implements IShopMembershipsRepository {
 
   async delete(id: string): Promise<void> {
     await this.repo.delete({ id });
+  }
+
+  async deleteForMember(memberUserId: string): Promise<void> {
+    await this.repo.delete({ memberUserId });
   }
 }

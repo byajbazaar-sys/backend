@@ -13,6 +13,12 @@ export interface IWebSocketConnectionsRepository {
   findActiveByUserId(userId: string, area?: string): Promise<WebSocketConnection[]>;
   findActiveBySessionAndDevice(sessionId: string, deviceType: EDeviceType): Promise<WebSocketConnection>;
   markDisconnected(connectionId: string): Promise<void>;
+  /**
+   * A member's access to a shop changed: their live connections to it get the new permissions, or (null: removed /
+   * disabled) stop receiving that shop's events. The owner's own connections (actorUserId = owner) are never matched
+   * for a member id.
+   */
+  updateShopAccess(shopId: string, actorUserId: string, permissions: Record<string, string> | null): Promise<void>;
   updateSessionId(connectionId: string, sessionId: string): Promise<void>;
   updateDeviceType(connectionId: string, deviceType: EDeviceType): Promise<void>;
 }

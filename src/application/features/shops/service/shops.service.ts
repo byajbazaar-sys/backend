@@ -15,6 +15,10 @@ import { IShopMembershipsRepository, SHOP_MEMBERSHIPS_REPOSITORY } from './i-sho
 import { ShopAccess, ShopAccessService } from './shop-access.service';
 import { EMAIL_SERVICE, IEmailService, IUsersFileStorage, USERS_FILE_STORAGE, WebAppOptions } from '../../../shared';
 import { EMAIL_TEMPLATE_SERVICE, IEmailTemplateService } from '../../notifications';
+import {
+  IWebSocketConnectionsRepository,
+  WEBSOCKET_CONNECTIONS_REPOSITORY,
+} from '../../pos/service/i-websocket-connections.repository';
 import { User } from '../../users/domain/user';
 import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
 import { resolveCatalogSlugForBusinessName } from '../../users/utils/catalog-slug.helper';
@@ -109,6 +113,7 @@ export class ShopsService {
     @Inject(EMAIL_TEMPLATE_SERVICE) private readonly templates: IEmailTemplateService,
     private readonly webApp: WebAppOptions,
     private readonly access: ShopAccessService,
+    @Inject(WEBSOCKET_CONNECTIONS_REPOSITORY) private readonly connections: IWebSocketConnectionsRepository,
     @InjectPinoLogger(ShopsService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -185,6 +190,8 @@ export class ShopsService {
     ];
     for (const m of await this.memberships.listForShop(shopId)) {
       const person = await this.users.findById(m.memberUserId);
+      // The member deleted their account: nothing to manage (their membership is removed with the account).
+      if (!person) continue;
       list.push({
         id: m.id,
         userId: m.memberUserId,
@@ -212,12 +219,19 @@ export class ShopsService {
     if (membership?.shopId !== shopId) throw new NotFoundException('Member not found');
     if (membership.memberUserId === actorUserId) throw new BadRequestException('You cannot change your own access.');
     this.assertCanManage(me, membership.role, patch.role);
+    const roleChanged = !!patch.role && patch.role !== membership.role;
     await this.memberships.update(membershipId, {
       ...(patch.role ? { role: patch.role } : {}),
-      ...(patch.permissions ? { permissions: sanitizePermissions(patch.permissions) } : {}),
+      // A new role starts from its own preset: old per-module overrides (e.g. edit access from a custom role) must
+      // not carry over to a narrower role such as "Read only".
+      ...(patch.permissions
+        ? { permissions: sanitizePermissions(patch.permissions) }
+        : roleChanged
+          ? { permissions: {} }
+          : {}),
       ...(patch.status ? { status: patch.status } : {}),
     });
-    this.access.forget(shopId, membership.memberUserId);
+    await this.afterAccessChanged(shopId, membership.memberUserId);
     return this.listMembers(actorUserId, shopId);
   }
 
@@ -230,7 +244,7 @@ export class ShopsService {
       this.assertCanManage(me, membership.role);
     }
     await this.memberships.delete(membershipId);
-    this.access.forget(shopId, membership.memberUserId);
+    await this.afterAccessChanged(shopId, membership.memberUserId);
   }
 
   // ------------------------------------------------------------------ invites
@@ -251,7 +265,9 @@ export class ShopsService {
     this.assertCanManage(me, undefined, input.role);
     const shop = await this.requireShop(shopId);
     const email = normEmail(input.email ?? '');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('Enter a valid email address.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.endsWith(`@${SHOP_EMAIL_DOMAIN}`)) {
+      throw new BadRequestException('Enter a valid email address.');
+    }
 
     const ownerId = shop.ownerUserId ?? shop.id;
     const owner = ownerId === shop.id ? shop : await this.users.findById(ownerId);
@@ -261,9 +277,7 @@ export class ShopsService {
       const membership = await this.memberships.find(shopId, existingUser.id);
       if (membership?.status === 'active') throw new ConflictException('This person is already a member of the shop.');
     }
-    if ((await this.memberships.listForShop(shopId)).length >= MAX_MEMBERS) {
-      throw new BadRequestException(`A shop can have up to ${MAX_MEMBERS} members.`);
-    }
+    await this.assertMemberCapacity(shopId, existingUser?.id);
     // One open invite per email: a new one replaces the old link.
     for (const open of await this.invites.listOpenForShop(shopId)) {
       if (normEmail(open.email) === email) await this.invites.update(open.id, { revokedAt: new Date() });
@@ -293,11 +307,12 @@ export class ShopsService {
     shopId: string,
     inviteId: string,
   ): Promise<{ invite: ShopInviteView; inviteUrl: string; emailSent: boolean }> {
-    await this.requireTeam(actorUserId, shopId, 'edit');
+    const me = await this.requireTeam(actorUserId, shopId, 'edit');
     const invite = await this.invites.findById(inviteId);
     if (invite?.shopId !== shopId || invite.acceptedAt || invite.revokedAt) {
       throw new NotFoundException('Invite not found');
     }
+    this.assertCanManage(me, invite.role);
     const token = randomBytes(24).toString('base64url');
     const updated = await this.invites.update(inviteId, {
       tokenHash: hashToken(token),
@@ -309,9 +324,10 @@ export class ShopsService {
   }
 
   async revokeInvite(actorUserId: string, shopId: string, inviteId: string): Promise<void> {
-    await this.requireTeam(actorUserId, shopId, 'edit');
+    const me = await this.requireTeam(actorUserId, shopId, 'edit');
     const invite = await this.invites.findById(inviteId);
     if (invite?.shopId !== shopId) throw new NotFoundException('Invite not found');
+    this.assertCanManage(me, invite.role);
     if (!invite.acceptedAt && !invite.revokedAt) await this.invites.update(inviteId, { revokedAt: new Date() });
   }
 
@@ -360,6 +376,8 @@ export class ShopsService {
     if (shop.id === actorUserId || shop.ownerUserId === actorUserId) {
       throw new ConflictException('You already own this shop.');
     }
+    // Several invites can be open at once: the limit is checked again when one is used.
+    await this.assertMemberCapacity(shop.id, actorUserId);
 
     await this.memberships.upsert({
       shopId: shop.id,
@@ -424,6 +442,40 @@ export class ShopsService {
       throw new ForbiddenException('Only the shop owner or a superuser can manage members.');
     }
     return access;
+  }
+
+  /**
+   * After a member's access changed (role, overrides, disabled, removed, left): drop cached answers, bring their
+   * open live connections in line, and — when they lost access — cancel the invites they sent, so someone who was
+   * just removed can't leave a way back in (e.g. an invite to a second account of theirs).
+   */
+  private async afterAccessChanged(shopId: string, memberUserId: string): Promise<void> {
+    this.access.forget(shopId, memberUserId);
+    const membership = await this.memberships.find(shopId, memberUserId);
+    const active = membership?.status === 'active';
+    try {
+      await this.connections.updateShopAccess(
+        shopId,
+        memberUserId,
+        active ? effectivePermissions(membership.role, membership.permissions) : null,
+      );
+    } catch (err) {
+      // Best effort: new connections are checked again on connect.
+      this.logger.warn({ err, shopId, memberUserId }, 'Could not update live connections after an access change');
+    }
+    if (!active) {
+      for (const open of await this.invites.listOpenForShop(shopId)) {
+        if (open.invitedBy === memberUserId) await this.invites.update(open.id, { revokedAt: new Date() });
+      }
+    }
+  }
+
+  /** Room for one more member (someone already listed — e.g. a disabled member invited again — takes no new seat). */
+  private async assertMemberCapacity(shopId: string, memberUserId?: string): Promise<void> {
+    const others = (await this.memberships.listForShop(shopId)).filter((m) => m.memberUserId !== memberUserId);
+    if (others.length >= MAX_MEMBERS) {
+      throw new BadRequestException(`A shop can have up to ${MAX_MEMBERS} members.`);
+    }
   }
 
   /** Superusers manage everyone except other superusers; only the owner makes or changes superusers. */

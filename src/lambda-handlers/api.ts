@@ -42,9 +42,12 @@ async function bootstrap(): Promise<Handler> {
       .getInstance()
       .set('query parser', (str: string) => parse(str, { depth: Infinity }));
 
-    // Global validation pipe
+    // Global validation pipe. `whitelist` drops body fields a request model doesn't declare, so a client can never
+    // slip extra properties (userType, googleId, resetPasswordToken …) into a record. Unlike local dev (main.ts) it
+    // doesn't reject them, so older app versions that send extra fields keep working.
     app.useGlobalPipes(
       new ValidationPipe({
+        whitelist: true,
         transform: true,
         transformOptions: { enableImplicitConversion: true },
       }),

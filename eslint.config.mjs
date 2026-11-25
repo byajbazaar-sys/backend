@@ -139,4 +139,16 @@ export default [
       ],
     },
   },
+
+  // Tests (node:test): describe / it return promises the runner tracks, and in-memory fakes mirror async
+  // repositories without awaiting anything.
+  {
+    files: ['test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+    },
+  },
 ];

@@ -1,7 +1,7 @@
 import { UseGuards, Controller, Post, HttpStatus, HttpCode, Body, Inject, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiResponse, ApiTags, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { UserAuthGuard, RolesGuard, Identity, IIdentity } from '@shared-libs';
+import { EUserType, UserAuthGuard, Roles, RolesGuard, Identity, IIdentity } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
@@ -26,7 +26,9 @@ export class NotificationsController {
   ) {}
 
   @Post('email')
-  @ApiOperation({ summary: 'Send an email and store notification record' })
+  // Sends any email from the platform's address: never for shops or their members (phishing / spam relay).
+  @Roles(EUserType.Admin)
+  @ApiOperation({ summary: 'Send an email and store notification record (platform admins only)' })
   @ApiResponse({ status: HttpStatus.CREATED, type: NotificationResponseModel })
   @HttpCode(HttpStatus.CREATED)
   async sendEmail(

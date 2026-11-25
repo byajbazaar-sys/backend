@@ -6,6 +6,7 @@ import { IShopMembershipsRepository, SHOP_MEMBERSHIPS_REPOSITORY } from './i-sho
 import { IUsersRepository, USERS_REPOSITORY } from '../../users/service/i-users.repository';
 import {
   ROLE_PRESETS,
+  ShopModule,
   ShopPermissions,
   ShopRole,
   accessRuleFor,
@@ -111,14 +112,7 @@ export class ShopAccessService {
         message: 'You no longer have access to this shop. Ask the owner to invite you again.',
       });
     }
-    // Deleting the shop account is the owner's alone.
-    if (!access.isOwner && request.method === 'DELETE' && (path === 'users' || path.startsWith('users/'))) {
-      throw new ForbiddenException({
-        code: SHOP_PERMISSION_DENIED,
-        message: 'Only the shop owner can delete the shop.',
-      });
-    }
-    this.assertAllowed(access.permissions, path, request.method);
+    this.assertAllowed(access, path, request.method);
     return {
       ...identity,
       userId: requested,
@@ -128,9 +122,33 @@ export class ShopAccessService {
     };
   }
 
-  private assertAllowed(permissions: ShopPermissions, path: string, method: string): void {
+  /**
+   * Who hears about something in a shop: its owner (the person, also for an extra shop) and the active members
+   * with at least `view` on `module`. Push devices and emails belong to people, never to the shop account.
+   */
+  async peopleFor(
+    shopId: string,
+    module: ShopModule,
+  ): Promise<{ ownerUserId: string | null; memberUserIds: string[] }> {
+    const shop = await this.users.findById(shopId);
+    if (!shop) return { ownerUserId: null, memberUserIds: [] };
+    const members = await this.memberships.listForShop(shopId);
+    return {
+      ownerUserId: shop.ownerUserId ?? shop.id,
+      memberUserIds: members
+        .filter((m) => m.status === 'active' && allows(effectivePermissions(m.role, m.permissions), module, 'view'))
+        .map((m) => m.memberUserId),
+    };
+  }
+
+  private assertAllowed(access: ShopAccess, path: string, method: string): void {
+    const { permissions } = access;
     const rule = accessRuleFor(path, method);
     if (rule.kind === 'always') return;
+    if (rule.kind === 'ownerOnly') {
+      if (access.isOwner) return;
+      throw new ForbiddenException({ code: SHOP_PERMISSION_DENIED, message: rule.reason });
+    }
     if (rule.kind === 'denied') {
       throw new ForbiddenException({
         code: SHOP_PERMISSION_DENIED,

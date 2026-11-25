@@ -71,6 +71,9 @@ function asHttpLikeError(error: unknown): HttpLikeError {
   return { message: String(error) };
 }
 
+/** An extra shop an owner added: a business account with no person behind it (placeholder email, no password). */
+const isShopAccount = (user: { ownerUserId?: string | null }): boolean => !!user.ownerUserId;
+
 @Injectable()
 export class AuthService implements IAuthService {
   constructor(
@@ -144,8 +147,8 @@ export class AuthService implements IAuthService {
     try {
       const user = await this.usersRepo.findByEmail(email.toLowerCase().trim());
 
-      // User doesn't exist
-      if (!user) {
+      // User doesn't exist (an extra shop's account is not a person: nobody signs in as it)
+      if (!user || isShopAccount(user)) {
         throw new UnauthorizedException('Invalid credentials');
       }
 
@@ -301,7 +304,7 @@ export class AuthService implements IAuthService {
   async forgotPassword(email: string): Promise<void> {
     try {
       const user = await this.usersRepo.findByEmail(email.toLowerCase().trim());
-      if (!user) {
+      if (!user || isShopAccount(user)) {
         throw new NotFoundException('User not found');
       }
       const resolvedUser = this.requireResolvedUser(user);
@@ -381,6 +384,9 @@ export class AuthService implements IAuthService {
 
       // Check if user exists with Google ID
       let user = await this.usersRepo.findByGoogleId(googleUser.sub);
+      if (user && isShopAccount(user)) {
+        throw new UnauthorizedException('Invalid Google account');
+      }
 
       let isNewUser = false;
 
@@ -388,6 +394,9 @@ export class AuthService implements IAuthService {
       if (!user) {
         const existingUser = await this.usersRepo.findByEmail(googleUser.email.toLowerCase().trim());
 
+        if (existingUser && isShopAccount(existingUser)) {
+          throw new UnauthorizedException('Invalid Google account');
+        }
         if (existingUser) {
           const linkedUser = this.requireResolvedUser(existingUser);
           // User exists with same email - link Google account to existing user

@@ -30,6 +30,7 @@ import {
   UserResponseModel,
 } from './models';
 import { IUsersService, USERS_SERVICE } from './service';
+import { pickUserUpdate } from './utils/pick-user-update.util';
 
 @ApiTags('users')
 @ApiBearerAuth('user')
@@ -108,12 +109,16 @@ export class UsersController {
       throw new ForbiddenException('You are not authorized to update this user');
     }
 
-    const userData = plainToInstance(User, body, {
+    const isAdmin = identity.userType === EUserType.Admin;
+    // The shop's own person: the account itself, or its owner (an extra shop). Invited members edit the shop's
+    // business details only — in the owner's main shop the "shop" is the owner's personal account.
+    const isAccountOwner = !identity.shopRole || identity.shopRole === 'owner';
+    const userData = plainToInstance(User, pickUserUpdate(body, { isAdmin, isAccountOwner }), {
       excludeExtraneousValues: true,
     });
 
-    // Attach profile photo file if provided
-    if (profilePhoto) {
+    // Attach profile photo file if provided (the person's own photo: not for members)
+    if (profilePhoto && (isAccountOwner || isAdmin)) {
       userData.profilePhoto = profilePhoto.buffer;
       userData.profilePhotoContentType = profilePhoto.mimetype;
       userData.profilePhotoFileName = profilePhoto.originalname;

@@ -99,9 +99,12 @@ export class PaymentsService implements IPaymentsService {
     return !!active;
   }
 
-  async hasAppAccess(userId: string): Promise<boolean> {
+  /** `shopOrUserId` may be an extra shop or a shop someone was invited to: it runs on its owner's plan. */
+  async hasAppAccess(shopOrUserId: string): Promise<boolean> {
+    const shop = await this.usersRepo.findById(shopOrUserId);
+    const userId = shop?.ownerUserId ?? shopOrUserId;
     if (await this.findPayingSubscription(userId)) return true;
-    const user = await this.usersRepo.findById(userId);
+    const user = userId === shopOrUserId ? shop : await this.usersRepo.findById(userId);
     if (!user) return false;
     return user.userType === EUserType.Admin || isTrialActive(user, TRIAL_DAYS);
   }

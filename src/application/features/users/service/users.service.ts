@@ -16,6 +16,10 @@ import {
   USER_DETAILS_CACHE_TTL_SECONDS,
   normalizeIndianMobile,
 } from '../../../shared';
+import {
+  IShopMembershipsRepository,
+  SHOP_MEMBERSHIPS_REPOSITORY,
+} from '../../shops/service/i-shop-memberships.repository';
 import { isCatalogSlugUniqueViolation, resolveCatalogSlugForBusinessName } from '../utils';
 
 type CachedUser = User & { profilePhotoUrl?: string; shopLogoUrl?: string };
@@ -26,6 +30,7 @@ export class UsersService implements IUsersService {
     @Inject(USERS_REPOSITORY) private readonly usersRepo: IUsersRepository,
     @Inject(USERS_FILE_STORAGE) private readonly usersFileStorage: IUsersFileStorage,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+    @Inject(SHOP_MEMBERSHIPS_REPOSITORY) private readonly memberships: IShopMembershipsRepository,
     @InjectPinoLogger(UsersService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -238,6 +243,15 @@ export class UsersService implements IUsersService {
 
     await this.usersRepo.softDelete(id);
     await this.invalidateUserDetailsCache(id);
+    if (!user.ownerUserId) {
+      // Extra shops the person added live on their account and plan: they go with it (members lose access too).
+      for (const shop of await this.usersRepo.listByOwner(id)) {
+        await this.usersRepo.softDelete(shop.id);
+        await this.invalidateUserDetailsCache(shop.id);
+      }
+      // The person leaves every shop they were invited to (a soft delete doesn't fire the FK cascade).
+      await this.memberships.deleteForMember(id);
+    }
     this.logger.info({ userId: id }, 'User soft-deleted');
   }
 

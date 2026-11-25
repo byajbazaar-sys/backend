@@ -11,4 +11,6 @@ export interface IShopMembershipsRepository {
   upsert(membership: Omit<ShopMembership, 'id'>): Promise<ShopMembership>;
   update(id: string, patch: Partial<Pick<ShopMembership, 'role' | 'permissions' | 'status'>>): Promise<ShopMembership>;
   delete(id: string): Promise<void>;
+  /** Every shop the person was a member of (their account was deleted). */
+  deleteForMember(memberUserId: string): Promise<void>;
 }

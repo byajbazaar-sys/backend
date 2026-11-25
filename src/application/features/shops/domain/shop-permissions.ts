@@ -165,10 +165,14 @@ export const ACTOR_SCOPED_PREFIXES = [
 
 const matches = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
 
-/** The API path without the global prefix and query: "customers/123". */
+/**
+ * The API path without the global prefix and query: "customers/123". Anything in front of the prefix (an API Gateway
+ * stage or custom-domain base path such as "/prod/api/v1/…") is dropped too, so routes are classified the same way
+ * wherever the API is mounted.
+ */
 export function apiPath(originalUrl: string): string {
   const path = (originalUrl.split('?')[0] ?? '').replace(/^\/+/, '');
-  return path.replace(/^api\/v\d+\//, '');
+  return path.replace(/^(?:[^/]+\/)*?api\/v\d+\//, '');
 }
 
 /** Inside personal areas, but about the shop being worked in (its plan decides whether the app opens). */
@@ -181,15 +185,30 @@ export type AccessRule =
   | { kind: 'module'; module: ShopModule; need: AccessLevel }
   | { kind: 'anyOf'; modules: ShopModule[]; need: AccessLevel }
   | { kind: 'shared'; need: AccessLevel }
+  | { kind: 'ownerOnly'; reason: string }
   | { kind: 'denied' }
   | { kind: 'always' };
 
 export const isReadMethod = (method: string) => method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
 
+/**
+ * Changes only the owner may make, whatever a member's role or overrides say:
+ * - deleting the shop account;
+ * - API keys: a key acts as the shop with full owner rights and keeps working after the member who made it is
+ *   removed, so a member must never be able to create (or rotate / re-enable) one.
+ */
+const OWNER_ONLY_WRITES: [string, string][] = [['settings/api', 'Only the shop owner can manage API keys.']];
+
 /** Which permission a request needs. */
 export function accessRuleFor(path: string, method: string): AccessRule {
   const read = isReadMethod(method) || READ_ONLY_POSTS.some((re) => re.test(path));
   const need: AccessLevel = read ? 'view' : 'edit';
+  if (method === 'DELETE' && matches(path, 'users')) {
+    return { kind: 'ownerOnly', reason: 'Only the shop owner can delete the shop.' };
+  }
+  if (!read) {
+    for (const [prefix, reason] of OWNER_ONLY_WRITES) if (matches(path, prefix)) return { kind: 'ownerOnly', reason };
+  }
   // The shop's own profile is read by every screen (name, logo, address on invoices): GET users/:id (the
   // controller only serves the shop's own id).
   if (matches(path, 'users') && isReadMethod(method)) return { kind: 'always' };
