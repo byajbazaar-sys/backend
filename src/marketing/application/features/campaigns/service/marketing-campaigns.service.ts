@@ -7,6 +7,7 @@ import { CreateCampaignInput } from './create-campaign-input';
 import {
   MarketingBrand,
   MarketingCampaign,
+  MarketingScene,
   RenderJob,
   BUSY_RENDER_STATUSES,
   CAMPAIGN_SCENES,
@@ -42,6 +43,18 @@ import { MarketingBrandingService } from '../../branding/marketing-branding.serv
 import { MarketingRenderService, kaggleBatchStatus } from '../../kaggle';
 
 const MAX_ACTIVE_PER_USER = 2;
+/**
+ * An in-progress campaign with no open render job and no activity for this long can no longer finish (its queue step
+ * or the job it waited for was lost): it is settled instead of showing "in progress" forever. Queue steps run within
+ * seconds, so this only catches real orphans.
+ */
+const ORPHAN_GRACE_MS = 20 * 60 * 1000;
+const ACTIVE_CAMPAIGN_STATUSES: ECampaignStatus[] = [
+  ECampaignStatus.Planning,
+  ECampaignStatus.WaitingGpu,
+  ECampaignStatus.Rendering,
+];
+const toTime = (value?: Date | string | null): number => (value ? new Date(value).getTime() || 0 : 0);
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const UPLOAD_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
@@ -160,26 +173,39 @@ export class MarketingCampaignsService {
     return this.view(campaign, true, await this.jobs.latestForCampaigns([campaign.id]));
   }
 
+  /**
+   * Settles a campaign that still says it is in progress but cannot finish any more, so it never shows "in progress"
+   * forever:
+   *  - every scene has finished (the final status update was missed), or
+   *  - nothing is working on it: no open render job for it (nor the brand logo job it may wait for) and no activity
+   *    for ORPHAN_GRACE_MS — e.g. the plan step was lost, or the logo job failed while the campaign waited for it.
+   *    Unfinished scenes are marked failed so the user can make them again.
+   */
   private async reconcileFinishedCampaign(campaign: MarketingCampaign): Promise<MarketingCampaign> {
-    if (
-      campaign.status !== ECampaignStatus.Planning &&
-      campaign.status !== ECampaignStatus.WaitingGpu &&
-      campaign.status !== ECampaignStatus.Rendering
-    ) {
-      return campaign;
-    }
+    if (!ACTIVE_CAMPAIGN_STATUSES.includes(campaign.status)) return campaign;
 
-    const scenes = await this.scenes.listForCampaign(campaign.id);
-    if (
-      scenes.length === 0 ||
-      scenes.some((scene) => scene.videoStatus !== EAssetStatus.Ready && scene.videoStatus !== EAssetStatus.Failed)
-    ) {
-      return campaign;
+    let scenes = await this.scenes.listForCampaign(campaign.id);
+    const settled = (s: MarketingScene): boolean =>
+      s.videoStatus === EAssetStatus.Ready || s.videoStatus === EAssetStatus.Failed;
+    let error = campaign.error ?? null;
+
+    if (scenes.length === 0 || !scenes.every(settled)) {
+      if (!(await this.isOrphaned(campaign))) return campaign;
+      error = 'This reel stopped before it finished. Make the scenes again to retry.';
+      this.logger.warn({ campaignId: campaign.id, status: campaign.status }, 'Settling an orphaned campaign');
+      for (const scene of scenes.filter((s) => !settled(s))) {
+        await this.scenes.update(scene.id, {
+          imageStatus: scene.imageStatus === EAssetStatus.Ready ? EAssetStatus.Ready : EAssetStatus.Failed,
+          videoStatus: EAssetStatus.Failed,
+          error: scene.error ?? error,
+        });
+      }
+      scenes = await this.scenes.listForCampaign(campaign.id);
     }
 
     const ready = scenes.filter((scene) => scene.videoStatus === EAssetStatus.Ready).length;
     const status =
-      ready === scenes.length
+      ready > 0 && ready === scenes.length
         ? ECampaignStatus.Completed
         : ready > 0
           ? ECampaignStatus.Partial
@@ -187,12 +213,35 @@ export class MarketingCampaignsService {
     const updated = await this.campaigns.update(campaign.id, {
       status,
       progress: ready > 0 ? 100 : campaign.progress,
-      stageMessage: status === ECampaignStatus.Completed ? 'Ready' : `${ready}/${scenes.length} videos ready`,
-      error: status === ECampaignStatus.Completed ? null : campaign.error,
+      stageMessage:
+        status === ECampaignStatus.Completed
+          ? 'Ready'
+          : scenes.length
+            ? `${ready}/${scenes.length} videos ready`
+            : 'Failed',
+      error: status === ECampaignStatus.Completed ? null : error,
       completedAt: new Date(),
     });
     if (updated) await this.events.campaign(updated, true);
     return updated ?? campaign;
+  }
+
+  /** No render job can still finish this campaign, and nothing has happened to it for a while. */
+  private async isOrphaned(campaign: MarketingCampaign): Promise<boolean> {
+    if (await this.jobs.findOpenFor({ campaignId: campaign.id })) return false;
+    // A campaign waits for its shop's brand logo (image: an IMAGES job without a campaign; video: a LOGO job).
+    const userJobs = await this.jobs.listOpenFor({ userId: campaign.userId });
+    const logoJob = (job: RenderJob): boolean =>
+      job.kind === ERenderJobKind.Logo ||
+      (job.kind === ERenderJobKind.Images && job.payload?.imageGeneration?.type === 'logo');
+    if (userJobs.some(logoJob)) return false;
+    const jobs = await this.jobs.latestForCampaigns([campaign.id]);
+    const lastActivity = Math.max(
+      toTime(campaign.updatedAt),
+      toTime(campaign.createdAt),
+      ...jobs.map((job) => Math.max(toTime(job.updatedAt), toTime(job.finishedAt))),
+    );
+    return Date.now() - lastActivity > ORPHAN_GRACE_MS;
   }
 
   async remove(userId: string, id: string): Promise<void> {

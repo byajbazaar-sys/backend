@@ -98,6 +98,8 @@ import { WorkerSessionPoll } from './worker-session-poll';
 
 /** No progress for this long while on a worker → the Kaggle session died. */
 const STALE_JOB_MS = 45 * 60 * 1000;
+/** A job still waiting for a GPU after this long is failed (its owner sees it fail instead of "in progress" forever). */
+const MAX_WAITING_MS = 12 * 60 * 60 * 1000;
 /** All slots busy → one delayed queue message (deduplicated per window), not DB polling. */
 const RECHECK_DELAY_SECONDS = 120;
 /** Retry a failed account setup after this long. */
@@ -2096,12 +2098,20 @@ export class MarketingRenderService {
 
   // ---------------------------------------------------------------- failures & campaign state
 
-  /** Busy jobs with no progress for a while: continue them in a new session (or fail once out of restarts). */
+  /**
+   * Busy jobs with no progress for a while: continue them in a new session (or fail once out of restarts). Jobs that
+   * waited for a GPU far too long are failed, so their campaign / photoshoot settles instead of showing "in progress"
+   * forever.
+   */
   private async failStaleJobs(): Promise<void> {
     const stale = await this.jobs.findStale(BUSY_RENDER_STATUSES, new Date(Date.now() - STALE_JOB_MS));
     // Warm sessions are quiet while their job runs; reapSessions() handles them.
     for (const job of stale.filter((j) => j.kind !== ERenderJobKind.Worker)) {
       await this.restartJob(job, 'The GPU worker stopped responding');
+    }
+    const starved = await this.jobs.findStale([ERenderJobStatus.Waiting], new Date(Date.now() - MAX_WAITING_MS));
+    for (const job of starved.filter((j) => j.kind !== ERenderJobKind.Worker && j.kind !== ERenderJobKind.Setup)) {
+      await this.failJob(job, 'No GPU became free in time — please try again');
     }
   }
 

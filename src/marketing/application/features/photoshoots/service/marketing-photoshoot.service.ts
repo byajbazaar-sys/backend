@@ -6,8 +6,10 @@ import {
   PhotoshootPiece,
   PhotoshootShot,
   RenderJob,
+  BUSY_RENDER_STATUSES,
   EAssetStatus,
   EPhotoshootStatus,
+  ERenderJobStatus,
   PHOTOSHOOT_ASPECTS,
   PHOTOSHOOT_MODELS,
   PHOTOSHOOT_OUTFITS,
@@ -43,6 +45,13 @@ const MAX_ACTIVE_PER_USER = 3;
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const UPLOAD_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const LIST_LIMIT = 40;
+/**
+ * A generating photoshoot with no open image job and no activity for this long can no longer finish (its queue step
+ * was lost): it is settled instead of showing "in progress" forever. Queue steps run within seconds.
+ */
+const ORPHAN_GRACE_MS = 20 * 60 * 1000;
+const OPEN_JOB_STATUSES: string[] = [ERenderJobStatus.Waiting, ...BUSY_RENDER_STATUSES];
+const toTime = (value?: Date | string | null): number => (value ? new Date(value).getTime() || 0 : 0);
 
 const keys = {
   source: (userId: string, id: string, ext: string): string => `photoshoots/${userId}/${id}/source.${ext}`,
@@ -188,14 +197,34 @@ export class MarketingPhotoshootService {
     return this.view(shoot, shots, jobs);
   }
 
+  /**
+   * Settles a photoshoot that still says "generating" but cannot finish any more, so it never shows "in progress"
+   * forever:
+   *  - every shot has finished (the final status update was missed), or
+   *  - nothing is working on it: no open image job and no activity for ORPHAN_GRACE_MS (e.g. its queue step was lost).
+   *    Unfinished shots are marked failed so the user can make them again.
+   */
   private async reconcileFinishedPhotoshoot(shoot: Photoshoot): Promise<Photoshoot> {
     if (!is(shoot.status, EPhotoshootStatus.Generating)) return shoot;
-    const shots = await this.shots.listFor([shoot.id]);
-    if (
-      shots.length === 0 ||
-      shots.some((shot) => !is(shot.status, EAssetStatus.Ready) && !is(shot.status, EAssetStatus.Failed))
-    ) {
-      return shoot;
+    let shots = await this.shots.listFor([shoot.id]);
+    const settled = (shot: PhotoshootShot): boolean =>
+      is(shot.status, EAssetStatus.Ready) || is(shot.status, EAssetStatus.Failed);
+
+    if (shots.length === 0 || !shots.every(settled)) {
+      if (!(await this.isOrphaned(shoot, shots))) return shoot;
+      const message = 'This photo stopped before it finished. Try again.';
+      this.logger.warn({ photoshootId: shoot.id }, 'Settling an orphaned photoshoot');
+      await Promise.all(
+        shots
+          .filter((shot) => !settled(shot))
+          .map((shot) => this.shots.update(shot.id, { status: EAssetStatus.Failed, error: message })),
+      );
+      shots = await this.shots.listFor([shoot.id]);
+      if (shots.length === 0) {
+        const failed = await this.shoots.update(shoot.id, { status: EPhotoshootStatus.Failed, error: message });
+        if (failed) await this.notify(failed);
+        return failed ?? shoot;
+      }
     }
 
     const ready = shots.filter((shot) => is(shot.status, EAssetStatus.Ready)).length;
@@ -211,6 +240,19 @@ export class MarketingPhotoshootService {
     });
     if (updated) await this.notify(updated);
     return updated ?? shoot;
+  }
+
+  /** No image job can still finish this photoshoot, and nothing has happened to it for a while. */
+  private async isOrphaned(shoot: Photoshoot, shots: PhotoshootShot[]): Promise<boolean> {
+    const jobs = await this.jobs.latestForPhotoshoots([shoot.id]);
+    if (jobs.some((job) => OPEN_JOB_STATUSES.includes(job.status))) return false;
+    const lastActivity = Math.max(
+      toTime(shoot.updatedAt),
+      toTime(shoot.createdAt),
+      ...shots.map((shot) => toTime(shot.updatedAt)),
+      ...jobs.map((job) => Math.max(toTime(job.updatedAt), toTime(job.finishedAt))),
+    );
+    return Date.now() - lastActivity > ORPHAN_GRACE_MS;
   }
 
   async remove(userId: string, id: string): Promise<void> {
