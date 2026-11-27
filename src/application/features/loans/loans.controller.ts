@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   UseGuards,
   Controller,
   Post,
@@ -40,7 +39,6 @@ import {
 } from '@shared-libs';
 import { plainToInstance } from 'class-transformer';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { v4 as uuidv4 } from 'uuid';
 
 import { Loan, LoanItem } from './domain';
 import {
@@ -60,7 +58,7 @@ import {
   UploadLoanVoucherSignaturesRequestModel,
 } from './models';
 import { LoansFilterOptions, LoansDownloadFilterOptions, LoanStatsFilterOptions } from './options';
-import { ILoanService, LOAN_SERVICE } from './service';
+import { buildNewLoan, ILoanService, LOAN_SERVICE } from './service';
 import { ExportFormat } from '../../shared';
 
 @ApiTags('loans')
@@ -88,41 +86,7 @@ export class LoansController {
     },
   ): Promise<LoanResponseModel> {
     console.log('files=>', files);
-    const loanData = plainToInstance(Loan, body, {
-      excludeExtraneousValues: true,
-    });
-
-    // Issue / start date is stored as createdAt (existing system convention).
-    if (body.startDate) {
-      loanData.createdAt = new Date(body.startDate);
-    }
-
-    const loanId = uuidv4();
-    loanData.id = loanId;
-    let loanAmount = 0;
-
-    if (!Array.isArray(loanData.loanItems)) {
-      loanData.loanItems = loanData.loanItems ? [loanData.loanItems] : [];
-    }
-
-    loanData.loanItems = loanData.loanItems.map((item, index) => {
-      loanAmount += item.amount;
-      const itemId = item.itemId ?? (item as { item_id?: string }).item_id;
-      if (!itemId) {
-        throw new BadRequestException('Each loan item must have an itemId referencing an existing item');
-      }
-      const loanItem: LoanItem & { id?: string } = {
-        ...item,
-        id: uuidv4(),
-        itemId,
-        image: files.loanItemImages?.[index] ?? null,
-        loanId,
-        createdBy: identity.userId,
-      };
-      return loanItem;
-    });
-    loanData.amountRemaining = loanAmount;
-    loanData.createdBy = identity.userId;
+    const loanData = buildNewLoan(body, identity.userId, files.loanItemImages);
     const loan = await this.loanService.create(loanData);
     console.log('loan=>', loan);
     return plainToInstance(LoanResponseModel, loan, {

@@ -3,6 +3,7 @@ import { loadAppSettings } from '@shared-libs';
 import { Context, Handler } from 'aws-lambda';
 import { DataSource } from 'typeorm';
 
+import { AiDatabase } from '../ai';
 import { AppModule } from '../app.module';
 import { SeedingService } from '../infrastructure';
 import { LogsDatabase, LogsMaintenanceService } from '../logs';
@@ -34,6 +35,16 @@ export const handler: Handler = async (_event: unknown, context: Context) => {
       console.error('[PostDeploy] Marketing migrations failed:', err);
     }
 
+    // 1c. AI database (separate DB, own migrations table ai_migrations). A failure here must not block ByajBazaar.
+    let aiMigrations: number | string = 0;
+    try {
+      aiMigrations = await app.get(AiDatabase).runMigrations();
+      console.log(`[PostDeploy] AI migrations: ${aiMigrations} run`);
+    } catch (err) {
+      aiMigrations = `failed: ${err instanceof Error ? err.message : String(err)}`;
+      console.error('[PostDeploy] AI migrations failed:', err);
+    }
+
     // 2. Run seeds
     const seedingService = app.get(SeedingService);
     await seedingService.runAsync();
@@ -59,6 +70,7 @@ export const handler: Handler = async (_event: unknown, context: Context) => {
         message: 'Post-deploy completed',
         migrationsRun: migrations.length,
         marketingMigrations,
+        aiMigrations,
         logsMigrations,
         logsMaintenance,
         timestamp: new Date().toISOString(),

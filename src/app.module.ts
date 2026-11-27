@@ -6,6 +6,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { DEFAULT_THROTTLE_REQ_LIMIT, DEFAULT_THROTTLE_TTL, GlobalResponseInterceptor } from '@shared-libs';
 import { LoggerModule, Params } from 'nestjs-pino';
 
+import { AiModule } from './ai';
 import { ApplicationModule } from './application';
 import { configFactory, IMsConfig } from './configurations';
 import { InfrastructureModule } from './infrastructure';
@@ -32,6 +33,7 @@ import { MarketingModule } from './marketing';
     InfrastructureModule,
     LogsModule,
     MarketingModule,
+    AiModule,
     ScheduleModule.forRoot(),
   ],
   providers: [

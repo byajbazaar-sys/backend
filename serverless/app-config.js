@@ -4,7 +4,7 @@
  * load them on cold start: libs/aws/app-settings.loader.ts.
  *
  * Every key of .env.<stage> goes in, except the ones with their own parameter (MARKETING_* / KAGGLE_* →
- * marketing-config, LOGS_DB_* → logs-config, the Google Play key file), AWS-reserved names and the few keys the
+ * marketing-config, LOGS_DB_* → logs-config, AI_* → ai-config, the Google Play key file), AWS-reserved names and the few keys the
  * Lambda environment still sets itself (serverless/providers.yml). A new setting needs no change here.
  *
  * Only the .env file is read — never the deploying shell's environment (which holds its own AWS credentials).
@@ -27,8 +27,8 @@ const LAMBDA_ENV = [
   'APP_CONFIG_SSM_PREFIX',
 ];
 /** Stored in their own parameters, or never shipped. */
-const OWN_PARAMETER = /^(MARKETING_|KAGGLE_|LOGS_DB_)/;
-const SKIP = ['GOOGLE_PLAY_SERVICE_ACCOUNT_JSON', 'IS_OFFLINE', 'MARKETING_CONFIG_SSM', 'LOGS_CONFIG_SSM'];
+const OWN_PARAMETER = /^(MARKETING_|KAGGLE_|LOGS_DB_|AI_)/;
+const SKIP = ['GOOGLE_PLAY_SERVICE_ACCOUNT_JSON', 'IS_OFFLINE', 'MARKETING_CONFIG_SSM', 'LOGS_CONFIG_SSM', 'AI_CONFIG_SSM'];
 const AWS_RESERVED = /^(AWS_|LAMBDA_TASK_ROOT$|LAMBDA_RUNTIME_DIR$|_HANDLER$|_X_AMZN_TRACE_ID$|TZ$)/;
 /** What serverless/providers.yml used to default when a key was missing from .env. */
 const DEFAULTS = {

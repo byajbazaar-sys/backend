@@ -8,6 +8,7 @@ New to the project? Read these in order.
 | 2 | [MARKETING_KAGGLE_PIPELINE.md](MARKETING_KAGGLE_PIPELINE.md) | How a product photo becomes AI campaign images, photoshoots, logos and Instagram reels — and text becomes voiceovers (§6a) — on free Kaggle GPUs: image modes, the notebooks, warm workers, the model cache, settings, deploy and troubleshooting. |
 | 3 | [MARKETING_MEDIA_CDN.md](MARKETING_MEDIA_CDN.md) | How marketing images and videos are served from `media.byajbazaar.com` (Cloudflare Worker in front of the private B2 bucket), and how to set it up. |
 | 4 | [CLOUDFLARE_AI_ACCOUNTS.md](CLOUDFLARE_AI_ACCOUNTS.md) | The Cloudflare Workers AI accounts behind try-on and inventory background removal (FLUX.2 [klein] 9B): adding several in admin, rotation and cooldowns, and their logs in the logs database. |
+| 5 | [AI_ASSISTANT.md](AI_ASSISTANT.md) | ByajBazaar AI: the assistant module (own DB, Qdrant, queue, bucket), how a message becomes a preview and a confirmed change, its security rules, operating it and adding tools. |
 
 Elsewhere in the repo:
 

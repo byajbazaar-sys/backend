@@ -297,6 +297,14 @@ import {
     WHATSAPP_DUE_REMINDER_SERVICE,
     INBOX_SERVICE,
     INBOX_CHANNEL_REGISTRY,
+    // Used by ByajBazaar AI (src/ai) to make the same inventory changes the inventory API makes.
+    INVENTORY_ITEM_SERVICE,
+    INVENTORY_CATEGORY_SERVICE,
+    INVENTORY_REPORT_SERVICE,
+    // … and the same customer, pledge-item and deposit changes their APIs make.
+    CUSTOMER_SERVICE,
+    ITEM_SERVICE,
+    DEPOSIT_SERVICE,
   ],
 })
 export class ApplicationModule {}

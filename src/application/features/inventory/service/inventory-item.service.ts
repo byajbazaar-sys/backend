@@ -5,7 +5,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Paged, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
+import { Paged, SYSTEM_USER_ID, normalizeImageBufferForStorageOrThrow } from '@shared-libs';
 import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { createHash, randomUUID } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -110,10 +110,7 @@ export class InventoryItemService implements IInventoryItemService {
   }
 
   async create(data: CreateInventoryItemRequestModel, userId: string): Promise<InventoryItem> {
-    if (data.categoryId) {
-      const category = await this.categoriesRepo.findById(data.categoryId);
-      if (!category) throw new NotFoundException('Category not found');
-    }
+    if (data.categoryId) await this.assertCategoryUsable(data.categoryId, userId);
 
     const sku = data.sku?.trim() || (await this.generateSku(userId));
     const item: InventoryItem = {
@@ -137,6 +134,14 @@ export class InventoryItemService implements IInventoryItemService {
     this.logger.info({ itemId: created.id, sku }, 'Inventory item created');
     await this.invalidateInventoryReportsCache(userId);
     return this.enrichItem(created);
+  }
+
+  /** A category the shop may file items under: its own, or a shared default one (never another shop's). */
+  private async assertCategoryUsable(categoryId: string, userId: string): Promise<void> {
+    const category = await this.categoriesRepo.findById(categoryId);
+    if (!category || (category.createdBy !== userId && category.createdBy !== SYSTEM_USER_ID)) {
+      throw new NotFoundException('Category not found');
+    }
   }
 
   private mapListQuery(userId: string, query: ListInventoryItemsQueryModel): InventoryItemsFilterOptions {
@@ -212,10 +217,7 @@ export class InventoryItemService implements IInventoryItemService {
 
   async update(id: string, data: UpdateInventoryItemRequestModel, userId: string): Promise<InventoryItem> {
     await this.getById(id, userId);
-    if (data.categoryId) {
-      const category = await this.categoriesRepo.findById(data.categoryId);
-      if (!category) throw new NotFoundException('Category not found');
-    }
+    if (data.categoryId) await this.assertCategoryUsable(data.categoryId, userId);
     const { imageUrls: _ignored, ...rest } = data;
     const patch = instanceToPlain(plainToInstance(InventoryItemUpdatePatch, rest), {
       exposeUnsetFields: false,

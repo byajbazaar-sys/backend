@@ -142,6 +142,12 @@ const ANY_OF_WRITES: [string, ShopModule[]][] = [
 
 const PERSONAL_PREFIXES = ['notifications', 'support'];
 
+/**
+ * ByajBazaar AI: every member can talk to the assistant (even read-only ones); each assistant tool then checks the
+ * module it touches against the member's access, at preview time and again when a change is confirmed.
+ */
+const ASSISTANT_PREFIXES = ['ai'];
+
 /** Known shop-neutral routes: reads are allowed for members; changes use the shared edit rule. */
 const SHARED_PREFIXES = ['events'];
 
@@ -159,6 +165,7 @@ export const ACTOR_SCOPED_PREFIXES = [
   'admin',
   'logs/admin',
   'marketing/admin',
+  'ai/admin',
   'public',
   'webhooks',
 ];
@@ -214,6 +221,7 @@ export function accessRuleFor(path: string, method: string): AccessRule {
   if (matches(path, 'users') && isReadMethod(method)) return { kind: 'always' };
   // Marking notifications read / asking support: fine for every member, read-only ones included.
   if (PERSONAL_PREFIXES.some((p) => matches(path, p))) return { kind: 'always' };
+  if (ASSISTANT_PREFIXES.some((p) => matches(path, p))) return { kind: 'always' };
   if (SHOP_SCOPED_EXCEPTIONS.includes(path)) return { kind: 'always' };
   if (!read && SETTINGS_WRITE_PREFIXES.some((p) => matches(path, p))) {
     return { kind: 'module', module: 'settings', need: 'edit' };

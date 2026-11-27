@@ -23,6 +23,7 @@ custom:
     #   app-config/1..3  every other key   (serverless/app-config.js → libs/aws/app-settings.loader.ts)
     #   marketing-config MARKETING_* / KAGGLE_* (serverless/marketing-config.js)
     #   logs-config      LOGS_DB_*          (serverless/logs-config.js)
+    #   ai-config        AI_* (serverless/ai-config.js)
     # A new setting needs no change here: add it to .env.{stage} and redeploy.
     include: []
   serverless-offline:
@@ -82,45 +83,54 @@ resources:
         Tier: Standard
         Description: Logs database settings (JSON) - generated from .env.${sls:stage} on deploy
         Value: ${file(./serverless/logs-config.js)}
+    # ByajBazaar AI settings (AI_*), read by every Lambda on cold start. Empty JSON = fallbacks.
+    AiConfigParameter:
+      Type: AWS::SSM::Parameter
+      Properties:
+        Name: /byajbazaar/${sls:stage}/ai-config
+        Type: String
+        Tier: Standard
+        Description: ByajBazaar AI settings (JSON) - generated from .env.${sls:stage} on deploy
+        Value: ${file(./serverless/ai-config.js)}
 
   # Every function waits for the settings parameters, so no cold start ever runs without them during a deploy.
   extensions:
     RunPostDeployLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     ApiLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     UpdateDuesCronLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     CloseExpiredLoansCronLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     RelayLogsCronLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsConnectLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsDisconnectLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsCreateSessionLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsJoinSessionLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsBarcodeScannedLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsCartUpdatedLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsHeartbeatLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsLeaveSessionLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsMarketingProgressLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     WsDefaultLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     JewelleryTryOnLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     MarketingWorkerLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
     MarketingPublisherLambdaFunction:
-      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter]
+      DependsOn: [AppConfigParameter1, AppConfigParameter2, AppConfigParameter3, MarketingConfigParameter, LogsConfigParameter, AiConfigParameter]
 
 package:
   patterns:

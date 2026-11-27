@@ -34,6 +34,10 @@
     "marketing:migration:up": "npm run typeorm migration:run -- -d ./src/marketing/infrastructure/persistence/marketing-data-source.ts",
     "marketing:migration:down": "npm run typeorm -- -d ./src/marketing/infrastructure/persistence/marketing-data-source.ts migration:revert",
     "marketing:migration:create": "npm run typeorm -- migration:create ./src/marketing/infrastructure/persistence/migrations/marketing",
+    "ai:migration:show": "npm run typeorm migration:show -- -d ./src/ai/infrastructure/persistence/ai-data-source.cli.ts",
+    "ai:migration:up": "npm run typeorm migration:run -- -d ./src/ai/infrastructure/persistence/ai-data-source.cli.ts",
+    "ai:migration:down": "npm run typeorm -- -d ./src/ai/infrastructure/persistence/ai-data-source.cli.ts migration:revert",
+    "ai:migration:create": "npm run typeorm -- migration:create ./src/ai/infrastructure/persistence/migrations/ai",
     "logs:migration:show": "npm run typeorm migration:show -- -d ./src/logs/infrastructure/persistence/logs-data-source.cli.ts",
     "logs:migration:up": "npm run typeorm migration:run -- -d ./src/logs/infrastructure/persistence/logs-data-source.cli.ts",
     "logs:migration:down": "npm run typeorm -- -d ./src/logs/infrastructure/persistence/logs-data-source.cli.ts migration:revert",
@@ -99,7 +103,8 @@
     "sharp": "^0.33.0",
     "typeorm": "^0.3.20",
     "typeorm-naming-strategies": "^1.0.0",
-    "uuid": "9"
+    "uuid": "9",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
