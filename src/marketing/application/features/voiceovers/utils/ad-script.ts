@@ -1,6 +1,7 @@
+import { hindiGrams, hindiNumber } from '@shared-libs';
+
 import { AdScriptFacts } from './ad-script-facts';
 import { AdScriptStyle } from './ad-script-style';
-import { hindiGrams, hindiNumber } from './hindi-number-words';
 import { describePiece } from '../../photoshoots/utils/photoshoot.prompts';
 
 type Gender = 'm' | 'f' | 'pl';

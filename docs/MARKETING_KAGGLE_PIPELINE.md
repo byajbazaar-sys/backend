@@ -658,6 +658,17 @@ A **warm worker** is one long Kaggle session that does this once and then runs j
    pipelines need both GPUs).
 6. **Stop.** It exits when the backend tells it to (see idle rules below), and reports `completed`.
 
+### The assistant's voice lane (ByajBazaar AI)
+
+When voice is set up (`AI_VOICE_*`), every warm worker also runs a **voice lane** thread for ByajBazaar AI: it keeps a
+WebSocket to the voice gateway and speaks the assistant's Hindi replies with the same ChatterBox engine (port 8190) —
+outside the job queue, with its prompts at the front of the voice engine's queue. While the assistant is in use the
+worker reports `aiVoiceHot` when it polls: it then takes **voice jobs only** (image / video work would stop the voice
+engine), is not stopped for idling, and dispatch starts another worker for marketing's image / video jobs
+(`workersNeeded`). Image and video work never runs while the lane starts its engine (shared lock), and the lane
+stays away from the GPUs while such work runs. A voice session with no warm worker running starts one
+(`warmForAssistant`, the usual account rules). Details: `docs/AI_VOICE.md` §2a.
+
 ### When does a new worker start?
 
 Dispatch (`dispatchSessions`) counts waiting jobs and free workers (idle or still booting). For every waiting job

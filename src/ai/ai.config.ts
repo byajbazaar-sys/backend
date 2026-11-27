@@ -114,6 +114,48 @@ export class AiConfig {
     inFlightTurnMs: 90_000,
   };
 
+  /**
+   * Voice (cloudflare/voice-gateway): audio goes app ⇄ Cloudflare Worker (speech-to-text / text-to-speech on Workers
+   * AI); this API issues session tickets and runs each transcribed turn. Off until the three secrets below are set.
+   */
+  readonly voice = {
+    /** wss://voice.example.com — the deployed voice gateway. */
+    gatewayUrl: (env('AI_VOICE_GATEWAY_URL') ?? '').replace(/\/+$/, ''),
+    /** Signs session tickets (same value as the gateway's VOICE_TICKET_SECRET). */
+    ticketSecret: env('AI_VOICE_TICKET_SECRET') ?? '',
+    /** The gateway's key for /ai/voice/gateway/* (same value as its VOICE_GATEWAY_KEY). */
+    gatewayKey: env('AI_VOICE_GATEWAY_KEY') ?? '',
+    /** A ticket must be used to connect within this time; reconnecting asks for a new one. */
+    ticketTtlMs: 120_000,
+    sessionMaxMs: (Number(env('AI_VOICE_SESSION_MINUTES') ?? 15) || 15) * 60_000,
+    maxUtteranceMs: 30_000,
+    /** Longest reply read aloud (characters); longer replies are cut at a sentence. */
+    maxSpokenChars: Number(env('AI_VOICE_MAX_SPOKEN_CHARS') ?? 400) || 400,
+    maxConcurrentPerActor: 2,
+    maxConcurrentPerShop: Number(env('AI_VOICE_MAX_CONCURRENT_PER_SHOP') ?? 5) || 5,
+    /** Minutes of speech per person / per shop per day (UTC). */
+    dailyMinutesPerActor: Number(env('AI_VOICE_DAILY_MINUTES') ?? 30) || 30,
+    dailyMinutesPerShop: Number(env('AI_VOICE_SHOP_DAILY_MINUTES') ?? 120) || 120,
+    /** Original speech transcripts are dropped from conversations after this many days (cleaned text stays). */
+    transcriptRetentionDays: Number(env('AI_VOICE_TRANSCRIPT_RETENTION_DAYS') ?? 30) || 30,
+    /** AI_VOICE_CONFIRM=false: no spoken confirmations at all (every preview needs a tap). */
+    spokenConfirm: env('AI_VOICE_CONFIRM') !== 'false',
+    /**
+     * Hindi replies spoken by ChatterBox on the warm Kaggle workers (the Voice studio's engine), with Cloudflare as the
+     * fallback when no worker is free. AI_VOICE_KAGGLE_TTS=false: Cloudflare only (English).
+     */
+    kaggleTts: env('AI_VOICE_KAGGLE_TTS') !== 'false',
+  };
+
+  get voiceEnabled(): boolean {
+    return (
+      env('AI_VOICE_ENABLED') !== 'false' &&
+      !!this.voice.gatewayUrl &&
+      this.voice.ticketSecret.length >= 32 &&
+      this.voice.gatewayKey.length >= 32
+    );
+  }
+
   /** Conversations untouched for this long are deleted (messages and previews; audit rows stay). */
   readonly retentionDays = Number(env('AI_RETENTION_DAYS') ?? 90) || 90;
 

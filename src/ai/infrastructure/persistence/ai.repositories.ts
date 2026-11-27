@@ -38,6 +38,9 @@ import {
   IAiUsageRepository,
   AI_LANGUAGES,
   AI_REPLY_STYLES,
+  AI_SPEECH_LANGUAGES,
+  AI_VOICES,
+  AiPreferencesUpdate,
   DEFAULT_AI_PREFERENCES,
 } from '../../application';
 
@@ -228,6 +231,24 @@ export class AiMessagesRepository implements IAiMessagesRepository {
 
   async deleteTurn(conversationId: string, turnIndex: number): Promise<void> {
     await (await this.db.repository(AiMessageEntity)).delete({ conversationId, turnIndex });
+  }
+
+  async redactTranscripts(before: Date): Promise<number> {
+    const rows: unknown = await (
+      await this.db.connection()
+    ).query(
+      `UPDATE ai_messages
+          SET content = (SELECT COALESCE(jsonb_agg(b), '[]'::jsonb)
+                           FROM jsonb_array_elements(content) b
+                          WHERE b->>'type' <> 'transcript')
+        WHERE created_at < $1
+          AND content @> '[{"type":"transcript"}]'::jsonb
+        RETURNING id`,
+      [before],
+    );
+    // pg returns [rows, count] for UPDATE … RETURNING through TypeORM's query().
+    const list = Array.isArray(rows) && Array.isArray(rows[0]) ? (rows[0] as unknown[]) : (rows as unknown[]);
+    return Array.isArray(list) ? list.length : 0;
   }
 
   async saveResponse(conversationId: string, turnIndex: number, response: unknown): Promise<void> {
@@ -546,9 +567,20 @@ export class AiPreferencesRepository implements IAiPreferencesRepository {
     return row ? toPreferences(row) : { ...DEFAULT_AI_PREFERENCES };
   }
 
-  async save(actorUserId: string, prefs: Pick<AiPreferences, 'language' | 'replyStyle'>): Promise<AiPreferences> {
+  async save(actorUserId: string, prefs: AiPreferencesUpdate): Promise<AiPreferences> {
     const repo = await this.db.repository(AiUserPreferencesEntity);
-    await repo.upsert({ actorUserId, language: prefs.language, replyStyle: prefs.replyStyle }, ['actorUserId']);
+    const next = { ...(await this.get(actorUserId)), ...prefs };
+    await repo.upsert(
+      {
+        actorUserId,
+        language: next.language,
+        replyStyle: next.replyStyle,
+        speakReplies: next.speakReplies,
+        speechLanguage: next.speechLanguage,
+        voice: next.voice,
+      },
+      ['actorUserId'],
+    );
     return this.get(actorUserId);
   }
 }
@@ -561,6 +593,11 @@ function toPreferences(row: AiUserPreferencesEntity): AiPreferences {
     replyStyle: (AI_REPLY_STYLES as readonly string[]).includes(row.replyStyle)
       ? (row.replyStyle as AiPreferences['replyStyle'])
       : 'short',
+    speakReplies: row.speakReplies !== false,
+    speechLanguage: (AI_SPEECH_LANGUAGES as readonly string[]).includes(row.speechLanguage)
+      ? (row.speechLanguage as AiPreferences['speechLanguage'])
+      : 'auto',
+    voice: (AI_VOICES as readonly string[]).includes(row.voice) ? (row.voice as AiPreferences['voice']) : 'asteria',
     updatedAt: row.updatedAt,
   };
 }

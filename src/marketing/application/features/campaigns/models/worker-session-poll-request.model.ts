@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 
 /** A warm Kaggle worker session asking for its next job (also its heartbeat). Authorised by the session token. */
 export class WorkerSessionPollRequestModel {
@@ -12,4 +12,8 @@ export class WorkerSessionPollRequestModel {
   pipeline?: 'image' | 'video' | 'video-fast' | null;
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() finishedJobId?: string | null;
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsString() @MaxLength(500) jobError?: string | null;
+  @ApiPropertyOptional({ description: 'Speaking for ByajBazaar AI right now (takes voice jobs only)' })
+  @IsOptional()
+  @IsBoolean()
+  aiVoiceHot?: boolean;
 }

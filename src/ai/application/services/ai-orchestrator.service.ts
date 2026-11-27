@@ -65,6 +65,21 @@ export interface AiChatInput {
   clientMessageId?: string;
   /** The screen the person is on (e.g. /inventory), for context-aware answers. */
   page?: string;
+  /**
+   * Set when the message was spoken (the voice gateway transcribed it): the original transcript is stored with the
+   * message for audit, and the model is told it may contain recognition mistakes. `message` is the cleaned-up text.
+   */
+  voice?: AiVoiceTurnContext;
+}
+
+export interface AiVoiceTurnContext {
+  original: string;
+  language: string | null;
+  confidence: number | null;
+  /** From the transcript normaliser, e.g. unit:aana, fraction, amount. */
+  flags: string[];
+  /** Previews of these actions can be confirmed by saying "confirm" (the rest need a tap). */
+  confirmableByVoice: string[];
 }
 
 type ToolCall = Extract<AiModelBlock, { type: 'tool_call' }>;
@@ -176,8 +191,17 @@ export class AiOrchestratorService {
     ]);
     const userBlocks: AiStoredBlock[] = [
       { type: 'text', text },
-      { type: 'context', text: contextText(actor, input.page, open, now, prefs) },
+      { type: 'context', text: contextText(actor, input.page, open, now, prefs, input.voice) },
     ];
+    if (input.voice) {
+      userBlocks.push({
+        type: 'transcript',
+        original: input.voice.original.slice(0, limits.maxMessageChars),
+        language: input.voice.language,
+        confidence: input.voice.confidence,
+        flags: input.voice.flags.slice(0, 10),
+      });
+    }
     try {
       await this.messages.append(conversation.id, [
         { turnIndex, seq: 0, role: 'user', content: userBlocks, clientMessageId: input.clientMessageId ?? null },
@@ -658,6 +682,7 @@ function contextText(
   open: AiPendingAction[],
   now: Date,
   prefs: AiPreferences = DEFAULT_AI_PREFERENCES,
+  voice?: AiVoiceTurnContext,
 ): string {
   const date = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -667,9 +692,30 @@ function contextText(
   }).format(now);
   const lines = [`Today: ${date} (India)`, `Role in this shop: ${actor.shopRole}`];
   const language = LANGUAGE_NOTE[prefs.language];
-  if (language) lines.push(`Person's preference: ${language}`);
+  if (language) lines.push(`Language preference (overrides the language of the message): ${language}`);
   if (prefs.replyStyle === 'detailed')
     lines.push("Person's preference: a little more detail is welcome (up to 5 lines).");
+  if (voice) {
+    lines.push(
+      'Channel: voice. The person spoke this message; it was transcribed automatically and may contain recognition mistakes. If a number, weight, amount or name looks wrong or unclear, ask before preparing anything.',
+    );
+    if (voice.language) lines.push(`Speech language detected: ${voice.language}`);
+    const regional = voice.flags
+      .filter((f) => f.startsWith('unit:'))
+      .map((f) => f.slice(5))
+      .filter((u) => u !== 'tola');
+    if (regional.length) {
+      lines.push(
+        `Traditional units said: ${regional.join(', ')}. Do not convert them yourself — ask for the weight in grams (or the purity in %).`,
+      );
+    }
+    lines.push(
+      voice.confirmableByVoice.length
+        ? 'Voice confirmation: stock and customer previews can be saved by saying "confirm"; loans, payments and deposits need a tap on Confirm.'
+        : 'Voice confirmation is off: every preview needs a tap on Confirm.',
+    );
+    lines.push('Your reply may be read aloud: one or two short sentences, no lists, tables or symbols.');
+  }
   const screen = page && /^\/[a-z0-9/_-]{0,80}$/i.test(page) ? page : null;
   if (screen) lines.push(`Screen: ${screen}`);
   if (open.length) {

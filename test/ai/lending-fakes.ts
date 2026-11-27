@@ -263,8 +263,8 @@ export class MemoryPreferences implements IAiPreferencesRepository {
   async get(actorUserId: string) {
     return this.rows.get(actorUserId) ?? { ...DEFAULT_AI_PREFERENCES };
   }
-  async save(actorUserId: string, prefs: Pick<AiPreferences, 'language' | 'replyStyle'>) {
-    const row = { ...prefs, updatedAt: new Date() };
+  async save(actorUserId: string, prefs: Partial<Omit<AiPreferences, 'updatedAt'>>) {
+    const row = { ...(await this.get(actorUserId)), ...prefs, updatedAt: new Date() };
     this.rows.set(actorUserId, row);
     return row;
   }

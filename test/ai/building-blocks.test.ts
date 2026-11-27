@@ -161,6 +161,21 @@ describe('Workers AI model adapter', () => {
     assert.deepEqual(prose.content, [{ type: 'text', text: 'Payal is an anklet.' }]);
   });
 
+  it("drops Gemma's leaked control tokens and thinking (the bare `<channel|>` reply seen in production)", () => {
+    assert.deepEqual(fromWorkersAiResult({ response: '<channel|>' }, 'm', 1, names).content, []);
+    const thought = fromWorkersAiResult({ response: 'The user wants stock<channel|>Here it is.' }, 'm', 1, names);
+    assert.deepEqual(thought.content, [{ type: 'text', text: 'Here it is.' }]);
+    const wrapped = fromWorkersAiResult(
+      { choices: [{ message: { content: '<|channel>thought\nhmm<channel|>Namaste <end_of_turn>' } }] },
+      'm',
+      1,
+      names,
+    );
+    assert.deepEqual(wrapped.content, [{ type: 'text', text: 'Namaste' }]);
+    const plain = fromWorkersAiResult({ response: 'Use <b> only as text: 5 < 7 > 3' }, 'm', 1, names);
+    assert.deepEqual(plain.content, [{ type: 'text', text: 'Use <b> only as text: 5 < 7 > 3' }]);
+  });
+
   it('passes unreadable arguments on so the strict schema refuses them', () => {
     const result = fromWorkersAiResult(
       {

@@ -343,6 +343,14 @@ except Exception as exc:
     raise
 `;
 
+/**
+ * The voice engine's set-up (ComfyUI + ChatterBox on port 8190, on a GPU with room), as Python source. The warm worker's
+ * ByajBazaar AI voice lane runs this same code (quietly) to bring the engine up for the assistant.
+ */
+export function voiceEngineSource(): string {
+  return CELL_VOICE_ENGINE.replace('__VOICE_MODEL_FILES__', () => VOICE_FILES_PY);
+}
+
 /** VOICE_MODEL_FILES as a Python list of (url, path) tuples (JSON strings are valid Python strings). */
 const VOICE_FILES_PY =
   '[\n' + VOICE_MODEL_FILES.map((f) => `    (${JSON.stringify(f.url)}, ${JSON.stringify(f.path)}),`).join('\n') + '\n]';

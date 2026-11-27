@@ -5,6 +5,7 @@ import { buildModelHistory, textOf } from './ai-history';
 import { AiKnowledgeService } from './ai-knowledge.service';
 import { AI_SUMMARY_PROMPT } from './ai-prompts';
 import { AiConfig } from '../../ai.config';
+import { AI_VOICE_SESSIONS_REPOSITORY, IAiVoiceSessionsRepository } from '../../voice/ports/voice.ports';
 import {
   AI_ACTIONS_REPOSITORY,
   AI_CONVERSATIONS_REPOSITORY,
@@ -19,6 +20,8 @@ import {
   IAiMessagesRepository,
   IAiQueue,
   IAiUsageRepository,
+  AI_VOICE_GPU,
+  IAiVoiceGpu,
 } from '../ports';
 
 /** How many stale conversations one purge run deletes (the next run continues). */
@@ -39,6 +42,8 @@ export class AiJobsService {
     @Inject(AI_MESSAGES_REPOSITORY) private readonly messages: IAiMessagesRepository,
     @Inject(AI_ACTIONS_REPOSITORY) private readonly actions: IAiActionsRepository,
     @Inject(AI_USAGE_REPOSITORY) private readonly usage: IAiUsageRepository,
+    @Inject(AI_VOICE_SESSIONS_REPOSITORY) private readonly voiceSessions: IAiVoiceSessionsRepository,
+    @Inject(AI_VOICE_GPU) private readonly voiceGpu: IAiVoiceGpu,
     @InjectPinoLogger(AiJobsService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -59,6 +64,8 @@ export class AiJobsService {
         return this.summarize(job.conversationId, job.uptoTurn);
       case 'maintenance.purge':
         return this.purge();
+      case 'voice.prewarm':
+        return this.voiceGpu.warm();
     }
   }
 
@@ -116,6 +123,13 @@ export class AiJobsService {
       await this.conversations.delete(id);
     }
     if (ids.length) this.logger.info({ deleted: ids.length, before }, 'AI conversations purged');
+    // Voice: original speech transcripts have their own (shorter) retention; sessions past their end are closed.
+    const now = new Date();
+    const transcripts = await this.messages.redactTranscripts(
+      new Date(now.getTime() - this.config.voice.transcriptRetentionDays * 86_400_000),
+    );
+    const sessions = await this.voiceSessions.expireStale(now);
+    if (transcripts || sessions) this.logger.info({ transcripts, sessions }, 'AI voice retention applied');
     return { deleted: ids.length };
   }
 }

@@ -238,6 +238,15 @@ export class MemoryMessages implements IAiMessagesRepository {
     );
     return { message, response: final?.response ?? null };
   }
+  async redactTranscripts(before: Date) {
+    let changed = 0;
+    for (const row of this.rows) {
+      if (row.createdAt >= before || !row.content.some((b) => b.type === 'transcript')) continue;
+      row.content = row.content.filter((b) => b.type !== 'transcript');
+      changed++;
+    }
+    return changed;
+  }
   async deleteTurn(conversationId: string, turnIndex: number) {
     for (let i = this.rows.length - 1; i >= 0; i--) {
       if (this.rows[i].conversationId === conversationId && this.rows[i].turnIndex === turnIndex)

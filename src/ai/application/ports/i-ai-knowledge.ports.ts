@@ -67,7 +67,16 @@ export interface IAiDocumentStorage {
 export type AiJob =
   | { type: 'knowledge.reindex'; collection?: AiKnowledgeCollection; requestedBy?: string | null }
   | { type: 'conversation.summarize'; conversationId: string; uptoTurn: number }
-  | { type: 'maintenance.purge' };
+  | { type: 'maintenance.purge' }
+  /** A voice session started: make sure a warm Kaggle worker is up for the assistant's Hindi speech. */
+  | { type: 'voice.prewarm' };
+
+/** The warm Kaggle workers (marketing's GPU sessions) that speak the assistant's Hindi replies. */
+export const AI_VOICE_GPU = 'AI_VOICE_GPU';
+export interface IAiVoiceGpu {
+  /** Starts a warm worker on a free account when none is running or booting (existing assignment rules). */
+  warm(): Promise<'warm' | 'starting' | 'unavailable'>;
+}
 
 /** Background jobs (QStash). Without the queue, jobs run in-process. */
 export const AI_QUEUE = 'AI_QUEUE';

@@ -91,6 +91,9 @@ import {
   verifyMarketingWorkerToken,
   effectiveConcurrency,
   isSessionLimitError,
+  assistantVoiceLink,
+  ASSISTANT_VOICE_HOT_MS,
+  workersNeeded,
 } from '../utils';
 import { MarketingWorkerEvent } from './marketing-worker-event';
 import { WorkerSessionAnswer } from './worker-session-answer';
@@ -604,40 +607,7 @@ export class MarketingRenderService {
       await this.startJob(job, account.username, 0);
     }
 
-    const candidates: DispatchCandidate[] = [];
-    /** Why each account cannot take work right now (logged when renders wait with no free account). */
-    const unavailable: string[] = [];
-    for (const account of accounts) {
-      if (account.status !== EKaggleAccountStatus.Ready) {
-        unavailable.push(`${account.username}: ${String(account.status).toLowerCase().replace(/_/g, ' ')}`);
-        continue;
-      }
-      if (isAccountCoolingDown(account)) {
-        unavailable.push(
-          `${account.username}: resting after "${(account.lastError ?? 'a failed start').slice(0, 120)}"`,
-        );
-        continue;
-      }
-      const concurrency = effectiveConcurrency(workers.get(account.username).concurrency);
-      const used = busy[account.username] ?? 0;
-      if (used >= concurrency) {
-        unavailable.push(`${account.username}: all ${concurrency} GPU session(s) in use`);
-        continue;
-      }
-      const quota = await this.gpuQuota(account);
-      if (!quota.usable) {
-        unavailable.push(`${account.username}: weekly GPU quota nearly used (${quota.hoursLeft ?? '?'} h left)`);
-        continue;
-      }
-      candidates.push({
-        username: account.username,
-        concurrency,
-        used,
-        paid: workers.get(account.username).provider === 'colab',
-        gpuHoursLeft: quota.hoursLeft,
-        lastAssignedAt: account.lastAssignedAt ? new Date(account.lastAssignedAt).getTime() : 0,
-      });
-    }
+    const { candidates, unavailable } = await this.renderCandidates(accounts, workers, busy);
 
     if (!workers.size) unavailable.push('no Kaggle account is configured');
     if (candidates.length === 0) await this.reportNoCapacity(unavailable);
@@ -672,6 +642,49 @@ export class MarketingRenderService {
     }
   }
 
+  /** Ready accounts that can start a GPU session now (and why the others cannot), for dispatch and the assistant. */
+  private async renderCandidates(
+    accounts: Awaited<ReturnType<IKaggleAccountsRepository['list']>>,
+    workers: Map<string, Awaited<ReturnType<IKaggleWorkerPool['workers']>>[number]>,
+    busy: Record<string, number>,
+  ): Promise<{ candidates: DispatchCandidate[]; unavailable: string[] }> {
+    const candidates: DispatchCandidate[] = [];
+    /** Why each account cannot take work right now (logged when renders wait with no free account). */
+    const unavailable: string[] = [];
+    for (const account of accounts) {
+      if (account.status !== EKaggleAccountStatus.Ready) {
+        unavailable.push(`${account.username}: ${String(account.status).toLowerCase().replace(/_/g, ' ')}`);
+        continue;
+      }
+      if (isAccountCoolingDown(account)) {
+        unavailable.push(
+          `${account.username}: resting after "${(account.lastError ?? 'a failed start').slice(0, 120)}"`,
+        );
+        continue;
+      }
+      const concurrency = effectiveConcurrency(workers.get(account.username).concurrency);
+      const used = busy[account.username] ?? 0;
+      if (used >= concurrency) {
+        unavailable.push(`${account.username}: all ${concurrency} GPU session(s) in use`);
+        continue;
+      }
+      const quota = await this.gpuQuota(account);
+      if (!quota.usable) {
+        unavailable.push(`${account.username}: weekly GPU quota nearly used (${quota.hoursLeft ?? '?'} h left)`);
+        continue;
+      }
+      candidates.push({
+        username: account.username,
+        concurrency,
+        used,
+        paid: workers.get(account.username).provider === 'colab',
+        gpuHoursLeft: quota.hoursLeft,
+        lastAssignedAt: account.lastAssignedAt ? new Date(account.lastAssignedAt).getTime() : 0,
+      });
+    }
+    return { candidates, unavailable };
+  }
+
   /**
    * Warm sessions pull waiting jobs themselves (`nextForSession`). Here: retire dead sessions, then start one new
    * session per waiting job that no idle or booting session will pick up — so a busy worker never delays the next
@@ -679,11 +692,23 @@ export class MarketingRenderService {
    */
   private async dispatchSessions(candidates: DispatchCandidate[]): Promise<void> {
     await this.reapSessions();
-    const waiting = await this.jobs.countWaiting();
-    const free = (await this.jobs.listSessions()).filter(
+    const byKind = await this.jobs.countWaitingByKind();
+    const waiting = Object.values(byKind).reduce((sum, n) => sum + (n ?? 0), 0);
+    const freeSessions = (await this.jobs.listSessions()).filter(
       (s) => s.status === ERenderJobStatus.Starting || s.payload.session?.state !== 'busy',
+    );
+    const free = freeSessions.length;
+    // A session speaking for ByajBazaar AI only takes voice jobs: image / video work gets a worker of its own.
+    const freeHot = freeSessions.filter(
+      (s) => Date.parse(s.payload.session?.aiVoiceHotUntil ?? '') > Date.now(),
     ).length;
-    let need = waiting - free;
+    const waitingVoice = byKind[ERenderJobKind.Voice] ?? 0;
+    let need = workersNeeded({
+      waitingVoice,
+      waitingOther: waiting - waitingVoice,
+      freeHot,
+      freeCold: free - freeHot,
+    });
     while (need > 0) {
       const candidate = pickDispatchCandidate(candidates);
       if (!candidate) break;
@@ -700,6 +725,28 @@ export class MarketingRenderService {
         { delaySeconds: RECHECK_DELAY_SECONDS, deduplicationId: `marketing-dispatch-${window}` },
       );
     }
+  }
+
+  /**
+   * ByajBazaar AI started a voice session: make sure a warm worker is up or booting, so the assistant's Hindi replies
+   * can be spoken by its voice lane (ChatterBox). Picks the account exactly like dispatch (free slot, GPU hours, not
+   * resting). Nothing starts when a worker is already running or booting.
+   */
+  async warmForAssistant(): Promise<'warm' | 'starting' | 'unavailable'> {
+    if (!this.config.publicApiBaseUrl || !assistantVoiceLink(randomUUID(), 'probe', 0)) return 'unavailable';
+    const sessions = await this.jobs.listSessions();
+    if (sessions.some((s) => s.status === ERenderJobStatus.Running)) return 'warm';
+    if (sessions.length) return 'starting';
+    const workers = new Map((await this.pool.workers()).map((w) => [w.id, w]));
+    const busy = await this.jobs.countBusyByWorker();
+    const accounts = (await this.accounts.list()).filter((a) => workers.has(a.username));
+    const { candidates } = await this.renderCandidates(accounts, workers, busy);
+    const candidate = pickDispatchCandidate(candidates);
+    if (!candidate) return 'unavailable';
+    const slot = await this.freeSlot(candidate.username, candidate.concurrency);
+    const started = await this.startSession(candidate.username, slot);
+    if (started) this.logger.info({ account: candidate.username }, 'Warm GPU worker started for ByajBazaar AI voice');
+    return started ? 'starting' : 'unavailable';
   }
 
   /**
@@ -748,14 +795,17 @@ export class MarketingRenderService {
       const worker = (await this.pool.workers()).find((w) => w.id === workerId);
       const colab = worker?.provider === 'colab';
       const cache = account?.modelsDataset ?? null;
+      const sessionSeconds = this.sessionSecondsFor(worker);
+      const aiVoice = assistantVoiceLink(session.id, workerId, sessionSeconds);
       const notebook = buildWorkerSessionNotebook({
         jobId: session.id,
         token: signMarketingWorkerToken(session.id),
         apiBaseUrl: this.config.publicApiBaseUrl,
         wsUrl: this.config.websocketUrl,
-        sessionSeconds: this.sessionSecondsFor(worker),
+        sessionSeconds,
         provider: colab ? 'colab' : 'kaggle',
         ...(colab && cache?.startsWith('gs://') ? { modelsGcs: cache } : {}),
+        ...(aiVoice ? { aiVoice } : {}),
       });
       const pushed = await this.pool.pushNotebook(
         workerId,
@@ -870,7 +920,11 @@ export class MarketingRenderService {
       settle,
       remainingSeconds: remaining,
       pipeline: request.pipeline ?? state.pipeline ?? null,
+      aiVoiceHotUntil: request.aiVoiceHot ? new Date(Date.now() + ASSISTANT_VOICE_HOT_MS).toISOString() : null,
     };
+    // Speaking for ByajBazaar AI right now: voice jobs only (image / video work would stop its voice engine), and
+    // it is never sent home for being idle — the assistant comes first; marketing gets another worker.
+    const aiVoiceHot = !!request.aiVoiceHot;
     const stop = async (reason: string): Promise<WorkerSessionAnswer> => {
       await this.endSession({ ...session, payload: { ...session.payload, session: base } }, `Stopped: ${reason}`);
       await this.scheduler.schedule({ step: 'dispatch' }); // a fresh session takes over if work is waiting
@@ -888,7 +942,11 @@ export class MarketingRenderService {
     }
     if (!(await this.gpuQuota(account)).usable) return stop('the account is out of GPU hours');
 
-    const job = await this.jobs.claimNextForSession(session, base.pipeline);
+    const job = await this.jobs.claimNextForSession(
+      session,
+      base.pipeline,
+      aiVoiceHot ? [ERenderJobKind.Voice] : undefined,
+    );
     if (job) return this.handToSession(session, base, await this.absorbSiblings(session, job), remaining);
 
     const now = Date.now();
@@ -910,7 +968,7 @@ export class MarketingRenderService {
         return left < remaining || (left === remaining && s.id > session.id);
       });
     const limitMs = (await this.settings.kaggle()).warmIdleMinutes * 60_000;
-    if (idleMs >= (keeper ? limitMs : Math.min(limitMs, EXTRA_IDLE_MS))) {
+    if (!aiVoiceHot && idleMs >= (keeper ? limitMs : Math.min(limitMs, EXTRA_IDLE_MS))) {
       return stop(`idle for ${Math.round(idleMs / 60_000)} min`);
     }
     await this.jobs.update(session.id, {

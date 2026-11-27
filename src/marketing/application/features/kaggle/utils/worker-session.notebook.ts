@@ -1,6 +1,7 @@
 import { COLAB_RUNTIME_PY } from './colab-runtime.notebook';
 import { IMAGE_MODELS, IMAGE_PIP_PACKAGES } from './image-worker.notebook';
 import { IMAGE_COMFY_FILES, VOICE_MODEL_FILES } from './model-cache';
+import { voiceEngineSource } from './voice-worker.notebook';
 import { WorkerSessionNotebookJob } from './worker-session-notebook-job';
 
 const md = (source: string) => ({ cell_type: 'markdown', metadata: {}, source });
@@ -195,6 +196,309 @@ threading.Thread(target=boot_installs, daemon=True).start()
 threading.Thread(target=boot_staging, daemon=True).start()
 `;
 
+/**
+ * ByajBazaar AI voice lane (Backend/docs/AI_VOICE.md §2a). With SESSION["aiVoice"], a background thread keeps a
+ * WebSocket to the Cloudflare voice gateway and speaks the assistant's Hindi replies with ChatterBox — the Voice
+ * studio's own engine (ComfyUI on port 8190, started with the voice job's own set-up code). It runs beside the job loop,
+ * not through the queue, and its prompts go to the front of the voice engine's queue: the assistant never waits behind
+ * marketing work. While the assistant is in use ("hot") the session reports it at every poll and takes voice jobs only;
+ * image / video work (which needs the GPUs) is never started under it, and the lane steps aside while such work runs.
+ */
+const CELL_AI_VOICE = String.raw`
+import threading, re
+WORKER["voice_lock"] = WORKER.get("voice_lock") or threading.RLock()
+WORKER["heavy"] = False
+WORKER["stopping"] = False
+AI_VOICE = SESSION.get("aiVoice")
+
+
+def ai_voice_hot():
+    state = WORKER.get("ai_voice")
+    return bool(state and state["hot_until"] > time.time())
+
+
+if AI_VOICE:
+    import uuid, shutil
+    from urllib.parse import quote
+    import websocket
+
+    AI_VOICE_ENGINE_SRC = json.loads(__VOICE_ENGINE_JSON__)
+    AI_PORT = 8190
+    AI_BASE = f"http://127.0.0.1:{AI_PORT}"
+    AI = {"hot_until": 0.0, "starting": False, "current": None, "prompt": None, "cancelled": set(), "ws": None,
+          "ffmpeg": None}
+    WORKER["ai_voice"] = AI
+    AI_SEND = threading.Lock()
+    AI_SPEAK = threading.Lock()
+    AI_FIRST_PART, AI_PART_LIMIT, AI_MAX_PARTS = 80, 160, 10
+    AI_SETTINGS = {"exaggeration": 0.5, "cfg_weight": 0.5, "temperature": 0.8, "repetition_penalty": 2.0,
+                   "min_p": 0.05, "top_p": 1.0}
+    AI_LABELS = {"hi": "Hindi (hi)", "en": "English (en)"}
+    AI_SEED = 4242  # one voice for every reply
+
+    class _AiQuiet:
+        def send(self, *args, **kwargs):
+            pass
+
+    def ai_ffmpeg():
+        if AI["ffmpeg"]:
+            return AI["ffmpeg"]
+        exe = shutil.which("ffmpeg")
+        if not exe:
+            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "imageio-ffmpeg>=0.5.1"], check=True)
+            import imageio_ffmpeg
+            exe = imageio_ffmpeg.get_ffmpeg_exe()
+        AI["ffmpeg"] = exe
+        return exe
+
+    def ai_engine_ready():
+        voice = WORKER.get("comfy_voice")
+        return bool(voice and voice.get("proc") is not None and voice["proc"].poll() is None)
+
+    def ai_send(payload, binary=None):
+        ws = AI["ws"]
+        if ws is None:
+            return
+        with AI_SEND:
+            ws.send(json.dumps(payload))
+            if binary is not None:
+                ws.send_binary(binary)
+
+    def ai_status():
+        try:
+            ai_send({"type": "status", "engineReady": ai_engine_ready() and not WORKER.get("heavy"),
+                     "busy": AI["current"] is not None})
+        except Exception:
+            pass
+
+    def ai_start_engine():
+        """The voice engine, brought up with the voice job's own set-up code (same models, node and GPU choice)."""
+        try:
+            with WORKER["voice_lock"]:
+                if ai_engine_ready() or WORKER.get("heavy") or WORKER.get("stopping"):
+                    return
+                print("AI voice: starting the voice engine", flush=True)
+                ns = {"WORKER": WORKER, "report": _AiQuiet(), "find_ffmpeg": ai_ffmpeg, "__name__": "__ai_voice__",
+                      "__builtins__": __builtins__}
+                exec("import os, sys, json, time, subprocess, shutil, glob, traceback, threading, uuid, re\nimport requests",
+                     ns)
+                exec(compile(AI_VOICE_ENGINE_SRC, "<ai voice engine>", "exec"), ns)
+                print("AI voice: voice engine ready", flush=True)
+        except BaseException as exc:
+            print("AI voice: the voice engine did not start:", exc, flush=True)
+        finally:
+            AI["starting"] = False
+            ai_status()
+
+    def ai_split(text):
+        """Sentence parts; the first one short so its audio is ready sooner."""
+        parts, current = [], ""
+        for sentence in (s.strip() for s in re.split(r"(?<=[.!?।])\s+|\n+", str(text or "")) if s and s.strip()):
+            limit = AI_FIRST_PART if not parts and not current else AI_PART_LIMIT
+            while len(sentence) > limit:
+                if current:
+                    parts.append(current)
+                    current = ""
+                cut = max(sentence.rfind(", ", 0, limit), sentence.rfind(" ", 0, limit))
+                cut = cut + 1 if cut > limit // 2 else limit
+                parts.append(sentence[:cut].strip())
+                sentence = sentence[cut:].strip()
+                limit = AI_PART_LIMIT
+            if not sentence:
+                continue
+            if current and len(current) + 1 + len(sentence) > limit:
+                parts.append(current)
+                current = sentence
+            else:
+                current = (current + " " + sentence).strip()
+        if current:
+            parts.append(current)
+        return [p for p in parts if p][:AI_MAX_PARTS]
+
+    def ai_node(info, cls, **inputs):
+        """A ComfyUI API node checked against the engine's /object_info (unknown inputs dropped, defaults filled)."""
+        spec = (info.get(cls) or {}).get("input", {})
+        if not spec:
+            raise RuntimeError(f"The voice engine has no {cls} node")
+        known = {**spec.get("required", {}), **spec.get("optional", {})}
+        inputs = {k: v for k, v in inputs.items() if k in known}
+        for name, item in spec.get("required", {}).items():
+            if name in inputs:
+                continue
+            kind = item[0]
+            cfg = item[1] if len(item) > 1 and isinstance(item[1], dict) else {}
+            options = kind if isinstance(kind, list) else cfg.get("options") if kind == "COMBO" else None
+            if "default" in cfg:
+                inputs[name] = cfg["default"]
+            elif options:
+                inputs[name] = options[0]
+            else:
+                raise RuntimeError(f"{cls}: required input {name} is not wired")
+        return {"class_type": cls, "inputs": inputs}
+
+    def ai_mp3(path):
+        done = subprocess.run([ai_ffmpeg(), "-hide_banner", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", "24000",
+                               "-c:a", "libmp3lame", "-b:a", "64k", "-f", "mp3", "-"], capture_output=True)
+        if done.returncode != 0:
+            raise RuntimeError("ffmpeg failed: " + done.stderr.decode(errors="replace")[-300:])
+        return done.stdout
+
+    def ai_speak(event):
+        rid = str(event.get("id") or "")[:64]
+        with AI_SPEAK:
+            if rid in AI["cancelled"]:
+                return
+            if not ai_engine_ready() or WORKER.get("heavy"):
+                ai_send({"type": "error", "id": rid, "message": "the voice engine is not ready"})
+                return
+            AI["current"] = rid
+            ai_status()
+            files, comfy = [], None
+            started = time.time()
+            try:
+                info = WORKER["comfy_voice"]["info"]
+                parts = ai_split(event.get("text"))
+                if not parts:
+                    raise ValueError("nothing to say")
+                label = AI_LABELS.get(event.get("language") or "hi", "Hindi (hi)")
+                tag = uuid.uuid4().hex[:8]
+                graph = {}
+                for i, part in enumerate(parts):
+                    graph[f"tts{i}"] = ai_node(info, "FL_ChatterboxMultilingualTTS", text=part, language=label,
+                                               seed=AI_SEED, use_cpu=False, keep_model_loaded=True, **AI_SETTINGS)
+                    graph[f"save{i}"] = ai_node(info, "SaveAudio", audio=[f"tts{i}", 0],
+                                                filename_prefix=f"aivoice/{tag}_{i:03d}")
+                client_id = uuid.uuid4().hex
+                comfy = websocket.create_connection(f"ws://127.0.0.1:{AI_PORT}/ws?clientId={client_id}", timeout=30)
+                # front: ahead of any marketing voiceover waiting in the same engine.
+                r = requests.post(AI_BASE + "/prompt", json={"prompt": graph, "client_id": client_id, "front": True},
+                                  timeout=30)
+                if not r.ok:
+                    raise RuntimeError("the voice engine refused the request: " + r.text[:300])
+                pid = r.json()["prompt_id"]
+                AI["prompt"] = pid
+                ready, sent = {}, 0
+                comfy.settimeout(90)
+                while sent < len(parts):
+                    msg = comfy.recv()
+                    if not isinstance(msg, str):
+                        continue
+                    ev = json.loads(msg)
+                    kind, data = ev.get("type"), ev.get("data") or {}
+                    if data.get("prompt_id") not in (None, pid):
+                        continue
+                    if kind == "executed" and str(data.get("node") or "").startswith("save"):
+                        index = int(str(data["node"])[4:])
+                        saved = (data.get("output") or {}).get("audio") or []
+                        if not saved:
+                            raise RuntimeError(f"part {index + 1} produced no audio")
+                        f = saved[0]
+                        path = os.path.join(COMFY_DIR, f.get("type") or "output", f.get("subfolder", ""), f["filename"])
+                        files.append(path)
+                        ready[index] = ai_mp3(path)
+                        # In order: a part that finished early waits for the ones before it.
+                        while sent in ready and rid not in AI["cancelled"]:
+                            ai_send({"type": "audio", "id": rid, "segment": sent, "mime": "audio/mpeg",
+                                     "last": sent == len(parts) - 1}, ready.pop(sent))
+                            if sent == 0:
+                                print(f"AI voice: first audio after {time.time() - started:.1f}s", flush=True)
+                            sent += 1
+                        if rid in AI["cancelled"]:
+                            break
+                    elif kind == "execution_error":
+                        raise RuntimeError(f"{data.get('node_type')}: {data.get('exception_message')}")
+                    elif kind == "execution_interrupted":
+                        break
+                ai_send({"type": "done", "id": rid})
+            except Exception as exc:
+                traceback.print_exc()
+                try:
+                    ai_send({"type": "error", "id": rid, "message": f"{type(exc).__name__}: {exc}"[:300]})
+                except Exception:
+                    pass
+            finally:
+                AI["current"] = None
+                AI["prompt"] = None
+                try:
+                    comfy and comfy.close()
+                except Exception:
+                    pass
+                for f in files:
+                    try:
+                        os.remove(f)
+                    except OSError:
+                        pass
+                ai_status()
+
+    def ai_cancel(rid):
+        AI["cancelled"].add(rid)
+        if len(AI["cancelled"]) > 200:
+            AI["cancelled"] = {rid}
+        pid = AI.get("prompt")
+        if AI["current"] != rid or not pid:
+            return
+        try:
+            queue = requests.get(AI_BASE + "/queue", timeout=5).json()
+            if any(item[1] == pid for item in queue.get("queue_running", [])):
+                requests.post(AI_BASE + "/interrupt", timeout=5)
+            else:
+                requests.post(AI_BASE + "/queue", json={"delete": [pid]}, timeout=5)
+        except Exception:
+            pass
+
+    def ai_lane():
+        backoff = 2
+        while not WORKER.get("stopping"):
+            try:
+                url = AI_VOICE["url"] + ("&" if "?" in AI_VOICE["url"] else "?") + "token=" + quote(AI_VOICE["token"], safe="")
+                AI["ws"] = websocket.create_connection(url, timeout=20)
+                backoff = 2
+                ai_send({"type": "hello", "sessionId": SESSION["jobId"],
+                         "engineReady": ai_engine_ready() and not WORKER.get("heavy"), "busy": AI["current"] is not None})
+                print("AI voice: connected to the voice gateway", flush=True)
+                last = None
+                while not WORKER.get("stopping"):
+                    ready = ai_engine_ready() and not WORKER.get("heavy")
+                    if not ready and ai_voice_hot() and not WORKER.get("heavy") and not AI["starting"]:
+                        AI["starting"] = True
+                        threading.Thread(target=ai_start_engine, daemon=True).start()
+                    if ready != last:
+                        ai_status()
+                        last = ready
+                    AI["ws"].settimeout(1.0)
+                    try:
+                        msg = AI["ws"].recv()
+                    except websocket.WebSocketTimeoutException:
+                        continue
+                    if not isinstance(msg, str):
+                        continue
+                    event = json.loads(msg)
+                    kind = event.get("type")
+                    if kind == "speak":
+                        AI["hot_until"] = max(AI["hot_until"], time.time() + 600)
+                        threading.Thread(target=ai_speak, args=(event,), daemon=True).start()
+                    elif kind == "cancel":
+                        ai_cancel(str(event.get("id") or ""))
+                    elif kind == "demand":
+                        AI["hot_until"] = max(AI["hot_until"], time.time() + float(event.get("seconds") or 600))
+                    elif kind == "ping":
+                        ai_send({"type": "pong"})
+            except Exception as exc:
+                print("AI voice lane:", exc, flush=True)
+            finally:
+                try:
+                    AI["ws"] and AI["ws"].close()
+                except Exception:
+                    pass
+                AI["ws"] = None
+            if not WORKER.get("stopping"):
+                time.sleep(backoff)
+                backoff = min(60, backoff * 2)
+
+    threading.Thread(target=ai_lane, daemon=True).start()
+    print("AI voice lane started", flush=True)
+`;
+
 const CELL_LOOP = `
 def free_gpus():
     gc.collect()
@@ -289,7 +593,7 @@ while True:
         answer = post("/worker/next", {"sessionId": SESSION["jobId"], "token": SESSION["token"],
                                        "remainingSeconds": int(max(0, remaining())),
                                        "pipeline": WORKER.get("pipeline"), "finishedJobId": finished,
-                                       "jobError": job_error})
+                                       "jobError": job_error, "aiVoiceHot": ai_voice_hot()})
         poll_failures = 0
     except PermissionError as exc:
         reason = str(exc)
@@ -313,15 +617,18 @@ while True:
     # "cpu" = no GPU model needed (the CPU-animated logo clip): keep whatever models are loaded for the next GPU job.
     # "voice" = ChatterBox: small, runs beside whatever is loaded (its own ComfyUI on a GPU with room) — it never
     # makes the session drop its image / video models. Before image or video work, the voice engine makes room.
-    if job["pipeline"] in ("image", "video", "video-fast") and WORKER.get("comfy_voice"):
-        voice = WORKER.pop("comfy_voice", None) or {}
-        if voice.get("proc") is not None and voice["proc"].poll() is None:
-            voice["proc"].terminate()
-            try:
-                voice["proc"].wait(30)
-            except Exception:
-                voice["proc"].kill()
-        free_gpus()
+    heavy = job["pipeline"] in ("image", "video", "video-fast")
+    with WORKER["voice_lock"]:  # the AI voice lane never (re)starts the engine while heavy work holds the GPUs
+        WORKER["heavy"] = heavy
+        if heavy and WORKER.get("comfy_voice"):
+            voice = WORKER.pop("comfy_voice", None) or {}
+            if voice.get("proc") is not None and voice["proc"].poll() is None:
+                voice["proc"].terminate()
+                try:
+                    voice["proc"].wait(30)
+                except Exception:
+                    voice["proc"].kill()
+            free_gpus()
     if job["pipeline"] not in ("cpu", "voice"):
         if WORKER.get("pipeline") not in (None, job["pipeline"]):
             print(f"Switching the GPUs from {WORKER['pipeline']} to {job['pipeline']} work", flush=True)
@@ -329,12 +636,18 @@ while True:
         WORKER["pipeline"] = job["pipeline"]
     print(f"=== job {job['id']} ({job['kind']}) · {remaining() / 3600:.1f} h of session left", flush=True)
     started = time.time()
-    job_error = run_job(job)
+    if job["pipeline"] == "voice":
+        with WORKER["voice_lock"]:  # a voiceover sets the engine up itself: the lane waits instead of racing it
+            job_error = run_job(job)
+    else:
+        job_error = run_job(job)
+    WORKER["heavy"] = False
     finished = job["id"]
     jobs_run += 1
     print(f"=== job {job['id']} finished in {(time.time() - started) / 60:.1f} min"
           + (f" with an error: {job_error}" if job_error else ""), flush=True)
 
+WORKER["stopping"] = True
 try:
     LISTENER["ws"] and LISTENER["ws"].close()
 except Exception:
@@ -378,6 +691,7 @@ export function buildWorkerSessionNotebook(job: WorkerSessionNotebookJob): Recor
       code(COLAB_RUNTIME_PY),
       code(CELL_MODELS.replace('__BOOT_JSON__', () => pyJson(BOOT_CONFIG))),
       code(CELL_BOOT),
+      code(CELL_AI_VOICE.replace('__VOICE_ENGINE_JSON__', () => pyJson(voiceEngineSource()))),
       code(CELL_LOOP),
     ],
   };

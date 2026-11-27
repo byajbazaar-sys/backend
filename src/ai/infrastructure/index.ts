@@ -12,3 +12,6 @@ export * from './adapters/byajbazaar-workers-ai-model.adapter';
 export * from './adapters/byajbazaar-activity-log.adapter';
 export * from './adapters/byajbazaar-lending.adapter';
 export * from './adapters/byajbazaar-progress.adapter';
+export * from './persistence/ai-voice.repository';
+export * from './adapters/byajbazaar-voice-access.adapter';
+export * from './adapters/byajbazaar-voice-gpu.adapter';

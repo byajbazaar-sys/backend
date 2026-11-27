@@ -5,6 +5,7 @@ import type {
   AiMessage,
   AiPendingAction,
   AiPreferences,
+  AiPreferencesUpdate,
   AiStoredBlock,
   AiUsageEntry,
   AiUsageTotals,
@@ -50,6 +51,8 @@ export interface IAiMessagesRepository {
     clientMessageId: string,
   ): Promise<{ message: AiMessage; response: unknown } | null>;
   deleteTurn(conversationId: string, turnIndex: number): Promise<void>;
+  /** Retention: drops original speech transcripts stored before `before` (the cleaned-up text stays). */
+  redactTranscripts(before: Date): Promise<number>;
   saveResponse(conversationId: string, turnIndex: number, response: unknown): Promise<void>;
 }
 
@@ -108,7 +111,8 @@ export const AI_PREFERENCES_REPOSITORY = 'AI_PREFERENCES_REPOSITORY';
 export interface IAiPreferencesRepository {
   /** Defaults when the person never saved any. */
   get(actorUserId: string): Promise<AiPreferences>;
-  save(actorUserId: string, prefs: Pick<AiPreferences, 'language' | 'replyStyle'>): Promise<AiPreferences>;
+  /** Merges into what the person saved before (fields left out keep their value). */
+  save(actorUserId: string, prefs: AiPreferencesUpdate): Promise<AiPreferences>;
 }
 
 export const AI_KNOWLEDGE_DOCUMENTS_REPOSITORY = 'AI_KNOWLEDGE_DOCUMENTS_REPOSITORY';

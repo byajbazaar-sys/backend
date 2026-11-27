@@ -162,6 +162,9 @@ what happened next turn. Business rule failures → FAILED with the rule's messa
 - **Preferences.** `GET` / `PUT /api/v1/ai/preferences` `{ language: auto|en|hi|hinglish, replyStyle: short|detailed }`,
   per person across shops (table `ai_user_preferences`, migration `1801000000002`). Sent to the model in the per-turn
   context, so the system prompt stays the same for every request.
+- **Voice.** Speak to the assistant (Hindi, English, Hinglish, Gujarati, Marathi) and hear English replies, through
+  the Cloudflare voice gateway; spoken turns go through this same orchestrator and conversation. See
+  [AI_VOICE.md](AI_VOICE.md) for the design, the models and the accepted limitations.
 - **Apps.** Web: `/ai`, the ✨ button and Ctrl/⌘+K. Mobile: More → ByajBazaar AI. Both render the same typed cards
   (never HTML); card links are web paths, mapped to mobile screens by `mobileRouteFor` (unknown paths show no link).
 

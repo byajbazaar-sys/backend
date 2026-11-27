@@ -9,7 +9,9 @@ export type AiStoredBlock =
   | { type: 'text'; text: string }
   | { type: 'context'; text: string }
   | { type: 'tool_call'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; toolCallId: string; content: string; isError?: boolean };
+  | { type: 'tool_result'; toolCallId: string; content: string; isError?: boolean }
+  /** A spoken message as the recogniser heard it (the text block holds the cleaned-up version). Audit only. */
+  | { type: 'transcript'; original: string; language: string | null; confidence: number | null; flags: string[] };
 
 /** user = the person; assistant = the model; tool = tool results; event = something the app did (a confirmation). */
 export type AiMessageRole = 'user' | 'assistant' | 'tool' | 'event';
@@ -135,10 +137,26 @@ export interface AiKnowledgeDocument {
 /** How a person wants the assistant to answer (all shops). */
 export const AI_LANGUAGES = ['auto', 'en', 'hi', 'hinglish'] as const;
 export const AI_REPLY_STYLES = ['short', 'detailed'] as const;
+export const AI_SPEECH_LANGUAGES = ['auto', 'en', 'hi', 'gu', 'mr'] as const;
+export const AI_VOICES = ['asteria', 'luna', 'athena', 'helena', 'orion', 'arcas', 'apollo', 'zeus'] as const;
 export interface AiPreferences {
   /** auto: the language of each message. */
   language: (typeof AI_LANGUAGES)[number];
   replyStyle: (typeof AI_REPLY_STYLES)[number];
+  /** Voice: read replies aloud (English replies only — Cloudflare's hosted voices speak English). */
+  speakReplies: boolean;
+  /** Voice: speech-to-text language hint; auto detects each utterance. */
+  speechLanguage: (typeof AI_SPEECH_LANGUAGES)[number];
+  /** Voice: Aura-2 English speaker. */
+  voice: (typeof AI_VOICES)[number];
   updatedAt: Date | null;
 }
-export const DEFAULT_AI_PREFERENCES: AiPreferences = { language: 'auto', replyStyle: 'short', updatedAt: null };
+export type AiPreferencesUpdate = Partial<Omit<AiPreferences, 'updatedAt'>>;
+export const DEFAULT_AI_PREFERENCES: AiPreferences = {
+  language: 'auto',
+  replyStyle: 'short',
+  speakReplies: true,
+  speechLanguage: 'auto',
+  voice: 'asteria',
+  updatedAt: null,
+};

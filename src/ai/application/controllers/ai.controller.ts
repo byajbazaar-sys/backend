@@ -66,6 +66,8 @@ export class AiController {
       knowledge: this.knowledge.available,
       maxMessageChars: this.config.limits.maxMessageChars,
       dailyMessages: this.config.limits.dailyMessages,
+      /** Voice (Cloudflare voice gateway) is set up: the apps show the microphone. */
+      voice: this.config.voiceEnabled,
     };
   }
 
@@ -138,9 +140,15 @@ export class AiController {
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({ summary: 'Save your assistant preferences' })
   savePreferences(@Identity() identity: IIdentity, @Body() body: UpdateAiPreferencesModel) {
-    return this.preferences.save(actorFrom(identity).actorUserId, {
-      language: body.language,
-      replyStyle: body.replyStyle,
-    });
+    const update = Object.fromEntries(
+      Object.entries({
+        language: body.language,
+        replyStyle: body.replyStyle,
+        speakReplies: body.speakReplies,
+        speechLanguage: body.speechLanguage,
+        voice: body.voice,
+      }).filter(([, v]) => v !== undefined),
+    );
+    return this.preferences.save(actorFrom(identity).actorUserId, update);
   }
 }

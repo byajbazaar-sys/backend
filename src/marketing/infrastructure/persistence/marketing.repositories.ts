@@ -537,7 +537,16 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
    * Oldest waiting job, preferring the kinds that match what the session already has loaded (an image session keeps
    * klein + Qwen3-VL warm, a video session keeps Wan): switching pipelines means minutes of model loading.
    */
-  async claimNextForSession(session: RenderJob, pipeline?: string | null): Promise<RenderJob | null> {
+  async claimNextForSession(
+    session: RenderJob,
+    pipeline?: string | null,
+    kinds: ERenderJobKind[] = [
+      ERenderJobKind.Images,
+      ERenderJobKind.Campaign,
+      ERenderJobKind.Logo,
+      ERenderJobKind.Voice,
+    ],
+  ): Promise<RenderJob | null> {
     const preferred =
       pipeline === 'image'
         ? [ERenderJobKind.Images, ERenderJobKind.Logo, ERenderJobKind.Voice]
@@ -567,7 +576,7 @@ export class RenderJobsRepository extends MarketingRepositoryBase<RenderJobEntit
           session.kernelRef ?? null,
           session.id,
           ERenderJobStatus.Waiting,
-          [ERenderJobKind.Images, ERenderJobKind.Campaign, ERenderJobKind.Logo, ERenderJobKind.Voice],
+          kinds,
           preferred,
         ],
       ),

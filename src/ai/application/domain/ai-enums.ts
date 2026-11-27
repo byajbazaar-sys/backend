@@ -55,4 +55,7 @@ export enum EAiAuditEvent {
   ModelError = 'MODEL_ERROR',
   ConversationDeleted = 'CONVERSATION_DELETED',
   KnowledgeReindexed = 'KNOWLEDGE_REINDEXED',
+  VoiceSessionStarted = 'VOICE_SESSION_STARTED',
+  VoiceSessionEnded = 'VOICE_SESSION_ENDED',
+  VoiceTurnRefused = 'VOICE_TURN_REFUSED',
 }

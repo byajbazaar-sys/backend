@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -15,7 +16,7 @@ import {
 } from 'class-validator';
 
 import { AI_KNOWLEDGE_COLLECTIONS, AiKnowledgeCollection } from '../../ai.config';
-import { AI_LANGUAGES, AI_REPLY_STYLES } from '../domain';
+import { AI_LANGUAGES, AI_REPLY_STYLES, AI_SPEECH_LANGUAGES, AI_VOICES } from '../domain';
 
 export class AiChatRequestModel {
   @ApiProperty({ example: 'Create silver payal 5 gram 70% purity', maxLength: 2000 })
@@ -99,9 +100,9 @@ export class ReindexAiKnowledgeModel {
 
 /** A queue delivery (QStash). */
 export class AiJobModel {
-  @ApiProperty({ enum: ['knowledge.reindex', 'conversation.summarize', 'maintenance.purge'] })
-  @IsIn(['knowledge.reindex', 'conversation.summarize', 'maintenance.purge'])
-  type: 'knowledge.reindex' | 'conversation.summarize' | 'maintenance.purge';
+  @ApiProperty({ enum: ['knowledge.reindex', 'conversation.summarize', 'maintenance.purge', 'voice.prewarm'] })
+  @IsIn(['knowledge.reindex', 'conversation.summarize', 'maintenance.purge', 'voice.prewarm'])
+  type: 'knowledge.reindex' | 'conversation.summarize' | 'maintenance.purge' | 'voice.prewarm';
 
   @ApiPropertyOptional({ enum: AI_KNOWLEDGE_COLLECTIONS })
   @IsOptional()
@@ -126,12 +127,30 @@ export class AiJobModel {
   requestedBy?: string;
 }
 
+/** Every field is optional: what is left out keeps its saved value. */
 export class UpdateAiPreferencesModel {
-  @ApiProperty({ enum: AI_LANGUAGES, description: 'auto = the language of each message' })
+  @ApiPropertyOptional({ enum: AI_LANGUAGES, description: 'auto = the language of each message' })
+  @IsOptional()
   @IsIn(AI_LANGUAGES as unknown as string[])
-  language: (typeof AI_LANGUAGES)[number];
+  language?: (typeof AI_LANGUAGES)[number];
 
-  @ApiProperty({ enum: AI_REPLY_STYLES })
+  @ApiPropertyOptional({ enum: AI_REPLY_STYLES })
+  @IsOptional()
   @IsIn(AI_REPLY_STYLES as unknown as string[])
-  replyStyle: (typeof AI_REPLY_STYLES)[number];
+  replyStyle?: (typeof AI_REPLY_STYLES)[number];
+
+  @ApiPropertyOptional({ description: 'Voice: read English replies aloud' })
+  @IsOptional()
+  @IsBoolean()
+  speakReplies?: boolean;
+
+  @ApiPropertyOptional({ enum: AI_SPEECH_LANGUAGES, description: 'Voice: speech language hint (auto = detect)' })
+  @IsOptional()
+  @IsIn(AI_SPEECH_LANGUAGES as unknown as string[])
+  speechLanguage?: (typeof AI_SPEECH_LANGUAGES)[number];
+
+  @ApiPropertyOptional({ enum: AI_VOICES, description: 'Voice: Aura-2 English speaker' })
+  @IsOptional()
+  @IsIn(AI_VOICES as unknown as string[])
+  voice?: (typeof AI_VOICES)[number];
 }

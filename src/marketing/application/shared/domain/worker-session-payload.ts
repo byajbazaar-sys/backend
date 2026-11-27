@@ -19,4 +19,6 @@ export interface WorkerSessionPayload {
   settle?: { jobId: string; at: string } | null;
   /** WebSocket the idle session listens on: new work is pushed there instead of waiting for its next poll. */
   connectionId?: string | null;
+  /** Until when (ISO) it is speaking for ByajBazaar AI: voice jobs only, and it is not stopped for being idle. */
+  aiVoiceHotUntil?: string | null;
 }

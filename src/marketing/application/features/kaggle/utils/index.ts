@@ -18,3 +18,4 @@ export * from './worker-session-notebook-job';
 export * from './worker-session.notebook';
 export * from './voice-notebook-job';
 export * from './voice-worker.notebook';
+export * from './assistant-voice';

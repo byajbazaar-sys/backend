@@ -12,4 +12,6 @@ export interface WorkerSessionNotebookJob {
   provider?: 'kaggle' | 'colab';
   /** Colab: the account's model cache (gs:// prefix), copied to the local disk at boot. */
   modelsGcs?: string;
+  /** ByajBazaar AI's voice lane: the gateway URL and token (utils/assistant-voice.ts). Absent = no lane. */
+  aiVoice?: { url: string; token: string };
 }

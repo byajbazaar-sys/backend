@@ -15,6 +15,7 @@ import { IMsConfig } from '../configurations';
 import {
   Controllers,
   Services,
+  ShopAccessService,
   AUTH_SERVICE,
   AuthService,
   CUSTOMER_SERVICE,
@@ -305,6 +306,8 @@ import {
     CUSTOMER_SERVICE,
     ITEM_SERVICE,
     DEPOSIT_SERVICE,
+    // … and the person's current shop access for each voice turn.
+    ShopAccessService,
   ],
 })
 export class ApplicationModule {}

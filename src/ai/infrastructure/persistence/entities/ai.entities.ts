@@ -126,7 +126,34 @@ export class AiUserPreferencesEntity {
   @PrimaryColumn('uuid') actorUserId: string;
   @Column({ type: 'varchar', length: 16, default: 'auto' }) language: string;
   @Column({ type: 'varchar', length: 16, default: 'short' }) replyStyle: string;
+  @Column({ type: 'boolean', default: true }) speakReplies: boolean;
+  @Column({ type: 'varchar', length: 8, default: 'auto' }) speechLanguage: string;
+  @Column({ type: 'varchar', length: 24, default: 'asteria' }) voice: string;
   @UpdateDateColumn({ type: 'timestamptz' }) updatedAt: Date;
+}
+
+@Entity('ai_voice_sessions')
+export class AiVoiceSessionEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column('uuid') shopId: string;
+  @Column('uuid') actorUserId: string;
+  @Column({ type: 'uuid', nullable: true }) conversationId: string | null;
+  @Column({ type: 'varchar', length: 12, default: 'open' }) status: string;
+  @Column({ type: 'varchar', length: 40, nullable: true }) endReason: string | null;
+  @Column({ type: 'timestamptz' }) expiresAt: Date;
+  @Column({ type: 'timestamptz', nullable: true }) endedAt: Date | null;
+  @Column({ type: 'timestamptz', nullable: true }) lastActivityAt: Date | null;
+  @Column({ type: 'int', default: 0 }) audioMs: number;
+  @Column({ type: 'int', default: 0 }) partialAudioMs: number;
+  @Column({ type: 'int', default: 0 }) sttRequests: number;
+  @Column({ type: 'int', default: 0 }) sttLatencyMs: number;
+  @Column({ type: 'int', default: 0 }) sttErrors: number;
+  @Column({ type: 'int', default: 0 }) ttsChars: number;
+  @Column({ type: 'int', default: 0 }) ttsRequests: number;
+  @Column({ type: 'int', default: 0 }) ttsLatencyMs: number;
+  @Column({ type: 'int', default: 0 }) ttsErrors: number;
+  @Column({ type: 'int', default: 0 }) turns: number;
+  @CreateDateColumn({ type: 'timestamptz' }) createdAt: Date;
 }
 
 export const AI_ENTITY_CLASSES = [
@@ -138,4 +165,5 @@ export const AI_ENTITY_CLASSES = [
   AiUsageLogEntity,
   AiKnowledgeDocumentEntity,
   AiUserPreferencesEntity,
+  AiVoiceSessionEntity,
 ];

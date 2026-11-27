@@ -9,6 +9,7 @@ import {
   AI_LOANS_GATEWAY,
   AI_PREFERENCES_REPOSITORY,
   AI_PROGRESS_NOTIFIER,
+  AI_VOICE_GPU,
   AI_AUDIT_LOG,
   AI_CONVERSATIONS_REPOSITORY,
   AI_DOCUMENT_STORAGE,
@@ -57,6 +58,9 @@ import {
   ByajBazaarCustomersAdapter,
   ByajBazaarDepositsAdapter,
   ByajBazaarLoansAdapter,
+  ByajBazaarVoiceAccessAdapter,
+  ByajBazaarVoiceGpuAdapter,
+  AiVoiceSessionsRepository,
   ByajBazaarAiActivityLogAdapter,
   ByajBazaarInventoryAdapter,
   ByajBazaarWorkersAiLanguageModel,
@@ -65,6 +69,15 @@ import {
   QdrantKnowledgeIndex,
   QStashAiQueue,
 } from './infrastructure';
+import {
+  AI_VOICE_ACCESS,
+  AI_VOICE_SESSIONS_REPOSITORY,
+  AiVoiceController,
+  AiVoiceConversationService,
+  AiVoiceGatewayController,
+  AiVoiceGatewayGuard,
+  AiVoiceSessionsService,
+} from './voice';
 
 /**
  * ByajBazaar AI — a self-contained bounded context, like logs and marketing:
@@ -76,7 +89,7 @@ import {
  *    that import ByajBazaar code. Business changes always go through ByajBazaar's own services.
  */
 @Module({
-  controllers: [AiController, AiQueueController, AiAdminController],
+  controllers: [AiController, AiQueueController, AiAdminController, AiVoiceController, AiVoiceGatewayController],
   providers: [
     {
       provide: AiConfig,
@@ -105,6 +118,12 @@ import {
     { provide: AI_LOANS_GATEWAY, useClass: ByajBazaarLoansAdapter },
     { provide: AI_DEPOSITS_GATEWAY, useClass: ByajBazaarDepositsAdapter },
     { provide: AI_PROGRESS_NOTIFIER, useClass: ByajBazaarAiProgressNotifier },
+    { provide: AI_VOICE_SESSIONS_REPOSITORY, useClass: AiVoiceSessionsRepository },
+    { provide: AI_VOICE_ACCESS, useClass: ByajBazaarVoiceAccessAdapter },
+    { provide: AI_VOICE_GPU, useClass: ByajBazaarVoiceGpuAdapter },
+    AiVoiceSessionsService,
+    AiVoiceConversationService,
+    AiVoiceGatewayGuard,
     AiKnowledgeService,
     {
       provide: AiToolRegistry,

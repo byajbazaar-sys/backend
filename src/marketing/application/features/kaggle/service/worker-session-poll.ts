@@ -9,4 +9,6 @@ export interface WorkerSessionPoll {
   /** The job it just ran, and the error it raised if it crashed. */
   finishedJobId?: string | null;
   jobError?: string | null;
+  /** The session is speaking for ByajBazaar AI right now: it takes voice jobs only (keeps its voice engine up). */
+  aiVoiceHot?: boolean;
 }

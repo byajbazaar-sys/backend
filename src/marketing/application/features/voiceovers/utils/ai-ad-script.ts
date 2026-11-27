@@ -1,7 +1,8 @@
+import { hindiGrams, hindiNumber } from '@shared-libs';
+
 import { adScriptParts } from './ad-script';
 import { AdScriptFacts } from './ad-script-facts';
 import { AdScriptStyle } from './ad-script-style';
-import { hindiGrams, hindiNumber } from './hindi-number-words';
 import { ProductLook } from './product-look';
 
 const ANGLES = [

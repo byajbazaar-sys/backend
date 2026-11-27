@@ -167,9 +167,23 @@ function stringOf(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** Some models still emit their reasoning inline. It is never shown to the person. */
-function stripReasoning(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^[\s\S]*?<\/think>/i, '');
+/**
+ * Reasoning and chat-template control tokens that leak into a reply are never shown to the person. Gemma 4 wraps
+ * its thoughts as `<|channel>thought … <channel|>` and, with thinking switched off, still sometimes answers with a
+ * bare `<channel|>` (seen in production: the whole reply was that token). Anything before a closing token is the
+ * model's thinking; other `<|…>` / `<…|>` tokens (turn, tool, eos markers) are dropped. Ordinary text is untouched.
+ */
+export function stripReasoning(text: string): string {
+  let out = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^[\s\S]*?<\/think>/i, '')
+    .replace(/<\|channel\|?>[\s\S]*?<channel\|>/gi, '');
+  const close = out.lastIndexOf('<channel|>');
+  if (close >= 0) out = out.slice(close + '<channel|>'.length);
+  return out
+    .replace(/<\|[a-z_]{1,24}\|?>|<[a-z_]{1,24}\|>/gi, '')
+    .replace(/<(?:start_of_turn|end_of_turn|eos|bos|pad)>/gi, '')
+    .trim();
 }
 
 function parseArguments(value: unknown): unknown {

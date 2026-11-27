@@ -32,7 +32,12 @@ export interface IRenderJobsRepository {
    * it becomes STARTING on that account, in the session's slot and kernel, with payload.sessionJobId set.
    */
   /** Oldest waiting job, preferring the kinds of `pipeline` (the models the session already has loaded). */
-  claimNextForSession(session: RenderJob, pipeline?: string | null): Promise<RenderJob | null>;
+  /** `kinds`: only these job kinds (default: every kind a session runs). */
+  claimNextForSession(
+    session: RenderJob,
+    pipeline?: string | null,
+    kinds?: ERenderJobKind[],
+  ): Promise<RenderJob | null>;
   /**
    * Atomically takes up to `limit` WAITING jobs of `match.kind` — of `match.batchId`, or else of `match.campaignId` —
    * into `into` (row lock, skip locked): they become DONE with payload.mergedInto = into.id and join its batch.
