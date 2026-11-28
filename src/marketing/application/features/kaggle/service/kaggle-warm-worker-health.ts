@@ -14,4 +14,11 @@ export interface KaggleWarmWorkerHealth {
   pipeline: string | null;
   kernelRef: string | null;
   startedAt: Date | null;
+  /** Booting sessions: Kaggle's own state of the notebook (queued = waiting for a GPU) and its failure message. */
+  kaggleState?: string;
+  kaggleMessage?: string | null;
+  /** Booting sessions: when the notebook first reached the API (null = not yet). */
+  reportedAt?: string | null;
+  /** Booting sessions: started for ByajBazaar AI's Hindi voice. */
+  forAssistant?: boolean;
 }

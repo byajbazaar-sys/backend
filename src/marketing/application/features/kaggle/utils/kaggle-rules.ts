@@ -1,7 +1,7 @@
 import { KaggleJobStatusView } from './kaggle-job-status-view';
 import { KaggleNotebook } from './kaggle-notebook';
 import { KaggleWorkNotebook } from './kaggle-work-notebook';
-import { KaggleAccount, RenderJob, ERenderJobKind, ERenderJobStatus } from '../../../shared';
+import { KaggleAccount, KaggleSessionState, RenderJob, ERenderJobKind, ERenderJobStatus } from '../../../shared';
 
 /**
  * Pure Kaggle rules shared by dispatch (MarketingRenderService), the health report (KaggleHealthService) and the
@@ -14,6 +14,52 @@ export const MIN_GPU_HOURS = 1;
 export const STARTING_MAX_MS = 25 * 60 * 1000;
 /** A running warm session that has not polled for this long (and runs no job) has stopped. */
 export const SESSION_LOST_MS = 5 * 60 * 1000;
+
+/** A booting warm session is checked with Kaggle this often (the first time this long after the push). */
+export const BOOT_CHECK_MS = 3 * 60 * 1000;
+/** Kaggle kept a booting session queued this long → the account gets no GPU now: it rests, another account starts. */
+export const BOOT_QUEUED_MAX_MS = 8 * 60 * 1000;
+/** Kaggle runs the notebook, but it never reached ByajBazaar in this long → it cannot (no internet on the account). */
+export const BOOT_SILENT_MAX_MS = 10 * 60 * 1000;
+
+export type BootCheck = { stuck: false } | { stuck: true; reason: string; rest: boolean };
+
+/**
+ * Is a warm session that has not reported "ready" stuck? From Kaggle's session state and whether the notebook ever
+ * reached the API. `rest`: the account should get no new notebooks for a while (the next one goes elsewhere). A
+ * notebook reports in within about a minute of Kaggle running it, so waiting the full STARTING_MAX_MS only makes
+ * sense when Kaggle's state is unknown.
+ */
+export function bootCheck(input: {
+  ageMs: number;
+  reported: boolean;
+  state: KaggleSessionState | null;
+  failureMessage?: string | null;
+}): BootCheck {
+  const { ageMs, reported, state } = input;
+  const stuck = (reason: string, rest = true): BootCheck => ({ stuck: true, reason, rest });
+  // Right after a push Kaggle can still report the previous version's state: judge it only from the first check on.
+  if (ageMs >= BOOT_CHECK_MS) {
+    if (state === 'error') {
+      const detail = input.failureMessage?.trim();
+      return stuck(`Kaggle stopped the notebook with an error${detail ? `: ${detail.slice(0, 300)}` : ''}`);
+    }
+    if (state === 'cancelled') return stuck('The Kaggle session was cancelled', false);
+    if (state === 'complete') {
+      return stuck(reported ? 'The notebook stopped while booting' : 'The notebook ended without reaching ByajBazaar');
+    }
+    if (state === 'queued' && ageMs >= BOOT_QUEUED_MAX_MS) {
+      return stuck('Kaggle kept the session queued (no GPU free on the account)');
+    }
+    if (state === 'running' && !reported && ageMs >= BOOT_SILENT_MAX_MS) {
+      return stuck(
+        'Kaggle runs the notebook but it never reached ByajBazaar (is internet on for the account — phone verified?)',
+      );
+    }
+  }
+  if (ageMs >= STARTING_MAX_MS) return stuck('The warm GPU worker never reported in', state !== 'unknown' && !!state);
+  return { stuck: false };
+}
 
 export function notebookOf(kind: ERenderJobKind | string): KaggleNotebook {
   const value = String(kind);

@@ -134,23 +134,24 @@ export class KaggleHealthService {
         const account = snapshot.accounts.get(username);
         const jobs = snapshot.busy.filter((job) => job.workerId === username && job.kind !== ERenderJobKind.Worker);
         const sessions = snapshot.busy.filter((job) => job.workerId === username && job.kind === ERenderJobKind.Worker);
-        const [video, image] = await Promise.all([
+        const [video, image, worker] = await Promise.all([
           this.notebookHealth(account, jobs, 'video'),
           this.notebookHealth(account, jobs, 'image'),
+          this.warmWorker(sessions),
         ]);
         return {
           account: username,
           accountStatus: account?.status ?? 'UNCONFIGURED',
           video,
           image,
-          worker: this.warmWorker(sessions),
+          worker,
         };
       }),
     );
   }
 
   /** The newest live warm session of an account (busy ones first), or null. */
-  private warmWorker(sessions: RenderJob[]): KaggleWarmWorkerHealth | null {
+  private async warmWorker(sessions: RenderJob[]): Promise<KaggleWarmWorkerHealth | null> {
     if (!sessions.length) return null;
     const rank = (s: RenderJob) =>
       s.payload.session?.state === 'busy' ? 0 : s.status === ERenderJobStatus.Running ? 1 : 2;
@@ -168,6 +169,24 @@ export class KaggleHealthService {
       pipeline: info?.pipeline ?? null,
       kernelRef: session.kernelRef ?? null,
       startedAt: session.startedAt ?? null,
+      ...(state === 'starting' ? await this.bootingWorker(session) : {}),
+    };
+  }
+
+  /** A booting session: what Kaggle says about its notebook, and whether the notebook has reached the API yet. */
+  private async bootingWorker(
+    session: RenderJob,
+  ): Promise<Pick<KaggleWarmWorkerHealth, 'kaggleState' | 'kaggleMessage' | 'reportedAt' | 'forAssistant'>> {
+    const kernelName = kernelSlugOf(session.kernelRef);
+    const kaggle =
+      kernelName && session.workerId
+        ? await this.pool.sessionStatus(session.workerId, kernelName)
+        : { state: 'unknown' as const, failureMessage: undefined };
+    return {
+      kaggleState: kaggle.state,
+      kaggleMessage: kaggle.failureMessage ?? null,
+      reportedAt: session.payload.session?.reportedAt ?? null,
+      forAssistant: !!session.payload.session?.forAssistant,
     };
   }
 

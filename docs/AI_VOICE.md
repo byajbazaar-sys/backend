@@ -91,6 +91,14 @@ API (speech plan: Devanagari → chatterbox) ─► gateway session ─► TtsHu
   warm-up (§3a). Until the worker's voice engine is up, Hindi replies are shown as text.
   *Fixed Nov 2026:* the queue delivery (`AiQueueController` → `toJob`) had no `voice.prewarm` case, so the job ran
   `undefined`, failed, and no worker was ever started for the assistant.
+- **Boot watch:** every warm worker is checked with Kaggle 3 minutes after its push and every 3 minutes until it
+  reports ready (`watchBoot`, rules in `kaggle-rules.ts` → `bootCheck`). Kaggle kept it queued 8 min (no GPU for the
+  account), the notebook stopped (error / ended), or Kaggle runs it but it never reached the API in 10 min (no
+  internet on the account) → it is closed with that reason, the account rests 15 min (admin → Kaggle shows the
+  reason as its last error) and one started for the assistant is started again on another account (3 tries, within
+  30 min of the first ask; the app's warm-up keeps counting from the first ask). Before this, nothing looked at a
+  booting worker until the next dispatch, and it held "starting" for 25 min. Admin → Kaggle health shows a booting
+  worker's Kaggle state (`kaggleState`, `kaggleMessage`) and whether it reached the API (`reportedAt`).
 - **Fallback (Kaggle not free):** no worker connected, none idle with its engine up, or no first audio within 9 s →
   the reply is spoken by Cloudflare when it is in Latin letters, otherwise shown as text (Cloudflare's voice cannot
   read Hindi script). Interrupting cancels the request on the worker (dropped from the engine's queue, or stopped).
@@ -274,7 +282,9 @@ Optional: `AI_VOICE_SESSION_MINUTES`, `AI_VOICE_DAILY_MINUTES`, `AI_VOICE_SHOP_D
   answered (lengths only).
 - **API** (CloudWatch, `byajbazaar-backend-<stage>-api`): `Hindi voice: …` (a worker is up / booting / asked for / none
   can start, with the reason), `Assistant voice: …` (`warmForAssistant`: already up, booting, no account can start one
-  — each account's reason —, could not start), `Warm GPU worker started for ByajBazaar AI voice`, `AI queue job done` /
+  — each account's reason —, could not start, giving up), `Warm GPU worker started for ByajBazaar AI voice` (with the
+  try number), `Warm GPU worker reported in` (seconds from the push), `Warm GPU worker still booting` (Kaggle's state,
+  minutes), `Warm GPU worker did not boot` (reason, whether the account rests), `AI queue job done` /
   `AI queue job failed` (type, ms, result).
 - **Browser:** off by default (clean console). In the browser console: `localStorage.setItem('bb:voice-debug', '1')`,
   reload — `[voice] …` lines with ids and timings (microphone, session, retries, connection, heard / answered /
@@ -292,6 +302,8 @@ Optional: `AI_VOICE_SESSION_MINUTES`, `AI_VOICE_DAILY_MINUTES`, `AI_VOICE_SHOP_D
 - `fe-byajbazaar`: `npx vitest run --project unit` → `lib/voice/turnDetector.test.ts` (turn start / end, pauses,
   clicks, noisy rooms, echo with and without echo cancellation, barge-in) and `lib/voice/voiceProgress.test.ts`
   (progress labels and estimates; the Hindi warm-up).
+- `Backend`: `test/ai/voice-worker-boot.test.ts` — the boot watch (`bootCheck`; queued / failed workers replaced on
+  another account, tries limited, a worker that reported in is not taken for one without internet).
 - `Backend`: `test/ai/voice-kaggle.test.ts` also covers the prewarm (queue delivery → job, when a worker is asked for,
   which warm sessions can speak, English replies start nothing); `test/ai/error-body.test.ts` the error body keeping
   its code. Gateway: Hindi voice status (`voice.status`), the logs (never the words), the API error body.
@@ -317,5 +329,6 @@ Optional: `AI_VOICE_SESSION_MINUTES`, `AI_VOICE_DAILY_MINUTES`, `AI_VOICE_SHOP_D
 | Every utterance comes back as nothing heard | binary frames read as zero bytes (gateway older than the `socket-inbox` fix) | redeploy the gateway |
 | Every turn "Could not reach the assistant" (`AI_UNREACHABLE`) | gateway older than the `fetch` fix, or `BACKEND_URL` wrong | redeploy the gateway; check `BACKEND_URL` |
 | Transcripts appear but nothing is read aloud, replies in Hindi ("The voice is busy or still starting") | Hindi is spoken only by a warm Kaggle worker. Before the Nov 2026 fix the `voice.prewarm` job always failed (`toJob` had no case for it), so no worker was ever started | deploy the API; the app then shows the warm-up (§3a). If no worker starts (admin → Kaggle shows nothing running, accounts' "last assigned" does not move): API logs `Hindi voice:` / `Assistant voice:` say why (§7a) |
+| Hindi voice "warming up" for a long time; admin → Kaggle shows a worker "starting" for many minutes | Kaggle has not run the notebook (queued: no GPU for the account) or it cannot reach the API. Before the boot watch nobody checked for 25 min | deploy the API: it is replaced on another account within ~8 min. Admin health → the worker's `kaggleState` / the account's last error say which; `queued` on every account = Kaggle has no T4 GPUs free right now (wait); `running` but never reported in = turn on internet / verify the phone on that Kaggle account; open `kaggle.com/code/<account>/byajbazaar-worker-<slot>` for the notebook's log |
 | "The assistant could not answer" (`HTTP_504`) after ~20 s | the model call took longer than `AI_LLM_TIMEOUT_MS` (was 15 s), and the API's error body dropped its code (`AI_TIMEOUT`), so the message was lost too | deploy the API (20 s per call; codes kept) and the gateway (reads the message; a 504 is `AI_TIMEOUT`); the person can tap Retry |
 | Random `503 {"message":"Service Unavailable"}` on many API calls at once | AWS Lambda concurrency limit (a burst of ~20 requests is throttled) | raise "Concurrent executions" in AWS Service Quotas (Lambda) |

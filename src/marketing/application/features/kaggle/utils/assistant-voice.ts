@@ -67,7 +67,9 @@ export interface AssistantVoiceSessionLike {
   startedAt?: Date | string | null;
   createdAt?: Date | string | null;
   updatedAt?: Date | string | null;
-  payload: { session?: { state?: string; aiVoiceHotUntil?: string | null } | null };
+  payload: {
+    session?: { state?: string; aiVoiceHotUntil?: string | null; forAssistant?: { since: string } | null } | null;
+  };
 }
 
 /**
@@ -96,9 +98,12 @@ export function assistantVoiceSessions<T extends AssistantVoiceSessionLike>(
   return { running, booting };
 }
 
-/** When a warm session started. */
+/**
+ * When a warm session started — for one started for the assistant, when the assistant first asked (a replacement on
+ * another account keeps the wait the person has already had).
+ */
 export function sessionStart(session: AssistantVoiceSessionLike): Date | null {
-  const at = session.startedAt ?? session.createdAt;
+  const at = session.payload.session?.forAssistant?.since ?? session.startedAt ?? session.createdAt;
   return at ? new Date(at) : null;
 }
 

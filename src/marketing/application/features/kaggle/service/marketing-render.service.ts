@@ -76,6 +76,9 @@ import {
   MIN_GPU_HOURS,
   STARTING_MAX_MS,
   SESSION_LOST_MS,
+  BOOT_CHECK_MS,
+  BootCheck,
+  bootCheck,
   buildImageWorkerNotebook,
   ImageNotebookJob,
   buildFastReelNotebook,
@@ -147,6 +150,10 @@ const PIPELINE_MAX_CLIPS = 3;
 const SETTLE_GRACE_MS = 2 * 60 * 1000;
 /** Model cache builds are retried at most this often per account. */
 const MODEL_CACHE_RETRY_MS = 6 * 60 * 60 * 1000;
+/** A worker for ByajBazaar AI's voice that does not boot is replaced on another account up to this many tries… */
+const ASSISTANT_BOOT_ATTEMPTS = 3;
+/** …while the assistant asked for it less than this long ago (a voice session lasts at most 15 minutes). */
+const ASSISTANT_BOOT_WINDOW_MS = 30 * 60 * 1000;
 
 /** A ready account that can take render jobs in this dispatch round. */
 interface DispatchCandidate {
@@ -210,6 +217,12 @@ function sceneImageTarget(campaign: MarketingCampaign, scene: MarketingScene): I
 }
 
 /** Image indexes a job still has to deliver. */
+/** Whole seconds since `at` (null when unknown). */
+function secondsSince(at?: Date | string | null): number | null {
+  const ms = at ? new Date(at).getTime() : NaN;
+  return Number.isFinite(ms) ? Math.round((Date.now() - ms) / 1000) : null;
+}
+
 function unfinishedImageIndexes(job: RenderJob): Set<number> {
   const generation = job.payload.imageGeneration;
   const done = new Set(generation?.doneImages ?? []);
@@ -734,7 +747,7 @@ export class MarketingRenderService {
    * resting). Nothing starts when a worker that can speak for the assistant is already running or booting. Every
    * outcome is logged with its reason ("Assistant voice: …").
    */
-  async warmForAssistant(): Promise<'warm' | 'starting' | 'unavailable'> {
+  async warmForAssistant(retry?: { since: string; attempt: number }): Promise<'warm' | 'starting' | 'unavailable'> {
     const problem = this.assistantVoiceLaneProblem();
     if (problem) {
       this.logger.warn({ reason: problem }, 'Assistant voice: no GPU worker can be started');
@@ -767,9 +780,13 @@ export class MarketingRenderService {
       return 'unavailable';
     }
     const slot = await this.freeSlot(candidate.username, candidate.concurrency);
-    const started = await this.startSession(candidate.username, slot);
+    const forAssistant = retry ?? { since: new Date().toISOString(), attempt: 1 };
+    const started = await this.startSession(candidate.username, slot, forAssistant);
     if (started) {
-      this.logger.info({ account: candidate.username, slot }, 'Warm GPU worker started for ByajBazaar AI voice');
+      this.logger.info(
+        { account: candidate.username, slot, attempt: forAssistant.attempt },
+        'Warm GPU worker started for ByajBazaar AI voice',
+      );
     } else {
       this.logger.warn({ account: candidate.username, slot }, 'Assistant voice: the GPU worker could not start');
     }
@@ -849,13 +866,17 @@ export class MarketingRenderService {
   }
 
   /** Pushes a warm worker session notebook (with the account's model dataset mounted when it has one). */
-  private async startSession(workerId: string, slot: number): Promise<boolean> {
+  private async startSession(
+    workerId: string,
+    slot: number,
+    forAssistant: { since: string; attempt: number } | null = null,
+  ): Promise<boolean> {
     const session = await this.jobs.create({
       kind: ERenderJobKind.Worker,
       workerId,
       slot,
       status: ERenderJobStatus.Starting,
-      payload: { clips: [], session: { state: 'starting', jobsRun: 0 } },
+      payload: { clips: [], session: { state: 'starting', jobsRun: 0, forAssistant } },
       progress: 0,
       stageMessage: 'Warm GPU worker booting',
       attempts: 0,
@@ -887,6 +908,9 @@ export class MarketingRenderService {
       await this.jobs.update(session.id, { kernelRef: pushed.ref });
       await this.accounts.update(workerId, { lastAssignedAt: new Date(), lastError: null });
       this.logger.info({ account: workerId, slot, session: session.id }, 'Warm GPU worker started');
+      // Asked about with Kaggle while it boots: a session Kaggle keeps queued, or whose notebook fails, is replaced
+      // within minutes instead of holding the slot (and the assistant's "Hindi voice warming up") for 25.
+      await this.scheduleWatch(session.id, BOOT_CHECK_MS / 1000);
       return true;
     } catch (err) {
       const reason = (err as Error).message;
@@ -927,17 +951,11 @@ export class MarketingRenderService {
   private async reapSessions(): Promise<void> {
     for (const session of await this.jobs.listSessions()) {
       const silentMs = Date.now() - new Date(session.updatedAt ?? session.startedAt ?? Date.now()).getTime();
-      if (session.status === ERenderJobStatus.Starting && silentMs > STARTING_MAX_MS) {
-        const kernelName = kernelSlugOf(session.kernelRef);
-        const state =
-          session.workerId && kernelName ? (await this.pool.sessionStatus(session.workerId, kernelName)).state : null;
-        if (state === 'queued' && session.workerId) {
-          await this.accounts.update(session.workerId, {
-            cooldownUntil: new Date(Date.now() + START_FAILURE_COOLDOWN_MS),
-            lastError: 'Kaggle kept the session queued (no GPU free on the account)',
-          });
-        }
-        await this.endSession(session, 'The warm GPU worker never reported in', true);
+      if (session.status === ERenderJobStatus.Starting) {
+        // Normally the boot watch (watchBoot) settles it within minutes; this is the backstop.
+        if (silentMs <= STARTING_MAX_MS) continue;
+        const check = await this.checkBoot(session);
+        if (check.stuck) await this.failBoot(session, check, false); // the caller starts what is needed
         continue;
       }
       if (session.status !== ERenderJobStatus.Running || silentMs <= SESSION_LOST_MS) continue;
@@ -959,6 +977,86 @@ export class MarketingRenderService {
       payload: { ...session.payload, session: { ...(session.payload.session ?? { state: 'idle' }), state: 'idle' } },
     });
     this.logger.info({ session: session.id, account: session.workerId, reason }, 'Warm GPU worker closed');
+  }
+
+  /**
+   * Boot watch of a warm session (queued at its start, re-armed every BOOT_CHECK_MS until it reports ready): asks
+   * Kaggle how the notebook is doing and replaces a session that will not boot — queued with no GPU for the account,
+   * stopped with an error, or running without ever reaching the API.
+   */
+  private async watchBoot(session: RenderJob): Promise<void> {
+    if (session.status !== ERenderJobStatus.Starting) return; // up: its polls are its heartbeat (reapSessions)
+    const check = await this.checkBoot(session);
+    if (check.stuck) {
+      await this.failBoot(session, check, true);
+      return;
+    }
+    await this.scheduleWatch(session.id, BOOT_CHECK_MS / 1000);
+  }
+
+  private async checkBoot(session: RenderJob): Promise<BootCheck> {
+    const kernelName = kernelSlugOf(session.kernelRef);
+    const { state, failureMessage } =
+      session.workerId && kernelName
+        ? await this.pool.sessionStatus(session.workerId, kernelName)
+        : { state: null, failureMessage: undefined };
+    const reported = !!session.payload.session?.reportedAt;
+    const ageMs = Date.now() - new Date(session.startedAt ?? session.createdAt ?? Date.now()).getTime();
+    const check = bootCheck({ ageMs, reported, state, failureMessage });
+    if (!check.stuck) {
+      this.logger.info(
+        {
+          session: session.id,
+          account: session.workerId,
+          kaggle: state,
+          reported,
+          minutes: Math.round(ageMs / 60_000),
+        },
+        'Warm GPU worker still booting',
+      );
+    }
+    return check;
+  }
+
+  /**
+   * A warm session that did not boot: closed, its account rests (when the account is the problem) so the next
+   * notebook goes elsewhere, and — `replace` — waiting work gets a new worker; one started for the assistant's voice
+   * is started again on another account (a few tries, while the person can still be waiting).
+   */
+  private async failBoot(
+    session: RenderJob,
+    check: Extract<BootCheck, { stuck: true }>,
+    replace: boolean,
+  ): Promise<void> {
+    await this.endSession(session, check.reason, true);
+    const account = session.workerId;
+    if (account) {
+      await this.accounts.update(account, {
+        lastError: check.reason.slice(0, 2000),
+        ...(check.rest ? { cooldownUntil: new Date(Date.now() + START_FAILURE_COOLDOWN_MS) } : {}),
+      });
+      if (check.rest) {
+        await this.healthEvent('KAGGLE_ACCOUNT_COOLDOWN', account, {
+          reason: check.reason,
+          minutes: START_FAILURE_COOLDOWN_MS / 60_000,
+          sessionId: session.id,
+        });
+      }
+    }
+    const forAssistant = session.payload.session?.forAssistant ?? null;
+    this.logger.warn(
+      { session: session.id, account, reason: check.reason, rest: check.rest, forAssistant },
+      'Warm GPU worker did not boot',
+    );
+    if (!replace) return;
+    if (await this.jobs.countWaiting()) await this.scheduler.schedule({ step: 'dispatch' });
+    if (!forAssistant) return;
+    const since = Date.parse(forAssistant.since);
+    if (forAssistant.attempt >= ASSISTANT_BOOT_ATTEMPTS || !(Date.now() - since < ASSISTANT_BOOT_WINDOW_MS)) {
+      this.logger.warn({ forAssistant }, 'Assistant voice: giving up on a GPU worker for now');
+      return;
+    }
+    await this.warmForAssistant({ since: forAssistant.since, attempt: forAssistant.attempt + 1 });
   }
 
   /**
@@ -2088,13 +2186,26 @@ export class MarketingRenderService {
       return true;
     }
     const ready = event.stage === 'sessionReady';
+    const current = session.payload.session ?? { state: 'starting' as const };
+    if (!current.reportedAt) {
+      this.logger.info(
+        {
+          session: session.id,
+          account: session.workerId,
+          stage: event.stage,
+          seconds: secondsSince(session.startedAt),
+        },
+        'Warm GPU worker reported in',
+      );
+    }
     await this.jobs.update(session.id, {
       status: ready ? ERenderJobStatus.Running : session.status,
       stageMessage: (event.message || session.stageMessage || '').slice(0, 250),
       payload: {
         ...session.payload,
         session: {
-          ...(session.payload.session ?? { state: 'starting' }),
+          ...current,
+          reportedAt: current.reportedAt ?? new Date().toISOString(),
           ...(typeof event.modelsCached === 'boolean' ? { modelsCached: event.modelsCached } : {}),
         },
       },
@@ -2261,6 +2372,10 @@ export class MarketingRenderService {
   async watch(jobId: string): Promise<void> {
     const job = await this.jobs.findById(jobId);
     if (!job || !BUSY_RENDER_STATUSES.includes(job.status)) return;
+    if (job.kind === ERenderJobKind.Worker) {
+      await this.watchBoot(job);
+      return;
+    }
     const silentMs = Date.now() - new Date(job.updatedAt ?? job.startedAt ?? Date.now()).getTime();
     const kernelName = kernelSlugOf(job.kernelRef);
     const { state, failureMessage } =

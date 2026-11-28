@@ -21,4 +21,11 @@ export interface WorkerSessionPayload {
   connectionId?: string | null;
   /** Until when (ISO) it is speaking for ByajBazaar AI: voice jobs only, and it is not stopped for being idle. */
   aiVoiceHotUntil?: string | null;
+  /** When the notebook first reached the API (ISO). Until then Kaggle has not run it (queued) or it has no internet. */
+  reportedAt?: string | null;
+  /**
+   * Started for ByajBazaar AI's Hindi voice: when the assistant first asked for a worker (ISO) and which try this is.
+   * A try that does not boot (Kaggle queued it, the notebook failed) is replaced on another account.
+   */
+  forAssistant?: { since: string; attempt: number } | null;
 }
