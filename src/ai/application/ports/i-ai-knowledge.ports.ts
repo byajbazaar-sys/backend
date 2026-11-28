@@ -71,11 +71,38 @@ export type AiJob =
   /** A voice session started: make sure a warm Kaggle worker is up for the assistant's Hindi speech. */
   | { type: 'voice.prewarm' };
 
+/**
+ * The GPU workers for the assistant's Hindi voice, right now (database only — no Kaggle calls):
+ * running = a worker that can speak for the assistant is up (its voice engine may still be loading) ·
+ * starting = one is booting · idle = none, but an account could start one · unavailable = no account can.
+ */
+export interface AiVoiceGpuStatus {
+  state: 'running' | 'starting' | 'idle' | 'unavailable';
+  /** When the running / booting worker started. */
+  since: Date | null;
+  /** Why none can start (unavailable), for logs. */
+  reason?: string;
+}
+
+/**
+ * What a starting voice session is told about its Hindi voice (the app shows "Hindi voice warming up…" from it):
+ * warm = a worker is up (its voice engine may still be loading — the gateway reports when it is ready) ·
+ * starting = one is booting · unavailable = none can start now (Hindi replies are shown as text).
+ */
+export interface AiHindiVoiceState {
+  state: 'warm' | 'starting' | 'unavailable';
+  /** When that worker started (ISO). */
+  since: string | null;
+  /** About how long a worker takes from start to its first Hindi speech. */
+  typicalSeconds: number;
+}
+
 /** The warm Kaggle workers (marketing's GPU sessions) that speak the assistant's Hindi replies. */
 export const AI_VOICE_GPU = 'AI_VOICE_GPU';
 export interface IAiVoiceGpu {
   /** Starts a warm worker on a free account when none is running or booting (existing assignment rules). */
   warm(): Promise<'warm' | 'starting' | 'unavailable'>;
+  status(): Promise<AiVoiceGpuStatus>;
 }
 
 /** Background jobs (QStash). Without the queue, jobs run in-process. */

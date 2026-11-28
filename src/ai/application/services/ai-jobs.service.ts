@@ -21,6 +21,8 @@ import {
   IAiQueue,
   IAiUsageRepository,
   AI_VOICE_GPU,
+  AiHindiVoiceState,
+  AiVoiceGpuStatus,
   IAiVoiceGpu,
 } from '../ports';
 
@@ -54,6 +56,51 @@ export class AiJobsService {
       return { queued: true };
     }
     return { queued: false, result: await this.run(job) };
+  }
+
+  /**
+   * A voice session that may reply in Hindi is starting: where its Hindi voice stands, and — when no GPU worker that
+   * can speak for the assistant is up or booting — a queued `voice.prewarm` to start one. Only database reads on the
+   * person's path (the Kaggle calls run in the queued job). Never throws: voice works without it.
+   */
+  async prepareHindiVoice(now = new Date()): Promise<AiHindiVoiceState> {
+    const typicalSeconds = this.config.voice.hindiWarmupSeconds;
+    let status: AiVoiceGpuStatus;
+    try {
+      status = await this.voiceGpu.status();
+    } catch (err) {
+      this.logger.warn(
+        { err: (err as Error).message },
+        'Hindi voice: status check failed — asking for a worker anyway',
+      );
+      status = { state: 'idle', since: null };
+    }
+    if (status.state === 'running') {
+      this.logger.info({ since: status.since }, 'Hindi voice: a GPU worker is up');
+      return { state: 'warm', since: status.since?.toISOString() ?? null, typicalSeconds };
+    }
+    if (status.state === 'starting') {
+      this.logger.info({ since: status.since }, 'Hindi voice: a GPU worker is booting');
+      return { state: 'starting', since: (status.since ?? now).toISOString(), typicalSeconds };
+    }
+    if (status.state === 'unavailable') {
+      this.logger.warn({ reason: status.reason }, 'Hindi voice: no GPU worker can start — Hindi replies stay text');
+      return { state: 'unavailable', since: null, typicalSeconds };
+    }
+    try {
+      const submitted = await this.submit(
+        { type: 'voice.prewarm' },
+        `ai-voice-prewarm-${Math.floor(now.getTime() / 60_000)}`,
+      );
+      // Without a queue the job ran right here: its answer is known.
+      const outcome = submitted.queued ? 'starting' : (submitted.result as 'warm' | 'starting' | 'unavailable');
+      this.logger.info({ queued: submitted.queued, outcome }, 'Hindi voice: asked for a warm GPU worker');
+      if (outcome === 'unavailable') return { state: 'unavailable', since: null, typicalSeconds };
+      return { state: outcome === 'warm' ? 'warm' : 'starting', since: now.toISOString(), typicalSeconds };
+    } catch (err) {
+      this.logger.warn({ err: (err as Error).message }, 'Hindi voice: could not ask for a GPU worker');
+      return { state: 'unavailable', since: null, typicalSeconds };
+    }
   }
 
   async run(job: AiJob): Promise<unknown> {

@@ -1,5 +1,8 @@
 import { createHmac } from 'crypto';
 
+import { SESSION_LOST_MS, STARTING_MAX_MS } from './kaggle-rules';
+import { ERenderJobStatus } from '../../../shared';
+
 /**
  * ByajBazaar AI's voice lane on the warm workers (Backend/docs/AI_VOICE.md §2a): every warm worker also speaks the
  * assistant's Hindi replies with ChatterBox — the Voice studio's engine — over a WebSocket to the Cloudflare voice
@@ -56,4 +59,51 @@ export function workersNeeded(input: {
   const coldLeft = Math.max(0, input.freeCold - input.waitingOther);
   const voiceShort = Math.max(0, input.waitingVoice - input.freeHot - coldLeft);
   return otherShort + voiceShort;
+}
+
+/** The fields of a warm worker session (a WORKER render job) that say whether it can speak for the assistant. */
+export interface AssistantVoiceSessionLike {
+  status: ERenderJobStatus | string;
+  startedAt?: Date | string | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+  payload: { session?: { state?: string; aiVoiceHotUntil?: string | null } | null };
+}
+
+/**
+ * Warm sessions that can speak the assistant's Hindi replies: booting ones (their voice lane connects as they start)
+ * and running ones that are idle or already speaking for it ("hot"). A session busy with image / video work has
+ * dropped its voice engine until that job ends, and one that stopped polling (no job) is gone — neither counts, so a
+ * worker is started for the assistant instead of waiting on it.
+ */
+export function assistantVoiceSessions<T extends AssistantVoiceSessionLike>(
+  sessions: T[],
+  now = Date.now(),
+): { running: T[]; booting: T[] } {
+  const running: T[] = [];
+  const booting: T[] = [];
+  for (const session of sessions) {
+    const state = session.payload.session?.state;
+    const silentMs = now - toMs(session.updatedAt ?? session.startedAt ?? session.createdAt, now);
+    if (String(session.status) === String(ERenderJobStatus.Starting)) {
+      if (silentMs <= STARTING_MAX_MS) booting.push(session);
+      continue;
+    }
+    if (String(session.status) !== String(ERenderJobStatus.Running)) continue;
+    const hot = toMs(session.payload.session?.aiVoiceHotUntil, 0) > now;
+    if (state === 'busy' ? hot : silentMs <= SESSION_LOST_MS) running.push(session);
+  }
+  return { running, booting };
+}
+
+/** When a warm session started. */
+export function sessionStart(session: AssistantVoiceSessionLike): Date | null {
+  const at = session.startedAt ?? session.createdAt;
+  return at ? new Date(at) : null;
+}
+
+function toMs(value: Date | string | null | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : fallback;
 }

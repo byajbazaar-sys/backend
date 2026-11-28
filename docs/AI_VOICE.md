@@ -80,10 +80,17 @@ API (speech plan: Devanagari → chatterbox) ─► gateway session ─► TtsHu
   up (with the voice job's own set-up code) and report `aiVoiceHot` at every poll. While hot, a worker takes **voice
   jobs only** and is never stopped for being idle; dispatch counts it as free for voice work only, so marketing image /
   video work gets a worker of its own instead of taking the assistant's GPU. Hot lasts 10 minutes after the last use.
-- **A worker for the assistant.** Starting a voice session queues `voice.prewarm`: if no warm worker is running or
-  booting, one is started on a free account with the **existing rules** (free slot, GPU hours left, not resting —
-  `MarketingRenderService.warmForAssistant`). Its first boot takes minutes (packages, model copy, engine start); until
-  then Hindi replies are shown as text.
+- **A worker for the assistant.** Starting a voice session whose replies can be Hindi (reply language Hindi, or
+  "same as my message" when the person may speak Hindi / Marathi — `mayReplyInHindi`) checks the database
+  (`assistantVoiceStatus`, no Kaggle calls): a worker that can speak for the assistant is up (idle, or "hot"; one busy
+  with image / video work does not count) or booting → nothing to do; none → `voice.prewarm` is queued and starts one
+  on a free account with the **existing rules** (free slot, GPU hours left, not resting —
+  `MarketingRenderService.warmForAssistant`, which first closes workers that stopped polling). English and Hinglish
+  replies never start a GPU. The session's answer carries `hindiVoice` (`warm` / `starting` since when /
+  `unavailable`, plus the usual warm-up time, `AI_VOICE_HINDI_WARMUP_SECONDS`, default 240) and the app shows the
+  warm-up (§3a). Until the worker's voice engine is up, Hindi replies are shown as text.
+  *Fixed Nov 2026:* the queue delivery (`AiQueueController` → `toJob`) had no `voice.prewarm` case, so the job ran
+  `undefined`, failed, and no worker was ever started for the assistant.
 - **Fallback (Kaggle not free):** no worker connected, none idle with its engine up, or no first audio within 9 s →
   the reply is spoken by Cloudflare when it is in Latin letters, otherwise shown as text (Cloudflare's voice cannot
   read Hindi script). Interrupting cancels the request on the worker (dropped from the engine's queue, or stopped).
@@ -117,9 +124,12 @@ API (speech plan: Devanagari → chatterbox) ─► gateway session ─► TtsHu
 - **Echo on speakers without echo cancellation:** the web app measures how much of the assistant's own voice reaches
   the microphone and only lets the person interrupt when they are clearly louder than that (§3a). On such devices a
   soft-spoken person may have to tap Stop; headphones avoid it. Mobile has no barge-in by voice (tap to talk).
-- **Answer speed** is set by the assistant, not by voice: in the Nov 2026 end-to-end check, speech-to-text took
-  1.6–3.4 s after the person stopped, the assistant 9–16 s (Gemma 4 with tool calls; one turn hit the 24 s budget),
-  first audio 2.5–6 s (measured through a local gateway — in production the AI binding is in the same data centre).
+- **Answer speed** is set by the assistant, not by voice: in the Nov 2026 end-to-end checks, speech-to-text took
+  1.6–3.4 s after the person stopped, the assistant 9–23 s (Gemma 4 with tool calls; ~6k input tokens per call,
+  ~25 output), first audio 2.5–6 s. Each model call may take up to `AI_LLM_TIMEOUT_MS` (now 20 s; at 15 s about two
+  in three Hindi questions failed with "took too long"), the whole turn `AI_TURN_BUDGET_MS` (24 s) — API Gateway cuts
+  every request at 30 s. When no time is left for the second call the answer is the cards found ("Here is what I
+  found."), not an error. The apps show what is happening meanwhile (§3a).
 - **Confirming by voice** (saying "confirm") works for stock and customer previews only; loans, payments and
   deposits always need a tap on Confirm. A bare "haan" / "yes" never confirms anything.
 - **Traditional units** (aana, ratti, bhar, masha) are kept as said and the assistant asks for grams or purity —
@@ -150,7 +160,26 @@ Tap the mic once: voice is **on** until it is tapped again (or **End**). No tapp
   session limit, or when the connection is lost for good — with a one-line note.
 - The bar shows Listening / the live transcript / Thinking / Speaking, with **Stop** (silence this reply), mute
   (replies as text only) and **End**.
+- **Progress while waiting** (`lib/voice/voiceProgress.ts`, tested): starting — "Opening the microphone…",
+  "Starting a voice session…" (or "The server is busy — trying again…": a 502 / 503 / 504 from the API is retried
+  twice), "Connecting to the voice service…"; a question — "Writing down what you said…", then the assistant's live
+  step when the app gets one (`aiProgress` on the notifications socket, e.g. "Looking up loans…") or what it usually
+  does by then ("Understanding your question…", "Checking your shop's records…", "Preparing the answer…", "Almost
+  there…"), then "Getting the voice ready…" — each with a bar and a percentage. The percentages are estimates from
+  the measured timings: they move quickly, then slow down, and never reach 100 before the step is done. Typed
+  questions get the same label with a percentage and seconds under the message.
+- **Hindi voice warming up:** when the session answer says `hindiVoice` (and replies can be Hindi), a strip shows
+  "Hindi voice warming up — starting a GPU for it… About 3 min." with a bar, then "almost ready — loading the voice"
+  when the worker has connected, then "Hindi voice is ready" for a few seconds. The app sends `hindiVoice: true` in
+  `session.start` and the gateway reports `voice.status` (`waiting` / `warming` / `ready`) from the hub — checked
+  every 5 s until ready, then every 30 s. `unavailable`: one line saying Hindi replies are shown as text and that
+  "Reply in: English" is read aloud. A spoken question that failed (e.g. took too long) has **Retry** (sent as text).
 - The site must allow the microphone: `Permissions-Policy: microphone=(self)` (`fe-byajbazaar/next.config.ts`).
+- **From any screen:** the microphone in the command bar (the floating "Ask ByajBazaar AI" button, Ctrl / ⌘ K) opens
+  `/ai?voice=1` and the same voice conversation starts there. The tap unlocks the audio first
+  (`lib/voice/audioUnlock.ts`; iOS only starts audio from a tap), and the AI page takes that unlocked audio over. It
+  replaced the browser's own `SpeechRecognition` dictation, which sent audio to Google, failed in Brave and Firefox,
+  and only filled the text box.
 
 ## 4. Protocol (bb.voice.v1)
 
@@ -159,7 +188,7 @@ Source of truth: `cloudflare/voice-gateway/src/protocol.ts`, copied to both apps
 
 | App → gateway | |
 | --- | --- |
-| `session.start` / `session.update` | conversation id, speech language, speak replies, voice, screen |
+| `session.start` / `session.update` | conversation id, speech language, speak replies, voice, screen; `hindiVoice: true` = send `voice.status` |
 | `audio.start` → binary frames → `audio.end` / `audio.cancel` | one utterance (`utteranceId`, `format: pcm16`, sample rate) |
 | `text.message` | typed text over the socket; with `utteranceId` = the confirmed text of an unsure transcript |
 | `assistant.interrupt`, `session.end`, `ping` | |
@@ -170,6 +199,7 @@ Source of truth: `cloudflare/voice-gateway/src/protocol.ts`, copied to both apps
 | `transcript.partial`, `transcript.final` | `uncertain: true` + `no_speech` / `low_confidence` → nothing was sent; the app asks |
 | `assistant.thinking`, `assistant.text.delta` (one, final), `assistant.response` | the API's chat response, previews included |
 | `assistant.audio.start` → binary MP3 frames → `assistant.audio.end`; `assistant.audio.skipped` | per sentence |
+| `voice.status` | `hindi: waiting / warming / ready` — the GPU voice for Hindi replies, sent when it changes |
 | `assistant.interrupted`, `assistant.error`, `session.closed`, `pong` | |
 
 Every event has a `seq`; the gateway ignores an app event it has already handled (resends after a reconnect are
@@ -232,6 +262,25 @@ Optional: `AI_VOICE_SESSION_MINUTES`, `AI_VOICE_DAILY_MINUTES`, `AI_VOICE_SHOP_D
 `AI_VOICE_CONFIRM=false` (no spoken confirmations), `AI_VOICE_ENABLED=false`; gateway vars `STT_MODEL`,
 `TTS_MODEL`, `TTS_DEFAULT_VOICE`, `PARTIAL_TRANSCRIPTS`, `AI_GATEWAY_ID`, and the timing limits in `src/models.ts`.
 
+## 7a. Logs
+
+- **Gateway** (Cloudflare dashboard → Workers → `byajbazaar-voice-gateway-production` → Logs, or
+  `npx wrangler tail --env production --format json`): one JSON line per step, with the session and shop ids —
+  `session.connected` / `session.start` / `session.closed` (reason, turns, seconds), `stt` (outcome ok / no_speech /
+  unsure / silent / timeout / error, ms, audio ms, language), `turn` (ok or the error code, ms, how the reply is
+  spoken), `tts` (engine cloudflare / kaggle, outcome spoken / fallback / unavailable / skipped + reason, first-audio
+  ms, segments), `hindi.status`, `error`; the hub: `hub.worker.connected` / `disconnected`, `hub.worker.engine`
+  (voice engine up), `hub.speak.no_worker` (with counts), `first_audio`, `done`, `failed`. Never what was said or
+  answered (lengths only).
+- **API** (CloudWatch, `byajbazaar-backend-<stage>-api`): `Hindi voice: …` (a worker is up / booting / asked for / none
+  can start, with the reason), `Assistant voice: …` (`warmForAssistant`: already up, booting, no account can start one
+  — each account's reason —, could not start), `Warm GPU worker started for ByajBazaar AI voice`, `AI queue job done` /
+  `AI queue job failed` (type, ms, result).
+- **Browser:** off by default (clean console). In the browser console: `localStorage.setItem('bb:voice-debug', '1')`,
+  reload — `[voice] …` lines with ids and timings (microphone, session, retries, connection, heard / answered /
+  speaking ms, not spoken + reason, Hindi voice, errors); `localStorage.removeItem('bb:voice-debug')` turns it off.
+  Always on in development.
+
 ## 8. Tests and what still needs real audio
 
 - `Backend`: `yarn test` → `test/ai/voice.test.ts` (tickets, limits, tenant isolation, voice ↔ text continuity,
@@ -241,7 +290,11 @@ Optional: `AI_VOICE_SESSION_MINUTES`, `AI_VOICE_DAILY_MINUTES`, `AI_VOICE_SHOP_D
   reconnection, limits, expiry; protocol, tickets signed the API's way, WAV, providers, API client, binary frames
   received in order, the shared app client) and `npm run typecheck`.
 - `fe-byajbazaar`: `npx vitest run --project unit` → `lib/voice/turnDetector.test.ts` (turn start / end, pauses,
-  clicks, noisy rooms, echo with and without echo cancellation, barge-in).
+  clicks, noisy rooms, echo with and without echo cancellation, barge-in) and `lib/voice/voiceProgress.test.ts`
+  (progress labels and estimates; the Hindi warm-up).
+- `Backend`: `test/ai/voice-kaggle.test.ts` also covers the prewarm (queue delivery → job, when a worker is asked for,
+  which warm sessions can speak, English replies start nothing); `test/ai/error-body.test.ts` the error body keeping
+  its code. Gateway: Hindi voice status (`voice.status`), the logs (never the words), the API error body.
 - **End to end (Nov 2026):** a real browser (local web app) with a recorded voice as its microphone, the gateway in
   `wrangler dev` (real Workers AI) and the production API, account set to reply in English: speech while starting was
   kept and answered, questions were transcribed word for word, replies were spoken, talking over a reply stopped it
@@ -263,5 +316,6 @@ Optional: `AI_VOICE_SESSION_MINUTES`, `AI_VOICE_DAILY_MINUTES`, `AI_VOICE_SHOP_D
 | "Microphone is blocked…" although the browser allows it | the page's `Permissions-Policy` forbids the microphone | `microphone=(self)` in `next.config.ts`, redeploy the web app |
 | Every utterance comes back as nothing heard | binary frames read as zero bytes (gateway older than the `socket-inbox` fix) | redeploy the gateway |
 | Every turn "Could not reach the assistant" (`AI_UNREACHABLE`) | gateway older than the `fetch` fix, or `BACKEND_URL` wrong | redeploy the gateway; check `BACKEND_URL` |
-| Transcripts appear but nothing is read aloud, replies in Hindi | Hindi is spoken only by a warm Kaggle worker started after the gateway deploy | wait for the worker (the session start asks for one), or "Reply in: English" |
+| Transcripts appear but nothing is read aloud, replies in Hindi ("The voice is busy or still starting") | Hindi is spoken only by a warm Kaggle worker. Before the Nov 2026 fix the `voice.prewarm` job always failed (`toJob` had no case for it), so no worker was ever started | deploy the API; the app then shows the warm-up (§3a). If no worker starts (admin → Kaggle shows nothing running, accounts' "last assigned" does not move): API logs `Hindi voice:` / `Assistant voice:` say why (§7a) |
+| "The assistant could not answer" (`HTTP_504`) after ~20 s | the model call took longer than `AI_LLM_TIMEOUT_MS` (was 15 s), and the API's error body dropped its code (`AI_TIMEOUT`), so the message was lost too | deploy the API (20 s per call; codes kept) and the gateway (reads the message; a 504 is `AI_TIMEOUT`); the person can tap Retry |
 | Random `503 {"message":"Service Unavailable"}` on many API calls at once | AWS Lambda concurrency limit (a burst of ~20 requests is throttled) | raise "Concurrent executions" in AWS Service Quotas (Lambda) |

@@ -51,8 +51,12 @@ export class AiConfig {
     maxTokens: Number(env('AI_LLM_MAX_TOKENS') ?? 1024) || 1024,
     /** Low: tool choice and field values should be the same every time. */
     temperature: Number(env('AI_LLM_TEMPERATURE') ?? 0.2),
-    /** Per model call, account rotation included; the whole turn has its own budget (limits.turnBudgetMs). */
-    timeoutMs: Number(env('AI_LLM_TIMEOUT_MS') ?? 15_000) || 15_000,
+    /**
+     * Per model call, account rotation included; the whole turn has its own budget (limits.turnBudgetMs). 20 s: the
+     * first call (~6k input tokens) sometimes takes 15–20 s on Workers AI, and at 15 s those turns failed outright
+     * ("took too long"); now they answer — with the cards found, if no time is left for a second call.
+     */
+    timeoutMs: Number(env('AI_LLM_TIMEOUT_MS') ?? 20_000) || 20_000,
     /** Cloudflare accounts tried per call (quota, token and server errors move to the next one). */
     maxAttempts: Number(env('AI_LLM_MAX_ATTEMPTS') ?? 3) || 3,
   };
@@ -145,6 +149,11 @@ export class AiConfig {
      * fallback when no worker is free. AI_VOICE_KAGGLE_TTS=false: Cloudflare only (English).
      */
     kaggleTts: env('AI_VOICE_KAGGLE_TTS') !== 'false',
+    /**
+     * About how long a GPU worker takes from being started to its first Hindi speech (Kaggle boot, packages, voice
+     * engine). Only for the app's "Hindi voice warming up" estimate — measure and adjust.
+     */
+    hindiWarmupSeconds: Number(env('AI_VOICE_HINDI_WARMUP_SECONDS') ?? 240) || 240,
   };
 
   get voiceEnabled(): boolean {

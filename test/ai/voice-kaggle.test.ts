@@ -10,9 +10,13 @@ import { describe, it } from 'node:test';
 
 import { assistant, owner } from './fakes';
 import { AiConfig } from '../../src/ai/ai.config';
-import { AiVoiceSessionsService, hindiAmount, speechFor, toHindiSpeech } from '../../src/ai/voice';
+import type { IAiVoiceGpu } from '../../src/ai/application';
+import { AiQueueController, toJob } from '../../src/ai/application/controllers/ai-jobs.controllers';
+import { AiJobsService } from '../../src/ai/application/services/ai-jobs.service';
+import { AiVoiceSessionsService, hindiAmount, mayReplyInHindi, speechFor, toHindiSpeech } from '../../src/ai/voice';
 import {
   assistantVoiceLink,
+  assistantVoiceSessions,
   buildWorkerSessionNotebook,
   workersNeeded,
 } from '../../src/marketing/application/features/kaggle/utils';
@@ -72,10 +76,8 @@ describe('warm workers and the assistant', () => {
     assert.equal(workersNeeded({ waitingVoice: 2, waitingOther: 1, freeHot: 1, freeCold: 1 }), 1);
   });
 
-  it('starting a voice session asks for a warm worker (queued job) when the Kaggle voice is on', async () => {
-    const a = assistant();
-    const jobs: unknown[] = [];
-    const sessions = new AiVoiceSessionsService(
+  const voiceSessions = (jobs: unknown, prefs = assistant().preferences) =>
+    new AiVoiceSessionsService(
       new AiConfig(),
       {
         create: async (input: {
@@ -105,12 +107,162 @@ describe('warm workers and the assistant', () => {
         listOpen: async () => [],
         totals: async () => ({ sessions: 0, audioMs: 0, partialAudioMs: 0, ttsChars: 0, turns: 0 }),
       } as never,
-      a.preferences,
-      a.audit,
-      { submit: async (job: unknown) => (jobs.push(job), { queued: true }) } as never,
+      prefs,
+      assistant().audit,
+      jobs as never,
     );
-    await sessions.start(owner(), {});
-    assert.deepEqual(jobs, [{ type: 'voice.prewarm' }]);
+
+  it('starting a voice session readies the Hindi voice and tells the app where it stands', async () => {
+    const asked: Date[] = [];
+    const state = { state: 'starting' as const, since: new Date().toISOString(), typicalSeconds: 240 };
+    const grant = await voiceSessions({
+      prepareHindiVoice: async (now: Date) => (asked.push(now), state),
+    }).start(owner(), {});
+    assert.equal(asked.length, 1);
+    assert.deepEqual(grant.hindiVoice, state);
+  });
+
+  it('… but not for people whose replies are English (no GPU worker started for them)', async () => {
+    const a = assistant();
+    await a.preferences.save(owner().actorUserId, { language: 'en' });
+    let asked = 0;
+    const grant = await voiceSessions({ prepareHindiVoice: async () => (asked++, null) }, a.preferences).start(
+      owner(),
+      {},
+    );
+    assert.equal(asked, 0);
+    assert.equal(grant.hindiVoice, null);
+  });
+
+  it('which reply settings can need the Hindi voice', () => {
+    const p = (language: string, speechLanguage = 'auto', speakReplies = true) =>
+      mayReplyInHindi({ language, speechLanguage, speakReplies } as never);
+    assert.equal(p('hi'), true);
+    assert.equal(p('auto'), true);
+    assert.equal(p('auto', 'mr'), true);
+    assert.equal(p('auto', 'en'), false);
+    assert.equal(p('en'), false);
+    assert.equal(p('hinglish'), false);
+    assert.equal(p('hi', 'auto', false), false);
+  });
+});
+
+describe('the Hindi voice warm-up (voice.prewarm)', () => {
+  const quiet = { info() {}, warn() {}, error() {}, debug() {} };
+  const jobsService = (gpu: Partial<IAiVoiceGpu>, queue: { enabled: boolean; enqueue?: unknown }) =>
+    new AiJobsService(
+      new AiConfig(),
+      {} as never,
+      queue as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      gpu as IAiVoiceGpu,
+      quiet as never,
+    );
+
+  it('the queue delivery runs the prewarm job (it used to run `undefined` and fail every time)', async () => {
+    assert.deepEqual(toJob({ type: 'voice.prewarm' } as never), { type: 'voice.prewarm' });
+    const ran: unknown[] = [];
+    const controller = new AiQueueController(
+      { run: async (job: unknown) => (ran.push(job), 'starting') } as never,
+      { verify: async () => true } as never,
+      quiet as never,
+    );
+    assert.deepEqual(await controller.deliver({ header: () => 'sig' } as never, { type: 'voice.prewarm' } as never), {
+      ok: true,
+    });
+    assert.deepEqual(ran, [{ type: 'voice.prewarm' }]);
+  });
+
+  it('no worker up or booting → one is asked for (queued, once a minute) and the app sees "starting"', async () => {
+    const queued: unknown[] = [];
+    const jobs = jobsService(
+      { status: async () => ({ state: 'idle', since: null }) },
+      { enabled: true, enqueue: async (job: unknown, options: unknown) => queued.push([job, options]) },
+    );
+    const now = new Date('2026-11-28T10:00:30Z');
+    const state = await jobs.prepareHindiVoice(now);
+    assert.deepEqual(state, { state: 'starting', since: now.toISOString(), typicalSeconds: 240 });
+    assert.deepEqual(queued, [
+      [{ type: 'voice.prewarm' }, { deduplicationId: `ai-voice-prewarm-${Math.floor(now.getTime() / 60_000)}` }],
+    ]);
+  });
+
+  it('a worker already up or booting → nothing is started; none can start → "unavailable"', async () => {
+    const since = new Date('2026-11-28T09:58:00Z');
+    let queued = 0;
+    const queue = { enabled: true, enqueue: async () => void queued++ };
+    const up = await jobsService({ status: async () => ({ state: 'running', since }) }, queue).prepareHindiVoice();
+    assert.deepEqual(up, { state: 'warm', since: since.toISOString(), typicalSeconds: 240 });
+    const boot = await jobsService({ status: async () => ({ state: 'starting', since }) }, queue).prepareHindiVoice();
+    assert.equal(boot.state, 'starting');
+    assert.equal(boot.since, since.toISOString());
+    const none = await jobsService(
+      { status: async () => ({ state: 'unavailable', since: null, reason: 'resting' }) },
+      queue,
+    ).prepareHindiVoice();
+    assert.equal(none.state, 'unavailable');
+    assert.equal(queued, 0);
+  });
+
+  it('a failed status check still asks for a worker; a failed queue says "unavailable" (voice itself still works)', async () => {
+    let queued = 0;
+    const asked = await jobsService(
+      {
+        status: async () => {
+          throw new Error('db down');
+        },
+      },
+      { enabled: true, enqueue: async () => void queued++ },
+    ).prepareHindiVoice();
+    assert.equal(asked.state, 'starting');
+    assert.equal(queued, 1);
+    const failed = await jobsService(
+      { status: async () => ({ state: 'idle', since: null }) },
+      {
+        enabled: true,
+        enqueue: async () => {
+          throw new Error('QStash publish failed (500)');
+        },
+      },
+    ).prepareHindiVoice();
+    assert.equal(failed.state, 'unavailable');
+  });
+
+  it('which warm sessions can speak for the assistant', () => {
+    const now = Date.parse('2026-11-28T10:00:00Z');
+    const ago = (ms: number) => new Date(now - ms).toISOString();
+    const session = (status: string, state: string, updatedMsAgo: number, hotUntil: string | null = null) => ({
+      id: `${status}-${state}-${updatedMsAgo}`,
+      status,
+      startedAt: ago(updatedMsAgo + 60_000),
+      updatedAt: ago(updatedMsAgo),
+      payload: { session: { state, aiVoiceHotUntil: hotUntil } },
+    });
+    const { running, booting } = assistantVoiceSessions(
+      [
+        session('RUNNING', 'idle', 30_000), // polling: yes
+        session('RUNNING', 'idle', 10 * 60_000), // stopped polling: gone
+        session('RUNNING', 'busy', 60_000), // image / video job: its voice engine is down
+        session('RUNNING', 'busy', 60_000, new Date(now + 60_000).toISOString()), // speaking for the assistant: yes
+        session('STARTING', 'starting', 2 * 60_000), // booting: yes
+        session('STARTING', 'starting', 40 * 60_000), // never reported in: stuck
+      ],
+      now,
+    );
+    assert.deepEqual(
+      running.map((s) => s.id),
+      ['RUNNING-idle-30000', 'RUNNING-busy-60000'],
+    );
+    assert.equal(running[1].payload.session.aiVoiceHotUntil !== null, true);
+    assert.deepEqual(
+      booting.map((s) => s.id),
+      ['STARTING-starting-120000'],
+    );
   });
 });
 

@@ -75,6 +75,7 @@ import {
   kernelSlugOf,
   MIN_GPU_HOURS,
   STARTING_MAX_MS,
+  SESSION_LOST_MS,
   buildImageWorkerNotebook,
   ImageNotebookJob,
   buildFastReelNotebook,
@@ -92,6 +93,8 @@ import {
   effectiveConcurrency,
   isSessionLimitError,
   assistantVoiceLink,
+  assistantVoiceSessions,
+  sessionStart,
   ASSISTANT_VOICE_HOT_MS,
   workersNeeded,
 } from '../utils';
@@ -140,8 +143,6 @@ const SESSION_POLL_SECONDS = 10;
  */
 const PIPELINE_MAX_IMAGES = 4;
 const PIPELINE_MAX_CLIPS = 3;
-/** An idle warm session that stopped polling this long ago is gone. */
-const SESSION_LOST_MS = 5 * 60 * 1000;
 /** A job a session finished is checked for its final event after this long. */
 const SETTLE_GRACE_MS = 2 * 60 * 1000;
 /** Model cache builds are retried at most this often per account. */
@@ -730,23 +731,93 @@ export class MarketingRenderService {
   /**
    * ByajBazaar AI started a voice session: make sure a warm worker is up or booting, so the assistant's Hindi replies
    * can be spoken by its voice lane (ChatterBox). Picks the account exactly like dispatch (free slot, GPU hours, not
-   * resting). Nothing starts when a worker is already running or booting.
+   * resting). Nothing starts when a worker that can speak for the assistant is already running or booting. Every
+   * outcome is logged with its reason ("Assistant voice: …").
    */
   async warmForAssistant(): Promise<'warm' | 'starting' | 'unavailable'> {
-    if (!this.config.publicApiBaseUrl || !assistantVoiceLink(randomUUID(), 'probe', 0)) return 'unavailable';
-    const sessions = await this.jobs.listSessions();
-    if (sessions.some((s) => s.status === ERenderJobStatus.Running)) return 'warm';
-    if (sessions.length) return 'starting';
+    const problem = this.assistantVoiceLaneProblem();
+    if (problem) {
+      this.logger.warn({ reason: problem }, 'Assistant voice: no GPU worker can be started');
+      return 'unavailable';
+    }
+    await this.reapSessions(); // a worker that stopped polling must not count as warm
+    const { running, booting } = assistantVoiceSessions(await this.jobs.listSessions());
+    if (running.length) {
+      this.logger.info(
+        { session: running[0].id, account: running[0].workerId },
+        'Assistant voice: a warm GPU worker is already up',
+      );
+      return 'warm';
+    }
+    if (booting.length) {
+      this.logger.info(
+        { session: booting[0].id, account: booting[0].workerId, since: booting[0].startedAt },
+        'Assistant voice: a GPU worker is already booting',
+      );
+      return 'starting';
+    }
     const workers = new Map((await this.pool.workers()).map((w) => [w.id, w]));
     const busy = await this.jobs.countBusyByWorker();
     const accounts = (await this.accounts.list()).filter((a) => workers.has(a.username));
-    const { candidates } = await this.renderCandidates(accounts, workers, busy);
+    const { candidates, unavailable } = await this.renderCandidates(accounts, workers, busy);
     const candidate = pickDispatchCandidate(candidates);
-    if (!candidate) return 'unavailable';
+    if (!candidate) {
+      if (!workers.size) unavailable.push('no Kaggle account is configured');
+      this.logger.warn({ unavailable }, 'Assistant voice: no Kaggle account can start a GPU worker');
+      return 'unavailable';
+    }
     const slot = await this.freeSlot(candidate.username, candidate.concurrency);
     const started = await this.startSession(candidate.username, slot);
-    if (started) this.logger.info({ account: candidate.username }, 'Warm GPU worker started for ByajBazaar AI voice');
+    if (started) {
+      this.logger.info({ account: candidate.username, slot }, 'Warm GPU worker started for ByajBazaar AI voice');
+    } else {
+      this.logger.warn({ account: candidate.username, slot }, 'Assistant voice: the GPU worker could not start');
+    }
     return started ? 'starting' : 'unavailable';
+  }
+
+  /**
+   * Where the assistant's Hindi voice stands — database only (read on the person's path when voice starts, so no
+   * Kaggle calls): a worker up / booting, or whether an account could start one (cached GPU hours).
+   */
+  async assistantVoiceStatus(): Promise<{
+    state: 'running' | 'starting' | 'idle' | 'unavailable';
+    since: Date | null;
+    reason?: string;
+  }> {
+    const problem = this.assistantVoiceLaneProblem();
+    if (problem) return { state: 'unavailable', since: null, reason: problem };
+    const { running, booting } = assistantVoiceSessions(await this.jobs.listSessions());
+    if (running.length) return { state: 'running', since: sessionStart(running[0]) };
+    if (booting.length) return { state: 'starting', since: sessionStart(booting[0]) };
+    const [pool, busy, accounts] = await Promise.all([
+      this.pool.workers(),
+      this.jobs.countBusyByWorker(),
+      this.accounts.list(),
+    ]);
+    const workers = new Map(pool.map((w) => [w.id, w]));
+    const reasons: string[] = [];
+    for (const account of accounts) {
+      const worker = workers.get(account.username);
+      if (!worker) continue;
+      if (account.status !== EKaggleAccountStatus.Ready) reasons.push(`${account.username}: not ready`);
+      else if (isAccountCoolingDown(account)) reasons.push(`${account.username}: resting`);
+      else if ((busy[account.username] ?? 0) >= effectiveConcurrency(worker.concurrency)) {
+        reasons.push(`${account.username}: every GPU session in use`);
+      } else if (typeof account.gpuHoursLeft === 'number' && account.gpuHoursLeft < MIN_GPU_HOURS) {
+        reasons.push(`${account.username}: weekly GPU hours nearly used`);
+      } else return { state: 'idle', since: null };
+    }
+    return { state: 'unavailable', since: null, reason: reasons.join('; ') || 'no Kaggle account is configured' };
+  }
+
+  /** Why workers cannot get the assistant's voice lane (null = they can). */
+  private assistantVoiceLaneProblem(): string | null {
+    if (!this.config.publicApiBaseUrl) return 'MARKETING_API_BASE_URL is not set (workers cannot reach the API)';
+    if (!assistantVoiceLink(randomUUID(), 'probe', 0)) {
+      return 'the voice lane is off (AI_VOICE_GATEWAY_URL or AI_VOICE_TICKET_SECRET missing, or AI_VOICE_ENABLED / AI_VOICE_KAGGLE_TTS is false)';
+    }
+    return null;
   }
 
   /**

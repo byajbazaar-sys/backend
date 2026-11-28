@@ -14,6 +14,8 @@ import { catchError, map } from 'rxjs/operators';
 export interface ApiResponse<T> {
   statusCode: number;
   message: string;
+  /** A machine-readable error code from the exception (e.g. AI_TIMEOUT), when it has one. */
+  code?: string;
   data: T;
   error?: string;
   errors?: unknown;
@@ -79,6 +81,7 @@ export class GlobalResponseInterceptor<T> implements NestInterceptor<T, ApiRespo
     let message = 'Internal server error';
     let errorName = 'Internal Server Error';
     let errors: unknown = undefined;
+    let code: string | undefined;
     let details: string;
 
     if (error instanceof HttpException) {
@@ -90,6 +93,8 @@ export class GlobalResponseInterceptor<T> implements NestInterceptor<T, ApiRespo
         message = errObj.message || error.message;
         errorName = errObj.error || error.name;
         errors = errObj.errors;
+        // Clients act on it (e.g. AI_DAILY_LIMIT, AI_TIMEOUT, AI_VOICE_SESSION_ENDED): it used to be dropped here.
+        if (typeof errObj.code === 'string') code = errObj.code;
       } else if (typeof errorResponse === 'string') {
         message = errorResponse;
         errorName = error.name || 'HttpException';
@@ -105,6 +110,7 @@ export class GlobalResponseInterceptor<T> implements NestInterceptor<T, ApiRespo
       statusCode,
       message,
       error: errorName,
+      ...(code && { code }),
       data: {},
       ...(errors && { errors }),
     };

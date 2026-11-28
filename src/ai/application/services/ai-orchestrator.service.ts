@@ -693,7 +693,8 @@ function contextText(
   const lines = [`Today: ${date} (India)`, `Role in this shop: ${actor.shopRole}`];
   const language = LANGUAGE_NOTE[prefs.language];
   if (language) lines.push(`Language preference (overrides the language of the message): ${language}`);
-  if (prefs.replyStyle === 'detailed')
+  // Spoken replies stay short whatever the style (below): "up to 5 lines" read aloud is slow to make and to hear.
+  if (prefs.replyStyle === 'detailed' && !voice)
     lines.push("Person's preference: a little more detail is welcome (up to 5 lines).");
   if (voice) {
     lines.push(

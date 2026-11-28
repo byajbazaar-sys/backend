@@ -1,3 +1,5 @@
+import type { AiHindiVoiceState } from '../../application/ports/i-ai-knowledge.ports';
+
 /**
  * ByajBazaar AI — voice. Audio never reaches this API: the Cloudflare voice gateway (cloudflare/voice-gateway) runs
  * speech-to-text and text-to-speech on Workers AI and sends this API only the transcript of each turn. This side
@@ -85,4 +87,9 @@ export interface VoiceSessionGrant {
   expiresAt: string;
   limits: { maxUtteranceMs: number; maxSpokenChars: number; sessionMaxMs: number };
   preferences: { speakReplies: boolean; speechLanguage: VoiceSpeechLanguage; voice: VoiceSpeaker; language: string };
+  /**
+   * Starting a session (not on reconnect tickets): where the GPU worker for spoken Hindi replies stands — null when
+   * this person's replies are not Hindi (or the Kaggle voice is off).
+   */
+  hindiVoice?: AiHindiVoiceState | null;
 }

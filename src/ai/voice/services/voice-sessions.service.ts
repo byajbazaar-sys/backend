@@ -32,6 +32,17 @@ import { AI_VOICE_SESSIONS_REPOSITORY, IAiVoiceSessionsRepository } from '../por
 const startOfUtcDay = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
 /**
+ * Whether this person's spoken replies can come in Hindi script (spoken by the Kaggle GPU workers): replies in Hindi,
+ * or in the language of each message when they may speak Hindi / Marathi. English and Hinglish (Latin letters) are
+ * spoken by Cloudflare.
+ */
+export function mayReplyInHindi(prefs: Pick<AiPreferences, 'language' | 'speakReplies' | 'speechLanguage'>): boolean {
+  if (!prefs.speakReplies) return false;
+  if (prefs.language === 'hi') return true;
+  return prefs.language === 'auto' && ['auto', 'hi', 'mr'].includes(prefs.speechLanguage);
+}
+
+/**
  * VoiceSessionService: who may talk to the assistant by voice, for how long, and how much. A session belongs to one
  * person in one shop (taken from the authenticated request); the app connects to the voice gateway with a ticket
  * that is valid for two minutes, and asks for a fresh one to reconnect.
@@ -79,14 +90,13 @@ export class AiVoiceSessionsService {
       );
     }
 
-    // Hindi replies are spoken on a warm Kaggle worker: ask for one now (existing account rules) if none is up —
-    // queued while the session is created, not before it.
-    const prewarm =
-      voice.kaggleTts && this.jobs
-        ? this.jobs
-            .submit({ type: 'voice.prewarm' }, `ai-voice-prewarm-${Math.floor(now.getTime() / 60_000)}`)
-            .catch(() => undefined)
-        : undefined;
+    // Hindi replies are spoken on a warm Kaggle worker: where it stands (the app shows the warm-up), and one is asked
+    // for (existing account rules) if none is up — while the session is created, not before it. Only for people whose
+    // replies can be Hindi: an English reply never needs the GPU.
+    const hindi =
+      voice.kaggleTts && this.jobs && mayReplyInHindi(prefs)
+        ? this.jobs.prepareHindiVoice(now).catch(() => null)
+        : Promise.resolve(null);
     await Promise.all(replaced.map((old) => this.sessions.end(old.id, 'replaced', now)));
     const session = await this.sessions.create({
       shopId: actor.shopId,
@@ -94,7 +104,7 @@ export class AiVoiceSessionsService {
       conversationId: input.conversationId ?? null,
       expiresAt: new Date(now.getTime() + voice.sessionMaxMs),
     });
-    await Promise.all([
+    const [, hindiVoice] = await Promise.all([
       this.audit.record({
         event: EAiAuditEvent.VoiceSessionStarted,
         shopId: actor.shopId,
@@ -102,9 +112,9 @@ export class AiVoiceSessionsService {
         conversationId: input.conversationId ?? null,
         data: { sessionId: session.id },
       }),
-      prewarm,
+      hindi,
     ]);
-    return this.grant(session, prefs, now);
+    return { ...this.grant(session, prefs, now), hindiVoice };
   }
 
   /** A fresh connect ticket for an open session (the app reconnecting). */

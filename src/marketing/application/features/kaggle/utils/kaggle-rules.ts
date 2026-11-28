@@ -12,6 +12,8 @@ import { KaggleAccount, RenderJob, ERenderJobKind, ERenderJobStatus } from '../.
 export const MIN_GPU_HOURS = 1;
 /** Pushed but the notebook never reported in this long → it is treated as stuck. */
 export const STARTING_MAX_MS = 25 * 60 * 1000;
+/** A running warm session that has not polled for this long (and runs no job) has stopped. */
+export const SESSION_LOST_MS = 5 * 60 * 1000;
 
 export function notebookOf(kind: ERenderJobKind | string): KaggleNotebook {
   const value = String(kind);
