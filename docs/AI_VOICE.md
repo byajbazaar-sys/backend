@@ -25,8 +25,10 @@ app mic ──binary WebSocket (bb.voice.v1)──► voice gateway (Worker + Du
    itself lasts at most 15 minutes. Reconnecting asks for a fresh ticket (`POST …/sessions/:id/ticket`).
 2. The app opens `wss://voice.byajbazaar.com/v1/connect?ticket=…`. The Worker checks the ticket and hands the
    socket to the session's Durable Object. Cloudflare tokens never reach the app.
-3. Each utterance is streamed as 16 kHz PCM (web: AudioWorklet; mobile: expo-audio's audio stream). It ends after
-   1.2 s of silence, a tap, 30 s, or 2 MB.
+3. Each utterance is streamed as 16 kHz PCM (web: AudioWorklet; mobile: expo-audio's audio stream). On the web the
+   conversation is **full duplex** (§3a): one tap turns voice on, the microphone stays open, and every time the
+   person talks an utterance opens — also while the assistant is thinking or speaking. It ends after 1 s of quiet,
+   30 s, or 2 MB. Mobile is still tap-to-talk (ends after 1.2 s of silence or a tap).
 4. The gateway transcribes it and sends the text to the API with its key and the ticket. The API reads the
    person's shop access **again** (a removed or demoted member loses voice at the next turn), cleans up the
    transcript, and runs the turn through the orchestrator — same tools, same previews, same rules.
@@ -111,9 +113,13 @@ API (speech plan: Devanagari → chatterbox) ─► gateway session ─► TtsHu
   to be checked with real recordings (see §8). Hinglish usually comes back in Devanagari (Whisper treats it as
   Hindi); the assistant reads both.
 - **Interrupting** stops speech at once, but an answer already being worked out still finishes and is saved to the
-  conversation (just not spoken).
-- **Echo:** while the assistant speaks, the microphone is off (tap to interrupt and talk). There is no
-  talk-over-the-voice barge-in, to avoid the assistant hearing itself.
+  conversation (shown as text, not spoken over the newer words — §3a).
+- **Echo on speakers without echo cancellation:** the web app measures how much of the assistant's own voice reaches
+  the microphone and only lets the person interrupt when they are clearly louder than that (§3a). On such devices a
+  soft-spoken person may have to tap Stop; headphones avoid it. Mobile has no barge-in by voice (tap to talk).
+- **Answer speed** is set by the assistant, not by voice: in the Nov 2026 end-to-end check, speech-to-text took
+  1.6–3.4 s after the person stopped, the assistant 9–16 s (Gemma 4 with tool calls; one turn hit the 24 s budget),
+  first audio 2.5–6 s (measured through a local gateway — in production the AI binding is in the same data centre).
 - **Confirming by voice** (saying "confirm") works for stock and customer previews only; loans, payments and
   deposits always need a tap on Confirm. A bare "haan" / "yes" never confirms anything.
 - **Traditional units** (aana, ratti, bhar, masha) are kept as said and the assistant asks for grams or purity —
@@ -122,6 +128,29 @@ API (speech plan: Devanagari → chatterbox) ─► gateway session ─► TtsHu
   expo-audio 57 and expo-file-system (already in the app).
 - After a reconnect, a reply that finished while the app was offline is not replayed over the socket; it is in the
   conversation (reload it).
+
+## 3a. Full duplex on the web (hands-free, interruptible)
+
+Tap the mic once: voice is **on** until it is tapped again (or **End**). No tapping per sentence.
+
+- **Turn taking in the browser** (`fe-byajbazaar/lib/voice/turnDetector.ts`, tested in `turnDetector.test.ts`): a
+  turn starts after 0.2 s of speech clearly above the room's level (the quietest moment of the last 2 s — steady fan
+  or traffic noise becomes the floor) and ends after 1 s of quiet; 0.5 s of audio from before the start is sent with
+  it, so the first syllable is not lost. A click or bump (< 0.25 s) is dropped, not transcribed. 29 s at most.
+- **Barge-in:** talking while the assistant speaks stops it at once (the app silences its player; the gateway stops
+  making speech and drops audio still on the way). To keep the assistant from interrupting itself, the app compares
+  the microphone with what is playing, learns how much of its own voice comes back (little with the browser's echo
+  cancellation, more on speakers without it) and needs the person to be 3× louder than that, for 0.3 s.
+- **Newer words win:** a reply that comes back while the person is talking again is held; if those words were
+  speech it is not read out (it stays as text — `assistant.audio.skipped`, reason `interrupted`) and the new words
+  are answered; if they were only noise it is read out after all.
+- **Talking right after the tap** works: speech heard while the session is still starting is kept and sent the
+  moment it is ready.
+- **Off by itself** after 90 s with nobody talking and nothing to say, when the tab is hidden, at the 15-minute
+  session limit, or when the connection is lost for good — with a one-line note.
+- The bar shows Listening / the live transcript / Thinking / Speaking, with **Stop** (silence this reply), mute
+  (replies as text only) and **End**.
+- The site must allow the microphone: `Permissions-Policy: microphone=(self)` (`fe-byajbazaar/next.config.ts`).
 
 ## 4. Protocol (bb.voice.v1)
 
@@ -192,8 +221,10 @@ time while sockets are open is extra (small: sessions are short).
 3. Gateway (the deploy also creates the `TtsHub` Durable Object, migration `v2`): `cd cloudflare/voice-gateway && npm install`, then
    `npx wrangler secret put VOICE_TICKET_SECRET --env production` and `… VOICE_GATEWAY_KEY …` (same values),
    check `BACKEND_URL` / `ALLOWED_ORIGINS` in `wrangler.toml`, and `npm run deploy:production`.
-4. The mic button appears when `GET /api/v1/ai/status` returns `voice: true`.
-5. Hindi speech: nothing extra — warm workers started **after** this deploy carry the voice lane (running ones finish
+4. Check the gateway answers on its domain: `curl https://voice.byajbazaar.com/health` must return
+   `{"ok":true,"protocol":"bb.voice.v1"}` — an HTML page means the domain still points at the website (§9).
+5. The mic button appears when `GET /api/v1/ai/status` returns `voice: true`.
+6. Hindi speech: nothing extra — warm workers started **after** this deploy carry the voice lane (running ones finish
    with the old notebook). `AI_VOICE_KAGGLE_TTS=false` turns it off.
 
 Optional: `AI_VOICE_SESSION_MINUTES`, `AI_VOICE_DAILY_MINUTES`, `AI_VOICE_SHOP_DAILY_MINUTES`,
@@ -206,10 +237,31 @@ Optional: `AI_VOICE_SESSION_MINUTES`, `AI_VOICE_DAILY_MINUTES`, `AI_VOICE_SHOP_D
 - `Backend`: `yarn test` → `test/ai/voice.test.ts` (tickets, limits, tenant isolation, voice ↔ text continuity,
   spoken confirm / cancel rules, duplicates, transcript clean-up, what is spoken).
 - `cloudflare/voice-gateway`: `npm test` (session logic with fakes: transcripts, partials, silence, unsure
-  transcripts, duplicates, interrupt, barge-in, timeouts, reconnection, limits, expiry; protocol, tickets signed
-  the API's way, WAV, providers, API client, the shared app client) and `npm run typecheck`.
-- **Not yet verified, needs staging with real recordings:** transcription quality per language (Hindi, English,
-  Hinglish, Gujarati, Marathi) and jewellery words; the `MIN_CONFIDENCE` (0.45) / `MAX_NO_SPEECH` (0.6) thresholds;
-  Aura-2's pronunciation of Indian names and amounts; the live Workers AI calls themselves (shapes are taken from
-  the official typings); iOS / Android audio routing. Record ~10 real shop-staff clips per language and run them
-  through a staging session before relying on voice.
+  transcripts, duplicates, interrupt, barge-in, full duplex — replies held, dropped or read out; timeouts,
+  reconnection, limits, expiry; protocol, tickets signed the API's way, WAV, providers, API client, binary frames
+  received in order, the shared app client) and `npm run typecheck`.
+- `fe-byajbazaar`: `npx vitest run --project unit` → `lib/voice/turnDetector.test.ts` (turn start / end, pauses,
+  clicks, noisy rooms, echo with and without echo cancellation, barge-in).
+- **End to end (Nov 2026):** a real browser (local web app) with a recorded voice as its microphone, the gateway in
+  `wrangler dev` (real Workers AI) and the production API, account set to reply in English: speech while starting was
+  kept and answered, questions were transcribed word for word, replies were spoken, talking over a reply stopped it
+  and the new question was answered, the conversation continued hands-free. Two runtime bugs the unit tests could not
+  see were found and fixed there: binary frames arrive as `Blob` in Workers (read as zero bytes → every utterance
+  "silent"; now `src/socket-inbox.ts`), and the API client called the global `fetch` as a method ("Illegal
+  invocation" → every turn `AI_UNREACHABLE`).
+- **Not yet verified:** the deployed gateway (production domain), Hindi speech through a warm Kaggle worker, real
+  rooms and devices (echo on speakers, phones), transcription quality per language (Hindi, Gujarati, Marathi) and
+  jewellery words; the `MIN_CONFIDENCE` (0.45) / `MAX_NO_SPEECH` (0.6) thresholds; Aura-2's pronunciation of Indian
+  names and amounts; iOS / Android audio routing. Record ~10 real shop-staff clips per language and run them through
+  a staging session before relying on voice.
+
+## 9. Troubleshooting
+
+| What you see | Cause | Fix |
+| --- | --- | --- |
+| "Starting voice…" then "Reconnecting voice…" forever; console: `WebSocket … failed`, `Unexpected response code: 200` | `voice.byajbazaar.com` answers with the website: the gateway is not deployed on that domain | `npm run deploy:production` in `cloudflare/voice-gateway`; `/health` must return JSON (§7) |
+| "Microphone is blocked…" although the browser allows it | the page's `Permissions-Policy` forbids the microphone | `microphone=(self)` in `next.config.ts`, redeploy the web app |
+| Every utterance comes back as nothing heard | binary frames read as zero bytes (gateway older than the `socket-inbox` fix) | redeploy the gateway |
+| Every turn "Could not reach the assistant" (`AI_UNREACHABLE`) | gateway older than the `fetch` fix, or `BACKEND_URL` wrong | redeploy the gateway; check `BACKEND_URL` |
+| Transcripts appear but nothing is read aloud, replies in Hindi | Hindi is spoken only by a warm Kaggle worker started after the gateway deploy | wait for the worker (the session start asks for one), or "Reply in: English" |
+| Random `503 {"message":"Service Unavailable"}` on many API calls at once | AWS Lambda concurrency limit (a burst of ~20 requests is throttled) | raise "Concurrent executions" in AWS Service Quotas (Lambda) |

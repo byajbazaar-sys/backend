@@ -56,15 +56,19 @@ export class AiVoiceSessionsService {
       throw new ServiceUnavailableException({ code: 'AI_VOICE_NOT_CONFIGURED', message: 'Voice is not set up yet.' });
     }
     const now = new Date();
-    await this.assertDailyMinutes(actor.shopId, actor.actorUserId, now);
+    // Independent reads at once: starting voice is on the person's critical path ("Starting voice…").
+    const [, mine, shopOpen, prefs] = await Promise.all([
+      this.assertDailyMinutes(actor.shopId, actor.actorUserId, now),
+      this.sessions.listOpen({ actorUserId: actor.actorUserId }, now),
+      this.sessions.listOpen({ shopId: actor.shopId }, now),
+      this.prefsOf(actor.actorUserId),
+    ]);
 
-    // A person on a new device (or after a crash) takes over: their oldest sessions end at the limit.
-    const mine = await this.sessions.listOpen({ actorUserId: actor.actorUserId }, now);
-    const surplus = mine.length - voice.maxConcurrentPerActor + 1;
-    for (const old of mine.slice(0, Math.max(0, surplus))) await this.sessions.end(old.id, 'replaced', now);
-
-    const shopOpen = await this.sessions.listOpen({ shopId: actor.shopId }, now);
-    if (shopOpen.length >= voice.maxConcurrentPerShop) {
+    // A person on a new device (or after a crash) takes over: their oldest sessions end at the limit (and so do not
+    // count against the shop's limit).
+    const replaced = mine.slice(0, Math.max(0, mine.length - voice.maxConcurrentPerActor + 1));
+    const replacedIds = new Set(replaced.map((s) => s.id));
+    if (shopOpen.filter((s) => !replacedIds.has(s.id)).length >= voice.maxConcurrentPerShop) {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -75,25 +79,32 @@ export class AiVoiceSessionsService {
       );
     }
 
+    // Hindi replies are spoken on a warm Kaggle worker: ask for one now (existing account rules) if none is up —
+    // queued while the session is created, not before it.
+    const prewarm =
+      voice.kaggleTts && this.jobs
+        ? this.jobs
+            .submit({ type: 'voice.prewarm' }, `ai-voice-prewarm-${Math.floor(now.getTime() / 60_000)}`)
+            .catch(() => undefined)
+        : undefined;
+    await Promise.all(replaced.map((old) => this.sessions.end(old.id, 'replaced', now)));
     const session = await this.sessions.create({
       shopId: actor.shopId,
       actorUserId: actor.actorUserId,
       conversationId: input.conversationId ?? null,
       expiresAt: new Date(now.getTime() + voice.sessionMaxMs),
     });
-    if (this.config.voice.kaggleTts && this.jobs) {
-      // Hindi replies are spoken on a warm Kaggle worker: start one now (existing account rules) if none is up.
-      const minute = Math.floor(now.getTime() / 60_000);
-      await this.jobs.submit({ type: 'voice.prewarm' }, `ai-voice-prewarm-${minute}`).catch(() => undefined);
-    }
-    await this.audit.record({
-      event: EAiAuditEvent.VoiceSessionStarted,
-      shopId: actor.shopId,
-      actorUserId: actor.actorUserId,
-      conversationId: input.conversationId ?? null,
-      data: { sessionId: session.id },
-    });
-    return this.grant(session, await this.prefsOf(actor.actorUserId), now);
+    await Promise.all([
+      this.audit.record({
+        event: EAiAuditEvent.VoiceSessionStarted,
+        shopId: actor.shopId,
+        actorUserId: actor.actorUserId,
+        conversationId: input.conversationId ?? null,
+        data: { sessionId: session.id },
+      }),
+      prewarm,
+    ]);
+    return this.grant(session, prefs, now);
   }
 
   /** A fresh connect ticket for an open session (the app reconnecting). */
